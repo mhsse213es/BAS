@@ -9,6 +9,7 @@ const (
 	AppCtlAllowedUnexpected = "allowed_unexpectedly"
 	AppCtlAllowedByPolicy   = "allowed_by_policy"
 	AppCtlNotEnforced       = "not_enforced"
+	AppCtlAuditedOnly       = "audited_only"
 	AppCtlInconclusive      = "inconclusive"
 	AppCtlNotApplicable     = "not_applicable"
 
@@ -18,7 +19,7 @@ const (
 
 var appCtlObservedValues = map[string]bool{
 	AppCtlBlockedAsExpected: true, AppCtlAllowedUnexpected: true,
-	AppCtlAllowedByPolicy: true, AppCtlNotEnforced: true,
+	AppCtlAllowedByPolicy: true, AppCtlNotEnforced: true, AppCtlAuditedOnly: true,
 	AppCtlInconclusive: true, AppCtlNotApplicable: true,
 }
 
@@ -110,6 +111,30 @@ var appCtlFamilies = map[string]bool{
 	"indirect_execution": true, "alternate_binary": true,
 	"script_host_proxy": true, "alternate_ps_host": true,
 	"parent_child_asr": true, "inprocess_hosting": true,
+}
+
+// Families emitted by the Application Control Mastery scenarios. They share
+// the outcome vocabulary above and are listed in a report only when a run
+// produced them, so older runs keep their six-family view.
+var appCtlMasteryFamilies = []string{
+	"regsvr32_proxy", "rundll32_proxy", "mshta_proxy", "msiexec_proxy", "installutil_proxy",
+	"control_panel_cpl", "cmstp_proxy", "xsl_script_processing", "msbuild_proxy",
+	"wscript_host", "cmd_batch_script", "wsf_script_host", "user_writable_script_host",
+	"powershell_script_signing", "powershell_language_mode", "wmi_process_create", "alternate_interpreters",
+	"unsigned_executable", "tampered_signature", "publisher_trust", "exec_from_temp",
+	"exec_from_appdata", "exec_from_downloads", "renamed_extension", "dll_loading",
+	"ocx_module_loading", "msi_installation",
+	"policy_service_interruption", "policy_modification", "policy_downgrade",
+	"supplemental_policy", "managed_installer", "policy_after_reboot", "policy_lifecycle",
+	"packaged_app_rules", "sideloading_policy", "always_install_elevated", "writable_allowed_paths",
+	"dll_search_order", "com_activation", "scheduled_task_launch", "service_launch",
+	"enforcement_log_health", "identity_service_reliability", "overbroad_allow_rules",
+}
+
+func init() {
+	for _, f := range appCtlMasteryFamilies {
+		appCtlFamilies[f] = true
+	}
 }
 
 // Telemetry visibility values reported under APPCTL_DETECTION. Visibility is

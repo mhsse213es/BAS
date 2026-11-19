@@ -126,6 +126,51 @@ func TestEvaluateScenario_AllBlocked_ReturnsPass(t *testing.T) {
 	}
 }
 
+// Review Focus: a VectorFixture that sets EvidenceSource explicitly (a live
+// execution result, not a hand-authored fixture) must have that value
+// propagate to the resulting VectorAssertion -- the EvidenceSourceLiveExecution
+// const exists for exactly this. A fixture that leaves it unset (every
+// existing caller in this package) must still default to EvidenceSourceFixture,
+// so this is a strict backward-compatible addition, not a behavior change.
+func TestEvaluateScenario_FixtureEvidenceSourceOverride_PropagatesToAssertion(t *testing.T) {
+	scenario, err := NewEnterpriseScenario("S-6", "n", "o", []string{"V-1", "V-2"}, "p", "e", "prov")
+	if err != nil {
+		t.Fatalf("NewEnterpriseScenario: %v", err)
+	}
+	catalog := []wafcatalog.AttackVector{
+		mustVectorWithSeverity(t, "V-1", wafcatalog.SeverityCritical),
+		mustVectorWithSeverity(t, "V-2", wafcatalog.SeverityCritical),
+	}
+	live := blockedFixture("V-1")
+	live.EvidenceSource = EvidenceSourceLiveExecution
+	fixtures := map[string]VectorFixture{
+		"V-1": live,
+		"V-2": blockedFixture("V-2"), // EvidenceSource left unset
+	}
+	result, err := EvaluateScenario(scenario, fixtures, catalog)
+	if err != nil {
+		t.Fatalf("EvaluateScenario: %v", err)
+	}
+	var sawV1, sawV2 bool
+	for _, a := range result.Assertions {
+		switch a.VectorID {
+		case "V-1":
+			sawV1 = true
+			if a.EvidenceSource != EvidenceSourceLiveExecution {
+				t.Errorf("V-1 EvidenceSource = %q, want %q", a.EvidenceSource, EvidenceSourceLiveExecution)
+			}
+		case "V-2":
+			sawV2 = true
+			if a.EvidenceSource != EvidenceSourceFixture {
+				t.Errorf("V-2 EvidenceSource = %q, want %q (unset should default)", a.EvidenceSource, EvidenceSourceFixture)
+			}
+		}
+	}
+	if !sawV1 || !sawV2 {
+		t.Fatalf("expected assertions for both V-1 and V-2, got %+v", result.Assertions)
+	}
+}
+
 func TestEvaluateScenario_InvalidCatalogReference_ReturnsError(t *testing.T) {
 	scenario, err := NewEnterpriseScenario("S-5", "n", "o", []string{"V-1", "MISSING"}, "p", "e", "prov")
 	if err != nil {

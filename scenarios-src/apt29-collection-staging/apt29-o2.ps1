@@ -1,0 +1,15 @@
+Invoke-A29Test -Id 'o2' -Technique 'T1074.002' -Needle 'bas_a29_' -Telemetry @('sec:5145', 'sec:5140', 'sysmon:11') -Summary 'collected files are staged on a remote share, here the loopback administrative share (T1074.002)' -Attempt {
+  if ($env:BAS_CONFIRM_APT29_REMOTE_STAGING -cne 'true') { return @{ Ran = $false; Note = 'lab_gate_not_set'; NotApplicable = 'lab gate BAS_CONFIRM_APT29_REMOTE_STAGING is not set to true; this step writes a folder through the loopback administrative share and is skipped without it' } }
+  $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+  if (-not $isAdmin) { return @{ Ran = $false; Note = 'not_admin'; NotApplicable = 'the administrative share needs an administrator identity' } }
+  $src = Join-Path $script:A29Work 'collection'
+  New-Item -ItemType Directory -Path $src -Force | Out-Null
+  1..4 | ForEach-Object { Set-Content -LiteralPath (Join-Path $src "doc$_.txt") -Value ($script:A29Marker + " synthetic $_") -Encoding ASCII }
+  $unc = '\\localhost\C$\Users\Public\' + $script:A29Tag
+  $made = $false; $copied = 0
+  try { New-Item -ItemType Directory -Path $unc -Force -ErrorAction Stop | Out-Null; $made = $true; Get-ChildItem -LiteralPath $src -File | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $unc -ErrorAction Stop; $copied++ } } catch {}
+  $verified = ($made -and @(Get-ChildItem -LiteralPath $unc -File -ErrorAction SilentlyContinue).Count -eq 4)
+  Remove-Item -LiteralPath $unc -Recurse -Force -ErrorAction SilentlyContinue
+  $gone = -not (Test-Path -LiteralPath $unc)
+  return @{ Ran = $verified; Note = "staging_folder_created=$made files_copied=$copied verified_on_share=$verified staging_folder_removed=$gone share=C$ via loopback host=localhost"; CleanupOk = $gone; NotApplicable = '' }
+}

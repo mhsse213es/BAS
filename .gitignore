@@ -101,3 +101,33 @@ node_modules/
 /Threat_Intel_Installation.docx
 /troubleshootingOfAgents.docx
 /updt_bas-report-Atomic_Red_Team__-__Selective_Te-18b8523b.pdf
+
+# Aleef owner-only benchmark material: the sealed defect file and the ground-truth labels are authored
+# and held by the owner and must never be committed (see docs/aleef-benchmark-spec.md).
+orchestrator/internal/aleef/bank/sealed/sealed_defects.go
+**/labels.json
+
+# Local build outputs and screenshots (not source)
+/agent/agent
+/queryex
+/installer/installer
+/orchestrator/secretbackfill
+/orchestrator/staging-loadtest-linux
+/Capture.PNG
+/agentSet.PNG
+/agentSet1.PNG
+/agnt.PNG
+/console.PNG
+/phising.PNG
+/scen.PNG
+/section.PNG
+/user.PNG
+/wizard.PNG
+/clean_logo.png
+!orchestrator/internal/emailgwefficacy/testdata/eicar-protected.zip
+bin/segprobe-runner
+
+# Offline prerequisites (cosign, Docker, Compose). Binaries are fetched and checksum-verified on the build machine
+# (packaging/fetch-docker-static.ps1, packaging/appliance/fetch-cosign.sh), never committed: they are too large for git.
+packaging/tools/*
+!packaging/tools/README.md

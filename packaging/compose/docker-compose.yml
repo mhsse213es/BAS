@@ -16,8 +16,15 @@ services:
       POSTGRES_DB:       ${POSTGRES_DB:-bas_platform}
       POSTGRES_USER:     ${POSTGRES_USER:-bas_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    # TLS on (P0.1): the server certificate and key come from DATA_DIR/dbtls,
+    # created by install.sh (db-tls.sh) before this stack starts. The key is
+    # owned by the postgres user (UID 70) and is never copied into backups.
+    command: ["postgres", "-c", "ssl=on",
+              "-c", "ssl_cert_file=/etc/audspect/dbtls/server.crt",
+              "-c", "ssl_key_file=/etc/audspect/dbtls/server.key"]
     volumes:
       - audspect-postgres-data:/var/lib/postgresql/data
+      - ./dbtls:/etc/audspect/dbtls:ro
     networks:
       - bas-internal
     restart: unless-stopped
@@ -142,16 +149,17 @@ services:
       chrome:
         condition: service_started  # orchestrator falls back to built-in PDF if chrome unhealthy
     environment:
-      # sslmode=prefer encrypts when Postgres offers TLS (default in official image).
-      # Production deployments with a certificate chain should use sslmode=require
-      # or sslmode=verify-full with PGSSLROOTCERT set.
+      # Database connections verify the server certificate and hostname
+      # (sslmode=verify-full, P0.1). The orchestrator refuses to start with any
+      # weaker mode (db.RequireVerifiedDBTLS). The root is the server certificate
+      # itself, mounted read-only below; the key is never mounted here.
       #
       # DATABASE_URL is the orchestrator's normal runtime connection -- bas_app,
       # NOSUPERUSER/NOBYPASSRLS, owns nothing. DATABASE_ADMIN_URL is used only
       # during startup schema bootstrap/bas_app provisioning, then closed. See
       # docs/superpowers/specs/2026-09-30-runtime-role-separation-design.md.
-      DATABASE_URL:       "postgres://bas_app:${BAS_APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-bas_platform}?sslmode=prefer"
-      DATABASE_ADMIN_URL: "postgres://${POSTGRES_USER:-bas_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bas_platform}?sslmode=prefer"
+      DATABASE_URL:       "postgres://bas_app:${BAS_APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-bas_platform}?sslmode=verify-full&sslrootcert=/etc/audspect/dbtls/server.crt"
+      DATABASE_ADMIN_URL: "postgres://${POSTGRES_USER:-bas_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bas_platform}?sslmode=verify-full&sslrootcert=/etc/audspect/dbtls/server.crt"
       # Also passed standalone (not just embedded in DATABASE_URL above) --
       # config.Load() reads BAS_APP_DB_PASSWORD directly via os.Getenv, it
       # never parses the DSN. Both references interpolate from the same
@@ -217,6 +225,7 @@ services:
       CALDERA_API_KEY:  ${CALDERA_API_KEY:-BASPlatform2024}
       BAS_ADMIN_EMAIL:    ${BAS_ADMIN_EMAIL:-}
       BAS_ADMIN_PASSWORD: ${BAS_ADMIN_PASSWORD:-}
+      BAS_RECOVERY_PASSPHRASE: ${BAS_RECOVERY_PASSPHRASE:-}
       # Headless-Chromium sidecar for HTML→PDF report rendering (CDP). Falls back
       # to the built-in PDF renderer if unset/unreachable.
       CHROME_WS_URL:    "${CHROME_WS_URL:-http://chrome:9222}"
@@ -234,6 +243,10 @@ services:
       # interval defaults to 5 minutes.
       VALIDATION_LAB_AGENT_ID:     ${VALIDATION_LAB_AGENT_ID:-}
       VALIDATION_LAB_POLL_MINUTES: ${VALIDATION_LAB_POLL_MINUTES:-5}
+      # Lab-only spray/guessing exemption: the one agent allowed to run the BAS lab scenarios
+      # ad-password-spray-lab and ad-password-guessing-lab with the destructive veto lifted.
+      # Empty (default) turns it off everywhere. Set to an enrolled DEDICATED lab agent_id only.
+      SPRAY_LAB_AGENT_ID:          ${SPRAY_LAB_AGENT_ID:-}
       # ── OTX IOC Enrichment (optional — leave blank to disable) ───────────────
       # Distinct from the MISP/OpenCTI connector above — enriches run_iocs
       # (extracted indicators) against LevelBLUE OTX. See internal/ioc.
@@ -259,6 +272,8 @@ services:
       # cmd/server/main.go's checkCANotSilentlyRotated); leave unset for
       # normal operation.
       BAS_CONFIRM_NEW_CA: ${BAS_CONFIRM_NEW_CA:-}
+      # Enrolment authorization: "secret" (default) or "token" (single-use per-agent tokens). Audit F-03.
+      BAS_ENROLLMENT_MODE: ${BAS_ENROLLMENT_MODE:-secret}
       # ── Legacy listener retirement (B2) — operator override ─────────────────
       # BAS_LEGACY_LISTENER_ENABLED=false: Step 3 of the B2 retirement
       # procedure, set only after GET /api/agents/legacy-migration-status
@@ -272,6 +287,10 @@ services:
       # violations (POST /api/csp-report -> orchestrator log) -- a temporary
       # escape hatch if a client hits a violation. No "off" value exists.
       BAS_CSP_MODE: ${BAS_CSP_MODE:-enforce}
+      ALEEF_SECRETS_FILE: /etc/bas/aleef-secrets.env
+      # API BAS assessment jobs. Empty (default) leaves the job endpoints answering 503. To enable, set
+      # BAS_APIBAS_RUNNER=/apibas-runner in .env; the encryption key under /etc/audspect/secrets must also be provisioned.
+      BAS_APIBAS_RUNNER: ${BAS_APIBAS_RUNNER:-}
       # Install-wide phishing target allowlists (orchestrator phishscope). Blank
       # means unconfigured, so PH-ID-002 and PH-ID-003 stay unavailable.
       AUDSPECT_PHISH_IDENTITY_TARGET_USERS: ${AUDSPECT_PHISH_IDENTITY_TARGET_USERS:-}
@@ -295,11 +314,15 @@ services:
       # already-issued agent certificate AND every agent's locally-cached CA
       # root fingerprint -- a fleet-wide lockout, not just data loss.
       - ./pki:/etc/audspect/pki
+      # Database TLS trust root (P0.1): the server certificate only, never the key.
+      - ./dbtls/server.crt:/etc/audspect/dbtls/server.crt:ro
       # Deployment command-signing key (B4) -- independent trust domain
       # and lifecycle from pki's CA above (never chained to it), but the
       # identical bind-mount treatment: a host path the orchestrator
       # container (UID 65532) generates/persists into directly.
       - ./signing:/etc/audspect/signing
+      # Interim database encryption key (installer-provisioned, root:65532 0640). Read-only; outside DATA_DIR by design.
+      - /etc/audspect/secrets:/etc/audspect/secrets:ro
       # Operator-supplied TLS certificate for the browser dashboard
       # (BAS_TLS=true in setup.conf) -- install.sh already copies TLS_CERT/
       # TLS_KEY here (${DATA_DIR}/certs/bas.crt|bas.key); read-only, the
@@ -307,6 +330,10 @@ services:
       - ./certs:/etc/bas/certs:ro
       - ${DATA_DIR}/k8s-scenario:/run/k8s-scenario:ro
       - ${DATA_DIR}/k8s-discovery:/run/k8s-discovery:ro
+      # Aleef token references. install.sh writes it from the ALEEF_SECRET_* lines in setup.conf
+      # (mode 0600, always present, possibly empty). One file is mounted, not env_file, so no other
+      # .env secret reaches the container.
+      - ${DATA_DIR}/aleef-secrets.env:/etc/bas/aleef-secrets.env:ro
       # scenarios is read-write: the threat-intel connector writes generated
       # YAMLs into scenarios/intel/. Keep writable even if connector is unused.
       - ./scenarios:/scenarios
@@ -410,11 +437,12 @@ services:
       caldera:
         condition: service_started
     environment:
-      DATABASE_URL: "postgres://bas_app:${BAS_APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-bas_platform}?sslmode=prefer"
+      DATABASE_URL: "postgres://bas_app:${BAS_APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-bas_platform}?sslmode=verify-full&sslrootcert=/etc/audspect/dbtls/server.crt"
       CALDERA_URL: "http://caldera:8888"
       CALDERA_API_KEY: ${CALDERA_API_KEY:-BASPlatform2024}
     volumes:
       - ../..:/workspace
+      - ./dbtls/server.crt:/etc/audspect/dbtls/server.crt:ro
     working_dir: /workspace/orchestrator
     command: ["go", "run", "./cmd/auditcorpus"]
 

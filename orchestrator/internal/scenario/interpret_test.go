@@ -196,6 +196,9 @@ func TestInterpretARTExecutionErrors(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			// Every classified execution error — including a missing binary or
+			// unmet prerequisite — is ERROR here; the ExecutionFailure taxonomy
+			// (tested in execution_failure_test.go) attributes owner afterwards.
 			got, detail := interpretART(c.r, c.stdout)
 			if got != models.ResultError {
 				t.Errorf("interpretART(%q, exit=%d) = %q, want error (detail=%q)", c.stdout, c.r.ExitCode, got, detail)
@@ -250,6 +253,15 @@ func TestInterpretCustomClassifiesScriptCrash(t *testing.T) {
 		{"conflicting FAIL after PASS: FAIL wins despite position", ExecResult{ExitCode: 0}, "PASS: looked clean at first\nFAIL: actually exploitable", models.ResultFail},
 		{"conflicting PASS after FAIL: FAIL still wins", ExecResult{ExitCode: 0}, "FAIL: exploitable\nPASS: contradicts the above", models.ResultFail},
 		{"conflicting SKIP and PASS (no FAIL): SKIP wins", ExecResult{ExitCode: 0}, "SKIP: not applicable here\nPASS: contradicts the above", models.ResultSkipped},
+		// ERROR verdicts: the check could not run. They must never fall through
+		// to the exit-code default, which scores exit 0 as PASS.
+		{"ERROR verdict with exit 0 is not a PASS", ExecResult{ExitCode: 0}, "ERROR: BAS_APT29_CLOUD_TENANT not set, stage not run", models.ResultError},
+		{"ERROR verdict with exit 1 is ERROR, not FAIL", ExecResult{ExitCode: 1}, "ERROR: prerequisite missing", models.ResultError},
+		{"ERROR then PASS: ERROR beats PASS", ExecResult{ExitCode: 0}, "ERROR: could not query directory\nPASS: looked clean", models.ResultError},
+		{"ERROR then SKIP: ERROR beats SKIP", ExecResult{ExitCode: 0}, "SKIP: not applicable\nERROR: call threw", models.ResultError},
+		{"FAIL then ERROR: FAIL still wins", ExecResult{ExitCode: 0}, "ERROR: call threw\nFAIL: exploitable", models.ResultFail},
+		{"incidental lowercase Error: diagnostic does not override PASS", ExecResult{ExitCode: 0}, "PASS: check clean\nError: access is denied to one optional path", models.ResultPass},
+		{"informational line before ERROR verdict", ExecResult{ExitCode: 0}, "INFO: probing tenant\nERROR: graph returned 403", models.ResultError},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -293,7 +305,9 @@ func TestInterpretCustom_VerdictLineNotNecessarilyFirst(t *testing.T) {
 // (Technique Executed). They are NOT successful attacks — a bad path, a missing
 // runtime dependency, or a resource that already existed. Critically, several of
 // these surface on a ZERO exit code (PowerShell non-terminating errors), so they
-// must classify as ERROR, not FAIL. Strings are verbatim from the report.
+// must classify as ERROR, not FAIL. The ExecutionFailure taxonomy then attributes
+// each ERROR to its owner (environment vs content). Strings are verbatim from the
+// report.
 func TestInterpretARTAtomicArtifactsAreErrors(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -396,6 +410,7 @@ func TestClassifySkipReason(t *testing.T) {
 		{"caldera not configured", "Caldera not configured — set CALDERA_URL to enable ability abc123", models.SkipReasonPlatformUnavailable},
 		{"caldera ability not found", "Caldera ability abc123 not found", models.SkipReasonPlatformUnavailable},
 		{"circuit breaker open", "circuit breaker open for technique:T1055, domain:registry", models.SkipReasonCircuitOpen},
+		{"telemetry-only probe", "telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored.", models.SkipReasonTelemetryOnly},
 		{"unrecognized text", "some future skip reason nobody has written yet", ""},
 	}
 	for _, c := range cases {

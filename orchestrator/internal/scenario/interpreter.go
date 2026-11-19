@@ -24,9 +24,14 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 		sev = "Medium"
 	}
 
+	// A missing agent timestamp falls back to submission time for
+	// compatibility, but the fallback is labelled so it is never read as an
+	// agent-observed execution time.
 	execAt := result.ExecutedAt
+	execSource := models.ExecutedAtSourceAgent
 	if execAt.IsZero() {
 		execAt = time.Now()
+		execSource = models.ExecutedAtSourceOrchestratorFallback
 	}
 
 	combined := strings.TrimSpace(result.Stdout + "\n" + result.Stderr)
@@ -84,9 +89,7 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 		// C1). This is server-side classification -- no agent upgrade is
 		// needed for the correction to take effect.
 		checkResult = models.ResultVetoed
-		details = fmt.Sprintf(
-			"VETOED — Audspect prevented execution under its local destructive-action policy (action=%s, class=%s, source=%s). Customer defensive controls were not tested by this step.",
-			result.VetoedActionKey, result.VetoedExecutionClass, result.VetoedBlockSource)
+		details = vetoDetail(result.VetoedActionKey, result.VetoedExecutionClass, result.VetoedBlockSource)
 	} else if result.TimedOut {
 		checkResult = models.ResultError
 		details = fmt.Sprintf(
@@ -109,7 +112,7 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 		skipReason = classifySkipReason(details)
 	}
 
-	return models.SimulationResult{
+	sim := models.SimulationResult{
 		ID:       TaskID(step.TechniqueID, step.Name),
 		CheckID:  step.CheckID,
 		StepName: step.Name,
@@ -132,10 +135,13 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 		VetoedBlockSource:    result.VetoedBlockSource,
 		Remediation:          models.Remediation(checkResult, tactic, techniqueID, techniqueName),
 		RawOutput:            truncate(combined, outputLimit),
+		FraudControl:         fraudControlFromOutput(combined),
 		Truncated:            truncated,
 		OriginalOutputBytes:  len(combined),
+		ExecutionFailure:     assessExecutionFailure(checkResult, result, details),
 		DurationMs:           result.DurationMs,
 		ExecutedAt:           execAt,
+		ExecutedAtSource:     execSource,
 		Framework:            framework,
 		Events:               result.Events,
 		CleanupVerdict:       result.CleanupVerdict,
@@ -152,6 +158,10 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 		PID:                  result.PID,
 		StartedAt:            result.StartedAt,
 	}
+	// Fold the fraud-control verdict into the stored result once, here, so every
+	// reader sees it (see models.ApplyFraudControl).
+	models.ApplyFraudControl(&sim)
+	return sim
 }
 
 // interpretART interprets raw command output from an ART atomic test.
@@ -306,14 +316,17 @@ func firstLine(s string) string {
 // real authoring pattern -- but it must have one explicit, documented answer
 // rather than an accidental one.
 //
-// Fail-safe policy: FAIL > SKIP > PASS, independent of line order. A FAIL
+// Fail-safe policy: FAIL > ERROR > SKIP > PASS, independent of line order.
+// An uppercase ERROR: line means the check could not run (case-sensitive, so an
+// incidental "Error:" diagnostic is never mistaken for a verdict); it must never fall through
+// to the exit-code default, which scores exit 0 as PASS. A FAIL
 // line is never silently suppressed by a PASS or SKIP line found elsewhere in
 // the same output -- mirroring this file's existing bias (see Interpret's
 // Vetoed/TimedOut handling) toward never overstating a defensive win when
 // there is ambiguity. Among multiple lines of the SAME winning type, the
 // first one supplies the returned text.
 func dominantVerdict(s string) (line string, result models.CheckResult, ok bool) {
-	var failLine, skipLine, passLine string
+	var failLine, errLine, skipLine, passLine string
 	for _, l := range strings.Split(s, "\n") {
 		t := strings.TrimSpace(l)
 		if t == "" {
@@ -323,6 +336,8 @@ func dominantVerdict(s string) (line string, result models.CheckResult, ok bool)
 		switch {
 		case failLine == "" && strings.HasPrefix(lower, "fail:"):
 			failLine = t
+		case errLine == "" && strings.HasPrefix(t, "ERROR:"):
+			errLine = t
 		case skipLine == "" && strings.HasPrefix(lower, "skip:"):
 			skipLine = t
 		case passLine == "" && strings.HasPrefix(lower, "pass:"):
@@ -332,6 +347,8 @@ func dominantVerdict(s string) (line string, result models.CheckResult, ok bool)
 	switch {
 	case failLine != "":
 		return failLine, models.ResultFail, true
+	case errLine != "":
+		return errLine, models.ResultError, true
 	case skipLine != "":
 		return skipLine, models.ResultSkipped, true
 	case passLine != "":

@@ -122,6 +122,16 @@ There is currently no macOS agent build step in the pipeline, despite macOS-spec
 
 `BINARIES.sha256` is **not** computed by hashing local binaries — it's generated inside the Dockerfile's agent-builder stage (from the same binaries endpoints actually download) and extracted from the built image via `docker create` + `docker cp` (distroless has no shell, so this filesystem-level extraction is the only option). It's then RSA-signed with the same `private_key.pem` from Step 0b, staged into `orchestrator/agents/`, and copied into the delivery bundle.
 
+**Previous-release hashes (`#prev` lines).** An agent installed before an upgrade still runs its old binary. If the new manifest dropped that hash, the server would quarantine the agent as an unknown binary, and only an operator can release a quarantined agent. So the manifest also lists the previous release's hashes as `#prev <hash>  <file>` lines; the server then marks those agents `outdated` (degraded) and returns them to `active` once they run a current binary. The previous manifest is the newest earlier release under `dist\` (`Get-PreviousReleaseManifest` / `build.sh`), not `git HEAD`, because a build overwrites the committed manifest without committing it. `windows-build.ps1` and `build.sh` pass it to the image build as `PREVIOUS_MANIFEST_B64`; the Dockerfile's `binaries-manifest` stage carries it with `packaging/carry-previous-manifest.sh` and fails the build if any previous hash is missing. `Update-OrchestratorAgentArtifacts` checks the regenerated manifest again before signing it, and `sign-binaries.sh` (the Linux path) carries it too. Agents have no self-update, so an `outdated` agent still needs the new binary installed on its host.
+
+**Previous-release version (`#prev-version` line).** The carry step also writes `#prev-version <version>`, read from the `bas-install-<version>` folder the previous manifest sits in (nothing is written if the folder name carries no version, and an existing line is never overwritten). The server uses it as the default fleet minimum agent version, so until an administrator sets one, only agents older than the release before this one are flagged. An administrator's setting always wins, including "no minimum"; typing `default` in the console returns to it.
+
+**Revoking a binary.** Two ways, with different reach:
+- *Release revocation:* list the hash in `packaging/revoked-binaries.txt` (`<64-hex>  [file]  [note]`). The carry step writes it into the signed manifest as `#revoked <hash>  <file>` and carries it into every later release. Console users cannot reverse it; only a later release that no longer lists it can (remove it from the list and from the previous release's manifest).
+- *Console revocation:* an administrator revokes a hash from the agent drawer. It takes effect at once, applies to that deployment only, is audited, and can be reversed with **Un-revoke binary**. Un-revoking lifts the revocation but does not restore anyone: agents stay quarantined until an operator restores each one, and the restore checks trust again.
+
+A revoked binary is never trusted, even if it is a current or previous release.
+
 ### Step 6-7 — Copy Bundle Files, Write VERSION
 
 Copies scenarios (with `.yaml.sig` files), the dashboard `wwwroot`, and ART external payloads into the delivery folder, and writes a plain `VERSION` file containing the version string.
@@ -183,6 +193,7 @@ At `dist\` root: `bas-install-<version>.zip`, `.zip.sha256`, and (if GPG signing
 | `docker: no space left on device` | Old images/build cache filling disk | `docker builder prune -a -f && docker image prune -f` |
 | `error running keyboxd` (GPG) | Git-for-Windows' MSYS gpg's keyboxd not launchable from PowerShell | Prefer a full Gpg4win install over Git-for-Windows' bundled gpg; or remove `use-keyboxd` from `%USERPROFILE%\.gnupg\common.conf` |
 | Agent binary trust all yellow after upgrade | `BINARIES.sha256` not refreshed for the new agent build | Re-run the full pipeline (not `-SkipBuild`) so Step 5c re-extracts and re-signs it |
+| Agents quarantined (not `outdated`) after an upgrade | The new `BINARIES.sha256` has no `#prev` lines: the build found no earlier release under `dist\`, or the image was built without `PREVIOUS_MANIFEST_B64` (`-SkipBuild` reuses an old image) | `grep -c '^#prev' agents/BINARIES.sha256` should be above 0 after the first upgrade. Rebuild the full pipeline with the earlier `dist\bas-install-<version>` still in place. A quarantined agent must still be released by an operator |
 
 ---
 

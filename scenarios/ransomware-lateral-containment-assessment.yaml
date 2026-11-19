@@ -1,0 +1,464 @@
+# =============================================================================
+# Ransomware Lateral Movement and Containment Assessment (Windows)
+# =============================================================================
+id: ransomware-lateral-containment-assessment
+version: "1.0.0"
+product_line: ransomware
+name: Ransomware Lateral Movement and Containment Assessment
+description: >
+  Five-step assessment of whether a simulated compromise can reach and execute
+  on other Windows endpoints and whether anything contains it. L1 validates
+  remote-service authentication, L2 simulates lateral tool transfer, L3 runs a
+  transient benign remote service, L4 assesses cross-host propagation from the
+  evidence ledger and L5 validates containment by re-probing after a wait window.
+  Targets are operator-listed lab hosts in BAS_LATERAL_TARGETS (semicolon or comma
+  separated; host-name characters only); with none, every step SKIPs. Only the
+  current identity is used. L2 and L3 are gated (BAS_CONFIRM_LATERAL_WRITE and
+  BAS_CONFIRM_REMOTE_EXEC, each exact lowercase true). Nothing is encrypted and
+  no ransomware behaviour is performed; propagation is judged from reachability
+  and benign execution markers. Evidence is endpoint-visible only: a drop in
+  reachability in L5 cannot be attributed to containment, and EDR-side
+  containment status is not queried here. Work directory %TEMP%\bas_lat_<run>.
+
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+severity: high
+estimated_duration_sec: 300
+abort_conditions:
+  - "Free disk in %TEMP% < 64 MB"
+  - "PowerShell major version < 5"
+tags:
+  - ransomware
+  - lateral-movement
+  - containment
+  - t1021
+  - t1570
+  - t1569
+  - mitre
+  - bas
+mitre_phases:
+  - lateral-movement
+  - execution
+attck_tactics:
+  - TA0008  # Lateral Movement
+  - TA0002  # Execution
+references:
+  - "MITRE ATT&CK T1021, T1021.002, T1570, T1569.002"
+  - "CISA #StopRansomware Guide: segmentation, privileged-access hygiene and rapid isolation"
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+  require_run_id: false
+  require_temp_disk_mb: 64
+  min_powershell_major: 5
+
+variables:
+  run_id: "{{env.BAS_RUN_ID | default(random_hex8)}}"
+  sim_tag: "[BAS-SIM-LAT]"
+
+steps:
+  # ---------------------------------------------------------------------------
+  - id: lat-l1-remote-auth-validation
+    name: "Lateral Containment L1 - Remote Service Authentication Validation (T1021)"
+    technique_id: T1021
+    detection_profiles:
+      - windows_smb_lateral_probe
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 300
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Read-only. For each host in BAS_LATERAL_TARGETS probes SMB 445, the ADMIN$ share, WinRM, WMI and the remote Service Control Manager using the current identity only. No credentials are supplied or guessed. Creates the BAS work directory with the evidence ledger."
+    preconditions: ["Windows host.", "BAS_LATERAL_TARGETS lists lab hosts the operator owns.", "Steps L1-L5 run in order within one run."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; anything created on a target is removed and removal verified; L5 removes the work directory."]
+    abort_on: []
+    telemetry:
+      - "Security EID 4624 type 3 and 5140/5145 on the target (admin share access)"
+      - "System EID 7045 on the target (L3 transient service)"
+    detection:
+      - "EDR/SIEM: remote admin-share write, remote service creation and cross-host fan-out from one source within minutes"
+    expected_telemetry_count: 1
+    false_positive_notes: "Patching, software deployment and remote administration use the same channels; correlate with change windows and account."
+    mitigations:
+      - "Block SMB/WinRM/WMI between workstations; segment servers."
+      - "LAPS / tiered administration so one identity is not admin everywhere."
+      - "EDR network isolation and automated containment on lateral-movement detections."
+    references: ["CISA #StopRansomware Guide"]
+    evidence: ["Emit per-target channel results."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { 'norun' }
+      $work = Join-Path $env:TEMP "bas_lat_$runId"
+      $ledger = Join-Path $work 'ledger.jsonl'
+      $targets = @(); $badTargets = @()
+      foreach ($t in @($env:BAS_LATERAL_TARGETS -split '[;,]' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) { if ($t -match '^[A-Za-z0-9._-]{1,253}$') { $targets += $t } else { $badTargets += $t } }
+      function Add-Ledger($step, $target, $result, $facts) {
+        if (-not (Test-Path $work)) { return }
+        $o = [ordered]@{ step=$step; target=$target; ts=(Get-Date).ToUniversalTime().ToString('o'); result=$result; facts=$facts }
+        Add-Content -Path $ledger -Value ($o | ConvertTo-Json -Compress -Depth 4) -Encoding UTF8
+      }
+      function Read-Ledger { if (Test-Path $ledger) { @(Get-Content $ledger | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json }) } else { @() } }
+      function Test-Port($h, $p) { try { $c = New-Object Net.Sockets.TcpClient; $a = $c.BeginConnect($h, $p, $null, $null); $ok = $a.AsyncWaitHandle.WaitOne(3000) -and $c.Connected; $c.Close(); return [bool]$ok } catch { return $false } }
+      function Test-Channels($t) {
+        $r = [ordered]@{ smb445=(Test-Port $t 445); admin=$false; winrm=$false; wmi=$false; scm=$false }
+        if ($r.smb445) { $r.admin = [bool](Test-Path "\\$t\ADMIN`$") }
+        try { Test-WSMan -ComputerName $t -ErrorAction Stop | Out-Null; $r.winrm = $true } catch { }
+        $j = Start-Job -ScriptBlock { param($h) try { (Get-WmiObject Win32_OperatingSystem -ComputerName $h -ErrorAction Stop) -ne $null } catch { $false } } -ArgumentList $t
+        if (Wait-Job $j -Timeout 15) { $r.wmi = [bool](Receive-Job $j) } else { Stop-Job $j }
+        Remove-Job $j -Force
+        $o = (& sc.exe "\\$t" query bas_probe_nonexistent 2>&1 | Out-String)
+        if ($o -match '1060') { $r.scm = $true }
+        return $r
+      }
+      if ($targets.Count -eq 0) { Write-Output "SKIP: prerequisite missing (BAS_LATERAL_TARGETS not set or no valid host name; invalid entries ignored: $($badTargets.Count)). Lab hosts only. [BAS-SIM-LAT-L1]"; return }
+      if (Test-Path $work) { Remove-Item $work -Recurse -Force }
+      New-Item -ItemType Directory -Path $work -Force | Out-Null
+      $open = 0; $lines = @()
+      foreach ($t in $targets) {
+        $r = Test-Channels $t
+        $lat = ($r.admin -or $r.wmi -or $r.scm -or $r.winrm)
+        if ($lat) { $open++ }
+        Add-Ledger 'L1' $t $(if ($lat) { 'reachable' } else { 'blocked' }) $r
+        $lines += "$t smb445=$($r.smb445) admin_share=$($r.admin) winrm=$($r.winrm) wmi=$($r.wmi) scm=$($r.scm)"
+      }
+      Write-Output "EVIDENCE T1021: targets=$($targets.Count) invalid_ignored=$($badTargets.Count) targets_with_open_remote_channel=$open. Current identity only; no credentials were supplied or guessed. [BAS-SIM-LAT-L1]"
+      foreach ($l in $lines) { Write-Output "EVIDENCE T1021: $l [BAS-SIM-LAT-L1]" }
+      if ($open -gt 0) { Write-Output "FAIL: $open of $($targets.Count) target(s) accepted a remote administrative channel (admin share, WinRM, WMI or SCM) from this identity - lateral movement is possible. [BAS-SIM-LAT-L1]" }
+      else { Write-Output "PASS: none of the $($targets.Count) target(s) accepted a remote administrative channel from this identity. [BAS-SIM-LAT-L1]" }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  - id: lat-l2-lateral-tool-transfer
+    name: "Lateral Containment L2 - Lateral Tool Transfer Simulation (T1570)"
+    technique_id: T1570
+    detection_profiles:
+      - windows_smb_lateral_probe
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Gated by BAS_CONFIRM_LATERAL_WRITE=true (exact). Writes one benign marker file to ADMIN$\\Temp on each target, reads it back, deletes it and verifies deletion."
+    preconditions: ["Windows host.", "BAS_LATERAL_TARGETS lists lab hosts the operator owns.", "Steps L1-L5 run in order within one run."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; anything created on a target is removed and removal verified; L5 removes the work directory."]
+    abort_on: []
+    telemetry:
+      - "Security EID 4624 type 3 and 5140/5145 on the target (admin share access)"
+      - "System EID 7045 on the target (L3 transient service)"
+    detection:
+      - "EDR/SIEM: remote admin-share write, remote service creation and cross-host fan-out from one source within minutes"
+    expected_telemetry_count: 1
+    false_positive_notes: "Patching, software deployment and remote administration use the same channels; correlate with change windows and account."
+    mitigations:
+      - "Block SMB/WinRM/WMI between workstations; segment servers."
+      - "LAPS / tiered administration so one identity is not admin everywhere."
+      - "EDR network isolation and automated containment on lateral-movement detections."
+    references: ["CISA #StopRansomware Guide"]
+    evidence: ["Emit written, readback_match, removed per target."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { 'norun' }
+      $work = Join-Path $env:TEMP "bas_lat_$runId"
+      $ledger = Join-Path $work 'ledger.jsonl'
+      $targets = @(); $badTargets = @()
+      foreach ($t in @($env:BAS_LATERAL_TARGETS -split '[;,]' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) { if ($t -match '^[A-Za-z0-9._-]{1,253}$') { $targets += $t } else { $badTargets += $t } }
+      function Add-Ledger($step, $target, $result, $facts) {
+        if (-not (Test-Path $work)) { return }
+        $o = [ordered]@{ step=$step; target=$target; ts=(Get-Date).ToUniversalTime().ToString('o'); result=$result; facts=$facts }
+        Add-Content -Path $ledger -Value ($o | ConvertTo-Json -Compress -Depth 4) -Encoding UTF8
+      }
+      function Read-Ledger { if (Test-Path $ledger) { @(Get-Content $ledger | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json }) } else { @() } }
+      function Test-Port($h, $p) { try { $c = New-Object Net.Sockets.TcpClient; $a = $c.BeginConnect($h, $p, $null, $null); $ok = $a.AsyncWaitHandle.WaitOne(3000) -and $c.Connected; $c.Close(); return [bool]$ok } catch { return $false } }
+      function Test-Channels($t) {
+        $r = [ordered]@{ smb445=(Test-Port $t 445); admin=$false; winrm=$false; wmi=$false; scm=$false }
+        if ($r.smb445) { $r.admin = [bool](Test-Path "\\$t\ADMIN`$") }
+        try { Test-WSMan -ComputerName $t -ErrorAction Stop | Out-Null; $r.winrm = $true } catch { }
+        $j = Start-Job -ScriptBlock { param($h) try { (Get-WmiObject Win32_OperatingSystem -ComputerName $h -ErrorAction Stop) -ne $null } catch { $false } } -ArgumentList $t
+        if (Wait-Job $j -Timeout 15) { $r.wmi = [bool](Receive-Job $j) } else { Stop-Job $j }
+        Remove-Job $j -Force
+        $o = (& sc.exe "\\$t" query bas_probe_nonexistent 2>&1 | Out-String)
+        if ($o -match '1060') { $r.scm = $true }
+        return $r
+      }
+      if ($targets.Count -eq 0) { Write-Output "SKIP: prerequisite missing (BAS_LATERAL_TARGETS not set). [BAS-SIM-LAT-L2]"; return }
+      if ($env:BAS_CONFIRM_LATERAL_WRITE -cne 'true') { foreach ($t in $targets) { Add-Ledger 'L2' $t 'skipped_gate' @{} }; Write-Output "SKIP: gate not confirmed (BAS_CONFIRM_LATERAL_WRITE is not exactly 'true') - no marker was written to any target. [BAS-SIM-LAT-L2]"; return }
+      if (-not (Test-Path $work)) { New-Item -ItemType Directory -Path $work -Force | Out-Null }
+      $ok = 0; $lines = @()
+      foreach ($t in $targets) {
+        $body = "[BAS-SIM-LAT] lateral tool transfer marker $runId"
+        $dst = "\\$t\ADMIN`$\Temp\bas_lat_$runId.txt"
+        $written = $false; $match = $false; $removed = $false
+        try { [System.IO.File]::WriteAllText($dst, $body); $written = Test-Path $dst } catch { }
+        if ($written) { $match = ([System.IO.File]::ReadAllText($dst) -eq $body); Remove-Item $dst -Force -ErrorAction SilentlyContinue; $removed = -not (Test-Path $dst) }
+        if ($written) { $ok++ }
+        Add-Ledger 'L2' $t $(if ($written) { 'executed' } else { 'blocked' }) @{ written=$written; readback_match=$match; removed=$removed }
+        $lines += "$t written=$written readback_match=$match removed=$removed"
+        if ($written -and -not $removed) { Write-Output "WARNING: marker $dst could not be removed from $t; delete it manually. [BAS-SIM-LAT-L2]" }
+      }
+      foreach ($l in $lines) { Write-Output "EVIDENCE T1570: $l [BAS-SIM-LAT-L2]" }
+      if ($ok -gt 0) { Write-Output "FAIL: a marker file was transferred to ADMIN$ on $ok of $($targets.Count) target(s) and read back - lateral tool transfer is not blocked. [BAS-SIM-LAT-L2]" }
+      else { Write-Output "PASS: the marker transfer to ADMIN$ was blocked on all $($targets.Count) target(s). [BAS-SIM-LAT-L2]" }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  - id: lat-l3-remote-service-execution
+    name: "Lateral Containment L3 - Remote Service Execution (T1569.002)"
+    technique_id: T1569.002
+    detection_profiles:
+      - windows_malicious_service
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 300
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Gated by BAS_CONFIRM_REMOTE_EXEC=true (exact). Creates a transient service on each target that runs cmd.exe to write a benign marker, confirms the marker over SMB, then deletes the marker and the service and verifies both are gone. Persistence exists only for seconds."
+    preconditions: ["Windows host.", "BAS_LATERAL_TARGETS lists lab hosts the operator owns.", "Steps L1-L5 run in order within one run."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; anything created on a target is removed and removal verified; L5 removes the work directory."]
+    abort_on: []
+    telemetry:
+      - "Security EID 4624 type 3 and 5140/5145 on the target (admin share access)"
+      - "System EID 7045 on the target (L3 transient service)"
+    detection:
+      - "EDR/SIEM: remote admin-share write, remote service creation and cross-host fan-out from one source within minutes"
+    expected_telemetry_count: 1
+    false_positive_notes: "Patching, software deployment and remote administration use the same channels; correlate with change windows and account."
+    mitigations:
+      - "Block SMB/WinRM/WMI between workstations; segment servers."
+      - "LAPS / tiered administration so one identity is not admin everywhere."
+      - "EDR network isolation and automated containment on lateral-movement detections."
+    references: ["CISA #StopRansomware Guide"]
+    evidence: ["Emit service_created, marker_seen, service_removed per target."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { 'norun' }
+      $work = Join-Path $env:TEMP "bas_lat_$runId"
+      $ledger = Join-Path $work 'ledger.jsonl'
+      $targets = @(); $badTargets = @()
+      foreach ($t in @($env:BAS_LATERAL_TARGETS -split '[;,]' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) { if ($t -match '^[A-Za-z0-9._-]{1,253}$') { $targets += $t } else { $badTargets += $t } }
+      function Add-Ledger($step, $target, $result, $facts) {
+        if (-not (Test-Path $work)) { return }
+        $o = [ordered]@{ step=$step; target=$target; ts=(Get-Date).ToUniversalTime().ToString('o'); result=$result; facts=$facts }
+        Add-Content -Path $ledger -Value ($o | ConvertTo-Json -Compress -Depth 4) -Encoding UTF8
+      }
+      function Read-Ledger { if (Test-Path $ledger) { @(Get-Content $ledger | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json }) } else { @() } }
+      function Test-Port($h, $p) { try { $c = New-Object Net.Sockets.TcpClient; $a = $c.BeginConnect($h, $p, $null, $null); $ok = $a.AsyncWaitHandle.WaitOne(3000) -and $c.Connected; $c.Close(); return [bool]$ok } catch { return $false } }
+      function Test-Channels($t) {
+        $r = [ordered]@{ smb445=(Test-Port $t 445); admin=$false; winrm=$false; wmi=$false; scm=$false }
+        if ($r.smb445) { $r.admin = [bool](Test-Path "\\$t\ADMIN`$") }
+        try { Test-WSMan -ComputerName $t -ErrorAction Stop | Out-Null; $r.winrm = $true } catch { }
+        $j = Start-Job -ScriptBlock { param($h) try { (Get-WmiObject Win32_OperatingSystem -ComputerName $h -ErrorAction Stop) -ne $null } catch { $false } } -ArgumentList $t
+        if (Wait-Job $j -Timeout 15) { $r.wmi = [bool](Receive-Job $j) } else { Stop-Job $j }
+        Remove-Job $j -Force
+        $o = (& sc.exe "\\$t" query bas_probe_nonexistent 2>&1 | Out-String)
+        if ($o -match '1060') { $r.scm = $true }
+        return $r
+      }
+      if ($targets.Count -eq 0) { Write-Output "SKIP: prerequisite missing (BAS_LATERAL_TARGETS not set). [BAS-SIM-LAT-L3]"; return }
+      if ($env:BAS_CONFIRM_REMOTE_EXEC -cne 'true') { foreach ($t in $targets) { Add-Ledger 'L3' $t 'skipped_gate' @{} }; Write-Output "SKIP: gate not confirmed (BAS_CONFIRM_REMOTE_EXEC is not exactly 'true') - no remote service was created. [BAS-SIM-LAT-L3]"; return }
+      if (-not (Test-Path $work)) { New-Item -ItemType Directory -Path $work -Force | Out-Null }
+      $svc = "BASLat$runId"; $ok = 0; $lines = @()
+      foreach ($t in $targets) {
+        $markerLocal = "C:\Windows\Temp\bas_lat_exec_$runId.txt"
+        $markerUnc = "\\$t\C`$\Windows\Temp\bas_lat_exec_$runId.txt"
+        $bin = "cmd.exe /c echo [BAS-SIM-LAT] remote service execution $runId > $markerLocal"
+        $c = (& sc.exe "\\$t" create $svc binPath= $bin start= demand 2>&1 | Out-String)
+        $created = ($c -match 'SUCCESS')
+        $executed = $false
+        if ($created) {
+          & sc.exe "\\$t" start $svc 2>&1 | Out-Null
+          for ($i = 0; $i -lt 8 -and -not $executed; $i++) { Start-Sleep -Milliseconds 500; $executed = [bool](Test-Path $markerUnc) }
+        }
+        Remove-Item $markerUnc -Force -ErrorAction SilentlyContinue
+        $markerGone = -not (Test-Path $markerUnc)
+        $svcGone = $true
+        if ($created) {
+          & sc.exe "\\$t" delete $svc 2>&1 | Out-Null
+          Start-Sleep -Milliseconds 800
+          $q = (& sc.exe "\\$t" query $svc 2>&1 | Out-String)
+          $svcGone = ($q -match '1060')
+        }
+        if ($executed) { $ok++ }
+        Add-Ledger 'L3' $t $(if ($executed) { 'executed' } elseif ($created) { 'created_not_executed' } else { 'blocked' }) @{ created=$created; marker_seen=$executed; marker_removed=$markerGone; service_removed=$svcGone }
+        $lines += "$t service_created=$created marker_seen=$executed marker_removed=$markerGone service_removed=$svcGone"
+        if (-not $svcGone) { Write-Output "WARNING: service $svc may remain on $t; remove with: sc.exe \\$t delete $svc [BAS-SIM-LAT-L3]" }
+      }
+      foreach ($l in $lines) { Write-Output "EVIDENCE T1569.002: $l [BAS-SIM-LAT-L3]" }
+      if ($ok -gt 0) { Write-Output "FAIL: a benign remote service ran on $ok of $($targets.Count) target(s) and its marker was confirmed over SMB - remote service execution is not blocked. [BAS-SIM-LAT-L3]" }
+      else { Write-Output "PASS: remote service creation or execution was blocked on all $($targets.Count) target(s) (confirmed by the absence of the marker). [BAS-SIM-LAT-L3]" }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  - id: lat-l4-propagation-assessment
+    name: "Lateral Containment L4 - Cross-Host Propagation Assessment (T1021.002)"
+    technique_id: T1021.002
+    detection_profiles:
+      - windows_smb_lateral_probe
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Read-only. Aggregates the ledger from L1-L3 into reachable and executed target counts and open channels. Nothing is encrypted and no ransomware behaviour is performed."
+    preconditions: ["Windows host.", "BAS_LATERAL_TARGETS lists lab hosts the operator owns.", "Steps L1-L5 run in order within one run."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; anything created on a target is removed and removal verified; L5 removes the work directory."]
+    abort_on: []
+    telemetry:
+      - "Security EID 4624 type 3 and 5140/5145 on the target (admin share access)"
+      - "System EID 7045 on the target (L3 transient service)"
+    detection:
+      - "EDR/SIEM: remote admin-share write, remote service creation and cross-host fan-out from one source within minutes"
+    expected_telemetry_count: 1
+    false_positive_notes: "Patching, software deployment and remote administration use the same channels; correlate with change windows and account."
+    mitigations:
+      - "Block SMB/WinRM/WMI between workstations; segment servers."
+      - "LAPS / tiered administration so one identity is not admin everywhere."
+      - "EDR network isolation and automated containment on lateral-movement detections."
+    references: ["CISA #StopRansomware Guide"]
+    evidence: ["Emit reachable, executed_on and channels_open."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { 'norun' }
+      $work = Join-Path $env:TEMP "bas_lat_$runId"
+      $ledger = Join-Path $work 'ledger.jsonl'
+      $targets = @(); $badTargets = @()
+      foreach ($t in @($env:BAS_LATERAL_TARGETS -split '[;,]' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) { if ($t -match '^[A-Za-z0-9._-]{1,253}$') { $targets += $t } else { $badTargets += $t } }
+      function Add-Ledger($step, $target, $result, $facts) {
+        if (-not (Test-Path $work)) { return }
+        $o = [ordered]@{ step=$step; target=$target; ts=(Get-Date).ToUniversalTime().ToString('o'); result=$result; facts=$facts }
+        Add-Content -Path $ledger -Value ($o | ConvertTo-Json -Compress -Depth 4) -Encoding UTF8
+      }
+      function Read-Ledger { if (Test-Path $ledger) { @(Get-Content $ledger | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json }) } else { @() } }
+      function Test-Port($h, $p) { try { $c = New-Object Net.Sockets.TcpClient; $a = $c.BeginConnect($h, $p, $null, $null); $ok = $a.AsyncWaitHandle.WaitOne(3000) -and $c.Connected; $c.Close(); return [bool]$ok } catch { return $false } }
+      function Test-Channels($t) {
+        $r = [ordered]@{ smb445=(Test-Port $t 445); admin=$false; winrm=$false; wmi=$false; scm=$false }
+        if ($r.smb445) { $r.admin = [bool](Test-Path "\\$t\ADMIN`$") }
+        try { Test-WSMan -ComputerName $t -ErrorAction Stop | Out-Null; $r.winrm = $true } catch { }
+        $j = Start-Job -ScriptBlock { param($h) try { (Get-WmiObject Win32_OperatingSystem -ComputerName $h -ErrorAction Stop) -ne $null } catch { $false } } -ArgumentList $t
+        if (Wait-Job $j -Timeout 15) { $r.wmi = [bool](Receive-Job $j) } else { Stop-Job $j }
+        Remove-Job $j -Force
+        $o = (& sc.exe "\\$t" query bas_probe_nonexistent 2>&1 | Out-String)
+        if ($o -match '1060') { $r.scm = $true }
+        return $r
+      }
+      $rows = Read-Ledger
+      if ($rows.Count -eq 0) { Write-Output "SKIP: prerequisite missing (no L1 ledger for this run; L1 recorded nothing). [BAS-SIM-LAT-L4]"; return }
+      $tg = @($rows | Where-Object { $_.step -eq 'L1' } | ForEach-Object { $_.target } | Sort-Object -Unique)
+      $reach = @($rows | Where-Object { $_.step -eq 'L1' -and $_.result -eq 'reachable' } | ForEach-Object { $_.target } | Sort-Object -Unique)
+      $exec = @($rows | Where-Object { $_.step -in 'L2','L3' -and $_.result -eq 'executed' } | ForEach-Object { $_.target } | Sort-Object -Unique)
+      $gated = 0; foreach ($st in 'L2','L3') { $stRows = @($rows | Where-Object { $_.step -eq $st }); if ($stRows.Count -gt 0 -and @($stRows | Where-Object { $_.result -ne 'skipped_gate' }).Count -eq 0) { $gated++ } }
+      $byChan = @{}; foreach ($r in @($rows | Where-Object { $_.step -eq 'L1' })) { foreach ($k in 'admin','winrm','wmi','scm') { if ($r.facts.$k) { $byChan[$k] = 1 + [int]$byChan[$k] } } }
+      $chan = (($byChan.Keys | Sort-Object | ForEach-Object { "$_=$($byChan[$_])" }) -join ' ')
+      Write-Output "EVIDENCE T1021.002: targets=$($tg.Count) reachable=$($reach.Count) executed_on=$($exec.Count) [$(($exec -join ','))] channels_open=[$chan] execution_steps_skipped_by_gate=$gated. Propagation is assessed from reachability and benign execution markers only; nothing was encrypted. [BAS-SIM-LAT-L4]"
+      if ($exec.Count -ge 2) { Write-Output "FAIL: benign execution succeeded on $($exec.Count) targets - an attacker with this identity could propagate across at least that many hosts (blast radius $($exec.Count) of $($tg.Count)). [BAS-SIM-LAT-L4]" }
+      elseif ($exec.Count -eq 1) { Write-Output "FAIL: benign execution succeeded on 1 target - lateral movement is possible; propagation to several hosts was not demonstrated with this target list. [BAS-SIM-LAT-L4]" }
+      elseif ($reach.Count -gt 0 -and $gated -gt 0) { Write-Output "SKIP: $($reach.Count) target(s) are reachable but execution was not tested (gates not confirmed); blast radius is reachability-only. [BAS-SIM-LAT-L4]" }
+      elseif ($reach.Count -gt 0) { Write-Output "PASS: $($reach.Count) target(s) were reachable but benign execution was blocked on all of them. [BAS-SIM-LAT-L4]" }
+      else { Write-Output "PASS: no target accepted a remote administrative channel; propagation was not possible from this identity. [BAS-SIM-LAT-L4]" }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  - id: lat-l5-containment-response
+    name: "Lateral Containment L5 - Containment and Response Validation (T1021.002)"
+    technique_id: T1021.002
+    detection_profiles:
+      - windows_smb_lateral_probe
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 720
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Waits BAS_CONTAINMENT_WAIT_SEC (default 60, max 600), re-probes the previously reachable targets and reads local isolation signals (firewall profiles, isolation-named rules, disabled adapters, EDR service state). Removes the BAS work directory and verifies removal."
+    preconditions: ["Windows host.", "BAS_LATERAL_TARGETS lists lab hosts the operator owns.", "Steps L1-L5 run in order within one run."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; anything created on a target is removed and removal verified; L5 removes the work directory."]
+    abort_on: []
+    telemetry:
+      - "Security EID 4624 type 3 and 5140/5145 on the target (admin share access)"
+      - "System EID 7045 on the target (L3 transient service)"
+    detection:
+      - "EDR/SIEM: remote admin-share write, remote service creation and cross-host fan-out from one source within minutes"
+    expected_telemetry_count: 1
+    false_positive_notes: "Patching, software deployment and remote administration use the same channels; correlate with change windows and account."
+    mitigations:
+      - "Block SMB/WinRM/WMI between workstations; segment servers."
+      - "LAPS / tiered administration so one identity is not admin everywhere."
+      - "EDR network isolation and automated containment on lateral-movement detections."
+    references: ["CISA #StopRansomware Guide"]
+    evidence: ["Emit still_reachable, no_longer_reachable and cleanup_verified."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { 'norun' }
+      $work = Join-Path $env:TEMP "bas_lat_$runId"
+      $ledger = Join-Path $work 'ledger.jsonl'
+      $targets = @(); $badTargets = @()
+      foreach ($t in @($env:BAS_LATERAL_TARGETS -split '[;,]' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) { if ($t -match '^[A-Za-z0-9._-]{1,253}$') { $targets += $t } else { $badTargets += $t } }
+      function Add-Ledger($step, $target, $result, $facts) {
+        if (-not (Test-Path $work)) { return }
+        $o = [ordered]@{ step=$step; target=$target; ts=(Get-Date).ToUniversalTime().ToString('o'); result=$result; facts=$facts }
+        Add-Content -Path $ledger -Value ($o | ConvertTo-Json -Compress -Depth 4) -Encoding UTF8
+      }
+      function Read-Ledger { if (Test-Path $ledger) { @(Get-Content $ledger | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json }) } else { @() } }
+      function Test-Port($h, $p) { try { $c = New-Object Net.Sockets.TcpClient; $a = $c.BeginConnect($h, $p, $null, $null); $ok = $a.AsyncWaitHandle.WaitOne(3000) -and $c.Connected; $c.Close(); return [bool]$ok } catch { return $false } }
+      function Test-Channels($t) {
+        $r = [ordered]@{ smb445=(Test-Port $t 445); admin=$false; winrm=$false; wmi=$false; scm=$false }
+        if ($r.smb445) { $r.admin = [bool](Test-Path "\\$t\ADMIN`$") }
+        try { Test-WSMan -ComputerName $t -ErrorAction Stop | Out-Null; $r.winrm = $true } catch { }
+        $j = Start-Job -ScriptBlock { param($h) try { (Get-WmiObject Win32_OperatingSystem -ComputerName $h -ErrorAction Stop) -ne $null } catch { $false } } -ArgumentList $t
+        if (Wait-Job $j -Timeout 15) { $r.wmi = [bool](Receive-Job $j) } else { Stop-Job $j }
+        Remove-Job $j -Force
+        $o = (& sc.exe "\\$t" query bas_probe_nonexistent 2>&1 | Out-String)
+        if ($o -match '1060') { $r.scm = $true }
+        return $r
+      }
+      $rows = Read-Ledger
+      if ($rows.Count -eq 0) { Write-Output "SKIP: prerequisite missing (no ledger for this run). [BAS-SIM-LAT-L5]"; if (Test-Path $work) { Remove-Item $work -Recurse -Force }; return }
+      $reach = @($rows | Where-Object { $_.step -eq 'L1' -and $_.result -eq 'reachable' } | ForEach-Object { $_.target } | Sort-Object -Unique)
+      $wait = 60; if ($env:BAS_CONTAINMENT_WAIT_SEC) { $w = 0; if ([int]::TryParse($env:BAS_CONTAINMENT_WAIT_SEC, [ref]$w) -and $w -ge 0) { $wait = [Math]::Min($w, 600) } }
+      if ($reach.Count -eq 0) { Remove-Item $work -Recurse -Force; Write-Output "SKIP: nothing was reachable in L1, so there is nothing to contain (cleanup_verified=$(-not (Test-Path $work))). [BAS-SIM-LAT-L5]"; return }
+      Start-Sleep -Seconds $wait
+      $still = @(); $dropped = @()
+      foreach ($t in $reach) { $r = Test-Channels $t; if ($r.admin -or $r.wmi -or $r.scm -or $r.winrm) { $still += $t } else { $dropped += $t } }
+      $fw = @(Get-NetFirewallProfile -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq 'True' }).Count
+      $isoRules = @(Get-NetFirewallRule -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -match '(?i)isolat|quarantin' -and $_.DisplayName -notmatch '(?i)HNS|Container|Hyper-V|Sandbox|Application Guard' -and $_.Enabled -eq 'True' }).Count
+      $adaptersDown = @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Disabled' }).Count
+      $edr = @(Get-Service -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^(CSFalconService|SentinelAgent|MsSense|CylanceSvc|CbDefense|xagt|CarbonBlack|elastic-endpoint|TaniumClient)' } | ForEach-Object { "$($_.Name)=$($_.Status)" })
+      Remove-Item $work -Recurse -Force
+      $clean = -not (Test-Path $work)
+      Write-Output "EVIDENCE T1021.002: waited_sec=$wait previously_reachable=$($reach.Count) still_reachable=$($still.Count) [$(($still -join ','))] no_longer_reachable=$($dropped.Count) [$(($dropped -join ','))] firewall_profiles_on=$fw isolation_named_firewall_rules=$isoRules adapters_disabled=$adaptersDown edr_services=[$(($edr -join ','))] cleanup_verified=$clean. These are endpoint-visible signals only; a drop in reachability cannot be attributed to containment versus other causes, and EDR-side status is not queried. [BAS-SIM-LAT-L5]"
+      if (-not $clean) { Write-Output "WARNING: work directory $work remains; remove it manually. [BAS-SIM-LAT-L5]" }
+      if ($dropped.Count -gt 0 -and $still.Count -eq 0) { Write-Output "PASS: all $($dropped.Count) previously reachable target(s) were no longer reachable after $wait s - consistent with containment or isolation (cause not attributable from the endpoint). [BAS-SIM-LAT-L5]" }
+      elseif ($dropped.Count -gt 0) { Write-Output "FAIL: only $($dropped.Count) of $($reach.Count) previously reachable target(s) dropped; $($still.Count) remained reachable after $wait s - containment was partial or absent. [BAS-SIM-LAT-L5]" }
+      else { Write-Output "FAIL: every previously reachable target ($($reach.Count)) was still reachable $wait s after the lateral-movement attempts - no containment was observed. [BAS-SIM-LAT-L5]" }
+    cleanup: |
+      $id = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { 'norun' }
+      Remove-Item (Join-Path $env:TEMP "bas_lat_$id") -Recurse -Force -ErrorAction SilentlyContinue

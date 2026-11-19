@@ -1,0 +1,171 @@
+[
+  {
+    "id": "cv-b14",
+    "n": 1,
+    "name": "Cloud VM AWS 14 - EC2 Instance Profile Presence (T1552.005)",
+    "technique_id": "T1552.005",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Checks whether an instance profile is attached through IMDSv2. Credentials are never retrieved.",
+    "telemetry": [
+      "CloudTrail: none (IMDS is local)",
+      "Sysmon EID 3: IMDSv2 request"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "cloud_imds_probe",
+    "no_default_cleanup": false
+  },
+  {
+    "id": "cv-b15",
+    "n": 2,
+    "name": "Cloud VM AWS 15 - Caller Identity Discovery (T1087.004)",
+    "technique_id": "T1087.004",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Runs sts get-caller-identity. Informational only; the ARN is not recorded.",
+    "telemetry": [
+      "CloudTrail: GetCallerIdentity (cloud side)"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "cloud_identity_read",
+    "no_default_cleanup": false
+  },
+  {
+    "id": "cv-b16",
+    "n": 3,
+    "name": "Cloud VM AWS 16 - IAM Role Policy Enumeration (T1069.003)",
+    "technique_id": "T1069.003",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Lists managed policies attached to the instance role. Read-only.",
+    "telemetry": [
+      "CloudTrail: ListAttachedRolePolicies (cloud side)"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "cloud_role_read",
+    "no_default_cleanup": false
+  },
+  {
+    "id": "cv-b17",
+    "n": 4,
+    "name": "Cloud VM AWS 17 - S3 Bucket Discovery (T1619)",
+    "technique_id": "T1619",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Lists bucket names visible to the instance identity. Read-only; names only.",
+    "telemetry": [
+      "CloudTrail: ListBuckets (cloud side)"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "cloud_inventory_read",
+    "no_default_cleanup": false
+  },
+  {
+    "id": "cv-b18",
+    "n": 5,
+    "name": "Cloud VM AWS 18 - Security Group and Network Inventory (T1580)",
+    "technique_id": "T1580",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Describes the first page of security groups. Read-only.",
+    "telemetry": [
+      "CloudTrail: DescribeSecurityGroups (cloud side)"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "cloud_inventory_read",
+    "no_default_cleanup": false
+  },
+  {
+    "id": "cv-b19",
+    "n": 6,
+    "name": "Cloud VM AWS 19 - KMS Key Inventory (T1580)",
+    "technique_id": "T1580",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Lists the first page of KMS key identifiers. Read-only.",
+    "telemetry": [
+      "CloudTrail: ListKeys (cloud side)"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "cloud_inventory_read",
+    "no_default_cleanup": false
+  },
+  {
+    "id": "cv-b20",
+    "n": 7,
+    "name": "Cloud VM AWS 20 - Secrets Manager Name Listing (T1555)",
+    "technique_id": "T1555",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Lists the first page of secret names. get-secret-value is never called.",
+    "telemetry": [
+      "CloudTrail: ListSecrets (cloud side)"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "cloud_secret_name_read",
+    "no_default_cleanup": false
+  },
+  {
+    "id": "cv-b21",
+    "n": 8,
+    "name": "Cloud VM AWS 21 - Instance Role Privilege-Escalation Policy Simulation (T1098)",
+    "technique_id": "T1098",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Runs IAM policy simulation for escalation actions against the instance role. Simulation only; no IAM change is made.",
+    "telemetry": [
+      "CloudTrail: SimulatePrincipalPolicy (cloud side)"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "policy_simulation_read",
+    "no_default_cleanup": false
+  }
+]

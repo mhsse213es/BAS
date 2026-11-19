@@ -1,0 +1,50 @@
+[
+  {
+    "id": "appctl-g01-log-health",
+    "n": 1,
+    "name": "Application control Operational Reliability: enforcement log channels are enabled and retained (T1562.002)",
+    "technique_id": "T1562.002",
+    "timeout_sec": 60,
+    "blast_radius": "Read-only: checks that the AppLocker and Code Integrity log channels this policy depends on are enabled and not capped below 1 MB. Changes nothing.",
+    "telemetry": [
+      "Event log channel configuration"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ],
+    "production_safe": true,
+    "risk": "low"
+  },
+  {
+    "id": "appctl-g02-identity-service",
+    "n": 2,
+    "name": "Application control Operational Reliability: application identity service runs while AppLocker enforces (T1562.001)",
+    "technique_id": "T1562.001",
+    "timeout_sec": 60,
+    "blast_radius": "Read-only: checks that the application identity service is present and running whenever an AppLocker collection is enforced. Changes nothing.",
+    "telemetry": [
+      "Service configuration for AppIDSvc"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ],
+    "production_safe": true,
+    "risk": "low"
+  },
+  {
+    "id": "appctl-g03-overbroad-allow",
+    "n": 3,
+    "name": "Application control Operational Reliability: allow rules open to everyone over whole drives or user-writable paths (T1562.001)",
+    "technique_id": "T1562.001",
+    "timeout_sec": 60,
+    "blast_radius": "Read-only: reads the effective AppLocker policy and counts allow rules that apply to Everyone or Users and cover a whole drive, a user-writable location or a network path. Rule names are not recorded. Changes nothing.",
+    "telemetry": [
+      "AppLocker effective policy XML"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ],
+    "production_safe": true,
+    "risk": "low"
+  }
+]

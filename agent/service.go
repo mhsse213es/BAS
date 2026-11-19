@@ -115,18 +115,24 @@ func (s *agentSvc) Execute(_ []string, r <-chan svc.ChangeRequest, status chan<-
 	}
 
 	go agent.connectWS()
+	go agent.runCertRenewal(context.Background())
 	go agent.startLocalAPI()
 	go agent.runSpoolDrainer()
 	go agent.runDisconnectWatchdog()
 	agent.sendHeartbeat("idle")
 
 	ticker := time.NewTicker(heartbeatInterval)
+	trayTicker := time.NewTicker(trayWatchInterval)
+	defer trayTicker.Stop()
 	defer ticker.Stop()
 
 	status <- svc.Status{
 		State:   svc.Running,
 		Accepts: svc.AcceptStop | svc.AcceptShutdown | svc.AcceptSessionChange,
 	}
+
+	// Restore the tray visibility last set by the server before anything can launch the tray.
+	loadTrayHidden()
 
 	// Covers a session that was already active before the service started (or
 	// restarted, e.g. via svcUpdate) — SessionChange notifications only fire for
@@ -138,6 +144,8 @@ func (s *agentSvc) Execute(_ []string, r <-chan svc.ChangeRequest, status chan<-
 		select {
 		case <-ticker.C:
 			agent.sendHeartbeat(agent.getStatus())
+		case <-trayTicker.C:
+			watchTray()
 		case <-stopRequested:
 			// stopSelf (agent.go) already ran finalize/heartbeat/disable before
 			// signaling here — this just performs the clean SCM handshake.
@@ -152,6 +160,7 @@ func (s *agentSvc) Execute(_ []string, r <-chan svc.ChangeRequest, status chan<-
 				agent.shutdownFinalize(shutdownGrace)
 				agent.sendHeartbeat("offline")
 				RestoreSystemDialogs()
+				stopTrayForActiveSession()
 				return false, 0
 			case svc.SessionChange:
 				// WTS_SESSION_LOGON (5): a user has just logged on to a session.
@@ -185,6 +194,13 @@ func svcInstall(serverURL, envLabel, secret, enrollPort string) error {
 	if s, err := m.OpenService(svcName); err == nil {
 		s.Close()
 		return fmt.Errorf("service %q already installed — run --uninstall first", svcName)
+	}
+
+	// A delete-at-restart order left by an earlier uninstall would delete this installation at the next restart.
+	if n, err := cancelPendingDeletes(agentPendingDeleteRoots(exePath)...); err != nil {
+		fmt.Printf("[~] Could not check for delete-at-restart orders from an earlier uninstall: %v\n", err)
+	} else if n > 0 {
+		fmt.Printf("[+] Cancelled %d delete-at-restart order(s) left by an earlier uninstall\n", n)
 	}
 
 	s, err := m.CreateService(svcName, exePath,
@@ -229,6 +245,12 @@ func svcInstall(serverURL, envLabel, secret, enrollPort string) error {
 
 	_ = eventlog.InstallAsEventCreate(svcName, eventlog.Error|eventlog.Warning|eventlog.Info)
 	fmt.Printf("[+] Service %q installed (LocalSystem, auto-start)\n", svcName)
+	// A Start Menu entry so the tray icon can be brought back by hand.
+	if err := createTrayShortcut(exePath); err != nil {
+		log.Printf("[svc] warning: %v", err)
+	} else {
+		fmt.Printf("[+] Start Menu shortcut \"Audspect Agent\" created\n")
+	}
 
 	// Apply tamper protections — failures are non-fatal (logged, service still starts).
 	if err := ApplyServiceRecovery(); err != nil {
@@ -447,6 +469,7 @@ func svcUninstall() error {
 
 	removedAny := false
 	var lastErr error
+	installDirs := installedBinaryDirs(m) // read before the services are deleted
 	for _, name := range []string{svcName, svcNameLegacy} {
 		removed, err := uninstallServiceRegistration(m, name)
 		if err != nil {
@@ -458,10 +481,22 @@ func svcUninstall() error {
 		}
 	}
 	if !removedAny {
+		// A removal that failed means the service is still registered: leave its data alone (the agent still needs it)
+		// and report the failure, instead of cleaning up and claiming success.
 		if lastErr != nil {
-			return lastErr
+			return uninstallOutcome(false, lastErr, 0)
 		}
-		return fmt.Errorf("service %q not found", svcName)
+		// No service is registered, but an earlier, partial uninstall may have left the agent's data behind.
+		rep := cleanAgentFootprint(nil, nil)
+		if err := uninstallOutcome(false, nil, len(rep.Removed)+len(rep.Deferred)); err != nil {
+			return fmt.Errorf("service %q not found", svcName)
+		}
+		fmt.Printf("[+] No service was registered; the leftover agent data was removed\n")
+		return nil
+	}
+	if lastErr != nil {
+		// One of the two registrations (current or legacy name) could not be removed: the agent would come back.
+		return uninstallOutcome(true, lastErr, 0)
 	}
 
 	// Everything below is best-effort cleanup: the tray autostart entry/
@@ -477,8 +512,30 @@ func svcUninstall() error {
 		fmt.Printf("[~] Could not remove tray shortcut: %v\n", err)
 	}
 
+	// The service is gone and its process has ended, so nothing holds the agent's files any more: put back the
+	// Windows settings it changed and remove its data (keys, certificates, token, logs, spool).
+	cleanAgentFootprint(installDirs, nil)
+
 	fmt.Printf("[+] Uninstall complete\n")
 	return nil
+}
+
+// installedBinaryDirs returns the folder each registered agent service runs from.
+func installedBinaryDirs(m *mgr.Mgr) []string {
+	var dirs []string
+	for _, name := range []string{svcName, svcNameLegacy} {
+		s, err := m.OpenService(name)
+		if err != nil {
+			continue
+		}
+		if cfg, err := s.Config(); err == nil {
+			if p := unquoteServicePath(cfg.BinaryPathName); p != "" {
+				dirs = append(dirs, filepath.Dir(p))
+			}
+		}
+		s.Close()
+	}
+	return dirs
 }
 
 // uninstallServiceRegistration stops and deletes the named service
@@ -516,7 +573,9 @@ func uninstallServiceRegistration(m *mgr.Mgr, name string) (removed bool, err er
 	// uninstall never hangs.
 	fmt.Printf("[*] Stopping %s...\n", name)
 	if err := stopServiceAndWait(s, 15*time.Second, 500*time.Millisecond, terminateProcessByPID); err != nil {
-		return false, fmt.Errorf("stop service %q: %w", name, err)
+		// A service that will not stop can still be deleted: Windows removes it as soon as its process ends.
+		// Giving up here used to leave the agent registered and running.
+		fmt.Printf("[~] Could not stop %s (%v); deleting it anyway\n", name, err)
 	}
 
 	if err := s.Delete(); err != nil {
@@ -532,13 +591,27 @@ func uninstallServiceRegistration(m *mgr.Mgr, name string) (removed bool, err er
 	}
 
 	if binaryPath != "" {
-		if err := scheduleBinaryDeleteOnReboot(binaryPath); err != nil {
+		// Windows Installer removes the executable itself once this uninstall ends; scheduling it here as well
+		// would leave a delete order that removes the next installation at the next restart.
+		if _, err := scheduleExeDelete(binaryPath, removedByMSI(), scheduleBinaryDeleteOnReboot); err != nil {
 			fmt.Printf("[~] Could not schedule binary for delayed deletion: %v\n", err)
 		}
 	}
 
 	fmt.Printf("[+] Service %q uninstalled\n", name)
 	return true, nil
+}
+
+// uninstallOutcome decides whether an uninstall succeeded. A service that could not be removed is a failure whatever
+// else was cleaned, because the agent would still be installed and would start again at the next boot.
+func uninstallOutcome(removedAny bool, lastErr error, footprintItems int) error {
+	if lastErr != nil {
+		return lastErr
+	}
+	if !removedAny && footprintItems == 0 {
+		return fmt.Errorf("no agent service or leftover agent data was found")
+	}
+	return nil
 }
 
 func svcRun() error {
@@ -683,8 +756,9 @@ func platformSelfUninstall() error {
 	// Everything below is best-effort cleanup, matching svcUninstall's own
 	// philosophy: a missing key/window/file is already the desired end
 	// state, not an error worth failing the whole uninstall over.
+	_, msiManaged := readMSIProductCode() // an MSI install is removed by Windows Installer below
 	if binaryPath != "" {
-		if err := scheduleBinaryDeleteOnReboot(binaryPath); err != nil {
+		if _, err := scheduleExeDelete(binaryPath, msiManaged, scheduleBinaryDeleteOnReboot); err != nil {
 			log.Printf("[~] Could not schedule binary for delayed deletion: %v", err)
 		}
 	}
@@ -695,6 +769,13 @@ func platformSelfUninstall() error {
 	terminateOtherAgentProcesses()
 	if err := removeTrayShortcut(); err != nil {
 		log.Printf("[~] Could not remove tray shortcut: %v", err)
+	}
+	// An agent installed from the MSI is also registered in Apps & features. Remove that
+	// registration (and the files) the same way an administrator would, so the two paths agree.
+	if code, ok := readMSIProductCode(); ok {
+		if err := startMSIRemoval(code); err != nil {
+			log.Printf("[~] Could not schedule the MSI removal: %v", err)
+		}
 	}
 	return nil
 }

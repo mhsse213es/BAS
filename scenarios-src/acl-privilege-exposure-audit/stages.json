@@ -1,0 +1,438 @@
+[
+ {
+  "id": "S0",
+  "n": 0,
+  "name": "ACL Stage 0 — Build Audit Context (domain DN, tier-0 list, right masks)",
+  "technique_id": "T1087.002",
+  "attack_note": "Discovery of the domain naming context only.",
+  "timeout_sec": 30,
+  "blast_radius": "Reads RootDSE only. No object security descriptors are touched.",
+  "telemetry": [
+   "Sysmon EID 1: powershell.exe reading RootDSE"
+  ],
+  "detection": [],
+  "call": "$ErrorActionPreference = 'SilentlyContinue'\ntry {\n  $rootDSE = [ADSI]\"LDAP://RootDSE\"\n  $domainDN = $rootDSE.defaultNamingContext\n  if (-not $domainDN) { throw \"no domain\" }\n  Write-Output \"CTX_DOMAIN_DN=$domainDN\"\n  Write-Output \"CTX_CONFIG_DN=$($rootDSE.configurationNamingContext)\"\n  Write-Output \"CTX_STATUS=READY\"\n} catch {\n  Write-Output \"CTX_STATUS=SKIP\"\n}\nWrite-Output \"SKIP: context-only step; it builds audit context and has no control outcome to score. Not scored.\"",
+  "no_lib": true
+ },
+ {
+  "id": "S1",
+  "n": 1,
+  "name": "ACL Stage 1 — Privileged Group DACL Exposure (Domain/Enterprise/Schema Admins)",
+  "technique_id": "T1069.002",
+  "attack_note": "Group-DACL discovery (T1069.002 Permission Groups Discovery: Domain Groups). Now also covers Builtin Administrators, operator groups, Key Admins, Domain Controllers and Group Policy Creator Owners. T1222 (file/directory permissions) was removed as incorrect for AD objects.",
+  "timeout_sec": 120,
+  "blast_radius": "Reads DACLs of the domain and forest privileged groups (Domain/Enterprise/Schema Admins, Builtin Administrators, operators, Key Admins, Domain Controllers, GPCO) only.",
+  "telemetry": [
+   "Sysmon EID 1: powershell.exe reading group ACLs via DirectoryServices",
+   "DC Directory Service EID 1644 (expensive/inefficient LDAP search, if enabled): paged security-descriptor reads"
+  ],
+  "detection": [
+   "SIEM: non-tier-0 ACE with GenericAll/GenericWrite/WriteDacl/WriteOwner on a privileged group",
+   "Security EID 4662 (if SACL): Control Access on Domain Admins"
+  ],
+  "call": "Invoke-AclStage -Id 'S1' -Plan @(@{ Scope='privileged-groups'; Caps=@('GenericAll','WriteDacl','WriteOwner','WriteAllProperties') }) -PassText 'no non-tier-0 principal holds takeover-enabling rights on any privileged group.'",
+  "no_lib": false
+ },
+ {
+  "id": "S2",
+  "n": 2,
+  "name": "ACL Stage 2 — Domain Head and AdminSDHolder DACL Exposure",
+  "technique_id": "T1069.002",
+  "attack_note": "DACL discovery on the domain root and AdminSDHolder. CreateChild/DeleteChild on the domain head are no longer flagged: broad default rights (for example Authenticated Users creating computer objects) are not takeover paths.",
+  "timeout_sec": 120,
+  "blast_radius": "Reads DACL of the domain root object and CN=AdminSDHolder,CN=System.",
+  "telemetry": [
+   "Sysmon EID 1: powershell.exe reading domain-head and AdminSDHolder ACLs via DirectoryServices",
+   "DC Directory Service EID 1644 (expensive/inefficient LDAP search, if enabled): paged security-descriptor reads"
+  ],
+  "detection": [
+   "SIEM: Event 5136 on CN=AdminSDHolder with nTSecurityDescriptor modified (exposure check reads only; the detection rule maps to 5136)",
+   "SIEM: non-tier-0 WriteDacl/WriteOwner on domain head: ACL exposure IOC"
+  ],
+  "call": "Invoke-AclStage -Id 'S2' -Plan @(@{ Scope='domain-head'; Caps=@('GenericAll','WriteDacl','WriteOwner','WriteAllProperties') }, @{ Scope='adminsdholder'; Caps=@('GenericAll','WriteDacl','WriteOwner','WriteAllProperties') }) -PassText 'domain head and AdminSDHolder carry no non-tier-0 takeover-enabling rights.'",
+  "no_lib": false
+ },
+ {
+  "id": "S3",
+  "n": 3,
+  "name": "ACL Stage 3 — adminCount=1 Orphaned Protected-Object Sweep",
+  "technique_id": "T1069.002",
+  "attack_note": "Separates stale adminCount protection (hygiene) from actual effective control over adminCount=1 objects.",
+  "timeout_sec": 180,
+  "blast_radius": "LDAP search for adminCount=1, privileged-group closure expansion, then DACL reads of each result. No writes.",
+  "telemetry": [
+   "Sysmon EID 1: powershell.exe reading adminCount=1 object ACLs via DirectoryServices",
+   "DC Directory Service EID 1644 (expensive/inefficient LDAP search, if enabled): paged security-descriptor reads",
+   "Sysmon EID 1: powershell.exe LDAP search (adminCount=1) + ACL reads"
+  ],
+  "detection": [
+   "SIEM: adminCount=1 user with non-tier-0 GenericAll/WriteDacl: stale-protection IOC",
+   "CISA CM0125 recommends monitoring command lines containing admincount"
+  ],
+  "call": "Invoke-StaleAdminCountStage -Id 'S3'",
+  "no_lib": false
+ },
+ {
+  "id": "S4",
+  "n": 4,
+  "name": "ACL Stage 4 — Password-Reset Extended-Right Exposure (ForceChangePassword)",
+  "technique_id": "T1098",
+  "attack_note": "User-Force-Change-Password lets a principal reset a victim's password without knowing it (T1098 Account Manipulation); the audit itself is discovery.",
+  "timeout_sec": 120,
+  "blast_radius": "Reads DACLs of tier-0 objects and the domain head, checking the User-Force-Change-Password extended right only.",
+  "telemetry": [
+   "Sysmon EID 1: powershell.exe reading tier-0 object ACLs via DirectoryServices",
+   "DC Directory Service EID 1644 (expensive/inefficient LDAP search, if enabled): paged security-descriptor reads"
+  ],
+  "detection": [
+   "SIEM: non-tier-0 ExtendedRight with User-Force-Change-Password GUID on a tier-0 object or the domain head",
+   "SIEM: Security EID 4724 (password reset attempt) against a tier-0 account by a non-admin principal"
+  ],
+  "call": "Invoke-AclStage -Id 'S4' -Plan @(@{ Scope='tier0-objects'; Caps=@('ForceChangePassword') }, @{ Scope='domain-head'; Caps=@('ForceChangePassword') }) -PassText 'no non-tier-0 principal can reset passwords of tier-0 accounts or, by inheritance, of all domain users.'",
+  "no_lib": false
+ },
+ {
+  "id": "S5",
+  "n": 5,
+  "name": "ACL Stage 5 — WriteDacl / WriteOwner / Ownership Enabler Exposure",
+  "technique_id": "T1098",
+  "attack_note": "WriteDacl and WriteOwner let a principal grant itself any right. Ownership implies WriteDacl. Mapped to T1098; T1222 is file/directory permissions and does not apply.",
+  "timeout_sec": 120,
+  "blast_radius": "Reads DACLs and owners of tier-0 objects, domain head and AdminSDHolder, isolating WriteDacl, WriteOwner and ownership.",
+  "telemetry": [
+   "Sysmon EID 1: powershell.exe reading tier-0 object ACLs via DirectoryServices",
+   "DC Directory Service EID 1644 (expensive/inefficient LDAP search, if enabled): paged security-descriptor reads"
+  ],
+  "detection": [
+   "SIEM: non-tier-0 WriteDAC access on a sensitive object: maps to 4662 AccessMask 0x40000",
+   "SIEM: ownership-write ACE (WriteOwner) on the domain head: enabler IOC"
+  ],
+  "call": "Invoke-AclStage -Id 'S5' -Plan @(@{ Scope='tier0-objects'; Caps=@('WriteDacl','WriteOwner') }, @{ Scope='domain-head'; Caps=@('WriteDacl','WriteOwner') }, @{ Scope='adminsdholder'; Caps=@('WriteDacl','WriteOwner') }, @{ Scope='tier0-objects'; Caps=@('WriteDacl'); Mode='owner' }) -PassText 'no non-tier-0 principal can rewrite or take over the DACL of a tier-0 object.'",
+  "no_lib": false
+ },
+ {
+  "id": "S6",
+  "n": 6,
+  "name": "ACL Stage 6 — GenericAll Exposure [P0]",
+  "technique_id": "T1098",
+  "attack_note": "GenericAll on a tier-0 user, group, computer, OU or the domain object is full control (T1098 Account Manipulation).",
+  "timeout_sec": 120,
+  "blast_radius": "Reads DACLs of tier-0 objects and their parent containers.",
+  "telemetry": [
+   "Sysmon EID 1: powershell.exe reading tier-0 object and container ACLs via DirectoryServices",
+   "DC Directory Service EID 1644 (expensive/inefficient LDAP search, if enabled): paged security-descriptor reads"
+  ],
+  "detection": [
+   "SIEM: non-tier-0 ACE with GenericAll on a tier-0 user/group/computer/OU or the domain object",
+   "Security EID 5136 on nTSecurityDescriptor of a tier-0 object (change detection)"
+  ],
+  "call": "Invoke-AclStage -Id 'S6' -Plan @(@{ Scope='tier0-objects'; Caps=@('GenericAll') }, @{ Scope='tier0-parents'; Caps=@('GenericAll') }) -PassText 'no non-tier-0 principal holds GenericAll on tier-0 objects or the containers that hold them.'",
+  "no_lib": false
+ },
+ {
+  "id": "S7",
+  "n": 7,
+  "name": "ACL Stage 7 — GenericWrite on Sensitive Attributes [P0]",
+  "technique_id": "T1098",
+  "attack_note": "Write to member, servicePrincipalName, msDS-KeyCredentialLink, delegation and logon-script attributes of privileged objects.",
+  "timeout_sec": 120,
+  "blast_radius": "Reads DACLs of tier-0 objects, checking WriteProperty on all properties and on a fixed list of sensitive attributes.",
+  "telemetry": [
+   "Sysmon EID 1: powershell.exe reading tier-0 object ACLs via DirectoryServices",
+   "DC Directory Service EID 1644 (expensive/inefficient LDAP search, if enabled): paged security-descriptor reads"
+  ],
+  "detection": [
+   "SIEM: non-tier-0 WriteProperty (all properties or a sensitive attribute) on a tier-0 object",
+   "Security EID 5136 on member, servicePrincipalName or scriptPath of a tier-0 object"
+  ],
+  "call": "Invoke-AclStage -Id 'S7' -Plan @(@{ Scope='tier0-objects'; Caps=@('GenericWriteSensitive','WriteAllProperties') }) -PassText 'no non-tier-0 principal can write security-sensitive attributes of tier-0 objects.'",
+  "no_lib": false
+ },
+ {
+  "id": "S8",
+  "n": 8,
+  "name": "ACL Stage 8 — AddMember / AddSelf Exposure [P0]",
+  "technique_id": "T1098",
+  "attack_note": "Group membership write (T1098 Account Manipulation) and the self-membership validated write (AddSelf).",
+  "timeout_sec": 120,
+  "blast_radius": "Reads DACLs of privileged groups, checking WriteProperty on member and the Self right with the member attribute.",
+  "telemetry": [
+   "Sysmon EID 1: powershell.exe reading privileged group ACLs via DirectoryServices",
+   "DC Directory Service EID 1644 (expensive/inefficient LDAP search, if enabled): paged security-descriptor reads"
+  ],
+  "detection": [
+   "SIEM: non-tier-0 WriteProperty on member, or Self right, on a privileged group",
+   "Security EID 4728/4732/4756 (member added to a privileged group) by a non-admin principal"
+  ],
+  "call": "Invoke-AclStage -Id 'S8' -Plan @(@{ Scope='privileged-groups'; Caps=@('AddMember','AddSelf') }) -PassText 'no non-tier-0 principal can add members, or itself, to a privileged group.'",
+  "no_lib": false
+ },
+ {
+  "id": "S9",
+  "n": 9,
+  "name": "ACL Stage 9 — Ownership-Based Privilege Exposure [P0]",
+  "technique_id": "T1098",
+  "attack_note": "The owner of an object can always rewrite its DACL.",
+  "timeout_sec": 120,
+  "blast_radius": "Reads the owner of tier-0 objects, their containers and GPO objects.",
+  "telemetry": [
+   "Sysmon EID 1: powershell.exe reading tier-0 object owner ACLs via DirectoryServices",
+   "DC Directory Service EID 1644 (expensive/inefficient LDAP search, if enabled): paged security-descriptor reads"
+  ],
+  "detection": [
+   "SIEM: owner of a tier-0 object or GPO is not an administrative principal",
+   "Security EID 4662 WriteOwner (0x80000) on a tier-0 object"
+  ],
+  "call": "Invoke-AclStage -Id 'S9' -Plan @(@{ Scope='tier0-objects'; Caps=@(); Mode='owner' }, @{ Scope='tier0-parents'; Caps=@(); Mode='owner' }, @{ Scope='gpo-objects'; Caps=@(); Mode='owner' }) -PassText 'tier-0 objects, their containers and GPOs are owned only by expected administrative principals.'",
+  "no_lib": false
+ },
+ {
+  "id": "S10",
+  "n": 10,
+  "name": "ACL Stage 10 — Delete / DeleteTree Exposure [P1]",
+  "technique_id": "T1485",
+  "attack_note": "Deleting a privileged object or its container is destructive; mapped to T1485 Data Destruction as the closest fit and flagged for review.",
+  "timeout_sec": 120,
+  "blast_radius": "Reads DACLs of tier-0 objects and their containers, checking Delete, DeleteTree and DeleteChild.",
+  "telemetry": [
+   "Sysmon EID 1: powershell.exe reading tier-0 object and container ACLs via DirectoryServices",
+   "DC Directory Service EID 1644 (expensive/inefficient LDAP search, if enabled): paged security-descriptor reads"
+  ],
+  "detection": [
+   "SIEM: non-tier-0 Delete/DeleteTree/DeleteChild right on a tier-0 object or its container",
+   "Security EID 5141 (directory object deleted) for a tier-0 object"
+  ],
+  "call": "Invoke-AclStage -Id 'S10' -Plan @(@{ Scope='tier0-objects'; Caps=@('Delete','DeleteTree') }, @{ Scope='tier0-parents'; Caps=@('DeleteChild','DeleteTree') }) -PassText 'no non-tier-0 principal can delete tier-0 objects or the containers that hold them.'",
+  "no_lib": false
+ },
+ {
+  "id": "S11",
+  "n": 11,
+  "name": "ACL Stage 11 — Validated Write Exposure (DNS Hostname / SPN) [P1]",
+  "technique_id": "T1098",
+  "attack_note": "Validated writes allow constrained attribute changes such as dNSHostName and servicePrincipalName, used in computer-account impersonation chains.",
+  "timeout_sec": 240,
+  "blast_radius": "Reads DACLs of tier-0 objects and OUs, checking the Self right with the DNS-Host-Name and SPN validated-write GUIDs.",
+  "telemetry": [
+   "Sysmon EID 1: powershell.exe reading tier-0 object and OU ACLs via DirectoryServices",
+   "DC Directory Service EID 1644 (expensive/inefficient LDAP search, if enabled): paged security-descriptor reads"
+  ],
+  "detection": [
+   "SIEM: non-tier-0 Self (validated write) right for DNS-Host-Name or SPN on a tier-0 object or computer container",
+   "Security EID 4742 changing dNSHostName or servicePrincipalName of a domain controller account"
+  ],
+  "call": "Invoke-AclStage -Id 'S11' -Plan @(@{ Scope='tier0-objects'; Caps=@('ValidatedSpn','ValidatedDnsHostName') }, @{ Scope='computer-parents'; Caps=@('ValidatedSpn','ValidatedDnsHostName') }) -PassText 'no non-tier-0 principal holds validated writes for DNS hostname or SPN on tier-0 objects or computer containers.'",
+  "no_lib": false
+ },
+ {
+  "id": "S12",
+  "n": 12,
+  "name": "ACL Stage 12 — Shadow Credentials Exposure (msDS-KeyCredentialLink) [P0]",
+  "technique_id": "T1098",
+  "attack_note": "Writing msDS-KeyCredentialLink enables Shadow Credentials against the target account (T1098 Account Manipulation).",
+  "timeout_sec": 120,
+  "blast_radius": "Reads DACLs of tier-0 objects and containers, checking WriteProperty on msDS-KeyCredentialLink (GUID resolved from the schema).",
+  "telemetry": [
+   "Sysmon EID 1: powershell.exe reading tier-0 object and container ACLs via DirectoryServices",
+   "DC Directory Service EID 1644 (expensive/inefficient LDAP search, if enabled): paged security-descriptor reads"
+  ],
+  "detection": [
+   "SIEM: Security EID 5136 on msDS-KeyCredentialLink of a tier-0 account by a non-key-admin principal",
+   "SIEM: non-tier-0 WriteProperty on msDS-KeyCredentialLink"
+  ],
+  "call": "Invoke-AclStage -Id 'S12' -Plan @(@{ Scope='tier0-objects'; Caps=@('ShadowCredentials') }, @{ Scope='tier0-parents'; Caps=@('ShadowCredentials') }) -PassText 'no non-tier-0 principal can write msDS-KeyCredentialLink on tier-0 objects or their containers.'",
+  "no_lib": false
+ },
+ {
+  "id": "S13",
+  "n": 13,
+  "name": "ACL Stage 13 — SPN Modification Exposure [P0]",
+  "technique_id": "T1558.003",
+  "attack_note": "Writing servicePrincipalName on a privileged account enables targeted Kerberoasting (T1558.003).",
+  "timeout_sec": 120,
+  "blast_radius": "Reads DACLs of tier-0 objects and containers, checking WriteProperty on servicePrincipalName.",
+  "telemetry": [
+   "Sysmon EID 1: powershell.exe reading tier-0 object and container ACLs via DirectoryServices",
+   "DC Directory Service EID 1644 (expensive/inefficient LDAP search, if enabled): paged security-descriptor reads"
+  ],
+  "detection": [
+   "SIEM: non-tier-0 WriteProperty on servicePrincipalName of a privileged account",
+   "Security EID 5136 on servicePrincipalName of a tier-0 account followed by EID 4769 for that SPN"
+  ],
+  "call": "Invoke-AclStage -Id 'S13' -Plan @(@{ Scope='tier0-objects'; Caps=@('SpnWrite') }, @{ Scope='tier0-parents'; Caps=@('SpnWrite') }) -PassText 'no non-tier-0 principal can modify servicePrincipalName on tier-0 accounts.'",
+  "no_lib": false
+ },
+ {
+  "id": "S14",
+  "n": 14,
+  "name": "ACL Stage 14 — RBCD Configuration Exposure [P1]",
+  "technique_id": "T1098",
+  "attack_note": "Writing msDS-AllowedToActOnBehalfOfOtherIdentity enables resource-based constrained delegation abuse; no dedicated ATT&CK sub-technique, mapped to T1098 and flagged for review.",
+  "timeout_sec": 120,
+  "blast_radius": "Reads DACLs of tier-0 objects and containers, checking WriteProperty on msDS-AllowedToActOnBehalfOfOtherIdentity.",
+  "telemetry": [
+   "Sysmon EID 1: powershell.exe reading tier-0 object and container ACLs via DirectoryServices",
+   "DC Directory Service EID 1644 (expensive/inefficient LDAP search, if enabled): paged security-descriptor reads"
+  ],
+  "detection": [
+   "SIEM: Security EID 5136 on msDS-AllowedToActOnBehalfOfOtherIdentity of a tier-0 computer",
+   "SIEM: non-tier-0 WriteProperty on msDS-AllowedToActOnBehalfOfOtherIdentity"
+  ],
+  "call": "Invoke-AclStage -Id 'S14' -Plan @(@{ Scope='tier0-objects'; Caps=@('RbcdWrite') }, @{ Scope='tier0-parents'; Caps=@('RbcdWrite') }) -PassText 'no non-tier-0 principal can configure RBCD on tier-0 objects.'",
+  "no_lib": false
+ },
+ {
+  "id": "S15",
+  "n": 15,
+  "name": "ACL Stage 15 — LAPS Credential Read Exposure (Legacy and Windows LAPS) [P0]",
+  "technique_id": "T1555",
+  "attack_note": "Reading LAPS password attributes yields local administrator credentials (T1555 Credentials from Password Stores).",
+  "timeout_sec": 300,
+  "blast_radius": "Reads DACLs of the domain head and every OU, checking ReadProperty on ms-Mcs-AdmPwd, msLAPS-Password and msLAPS-EncryptedPassword.",
+  "telemetry": [
+   "Sysmon EID 1: powershell.exe reading domain and OU ACLs via DirectoryServices",
+   "DC Directory Service EID 1644 (expensive/inefficient LDAP search, if enabled): paged security-descriptor reads"
+  ],
+  "detection": [
+   "SIEM: Security EID 4662 read of ms-Mcs-AdmPwd or msLAPS-Password by a non-helpdesk principal (needs SACL)",
+   "SIEM: non-tier-0 ReadProperty plus control access on LAPS password attributes"
+  ],
+  "call": "Invoke-AclStage -Id 'S15' -Plan @(@{ Scope='computer-parents'; Caps=@('LapsLegacyRead','LapsWindowsRead') }) -PassText 'no non-tier-0 principal can read legacy or Windows LAPS password attributes on the audited OUs (or LAPS is not deployed).'",
+  "no_lib": false
+ },
+ {
+  "id": "S16",
+  "n": 16,
+  "name": "ACL Stage 16 — gMSA Password Read Exposure (msDS-ManagedPassword) [P0]",
+  "technique_id": "T1555",
+  "attack_note": "Reading msDS-ManagedPassword yields the gMSA secret (T1555). The attribute is constructed, so access is governed by msDS-GroupMSAMembership; the audit checks that list and who can write it.",
+  "timeout_sec": 180,
+  "blast_radius": "Reads gMSA objects, the msDS-GroupMSAMembership reader list and DACLs. No password is read.",
+  "telemetry": [
+   "Sysmon EID 1: powershell.exe reading gMSA object ACLs via DirectoryServices",
+   "DC Directory Service EID 1644 (expensive/inefficient LDAP search, if enabled): paged security-descriptor reads",
+   "Sysmon EID 1: powershell.exe LDAP search for msDS-GroupManagedServiceAccount"
+  ],
+  "detection": [
+   "SIEM: user, broad principal or group with non-computer members listed in msDS-GroupMSAMembership of a gMSA",
+   "SIEM: non-tier-0 WriteProperty on msDS-GroupMSAMembership (adds a reader), or Security EID 5136 on that attribute",
+   "SIEM: non-computer principal reading msDS-ManagedPassword"
+  ],
+  "call": "Invoke-GmsaStage -Id 'S16'",
+  "no_lib": false
+ },
+ {
+  "id": "S17",
+  "n": 17,
+  "name": "ACL Stage 17 — Sensitive Account Attribute Exposure [P1]",
+  "technique_id": "T1098",
+  "attack_note": "Writes to userAccountControl, delegation targets, encryption types and logon-script style attributes.",
+  "timeout_sec": 120,
+  "blast_radius": "Reads DACLs of tier-0 objects and containers, checking WriteProperty on account-restriction attributes.",
+  "telemetry": [
+   "Sysmon EID 1: powershell.exe reading tier-0 object and container ACLs via DirectoryServices",
+   "DC Directory Service EID 1644 (expensive/inefficient LDAP search, if enabled): paged security-descriptor reads"
+  ],
+  "detection": [
+   "SIEM: Security EID 4738/4742 changing userAccountControl or msDS-AllowedToDelegateTo of a tier-0 account",
+   "SIEM: non-tier-0 WriteProperty on account-restriction attributes"
+  ],
+  "call": "Invoke-AclStage -Id 'S17' -Plan @(@{ Scope='tier0-objects'; Caps=@('AccountRestrictions') }, @{ Scope='tier0-parents'; Caps=@('AccountRestrictions') }) -PassText 'no non-tier-0 principal can change account restriction, delegation or authentication attributes of tier-0 accounts.'",
+  "no_lib": false
+ },
+ {
+  "id": "S18",
+  "n": 18,
+  "name": "ACL Stage 18 — DCSync Replication Rights [P0]",
+  "technique_id": "T1003.006",
+  "attack_note": "DS-Replication-Get-Changes, Get-Changes-All and Get-Changes-In-Filtered-Set on the domain head allow DCSync (T1003.006).",
+  "timeout_sec": 120,
+  "blast_radius": "Reads the DACL of the domain head, checking the three replication extended rights.",
+  "telemetry": [
+   "Sysmon EID 1: powershell.exe reading domain head ACLs via DirectoryServices",
+   "DC Directory Service EID 1644 (expensive/inefficient LDAP search, if enabled): paged security-descriptor reads"
+  ],
+  "detection": [
+   "SIEM: Security EID 4662 with replication GUID {1131f6aa}/{1131f6ad}/{89e95b76} from a non-DC account",
+   "SIEM: non-DC principal holding replication extended rights on the domain head"
+  ],
+  "call": "Invoke-AclStage -Id 'S18' -Plan @(@{ Scope='domain-head'; Caps=@('DcSync') }) -PassText 'no non-domain-controller principal holds directory replication rights on the domain head.'",
+  "no_lib": false
+ },
+ {
+  "id": "S19",
+  "n": 19,
+  "name": "ACL Stage 19 — OU Inheritance Exposure [P0]",
+  "technique_id": "T1098",
+  "attack_note": "Dangerous ACEs inherited from a parent OU onto privileged users, groups and computers. Protected (adminCount=1) objects have inheritance disabled and are covered by the direct stages.",
+  "timeout_sec": 120,
+  "blast_radius": "Reads DACLs of tier-0 objects and reports only inherited ACEs.",
+  "telemetry": [
+   "Sysmon EID 1: powershell.exe reading tier-0 object ACLs via DirectoryServices",
+   "DC Directory Service EID 1644 (expensive/inefficient LDAP search, if enabled): paged security-descriptor reads"
+  ],
+  "detection": [
+   "SIEM: Security EID 5136 on nTSecurityDescriptor of an OU that contains privileged objects",
+   "SIEM: inherited non-tier-0 GenericAll/WriteDacl on a privileged user, group or computer"
+  ],
+  "call": "Invoke-AclStage -Id 'S19' -Plan @(@{ Scope='tier0-objects'; Caps=@('GenericAll','WriteDacl','WriteOwner','WriteAllProperties','AddMember','ForceChangePassword','ShadowCredentials'); InheritedOnly=$true }) -PassText 'no dangerous ACE is inherited onto tier-0 objects from a parent container.'",
+  "no_lib": false
+ },
+ {
+  "id": "S20",
+  "n": 20,
+  "name": "ACL Stage 20 — Domain Root and Configuration/Schema ACL Exposure [P1]",
+  "technique_id": "T1098",
+  "attack_note": "Control of the domain, Configuration or Schema partition head is control of the forest.",
+  "timeout_sec": 120,
+  "blast_radius": "Reads DACLs of the domain, Configuration and Schema naming-context heads.",
+  "telemetry": [
+   "Sysmon EID 1: powershell.exe reading partition head ACLs via DirectoryServices",
+   "DC Directory Service EID 1644 (expensive/inefficient LDAP search, if enabled): paged security-descriptor reads"
+  ],
+  "detection": [
+   "SIEM: Security EID 5136 on nTSecurityDescriptor of the Configuration or Schema head",
+   "SIEM: non-tier-0 GenericAll/WriteDacl/WriteOwner on a partition head"
+  ],
+  "call": "Invoke-AclStage -Id 'S20' -Plan @(@{ Scope='partition-heads'; Caps=@('GenericAll','WriteDacl','WriteOwner','WriteAllProperties') }) -PassText 'no non-tier-0 principal holds takeover-enabling rights on the domain, Configuration or Schema partition heads.'",
+  "no_lib": false
+ },
+ {
+  "id": "S21",
+  "n": 21,
+  "name": "ACL Stage 21 — GPO ACL and Link Exposure [P0]",
+  "technique_id": "T1484.001",
+  "attack_note": "Control of a GPO, the Policies container or gPLink on the domain/DC OU allows policy-based code execution on Tier-0 systems (T1484.001).",
+  "timeout_sec": 300,
+  "blast_radius": "Reads DACLs of CN=Policies, every GPO object and the domain, Domain Controllers OU and tier-0 OUs (gPLink).",
+  "telemetry": [
+   "Sysmon EID 1: powershell.exe reading GPO and OU ACLs via DirectoryServices",
+   "DC Directory Service EID 1644 (expensive/inefficient LDAP search, if enabled): paged security-descriptor reads"
+  ],
+  "detection": [
+   "SIEM: Security EID 5136 on a groupPolicyContainer or gPLink by a non-admin principal",
+   "SIEM: non-tier-0 write right on a GPO or on gPLink of the domain/DC OU"
+  ],
+  "call": "Invoke-AclStage -Id 'S21' -Plan @(@{ Scope='gpo-objects'; Caps=@('GenericAll','WriteDacl','WriteOwner','GpoWrite') }, @{ Scope='gpo-link-points'; Caps=@('GpLinkWrite','GenericAll','WriteDacl') }) -PassText 'no non-tier-0 principal can modify a GPO, take its ownership or change GPO links on tier-0 scopes.'",
+  "no_lib": false
+ },
+ {
+  "id": "S22",
+  "n": 22,
+  "name": "ACL Stage 22 — Attack-Path Correlation to Tier-0 [P0]",
+  "technique_id": "T1087.002",
+  "attack_note": "Correlates permission edges from non-tier-0 principals to tier-0 objects across up to three hops, with a confidence label per path. Analysis only; no step of any path is executed.",
+  "timeout_sec": 300,
+  "blast_radius": "Reads DACLs of tier-0 objects and of the principals that control them (depth 3). No write is performed.",
+  "telemetry": [
+   "Sysmon EID 1: powershell.exe reading tier-0 object and controller ACLs via DirectoryServices",
+   "DC Directory Service EID 1644 (expensive/inefficient LDAP search, if enabled): paged security-descriptor reads"
+  ],
+  "detection": [
+   "SIEM: any non-tier-0 principal with a multi-hop control path to a tier-0 object",
+   "SIEM: broad principal (Everyone, Authenticated Users, Domain Users) on a path to tier-0"
+  ],
+  "call": "Invoke-PathStage -Id 'S22' -MaxDepth 3",
+  "no_lib": false
+ }
+]

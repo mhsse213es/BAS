@@ -1,0 +1,297 @@
+# Agent trust lifecycle audit
+
+Scope: TLS identity and certificate lifecycle from enrollment to rotation. Started 2026-10-26.
+Companion release gate (separate, still open): [Ubuntu staging runbook](guides/deployment-ca-staging-runbook.md).
+That runbook has **not** been executed; deployment validation is not complete.
+
+Evidence classes used below:
+
+* **Verified (executed)**: reproduced by running code.
+* **Verified (code)**: established by reading the exact code path; no test has run it yet.
+* **Design limit**: working as designed, but weaker than the trust model implies.
+* **Missing**: functionality that does not exist.
+* **Unconfirmed**: assumption not yet checked; will be settled in its own pass.
+
+Progress: all six areas assessed. Fixed: F-01, F-02, F-04, F-05, F-06, F-07; partly: F-03, F-08. Open: F-09, F-10 (design decisions, below).
+
+## 1. Agent identity binding and 2. certificate issuance
+
+### What holds (verified, code)
+
+| Property | Where |
+|---|---|
+| AgentID must match `^[0-9a-f]{16}$` before it can reach the CA | `internal/api/enroll_csr_handlers.go` `agentIDPattern` |
+| CommonName and DNS SAN come from the server, not the CSR; the CSR's own subject is ignored | `internal/pki/issue.go` `IssueClientCertificate` |
+| The CSR signature is checked (proof the requester holds the private key) | `issue.go` `csr.CheckSignature()` |
+| Leaf certificate: `ClientAuth` only, `DigitalSignature` only, not a CA, 365 days, random 128-bit serial | `issue.go` |
+| Renewal: the claimed agentId must equal the presenting certificate's CN, otherwise 401 | `EnrollCSR`, `mtlsID != req.AgentID` |
+| `/ws/agent` over mTLS: claimed agentId must equal the certificate CN | `mtls_context.go` `wsAgentAuthorized` |
+| `:9443` requires and verifies a client certificate against the deployment CA | `cmd/server/main.go` `RequireAndVerifyClientCert` |
+| The enrollment listener `:9444` exposes enrollment and `/health` only | `api.MountEnrollment` |
+| Concurrent bootstraps for one AgentID are serialised | advisory lock in `EnrollCSR` |
+
+### Findings
+
+#### F-01 CSR key algorithm and size are not validated. Medium. Verified (executed). **FIXED**
+
+* **Path:** `IssueClientCertificate` signs `csr.PublicKey` whatever it is. There is no check anywhere.
+* **Evidence:** a scratch test issued a certificate for an RSA-1024 key and for an ECDSA P-224 key (both `err = nil`). (RSA-512 could not be tested: Go refuses to generate it.)
+* **Impact:** whoever can enroll (holds the bootstrap secret) can obtain a client certificate with a key that is cheap to break, and then impersonate that agent. The agent's own key is ECDSA P-256 (`agent/certstore.go`), so legitimate agents are unaffected.
+* **Remediation:** accept ECDSA P-256/P-384 and RSA at least 2048 bits; reject everything else with a clear error. Do the check in `IssueClientCertificate` so every caller is covered.
+* **Regression test:** `TestIssueClientCertificate_KeyPolicy` (RSA-1024, P-224, Ed25519 rejected; P-256, P-384, RSA-2048 accepted). Written first and watched fail for exactly the three rejected keys.
+* **Fix:** `checkClientKeyPolicy` in `internal/pki/issue.go`; the enrollment handler returns 400 with the reason.
+
+#### F-02 Agent HTTP endpoints ignore the certificate's identity. High. Verified (code). **FIXED when a certificate is present; mandatory binding waits on the legacy listener**
+
+* **Path:** `Heartbeat`, `SubmitRunEvents`, `ReceiveEvents` (logs), `UninstallAgentResult`, `UnenrollAgent` and the other `validateAgentAuth` callers authenticate with the shared `X-Agent-Token` only, and take the AgentID from the request body or URL. `AuthenticatedAgentID` is read in exactly two places: `EnrollCSR` and `wsAgentAuthorized`.
+* **Impact:** any holder of the shared secret (and any enrolled agent, which holds it too) can report as, mark `uninstalled` (`UninstallAgentResult`), or retire (`UnenrollAgent`) any other agent, and inject events or heartbeats for it. Holding a valid certificate gives no extra protection on these routes. With `AGENT_SECRET` empty, `validateAgentAuth` returns true and there is no authentication at all.
+* **Constraint on the fix:** the plaintext legacy listener (`:9000`) serves the same router and its agents have no certificate, so binding cannot be mandatory until that listener is retired.
+* **Remediation:** when a request carries an mTLS identity, require the AgentID in the body or URL to equal it (reject otherwise). Then make the identity mandatory on the agent routes once the legacy listener is gone. Track the legacy listener retirement as the dependency.
+* **Regression test:** a table test over each agent route: a request with identity A and an AgentID of B returns 401; identity A with AgentID A succeeds. (Needs the Postgres test harness used by `internal/api`.)
+
+#### Fix for F-02
+
+* `agentMatchesCertificate` (`internal/api/mtls_context.go`): when a request carries a verified client certificate, the AgentID it
+  acts on must equal the certificate's identity, otherwise 401. Applied to heartbeat, enroll, unenroll, uninstall-result, log events
+  (the whole batch is refused), host events, SharpHound upload, attack-path collection and scenario results.
+* Correction to the finding: `SubmitScenarioResult` already refused a result naming an agent other than the one the run was
+  dispatched to. It now also checks the certificate. `SubmitRunEvents` and `SubmitRunDetections` carry only run IDs; they are now bound too (`runsBelongToCertificateAgent`: with a certificate present, a run owned by another agent gives 401, and a batch is refused whole). Test: `TestRunRoutes_RefuseAnotherAgentsRun`.
+* Not done: requests with **no** certificate (the plaintext legacy listener) are unchanged, so an agent holding only the shared
+  secret can still claim any ID there. Making the certificate mandatory depends on retiring that listener.
+* Tests: `TestAgentMatchesCertificate`, `TestAgentRoutes_RefuseAnotherAgentsCertificate` (8 routes, written first and failing).
+
+#### F-03 Bootstrap identity is claimed, not attested. Medium. Design limit. **MITIGATED (audit trail only); stronger options need a decision**
+
+* **Path:** `EnrollCSR` on `:9444` accepts the shared secret and any well-formed AgentID that has no currently valid certificate. AgentID is `hex(SHA-256(hostname))[:16]`, so it is predictable.
+* **Impact:** a holder of the bootstrap secret can enroll under another machine's AgentID once that machine's certificate has expired, or before it first enrolls, and later receive its commands. Recovery of an expired agent uses the same path, so this is intended behaviour, but it means the shared secret is the whole trust anchor for first identity.
+* **Remediation options (decision needed):** per-agent or single-use enrollment tokens; an operator approval step for an AgentID that already exists; or at minimum an audit event and dashboard alert when an existing AgentID re-bootstraps.
+* **Regression test:** depends on the chosen option.
+
+* **Mitigation done:** every bootstrap is now written to the audit log as `agent.enroll`, and a bootstrap for an AgentID that
+  already had certificates as `agent.reenroll` (with the count of earlier certificates and the new serial).
+  Test: `TestEnrollCSR_BootstrapIsAuditedAndReEnrolmentIsFlagged`. This detects abuse; it does not prevent it.
+* **Server side of per-agent tokens: BUILT, opt-in.** `BAS_ENROLLMENT_MODE=token` (default `secret`, so an upgrade changes nothing).
+  In token mode the shared secret no longer enrols anyone; first enrolment needs `X-Enrollment-Token`. Tokens: 256-bit random
+  (`bas_enr_…`), stored only as SHA-256, issued for one AgentID (given directly or derived from a hostname with the agent's own
+  `hex(SHA-256(hostname))[:16]`), 1 to 168 hours (default 24), consumed atomically inside the certificate-issuing transaction (a failed
+  enrolment, or a token presented for another agent, does not burn it), revocable while unused. Admin API: `POST/GET /api/enrollment-tokens`,
+  `DELETE /api/enrollment-tokens/{id}`; every issue, revoke and denial is audited. Failed attempts are throttled to 20 per 10 minutes
+  per address (in memory, resets on restart). Tests: `enroll_token_test.go` (5 tests, written first).
+* **Bulk issue: BUILT.** `POST /api/enrollment-tokens/bulk` takes up to 500 hostnames and creates one token each in a single all-or-nothing request (exact duplicates collapsed and reported); `?format=csv` returns `hostname,agentId,token,expiresAt` with `Cache-Control: no-store` and spreadsheet-formula-safe hostnames. Hostnames must be spelled exactly as the OS reports them, because the agent ID is derived from that spelling. Tests: `TestEnrollmentTokenBulk_*`.
+* **Rulings:** default stays `secret` so existing fleets and installers keep working; a malformed `BAS_ENROLLMENT_MODE` stops the
+  server instead of weakening enrolment; renewal over mTLS is unaffected by the mode.
+* **Agent side: BUILT.** `bas_agent --install` reads `BAS_ENROLLMENT_TOKEN` from the installer's environment (never a command-line
+  argument), enrols immediately and sends it as `X-Enrollment-Token` next to the shared secret (`enrollAtInstall`), so the token is
+  spent once and never stored; the service then starts already enrolled. A refused token fails the install with exit code 26.
+  The token goes only to the enrolment listener, never on a renewal. Tests: `install_enroll_test.go`, `protocol/csr_token_test.go`.
+  Linux: `sudo BAS_ENROLLMENT_TOKEN=... bas_agent --install --server ... --secret-stdin`. Windows: set the variable in the
+  elevated session before `bas_agent.exe --install`.
+* **Installers: BUILT.** Every entry point takes the token without a command-line argument: the Linux script (hidden prompt,
+  `--token-file`, `--token-stdin` or `BAS_ENROLLMENT_TOKEN`; the secret goes to the agent on stdin, which also removes the old
+  `-secret` argument from the process list), the agent CLI on Windows/Linux/macOS (`--enrollment-token-file`,
+  `--enrollment-token-stdin`, `BAS_ENROLLMENT_TOKEN`, or a hidden prompt), and the MSI (a masked, hidden wizard field and
+  `AUDSPECT_ENROLLMENT_TOKEN` for silent installs, passed to the agent only through the SYSTEM child's environment). No generic
+  package embeds a token. The Deploy Agent page has a token generator (hostnames, lifetime, shown once, CSV). Exit code 26 means the
+  server answered and refused the token; 27 means the server could not be reached; the Linux script, the MSI and the agent each say
+  which. Verified: unit tests on all three; the Linux script run in a container against a fake agent (argv, stdin, token file mode,
+  exit-code messages); the MSI built and structure-checked (not installed). The legacy `installer.exe` (being retired) still passes
+  `--secret` on its command line and has no token field; it was not changed.
+* **Operator approval mode: deferred by decision.** Per-agent tokens suit the current installation model; revisit when a customer
+  requires manual enrolment authorization.
+
+### Positive checks still to execute (cheap, planned)
+
+Tests that pin the properties in the "what holds" table, each written to fail if the property were removed: CSR subject ignored (CSR for CN=other yields CN=requested agent), non-hex AgentID rejected, `agentId` mismatch on renewal returns 401, leaf has `ClientAuth` only and `IsCA=false`.
+
+## 3. Authentication enforcement, 4. renewal and expiry, 5. revocation (code trace)
+
+Path traced: `:9443` listener (`cmd/server/main.go`), `/ws/agent` (`routes.go`, `wsAgentAuthorized`, `ws.ServeAgentWS`),
+`EnrollCSR`, and the agent side (`agent/bootstrap.go`, `agent/certstore.go`, `agent/main.go`, `agent/service.go`).
+
+What holds (verified, code): `:9443` uses `RequireAndVerifyClientCert` with the deployment CA as the only client CA, so Go's
+chain verification rejects expired certificates, certificates from another CA and certificates without the ClientAuth usage.
+Renewal never uses the bootstrap secret, and a certificate marked revoked cannot renew.
+
+#### F-04 There is no way to revoke an agent certificate or block an agent. High. Missing. **FIXED (API; no dashboard button yet)**
+
+* **Evidence (code):** no non-test code sets `agent_certificates.revoked`/`revoked_at` (the columns exist and are only read).
+  `UnenrollAgent` only sets `agents.state = 'retired'` and does not touch certificates.
+* **Impact:** a stolen or compromised agent key stays valid for up to 365 days. The only available response is replacing the
+  whole deployment CA, which forces the entire fleet to re-enroll.
+* **Remediation:** an admin action (audited, RBAC-gated) that marks the agent's certificates revoked and sets an agent-level
+  block; see F-05 for enforcement. Do not rely on certificate revocation alone, see F-08.
+* **Regression test:** revoke agent A, then A's certificate is refused on every agent route while agent B is unaffected.
+
+#### F-05 Revocation and agent state are checked only on renewal, not on connection. High. Verified (code). **FIXED**
+
+* **Evidence:** the only reader of `revoked` is `EnrollCSR`'s renewal branch. `:9443` has no `VerifyPeerCertificate` or
+  `VerifyConnection` hook, `wsAgentAuthorized` compares only the claimed ID with the certificate CN, and `ServeAgentWS` does not
+  consult `agents.state` (`retired`, `uninstalled`). A later connection from a second client with the same ID replaces the first.
+* **Impact:** even once F-04 exists, a revoked or retired agent would keep working until its certificate expires.
+* **Remediation:** one enforcement point on the mTLS listener (a `VerifyConnection` check against revoked serials and blocked
+  agents, cached with a short TTL), plus the same check in the websocket and agent routes as defence in depth.
+* **Regression test:** extract the listener's TLS configuration into one function used by `main` and by tests, then test expired,
+  wrong-CA, wrong-usage and revoked certificates against it.
+
+#### F-06 An enrolled agent whose certificate expires is blocked permanently. High (availability). Verified (code). **FIXED**
+
+* **Evidence:** `certExpiringSoon` (renew at 75% of lifetime) has a single caller, inside `ensureCertificate`, which runs only
+  at process start (`main.go`, `service.go`) and in the legacy retry loop. There is no renewal timer in a running agent. If the
+  certificate is expired at the next start, `ensureCertificate` returns `errBlocked` ("certificate has expired with no
+  successful renewal") and the agent retries forever; it never re-bootstraps because the enrolled marker forbids the secret. The
+  server would in fact accept a re-bootstrap (the duplicate check ignores expired certificates), so the block is agent-side only.
+* **Impact:** an agent that is offline or running without restart for the last 25% of the year (about 91 days) loses the fleet
+  connection at expiry and needs manual recovery (reset the enrollment marker). Agents enrolled together expire together.
+  Windows and Linux hosts that restart regularly are mostly protected, which is why this has not been seen.
+* **Remediation:** renew from a timer inside the running agent (on startup and every few hours once past the threshold, with
+  backoff); for an expired certificate, allow one controlled re-bootstrap with the secret, audited server-side, instead of
+  blocking forever. Keeping "never use the secret once enrolled" is right while the certificate is still valid.
+* **Regression test:** with the clock past the threshold a running agent renews without restart; with an expired certificate
+  the agent recovers via re-bootstrap and logs it.
+
+* **Fix:** `agent/cert_renewal.go` re-checks the certificate every 6 hours in the running agent (console and service). An enrolled agent
+  with an expired certificate now re-enrols once through the TLS enrolment listener with the secret (`reEnrolling` in
+  `ensureCertificate`); if that fails it stays blocked and never uses legacy transport. This reverses the earlier rule that an
+  enrolled agent never uses the secret after expiry, so the two tests that pinned that rule were rewritten on purpose. The server
+  already accepted such a request; recording it as an audit event is part of F-03.
+* **Tests:** `TestEnsureCertificate_EnrolledExpiredCertReEnrolsOverEnrolmentListener`, `..._ReEnrolmentFailureStaysBlocked`,
+  `TestResolveOperationalConfig_EnrolledExpiredCertRecovers`, `TestRunPeriodic_RunsImmediatelyThenOnEachTickUntilCancelled`.
+  Known unrelated failure: `TestExecStepCleanupRunsAfterOperatorCancel` fails with and without this change.
+
+* **Token-mode recovery (decided 2026-10-26): 24 hours, restricted.** The shared secret cannot re-enrol an agent in token mode, so
+  `POST /api/agents/recover-csr` (enrolment listener only) replaces an expired certificate when the agent proves itself with that
+  certificate and a signature, by its key, over a fresh timestamp and the new CSR. Rules, all enforced by the server on its own
+  clock: valid certificate -> refused (409, renew over mTLS); expired up to 24 hours -> one new certificate for the SAME AgentID;
+  expired more than 24 hours -> refused (fresh authorized enrolment required); revoked certificate, revoked/disabled/uninstalling
+  agent, certificate not issued by this server, not the agent's newest certificate, or already used (`superseded_at`) -> refused
+  immediately. Every refusal and success is audited (`agent.recover_denied`, `agent.recover`), failures are throttled per address.
+  **Verification of the critical condition:** the agent protocol already separates renewal from ordinary operation (renewal is a
+  call to enroll-csr over mTLS, and an expired certificate fails the TLS handshake on the agent listener). Recovery therefore adds a
+  separate endpoint on the listener that never accepted client certificates; certificate validation was not loosened anywhere, and
+  an expired certificate still cannot do anything else (`TestNewAgentTLSConfig_Handshakes`). The agent tries recovery first and, if
+  the server refuses, falls back to a fresh authorized enrolment with the credential it was given (secret or token). Tests:
+  `enroll_recover_test.go` (grace boundary 23h59m/24h01m, still valid, revoked agent/certificate, uninstalling, AgentID mismatch,
+  wrong key, proof for a different CSR, stale or future timestamp, certificate from another CA, replay, throttling, server clock),
+  `agent/recovery_test.go`, and a golden proof vector pinned on both sides. Not yet run on Ubuntu/Windows hosts. Limit: the proof
+  timestamp uses the agent's clock (+/-5 minutes of the server), so a badly skewed agent clock fails recovery and needs a fresh
+  authorized enrolment.
+#### Fix for F-04, F-05 and F-08 (revocation)
+
+* `POST /api/agents/{agentId}/revoke` (admin, reason required, audited): marks all of that agent's certificates revoked, sets
+  `agents.state = 'revoked'`, and drops its live websocket (`Hub.DisconnectAgent`). The CA and other agents are untouched.
+* `POST /api/agents/{agentId}/reinstate` (admin, reason required): lets the agent enrol again; old certificates stay revoked.
+  The agent must enrol afresh (reinstall or reset its enrolment marker); there is no automatic recovery on the agent side.
+* Enforcement at connection time: `pki.NewAgentTLSConfig` (used by the `:9443` listener) runs a revocation check on every
+  handshake, including resumed sessions, and **fails closed** if the database lookup errors. A revoked agent is refused whatever
+  certificate it presents. The bootstrap secret cannot re-enrol a revoked agent (403).
+* The same function pins `MinVersion` to TLS 1.2 for the listener.
+* Tests: `TestNewAgentTLSConfig_Handshakes` (valid, no cert, expired, other CA, wrong usage, revoked, lookup error),
+  `TestRevokeAgent_RevokesOnlyThatAgentsCertificatesAndBlocksIt`, `TestReinstateAgent_AllowsAFreshEnrolment`,
+  `TestDisconnectAgent_ClosesTheLiveConnection`, plus RBAC matrix entries. The RBAC matrix suite still has its 314 earlier failures,
+  none about these routes.
+* Dashboard: admins get **Revoke…** (live agents) and **Reinstate…** (revoked agents) in the Agents row menu, each with a required reason and a confirmation (`web/tests/unit/revoke-agent.test.mjs`). Not clicked through in a browser yet.
+* Not done: the agent does not yet tell the operator it was revoked (it just fails to connect).
+
+#### F-07 Renewal reuses the same private key. Low. Design limit. **FIXED**
+
+* **Fix:** renewal and re-enrolment generate a new key in memory (`newAgentKey`); only after the server issues the certificate are
+  the new key and certificate written as `.new` files and moved into place together (`rotateCredentials`). A crash at any point is
+  repaired on the next start (`recoverPendingRotation`), and a failed renewal leaves the old key untouched. The first bootstrap
+  is unchanged.
+* **Tests:** `TestRenewal_GeneratesAFreshKey`, `TestRenewalFailure_LeavesTheOldKeyUntouched`, `TestRecoverPendingRotation`
+  (crash before any rename, between the two renames, stale files).
+
+`loadOrGenerateAgentKey` returns the stored key, so a renewed certificate carries the old key. Renewal therefore does not limit
+the damage of a key that leaked earlier. Fix by generating a fresh key on renewal and swapping atomically.
+
+#### F-08 Long-lived websocket connections are not re-validated. Low. Untested assumption. **PARTLY FIXED (dropped on revoke; no re-check at expiry)**
+
+TLS verifies the certificate at handshake only. A connection opened before expiry or revocation stays up. Needed alongside
+F-05: the server should drop connections of revoked or blocked agents when the block is applied.
+
+## 6. Server certificate and CA rotation
+
+How trust works today (verified, code): the agent pins the deployment CA root from a file written at install time (`--ca-root` or
+the fingerprint-verified signed deployment config). The agent never reads the CA from an enrollment or renewal response (the
+server sends `caPem`, the agent does not use it), so a server that presents an unexpected replacement CA is **not** trusted: the
+agent's chain check fails and it stays blocked. That is the behaviour you asked for, and it is already true. The server holds one
+CA only (`ClientCAs` has a single entry) and its TLS identity is the CA certificate itself.
+
+#### F-09 There is no safe CA rotation path. High (operational). Missing.
+
+* **Evidence (code):** one CA keypair in `PKI_DIR`; `NewAgentTLSConfig` trusts exactly that CA; the agent trusts exactly the root
+  file it was installed with and has no way to receive a second root.
+* **Impact:** replacing the CA (expiry after 10 years, suspected CA-key compromise) invalidates every agent certificate and every
+  agent's trust in the server at once; each agent needs a new root file and a fresh enrolment. There is no overlap period.
+* **Recommended design (not built):**
+  1. The server holds a *current* and a *next* CA; the listener accepts client certificates from either.
+  2. The new root reaches agents over the existing authenticated channel as a command signed by the command-signing key the agent
+     already trusts (the agent verifies the signature and the root's fingerprint before appending it to its root file). Agents never
+     take roots from enrollment responses, so the "unexpected CA is rejected" property is kept.
+  3. The dashboard shows how many agents report both roots; when all do, the server switches issuing to the new CA and agents renew
+     into it (a forced renewal, using the F-06 loop).
+  4. After a full renewal cycle the old root is removed from the server and from the agents.
+  5. Rollback: until step 4, the old CA is still trusted both ways.
+* **Regression tests to write with it:** an agent with both roots accepts a server certificate from either; an unsigned or
+  wrongly signed trust update is refused; a root whose fingerprint does not match the update is refused.
+
+* **Server side: BUILT (not the agent side).** `internal/pki/rotation.go` is a file-visible state machine:
+  `stable -> prepared (start) -> promoted (promote) -> stable (retire)`, with `abort` (from prepared) and `rollback` (from promoted).
+  `start` creates a next CA and a cross-certificate for it signed by the current CA, and changes nothing about issuance or trust.
+  `promote` makes the new CA issue and keeps the old one as `previous-ca-*`, so every certificate already issued still verifies;
+  the server's mTLS listener trusts both roots (`TrustedClientRoots`, `NewAgentTLSConfigWithRoots`). `retire` removes the old
+  trust only when the operator says so. Every step copies the PEM files to `rotation-backups/` first. A missing CA is never a
+  rotation (every step refuses unless a complete current CA exists), and an inconsistent file set is an error, not a guess.
+  Operator command, offline, each change needs `--yes` and a server restart: `orchestrator ca-rotation status|start|abort|promote|rollback|retire`.
+  Tests: `rotation_test.go`, `TestNewAgentTLSConfigWithRoots_*`, `ca_rotation_cmd_test.go`.
+* **Agent pin: determined.** An agent pins ONE root file (`--ca-root` / signed deployment config), loaded into a pool by
+  `AppendCertsFromPEM`, so a file containing two PEMs would be trusted as two roots. The agent never takes a root from an
+  enrolment response.
+* **Agent delivery: BUILT.** `POST /api/ca-rotation/distribute` (admin, only while `prepared`) sends each connected agent a
+  `command_trust_ca` signed by the command-signing key, carrying the new root and the cross-certificate the current CA signed for
+  it. The agent (`acceptCARoot`, `agent/ca_trust.go`) accepts it only if (a) the envelope verifies, (b) the root is a CA inside its
+  validity, (c) the cross-certificate covers the same key and **verifies against the root the agent already pins**, so even a signed
+  command cannot add a root the pinned CA has not vouched for. The root is appended to the pinned file (atomic rename), never
+  replacing the old one; delivery is idempotent. Connections already running pick the new root up without a restart (the
+  server-certificate check re-reads the pinned file). Agents report the fingerprints they trust in every heartbeat
+  (`agents.trusted_root_fps`); `GET /api/ca-rotation/status` returns `agentsWithNewRoot / agentsTotal`, the agents still pending, and
+  `readyToPromote` (true only when every agent that can still connect has the root; revoked and uninstalling agents are not counted).
+  Tests: `agent/ca_trust_test.go`, `ca_trust_interop_test.go` (feeds the agent the server's real rotation output),
+  `internal/api/ca_rotation_handlers_test.go`.
+* **Procedure:** `ca-rotation start --yes` -> restart server -> `POST /api/ca-rotation/distribute` (repeat for agents that were
+  offline) -> wait for `readyToPromote` -> `ca-rotation promote --yes` -> restart server (it re-issues its own certificate from the
+  new CA; agents already trust it) -> agents renew their certificates from the new CA at 75% of lifetime or when re-enrolled ->
+  only when every agent is verified on the new CA, `ca-rotation retire --yes`. `rollback` is available until `retire`.
+* **Still not built / not verified:** (1) the CLI does not itself refuse `promote` when `readyToPromote` is false (the CLI is
+  offline, the gate is the status endpoint, so it is a procedure rule); (2) there is no per-agent "certificate was issued by the new
+  CA" indicator, so deciding that `retire` is safe is a manual check; retiring early locks out any agent still holding an old-CA
+  certificate; (3) no dashboard page, only the API; (4) agents that are offline during distribution only receive the root when
+  `distribute` is run again after they reconnect; (5) not run on a live fleet or on the Ubuntu staging server.
+#### F-10 The server's TLS certificate is the CA certificate. Medium. Design limit. **FIXED**
+
+* **Evidence (code):** `CA.TLSCertificate()` presents the CA certificate and key as the server identity (and the dashboard's
+  fallback certificate).
+* **Impact:** the CA signing key is used in every TLS handshake, so it must stay online, and the server certificate cannot be
+  rotated or have its names changed without replacing the CA (which is the fleet-wide event in F-09).
+* **Fix:** `pki.ServerCertSource` (`internal/pki/server_cert.go`) issues the server its own leaf certificate (`server-cert.pem`,
+  `server-key.pem` in `PKI_DIR`): ECDSA P-256, not a CA, server-authentication usage only, the configured DNS/IP names, one year,
+  renewed 30 days before expiry *while the server runs* (`GetCertificate`). It is used for the agent listener, the enrolment listener
+  and the dashboard fallback. A stored leaf that is damaged, signed by a different CA, due for renewal or has other names is replaced;
+  that is safe because agents trust the CA, not the leaf, and the leaf is only ever signed by the CA that is loaded, so nothing here
+  can introduce a new trust anchor. The CA key is no longer used in TLS handshakes.
+* **Agent compatibility (verified in code, not on a live fleet):** the agent verifies the server by chain to its pinned CA with the
+  server-authentication usage and the validity period, and does not check names (`verifyServerCertChain`), so a leaf signed by the
+  same CA is accepted without an agent change. `TestServerCert_AgentStyleChainVerificationOverARealHandshake` does a real handshake
+  with that exact check. Not yet confirmed against real agents: it is part of the staging runbook.
+* **Tests:** `server_cert_test.go` (leaf is distinct from the CA and not a CA; reuse across restarts; new names reissue the leaf only;
+  renewal while running without touching the CA; damaged or missing files; a leaf from another CA is replaced).
+
+## Incidental observations (status after the trace above)
+
+Found while tracing the issuance path; each gets its own pass and verdict.
+
+* **Area 5, missing:** nothing in the code ever sets `agent_certificates.revoked = true` (the column is only read). There is no way to revoke an individual agent certificate. `UnenrollAgent` only sets `agents.state = 'retired'` and does not touch certificates.
+* **Area 3, to confirm:** revocation (and agent state) appears to be checked only on renewal, not at the TLS handshake or on `/ws/agent`.
+* **Area 5, latent:** the bootstrap duplicate check ignores revoked rows, so once revocation exists, a revoked agent could re-enroll with the shared secret unless an agent-level block is added at the same time.
+* **Area 6:** the CA certificate doubles as the server's TLS certificate, so the CA key is used in TLS handshakes. Server certificate and CA rotation are therefore coupled.
+* **Area 3:** the listeners set no explicit `MinVersion` (Go's server default applies).

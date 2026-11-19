@@ -4,8 +4,15 @@
 # Env: BAS_VERSION
 set -euo pipefail
 
-VER="${BAS_VERSION:-1.6.0}"
-mkdir -p /packages
+# The package version: the agent build's version when it is a valid Debian version (starts with a digit), else
+# BAS_VERSION, else the long-standing default. Before this, every release was packaged as 1.6.0.
+valid_ver() { printf '%s' "$1" | grep -Eq '^[0-9][A-Za-z0-9.+~-]*$'; }
+VER="1.6.0"
+for candidate in "${AGENT_VERSION:-}" "${BAS_VERSION:-}"; do
+  if valid_ver "$candidate"; then VER="$candidate"; break; fi
+done
+export BAS_VERSION="$VER"
+mkdir -p /packages /tmp/legacy-packages
 
 # ── Shared systemd unit ───────────────────────────────────────────────────────
 # ExecStartPre fetches the deployment CA root before every start, not just at
@@ -125,20 +132,26 @@ PRERM
   chmod 755 "${D}/DEBIAN/prerm"
 
   dpkg-deb --build --root-owner-group "${D}" \
-    "/packages/bas-agent-linux-${arch}.deb"
-  echo "[+] bas-agent-linux-${arch}.deb"
+    "/tmp/legacy-packages/bas-agent-linux-${arch}.deb"
 }
 
+# The .deb that ships is built by linux-deb/build-deb.sh (package audspect-agent: shared installer, upgrade with
+# rollback, remove keeps data, purge erases it). The minimal package above is kept ONLY as the input for the .rpm
+# below until the rpm gets the same treatment.
+for arch in amd64 arm64; do
+  bash /linux-deb/build-deb.sh "$arch" "/binaries/bas-agent-linux-${arch}" /install-agent-linux.sh \
+    "/packages/bas-agent-linux-${arch}.deb"
+done
 build_deb amd64 /binaries/bas-agent-linux-amd64
 build_deb arm64 /binaries/bas-agent-linux-arm64
 
 # ── .rpm via alien from the amd64 .deb ───────────────────────────────────────
-cd /packages
+cd /tmp/legacy-packages
 alien --to-rpm --scripts "bas-agent-linux-amd64.deb"
 # alien produces bas-agent-<ver>-<rel>.x86_64.rpm — normalise the filename
 rpm_src=$(ls bas-agent-*.x86_64.rpm 2>/dev/null | head -1)
 if [[ -n "$rpm_src" ]]; then
-  mv "$rpm_src" "bas-agent-linux-amd64.rpm"
+  mv "$rpm_src" "/packages/bas-agent-linux-amd64.rpm"
   echo "[+] bas-agent-linux-amd64.rpm"
 else
   echo "[!] RPM not produced by alien"

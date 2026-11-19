@@ -72,3 +72,28 @@ func TestFleetRisk_NoCompletedRuns_ReturnsZero(t *testing.T) {
 		}
 	})
 }
+
+// The factory validation lab's runs are an internal quality loop on its own agent. Their scores must never move the
+// fleet risk shown to the customer.
+func TestFleetRisk_IgnoresFactoryValidationRuns(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExec(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('a1', 'HOST-1'), ('lab', 'LAB-1')`)
+		mustExec(t, pool, `
+			INSERT INTO scenario_runs (scenario_id, agent_id, status, score, completed_at)
+			VALUES ('scn-1', 'a1', 'completed', '{"riskScore": 40}'::jsonb, NOW())`)
+		mustExec(t, pool, `
+			INSERT INTO scenario_runs (scenario_id, agent_id, status, score, completed_at, execution_kind)
+			VALUES ('scn-lab', 'lab', 'completed', '{"riskScore": 100}'::jsonb, NOW(), 'factory_validation')`)
+
+		got, err := FleetRisk(context.Background(), pool)
+		if err != nil {
+			t.Fatalf("FleetRisk: %v", err)
+		}
+		if got.FleetAvgScore != 40 || got.ScoredRuns != 1 {
+			t.Errorf("FleetRisk = avg %d over %d runs, want 40 over 1: the lab run must not count", got.FleetAvgScore, got.ScoredRuns)
+		}
+	})
+}

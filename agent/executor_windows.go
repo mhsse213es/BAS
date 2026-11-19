@@ -112,6 +112,35 @@ else { Write-Output "WMI_TIMEOUT: inner process did not write output within time
 	}
 }
 
+// stepScriptFile moves a long PowerShell step off the command line: the script
+// is written to a private temp file and PowerShell is pointed at it with -File,
+// which keeps the exit code, stdout and stderr behaviour of -Command. Short
+// steps, and every executor other than PowerShell, are left exactly as built.
+// The returned cleanup removes the file and must be deferred by the caller.
+func stepScriptFile(cmd *exec.Cmd, step ScenarioStep) (func(), error) {
+	noop := func() {}
+	switch strings.ToLower(step.Executor) {
+	case "", "powershell", "psh":
+	default:
+		return noop, nil
+	}
+	if len(step.Command) <= stepScriptThreshold {
+		return noop, nil
+	}
+	path, cleanup, err := writeStepScript(os.TempDir(), ".ps1", step.Command, true)
+	if err != nil {
+		return noop, err
+	}
+	for i, a := range cmd.Args {
+		if strings.EqualFold(a, "-Command") {
+			cmd.Args = append(cmd.Args[:i:i], "-File", path)
+			return cleanup, nil
+		}
+	}
+	cleanup()
+	return noop, fmt.Errorf("powershell launch has no -Command argument")
+}
+
 // applyExecutionContext resolves the privilege context for a step, optionally
 // switches the cmd to run under the logged-in user's token (for "user" steps),
 // and returns the label that should be recorded in ExecResult.ExecutedAs plus

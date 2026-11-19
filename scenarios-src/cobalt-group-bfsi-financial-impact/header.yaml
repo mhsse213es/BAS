@@ -1,0 +1,27 @@
+id: "cobalt-group-bfsi-financial-impact"
+product_line: killchain
+name: "Cobalt Group BFSI - Financial Impact Simulator (P1)"
+description: >
+  Custom BFSI-specific scenarios validating financial-system controls beyond generic ATT&CK
+  technique coverage: transaction-record manipulation, payment-instruction manipulation, ATM
+  dispense-workflow manipulation, fraudulent transaction patterns, transaction-limit bypass, and
+  financial-reconciliation manipulation, plus a resilience smoke check. All scenarios mutate only
+  the lab bfsisim transaction ledger (internal/bfsisim); no real payment, ATM or core-banking system
+  is ever touched. Each write scenario includes verified cleanup and undo-record rollback.
+  Not all stages here map to documented Cobalt Group tradecraft -- these extend the campaign's
+  BFSI attack-path coverage beyond the group's historically observed techniques.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cobalt-group
+  - bfsi
+  - financial-impact
+  - p1
+  - custom
+mitre_phases:
+  - impact
+
+steps:
+

@@ -53,6 +53,17 @@ func fileUploadVectors() ([]AttackVector, error) {
 	}
 	out = append(out, v2)
 
+	benign3 := RequestTemplate{Method: "POST", Path: "/upload", PayloadLocation: "body:multipart:filename", Payload: "report.pdf", Description: "ordinary upload with a plain, single-segment filename"}
+	v3, err := NewAttackVector("FILEUP-003", 1, FamilyFileUpload, "Path traversal via a crafted upload filename", SeverityCritical,
+		"target derives the on-disk storage path for an uploaded file directly from the client-supplied filename without normalizing or rejecting traversal sequences",
+		RequestTemplate{Method: "POST", Path: "/upload", PayloadLocation: "body:multipart:filename", Payload: "../../../../etc/cron.d/evil", Description: "path-traversal attempt via a crafted multipart filename, aiming to write the uploaded file outside the designated upload directory"},
+		&benign3, "", StandardsMapping{CWEIDs: []string{"CWE-22"}, Top10Category: "A01:2021-Broken Access Control"},
+		"manually authored from CWE-22")
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, v3)
+
 	return out, nil
 }
 
@@ -78,6 +89,16 @@ func httpParserVectors() ([]AttackVector, error) {
 		return nil, err
 	}
 	out = append(out, v2)
+
+	benign3 := RequestTemplate{Method: "GET", Path: "/search", PayloadLocation: "query:q", Payload: "weather forecast", Description: "ordinary search query with no header injection content"}
+	v3, err := NewAttackVector("HTTPPARSE-003", 1, FamilyHTTPParser, "HTTP response splitting via CRLF injection into a reflected header value", SeverityHigh,
+		"target reflects a user-controlled value into a response header without stripping embedded CR/LF sequences",
+		RequestTemplate{Method: "GET", Path: "/search", PayloadLocation: "query:q", Payload: "weather\\r\\nSet-Cookie: session=attacker-controlled", Description: "CRLF-injection attempt into a reflected header value, attempting HTTP response splitting to inject an additional header or a second, attacker-controlled response"},
+		&benign3, "", StandardsMapping{CWEIDs: []string{"CWE-93"}}, "manually authored from CWE-93")
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, v3)
 
 	return out, nil
 }

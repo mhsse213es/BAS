@@ -24,9 +24,11 @@ def validate_build(built_rules: list[dict], known_technique_ids: set[str], failu
             raise ValidationError(f"duplicate sigma id: {rule['sigmaId']}")
         seen_sigma_ids.add(rule["sigmaId"])
 
-        for tid in rule["techniqueIds"]:
-            if tid not in known_technique_ids:
-                raise ValidationError(f"unrecognized ATT&CK technique {tid} on rule {rule['id']}")
+        # SigmaHQ is newer than the bundled ATT&CK data, so a rule may carry an id the bundle has not heard of
+        # (a technique added since). That alone is fine; a rule with no recognised technique at all is not.
+        unknown = [t for t in rule["techniqueIds"] if t not in known_technique_ids]
+        if unknown and len(unknown) == len(rule["techniqueIds"]):
+            raise ValidationError(f"unrecognized ATT&CK technique {unknown[0]} on rule {rule['id']}")
 
         if not rule["translations"]:
             raise ValidationError(f"rule {rule['id']} has zero successful translations across all backends")

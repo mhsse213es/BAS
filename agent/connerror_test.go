@@ -2,10 +2,15 @@ package main
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
+	"fmt"
 	"net"
+	"strings"
 	"testing"
 	"time"
+
+	"audspect/agent/protocol"
 )
 
 func TestClassifyConnError_ProxyAuthString_IsProxyAuth(t *testing.T) {
@@ -88,5 +93,33 @@ func TestAgent_RecordAndClearConnError(t *testing.T) {
 	lce = a.lastConnErrPtr.Load()
 	if lce == nil || lce.Category != ConnErrorNone {
 		t.Fatalf("after clearConnError: lastConnErrPtr = %+v, want Category == ConnErrorNone", lce)
+	}
+}
+
+func TestClassifyConnError_EnrollmentUnauthorized_IsServerRejected(t *testing.T) {
+	wrapped := fmt.Errorf("submit CSR (renewing=false): %w", &protocol.StatusError{Code: 401, Path: "/api/agents/enroll-csr"})
+	got := ClassifyConnError(wrapped)
+	if got.Category != ConnErrorServerRejected {
+		t.Fatalf("category = %q, want %q", got.Category, ConnErrorServerRejected)
+	}
+	if !strings.Contains(got.Detail, "AGENT_SECRET") {
+		t.Fatalf("detail %q should tell the operator to check AGENT_SECRET", got.Detail)
+	}
+}
+
+// A rejected enrollment leaves the agent on the fallback transport, whose later connections fail certificate
+// validation. That follow-on error must not hide the real cause while the agent is still not enrolled.
+func TestRecordConnError_EnrollmentRejectionNotMaskedByFollowOnTLSError(t *testing.T) {
+	a := &Agent{}
+	a.cfgPtr.Store(&Config{})
+	a.recordEnrollmentError(&protocol.StatusError{Code: 401, Path: "/api/agents/enroll-csr"})
+	a.recordConnError(x509.UnknownAuthorityError{})
+	if got := a.lastConnErrPtr.Load(); got == nil || got.Category != ConnErrorServerRejected {
+		t.Fatalf("last error = %+v, want category %q", got, ConnErrorServerRejected)
+	}
+	a.clearConnError()
+	a.recordConnError(x509.UnknownAuthorityError{})
+	if got := a.lastConnErrPtr.Load(); got == nil || got.Category != ConnErrorTLS {
+		t.Fatalf("after recovery a TLS failure must be reported as TLS, got %+v", got)
 	}
 }

@@ -26,14 +26,14 @@ func TestIsSignedCommandType_RejectsUnknownTypes(t *testing.T) {
 	}
 }
 
-// TestIsSignedCommandType_AcceptsExactlyTheEightSignedTypes pins the
+// TestIsSignedCommandType_AcceptsExactlyTheNineSignedTypes pins the
 // closed list itself -- exactly the 8 execution-triggering command
 // types the spec names, no more and no fewer.
-func TestIsSignedCommandType_AcceptsExactlyTheEightSignedTypes(t *testing.T) {
+func TestIsSignedCommandType_AcceptsExactlyTheNineSignedTypes(t *testing.T) {
 	want := []string{
 		"command_scenario", "command_simulate", "command_attackpath_collect",
 		"command_cancel", "command_pause", "command_resume",
-		"command_stop_agent", "command_uninstall_agent",
+		"command_stop_agent", "command_uninstall_agent", "command_trust_ca",
 	}
 	for _, ct := range want {
 		if !IsSignedCommandType(ct) {

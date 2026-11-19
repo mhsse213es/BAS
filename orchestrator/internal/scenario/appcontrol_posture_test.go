@@ -123,8 +123,16 @@ func loadStepCommand(t *testing.T, path, namePrefix string) string {
 
 func runPosturePowerShell(t *testing.T, script string) string {
 	t.Helper()
-	out, _ := exec.Command("powershell", "-NoProfile", "-NonInteractive",
+	out, err := exec.Command("powershell", "-NoProfile", "-NonInteractive",
 		"-ExecutionPolicy", "Bypass", "-Command", script).CombinedOutput()
+	// Keep the process error in the output: a silent failure used to show as an
+	// empty result with no cause, and the callers only check substrings.
+	if err != nil {
+		return string(out) + "\nRUNNER_ERR: " + err.Error()
+	}
+	if len(out) == 0 {
+		return "RUNNER_ERR: empty output and no process error"
+	}
 	return string(out)
 }
 

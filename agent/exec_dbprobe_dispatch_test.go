@@ -103,19 +103,19 @@ func TestDBProbeTamperedScenarioRefusedBeforeConnect(t *testing.T) {
 
 func TestDBProbeGateStepWiring(t *testing.T) {
 	ok := testDBProbeStep(nil)
-	if v := gateStep(ok); v != nil {
+	if v := gateStep(ok, "test-run"); v != nil {
 		t.Fatalf("clean non_destructive dbprobe step vetoed: %+v", v)
 	}
 
 	// dbsim pre-gate: baggage / missing spec.
 	bad := testDBProbeStep(nil)
 	bad.Cleanup = "rm -rf /tmp/x"
-	if v := gateStep(bad); v == nil || v.source != "dbsim_gate" || !v.result.Vetoed {
+	if v := gateStep(bad, "test-run"); v == nil || v.source != "dbsim_gate" || !v.result.Vetoed {
 		t.Fatalf("cleanup baggage must be vetoed by the dbsim gate: %+v", v)
 	}
 	nospec := testDBProbeStep(nil)
 	nospec.DBProbe = nil
-	if v := gateStep(nospec); v == nil || v.source != "dbsim_gate" {
+	if v := gateStep(nospec, "test-run"); v == nil || v.source != "dbsim_gate" {
 		t.Fatalf("missing spec must be vetoed by the dbsim gate: %+v", v)
 	}
 
@@ -123,7 +123,7 @@ func TestDBProbeGateStepWiring(t *testing.T) {
 	for _, class := range []string{"", "bogus", "destructive"} {
 		s := testDBProbeStep(nil)
 		s.ExecutionClass = class
-		v := gateStep(s)
+		v := gateStep(s, "test-run")
 		if v == nil || v.source == "dbsim_gate" || !v.result.Vetoed || v.result.VetoedBlockSource != v.source {
 			t.Errorf("class %q: expected a B5 veto, got %+v", class, v)
 		}
@@ -131,11 +131,11 @@ func TestDBProbeGateStepWiring(t *testing.T) {
 
 	// A non-dbprobe destructive shell step is still vetoed exactly as before.
 	sh := ScenarioStep{TaskID: "s", Executor: "cmd", Command: "vssadmin delete shadows /all /quiet", ExecutionClass: "non_destructive"}
-	if v := gateStep(sh); v == nil || v.source != "local_backstop" {
+	if v := gateStep(sh, "test-run"); v == nil || v.source != "local_backstop" {
 		t.Fatalf("local backstop must still veto destructive shell text: %+v", v)
 	}
 	// A benign shell step with a good class passes both gates.
-	if v := gateStep(ScenarioStep{TaskID: "s", Executor: "bash", Command: "echo hi", ExecutionClass: "non_destructive"}); v != nil {
+	if v := gateStep(ScenarioStep{TaskID: "s", Executor: "bash", Command: "echo hi", ExecutionClass: "non_destructive"}, "test-run"); v != nil {
 		t.Fatalf("benign shell step vetoed: %+v", v)
 	}
 }

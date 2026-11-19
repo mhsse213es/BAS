@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/audspect/bas/internal/avval"
 	"github.com/audspect/bas/internal/models"
 )
 
@@ -99,7 +100,7 @@ func TestBuildAppControlSection_PreventionAndVisibilityIndependent(t *testing.T)
 	blockedUnseen := "APPCTL_FAMILY: parent_child_asr\nAPPCTL_DETECTION: source=sysmon_process_create result=not_visible\nAPPCTL_OUTCOME: blocked_as_expected\n"
 	results := []models.SimulationResult{
 		appCtlResult("Application control alternate binary: renamed powershell.exe copy (T1036)", "T1036", allowedVisible),
-		appCtlResult("Application control parent-child ASR: spoofed Office parent (T1204.002)", "T1204.002", blockedUnseen),
+		appCtlResult("Application control parent-child ASR: Office-named parent image (T1036.005)", "T1036.005", blockedUnseen),
 	}
 	sec := buildAppControlSection("run-A", results)
 	got := map[string][2]string{}
@@ -176,4 +177,60 @@ func familyStatus(t *testing.T, sec AppControlSection, family string) AppControl
 	}
 	t.Fatalf("family %s not listed", family)
 	return AppControlFamilyStatus{}
+}
+
+func TestParseAppControlOutcome_AuditedOnlyIsKnownAndNeverAMatch(t *testing.T) {
+	got, ok := ParseAppControlOutcome("APPCTL_OUTCOME: audited_only\n")
+	if !ok || got != AppCtlAuditedOnly {
+		t.Fatalf("got %q ok=%v", got, ok)
+	}
+	if r := (appcontrolComparator{}).Compare(AppCtlExpectBlocked, AppCtlAuditedOnly); r != Mismatch {
+		t.Errorf("audit-mode execution must mismatch a blocked expectation, got %v", r)
+	}
+	if appControlPrevention(AppCtlAuditedOnly) != avval.PreventionAllowed {
+		t.Errorf("audit mode is not prevention")
+	}
+}
+
+func TestAppControlSection_MasteryFamiliesAppearOnlyWhenRun(t *testing.T) {
+	base := buildAppControlSection("r1", nil)
+	if len(base.Families) != 6 {
+		t.Fatalf("legacy view must keep exactly six families, got %d", len(base.Families))
+	}
+	res := models.SimulationResult{StepName: "Application control Trusted Binary Proxy: Regsvr32 scriptlet execution (T1218.010)",
+		RawOutput: "APPCTL_FAMILY: regsvr32_proxy\nAPPCTL_OUTCOME: blocked_as_expected\nAPPCTL_DETECTION: source=x result=visible\n"}
+	sec := buildAppControlSection("r1", []models.SimulationResult{res})
+	found := false
+	for _, f := range sec.Families {
+		if f.Family == "regsvr32_proxy" {
+			found = f.Status == AppCtlBlockedAsExpected
+		}
+	}
+	if !found || len(sec.Families) != 7 {
+		t.Fatalf("regsvr32_proxy missing or wrong status: %+v", sec.Families)
+	}
+}
+
+// Every Application Control Mastery step must still be recognised by name when it produced no
+// APPCTL_ output at all (crash, timeout), and map to a family the report lists.
+func TestAppControlMastery_StepNameFallbackCoversEveryStep(t *testing.T) {
+	listed := map[string]bool{}
+	for _, f := range appCtlMasteryFamilies {
+		listed[f] = true
+	}
+	if len(appCtlMasteryStepFamilies) != len(appCtlMasteryFamilies) {
+		t.Fatalf("fallback has %d steps, report lists %d families", len(appCtlMasteryStepFamilies), len(appCtlMasteryFamilies))
+	}
+	for name, fam := range appCtlMasteryStepFamilies {
+		if !listed[fam] {
+			t.Errorf("step %q maps to unlisted family %q", name, fam)
+		}
+		r := models.SimulationResult{StepName: name}
+		if !isAppControlResult(r) {
+			t.Errorf("step %q with no output is not recognised as an application-control result", name)
+		}
+		if got := appCtlFamilyOf(r); got != fam {
+			t.Errorf("step %q: family %q, want %q", name, got, fam)
+		}
+	}
 }

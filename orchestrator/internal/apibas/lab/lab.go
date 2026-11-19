@@ -455,6 +455,10 @@ func (s *Server) Handler() http.Handler {
 	}
 	mux.HandleFunc("GET /lab/state", s.adminOnly(s.getState))
 	s.registerNBFC(mux)
+	s.registerManufacturing(mux)
+	s.registerHealthcare(mux)
+	s.registerCommerce(mux)
+	s.registerUPI(mux)
 	mux.HandleFunc("POST /lab/orders", s.adminOnly(s.createTagged))
 	mux.HandleFunc("DELETE /lab/runs/{tag}", s.adminOnly(s.cleanupRun))
 	mux.HandleFunc("POST /lab/reset", s.adminOnly(s.resetFixture))
@@ -512,13 +516,12 @@ func methodOverride(next http.Handler) http.Handler {
 // actually established. It is recorded beside the claimed identity (REL-013 compares them) and never used for access.
 func (s *Server) verifiedIdentity(r *http.Request) string {
 	h := r.Header.Get("Authorization")
-	if h == "" {
+	const prefix = "Bearer "
+	if !strings.HasPrefix(h, prefix) {
+		// No Bearer credential (absent, or malformed): a certificate that chains to the lab CA is the proof, if one was sent.
 		if cn, ok := s.certIdentity(r); ok {
 			return cn
 		}
-	}
-	const prefix = "Bearer "
-	if !strings.HasPrefix(h, prefix) {
 		return ""
 	}
 	customer, ok := s.cfg.Tokens[strings.TrimPrefix(h, prefix)]

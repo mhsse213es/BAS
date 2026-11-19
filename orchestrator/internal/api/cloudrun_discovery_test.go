@@ -31,42 +31,51 @@ func TestValidateCloudPlanRunRequest_DiscoverAndEdgesMutuallyExclusive(t *testin
 	}
 }
 
-func TestCloudDiscovererFor_AzureNamesMissingVariableNotValue(t *testing.T) {
-	t.Setenv("AZURE_TENANT_ID", "tenant")
-	t.Setenv("AZURE_CLIENT_ID", "client")
-	t.Setenv("AZURE_CLIENT_SECRET", "")
-	t.Setenv("AZURE_SUBSCRIPTION_ID", "sub-1")
-
-	_, err := cloudDiscovererFor(context.Background(), cloudgraph.AccountScope{Provider: "azure", AccountID: "sub-1"})
-	if !errors.Is(err, errCloudDiscoveryNotConfigured) {
-		t.Fatalf("err = %v, want not-configured", err)
+// An account that is not allow-listed is refused before any provider client is built.
+func TestCloudDiscovererFor_RefusesUnlistedAccountFirst(t *testing.T) {
+	_, err := cloudDiscovererFor(context.Background(), &CloudSettings{}, cloudgraph.AccountScope{Provider: "aws", AccountID: "111111111111"})
+	if !errors.Is(err, errCloudAccountNotAllowed) {
+		t.Fatalf("err = %v, want the allow-list refusal", err)
 	}
-	if !strings.Contains(err.Error(), "AZURE_CLIENT_SECRET") {
-		t.Errorf("error should name the missing variable: %v", err)
-	}
-	if discoveryStatusCode(err) != http.StatusServiceUnavailable {
-		t.Errorf("status = %d, want 503 for missing server config", discoveryStatusCode(err))
+	if discoveryStatusCode(err) != http.StatusForbidden {
+		t.Errorf("status = %d, want 403", discoveryStatusCode(err))
 	}
 }
 
+// Azure credentials for one subscription are not used for another, even when the
+// other subscription is allow-listed.
 func TestCloudDiscovererFor_AzureRejectsSubscriptionMismatch(t *testing.T) {
-	t.Setenv("AZURE_TENANT_ID", "tenant")
-	t.Setenv("AZURE_CLIENT_ID", "client")
-	t.Setenv("AZURE_CLIENT_SECRET", "secret")
-	t.Setenv("AZURE_SUBSCRIPTION_ID", "sub-configured")
+	s := cloudTestSettings(t, "azure:sub-requested")
+	s.azure = &cloudgraph.AzureDiscoveryConfig{TenantID: "t", ClientID: "c", ClientSecret: "secret", SubscriptionID: "sub-configured"}
 
-	_, err := cloudDiscovererFor(context.Background(), cloudgraph.AccountScope{Provider: "azure", AccountID: "sub-requested"})
+	_, err := cloudDiscovererFor(context.Background(), s, cloudgraph.AccountScope{Provider: "azure", AccountID: "sub-requested"})
 	if err == nil || !strings.Contains(err.Error(), "sub-configured") {
 		t.Fatalf("err = %v, want subscription mismatch naming the configured subscription", err)
+	}
+	if strings.Contains(err.Error(), "secret") {
+		t.Errorf("error leaks the secret: %v", err)
 	}
 	if discoveryStatusCode(err) != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400 for an account the server cannot serve", discoveryStatusCode(err))
 	}
 }
 
+// Azure with no credentials loaded at startup is a server-side condition: 503.
+func TestCloudDiscovererFor_AzureWithoutLoadedCredentialsIsNotConfigured(t *testing.T) {
+	s := cloudTestSettings(t, "azure:sub-1")
+	_, err := cloudDiscovererFor(context.Background(), s, cloudgraph.AccountScope{Provider: "azure", AccountID: "sub-1"})
+	if !errors.Is(err, errCloudDiscoveryNotConfigured) {
+		t.Fatalf("err = %v, want not-configured", err)
+	}
+	if discoveryStatusCode(err) != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want 503", discoveryStatusCode(err))
+	}
+}
+
 func TestCloudDiscovererFor_UnknownProviderRejected(t *testing.T) {
-	if _, err := cloudDiscovererFor(context.Background(), cloudgraph.AccountScope{Provider: "oci", AccountID: "x"}); err == nil {
-		t.Fatal("unknown provider must be rejected")
+	s := cloudTestSettings(t, "oci:x")
+	if _, err := cloudDiscovererFor(context.Background(), s, cloudgraph.AccountScope{Provider: "oci", AccountID: "x"}); err == nil || errors.Is(err, errCloudAccountNotAllowed) {
+		t.Fatalf("err = %v, want an unknown-provider rejection (the account was allow-listed)", err)
 	}
 }
 

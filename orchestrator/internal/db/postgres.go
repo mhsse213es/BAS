@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -10,6 +11,9 @@ import (
 
 // Connect creates a pgxpool connection and verifies reachability.
 func Connect(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
+	if err := RequireVerifiedDBTLS(dsn, os.Getenv("BAS_DB_TLS_DEV_INSECURE") == "1"); err != nil {
+		return nil, err
+	}
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
 		return nil, fmt.Errorf("pgxpool.New: %w", err)
@@ -82,11 +86,17 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS policy_json    jsonb   NOT NULL DEFAULT '{}'`,
 		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS enrolled_at    timestamptz`,
 		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS protocol_version int  NOT NULL DEFAULT 1`,
+		// The agent's self-reported version, from enrolment and every heartbeat. Stored for the minimum-version
+		// policy; it is not a trust signal (trust comes from binary_hash against the signed manifest).
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS agent_version text NOT NULL DEFAULT ''`,
 		// TCF Phase 6: marks the single, persistent, factory-owned lab agent.
 		// Customer-facing dispatch modes (posture/telemetry/lab) refuse this
 		// agent; the new factory-validation mode requires it. See
 		// docs/superpowers/specs/2026-10-14-tcf-phase6-validation-lab-design.md §2.2.
 		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS is_factory_lab boolean NOT NULL DEFAULT false`,
+		// is_spray_lab marks the one lab agent allowed to run the lab password-spray
+		// scenario with the B5 signed-destructive veto lifted. Set by an operator; never by a scenario.
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS is_spray_lab boolean NOT NULL DEFAULT false`,
 		// security_products: installed AV/EDR inventory reported by the agent
 		// heartbeat (presence only) — shown as the report's security context.
 		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS security_products jsonb NOT NULL DEFAULT '[]'`,
@@ -125,6 +135,22 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// Populated going forward by internal/api/enroll_csr_handlers.go;
 		// read by cmd/server's checkSigningKeyNotSilentlyRotated.
 		`ALTER TABLE agent_certificates ADD COLUMN IF NOT EXISTS command_signing_key_id text`,
+		// SHA-256 of the certificate's public key. Blank for certificates issued before this column existed; those
+		// cannot be proven to belong to a reinstalling agent, so they still need an administrator's approval.
+		`ALTER TABLE agent_certificates ADD COLUMN IF NOT EXISTS public_key_sha256 text NOT NULL DEFAULT ''`,
+		// Single-use enrolment tokens (audit F-03). Only the SHA-256 of a token is stored.
+		`CREATE TABLE IF NOT EXISTS agent_enrollment_tokens (
+			id         text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			token_hash text        NOT NULL UNIQUE,
+			agent_id   text        NOT NULL,
+			note       text        NOT NULL DEFAULT '',
+			created_by text        NOT NULL DEFAULT '',
+			created_at timestamptz NOT NULL DEFAULT NOW(),
+			expires_at timestamptz NOT NULL,
+			used_at    timestamptz,
+			revoked    boolean     NOT NULL DEFAULT false
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_enrollment_tokens_agent ON agent_enrollment_tokens(agent_id)`,
 
 		`CREATE TABLE IF NOT EXISTS scenario_runs (
 			id             text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -141,6 +167,17 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		)`,
 
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS initiated_by text`,
+
+		// CI validation tokens (REQ-057). Only the SHA-256 of a token is stored.
+		`CREATE TABLE IF NOT EXISTS ci_tokens (
+			id           text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			name         text        NOT NULL,
+			token_hash   text        NOT NULL UNIQUE,
+			created_by   text        NOT NULL DEFAULT '',
+			created_at   timestamptz NOT NULL DEFAULT NOW(),
+			last_used_at timestamptz,
+			revoked_at   timestamptz
+		)`,
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS score jsonb`,
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS name text NOT NULL DEFAULT ''`,
 		// step_meta: TaskID→{techniqueId,name,framework} for the steps actually
@@ -775,6 +812,17 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE variant_runs ADD COLUMN IF NOT EXISTS execution_mode    text NOT NULL DEFAULT 'sequential'`,
 		`ALTER TABLE variant_runs ADD COLUMN IF NOT EXISTS generator_version text NOT NULL DEFAULT ''`,
 		`ALTER TABLE payload_families ADD COLUMN IF NOT EXISTS tactic text NOT NULL DEFAULT ''`,
+		// Explicit cleanup per family. 'unverified' is the default, so a family with no cleanup decision fails closed.
+		`ALTER TABLE payload_families ADD COLUMN IF NOT EXISTS cleanup text NOT NULL DEFAULT ''`,
+		`ALTER TABLE payload_families ADD COLUMN IF NOT EXISTS cleanup_status text NOT NULL DEFAULT 'unverified'`,
+		// Cleanup outcome of a variant run, kept apart from its attack verdict. Blank means not recorded (older runs).
+		`ALTER TABLE variant_runs ADD COLUMN IF NOT EXISTS cleanup_status text NOT NULL DEFAULT ''`,
+		`ALTER TABLE variant_runs ADD COLUMN IF NOT EXISTS cleanup_error text NOT NULL DEFAULT ''`,
+		`ALTER TABLE variant_runs ADD COLUMN IF NOT EXISTS remediation_required boolean NOT NULL DEFAULT false`,
+		`ALTER TABLE variant_runs ADD COLUMN IF NOT EXISTS cleanup_completed_at timestamptz`,
+		// Per step: whether the variant carried a cleanup command, and its cleanup status when dispatched.
+		`ALTER TABLE variant_run_steps ADD COLUMN IF NOT EXISTS has_cleanup boolean NOT NULL DEFAULT false`,
+		`ALTER TABLE variant_run_steps ADD COLUMN IF NOT EXISTS cleanup_status text NOT NULL DEFAULT ''`,
 
 		// ── Seed: default payload families (with tactic) ─────────────────────────
 		// T1059.001 — PowerShell Execution — tactic: execution
@@ -839,6 +887,13 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		 ('T1016','DNS Cache','Cached DNS entries',
 		  'Get-DnsClientCache | Select-Object Entry,Data,TimeToLive','recon','SAFE','discovery')
 		 ON CONFLICT (technique_id,name) DO UPDATE SET tactic = EXCLUDED.tactic`,
+
+		// The seeded recon families only read state (whoami, systeminfo, ipconfig, route, DNS cache, WMI and
+		// registry reads), so they are read-only by inspection. 'Download Stager' writes and stays unverified. Only
+		// families still at the default are touched, so an admin's later decision is never overwritten.
+		`UPDATE payload_families SET cleanup_status = 'read_only'
+		  WHERE cleanup_status = 'unverified'
+		    AND (technique_id IN ('T1082','T1016') OR (technique_id = 'T1059.001' AND name LIKE 'Recon - %'))`,
 
 		// T1057 — Process Discovery — tactic: discovery
 		`INSERT INTO payload_families (technique_id,name,description,payload,purpose,risk_level,tactic) VALUES
@@ -1175,6 +1230,48 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			updated_at    timestamptz NOT NULL DEFAULT NOW()
 		)`,
 
+		// risk_settings: singleton deployment setting for the estimated annual loss figure.
+		// The currency has no default and is stored explicitly. Unset means no loss figure is produced.
+		`CREATE TABLE IF NOT EXISTS risk_settings (
+			id         int         PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+			currency   text        NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
+			updated_by text        NOT NULL,
+			updated_at timestamptz NOT NULL DEFAULT NOW()
+		)`,
+
+		// risk_exposure_input: current customer-entered inputs per ATT&CK technique. The CHECKs reject
+		// negative, non-finite (including NaN, which sorts above Infinity in Postgres) and unordered values
+		// even if the application layer is bypassed.
+		`CREATE TABLE IF NOT EXISTS risk_exposure_input (
+			technique_id text        PRIMARY KEY,
+			label        text        NOT NULL DEFAULT '',
+  freq_low double precision NOT NULL CHECK (freq_low >= 0 AND freq_low < 'Infinity'::float8),
+  freq_likely double precision NOT NULL CHECK (freq_likely >= 0 AND freq_likely < 'Infinity'::float8),
+  freq_high double precision NOT NULL CHECK (freq_high >= 0 AND freq_high < 'Infinity'::float8),
+  mag_low double precision NOT NULL CHECK (mag_low >= 0 AND mag_low < 'Infinity'::float8),
+  mag_likely double precision NOT NULL CHECK (mag_likely >= 0 AND mag_likely < 'Infinity'::float8),
+  mag_high double precision NOT NULL CHECK (mag_high >= 0 AND mag_high < 'Infinity'::float8),
+			updated_by   text        NOT NULL,
+			updated_at   timestamptz NOT NULL DEFAULT NOW(),
+			version      bigint      NOT NULL DEFAULT 1,
+			CHECK (freq_low <= freq_likely AND freq_likely <= freq_high),
+			CHECK (mag_low <= mag_likely AND mag_likely <= mag_high)
+		)`,
+
+		// risk_exposure_input_history: append-only record of every change. Each row holds the value before
+		// and after, the actor and the time, so any past value can be reconstructed. The runtime role is
+		// denied UPDATE and DELETE on this table (see app_role.go).
+		`CREATE TABLE IF NOT EXISTS risk_exposure_input_history (
+			id           bigserial   PRIMARY KEY,
+			technique_id text        NOT NULL,
+			action       text        NOT NULL CHECK (action IN ('set', 'clear')),
+			previous     jsonb,
+			current      jsonb,
+			actor        text        NOT NULL,
+			changed_at   timestamptz NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_risk_input_history_tech ON risk_exposure_input_history (technique_id, changed_at)`,
+
 		// report_schedules: recurring, emailed report deliveries. Each row is one
 		// scheduled report (board/compliance/audit_pack) for one scope, delivered
 		// to a recipient list on a daily/weekly/monthly cadence. See
@@ -1276,6 +1373,65 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			UNIQUE(snapshot_date)
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_dashboard_snapshots_date ON dashboard_snapshots(snapshot_date DESC)`,
+		// Measurement validity per daily point. NULL = a legacy row written before validity was tracked: its
+		// exposure_score / detection_coverage may be a placeholder 100 or an all-asset average and must not be
+		// trended. true = the figure was measured. false = nothing was measurable that day (the numeric column
+		// holds a placeholder). A genuine 0 is therefore (0, true), never confusable with "unavailable".
+		`ALTER TABLE dashboard_snapshots ADD COLUMN IF NOT EXISTS exposure_measurable boolean`,
+		`ALTER TABLE dashboard_snapshots ADD COLUMN IF NOT EXISTS detection_measurable boolean`,
+		`ALTER TABLE dashboard_snapshots ADD COLUMN IF NOT EXISTS exposure_measured_assets int`,
+		// Same convention for the risk average: false = no scored run in the window (avg_risk_score is a bare 0),
+		// NULL = legacy row, true = averaged over at least one scored run.
+		`ALTER TABLE dashboard_snapshots ADD COLUMN IF NOT EXISTS risk_measurable boolean`,
+
+		// Tray-icon visibility (Windows agent). agents.tray_hidden is a per-agent override (NULL = follow the fleet
+		// default); fleet_settings holds fleet-wide defaults as key -> jsonb. The override is its own column
+		// because re-enrolling rewrites policy_json.
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS tray_hidden boolean`,
+
+		// Force Remove is permanent. force_removed_at is set only by an administrator's Force Remove (RemoveAgent);
+		// an agent that retires itself with its own --uninstall (which every reinstall runs) is NOT marked, so it can
+		// still come back. Once marked, the trigger below refuses every change of state away from 'retired' and any
+		// attempt to clear the mark, whatever code or SQL tries it (state endpoint, revoke/reinstate, uninstall/
+		// reinstall). Only the table owner can drop the trigger, which is the deliberate break-glass.
+		// The one exception is a fresh INSTALL of the agent on that machine: its ID is derived from the hostname, so
+		// a reinstall lands on the same record. EnrollCSR sets audspect.reinstall_agent (transaction-local) to that
+		// agent's ID while it lifts the removal; no other code path sets it.
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS force_removed_at timestamptz`,
+		// Agents force-removed before this column existed: the audit log is the only record of it.
+		`UPDATE agents SET force_removed_at = NOW()
+		  WHERE force_removed_at IS NULL AND state = 'retired'
+		    AND EXISTS (SELECT 1 FROM audit_logs al WHERE al.action = 'agent.remove' AND al.resource = agents.agent_id)`,
+		`CREATE OR REPLACE FUNCTION agents_force_removed_is_final() RETURNS trigger AS $$
+		BEGIN
+			IF OLD.force_removed_at IS NOT NULL
+			   AND (NEW.state IS DISTINCT FROM 'retired' OR NEW.force_removed_at IS DISTINCT FROM OLD.force_removed_at)
+			   AND COALESCE(current_setting('audspect.reinstall_agent', true), '') <> OLD.agent_id THEN
+				RAISE EXCEPTION 'agent % was force-removed and cannot be reactivated', OLD.agent_id
+					USING ERRCODE = 'check_violation';
+			END IF;
+			RETURN NEW;
+		END;
+		$$ LANGUAGE plpgsql`,
+		`DROP TRIGGER IF EXISTS agents_force_removed_final ON agents`,
+		`CREATE TRIGGER agents_force_removed_final BEFORE UPDATE ON agents
+			FOR EACH ROW EXECUTE FUNCTION agents_force_removed_is_final()`,
+		`CREATE TABLE IF NOT EXISTS fleet_settings (
+			key        text        PRIMARY KEY,
+			value      jsonb       NOT NULL,
+			updated_by text        NOT NULL DEFAULT '',
+			updated_at timestamptz NOT NULL DEFAULT NOW()
+		)`,
+
+		// Binary revocations (P3). An administrator revokes an agent binary hash from the console; the revoked hash is never
+		// trusted, and an agent running it is quarantined. Kept in the database so a revocation takes effect at once,
+		// and also carried in the signed manifest as "#revoked" lines by the release.
+		`CREATE TABLE IF NOT EXISTS binary_revocations (
+			sha256     text        PRIMARY KEY,
+			reason     text        NOT NULL DEFAULT '',
+			revoked_by text        NOT NULL DEFAULT '',
+			revoked_at timestamptz NOT NULL DEFAULT NOW()
+		)`,
 
 		// Phase 7 Multi-Tenancy — tenant_id on every operational table.
 		// DEFAULT 'default' backfills existing rows and covers every INSERT
@@ -1325,6 +1481,14 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// no retroactive backfill for runs that predate this column.
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS steps_total_base int NOT NULL DEFAULT 0`,
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS steps_eligible_base int NOT NULL DEFAULT 0`,
+		// validation_profile/validation_coverage record a factory-validation
+		// run's scope: "representative" (bounded, deterministic subset) vs full,
+		// plus the auditable coverage (total/selected/skipped/techniques,
+		// truncated). Written at dispatch for profiled runs; the validation lab
+		// copies them into the content_validations evidence. See
+		// docs/superpowers/specs/2026-11-03-factory-representative-validation-design.md.
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS validation_profile text NOT NULL DEFAULT ''`,
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS validation_coverage jsonb`,
 		// policy_skipped_results holds SimulationResults the server itself
 		// synthesized at dispatch time for steps a run's MaxPrivilege execution
 		// policy excluded before ever contacting the agent. Written once at
@@ -1484,6 +1648,23 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_technique_verification_runs_request_id ON technique_verification_runs (request_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_technique_verification_runs_agent_id ON technique_verification_runs (agent_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_technique_verification_runs_run_id ON technique_verification_runs (run_id) WHERE run_id != ''`,
+
+		// detection_rule_deployments: a customer's record that they deployed a recommended Sigma rule to close a
+		// detection gap found in run_id, and the run they used to re-test it. Recording a deployment proves nothing about
+		// detection; the outcome is derived from the re-test run's reviewed verifications (internal/detectgap).
+		`CREATE TABLE IF NOT EXISTS detection_rule_deployments (
+			id               text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			run_id           text        NOT NULL REFERENCES scenario_runs(id) ON DELETE CASCADE,
+			technique_id     text        NOT NULL,
+			rule_id          text        NOT NULL,
+			backend          text        NOT NULL,
+			note             text        NOT NULL DEFAULT '',
+			deployed_by      text        NOT NULL DEFAULT '',
+			deployed_at      timestamptz NOT NULL DEFAULT NOW(),
+			retest_run_id    text        REFERENCES scenario_runs(id) ON DELETE SET NULL,
+			retest_linked_at timestamptz
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_detection_rule_deployments_run_id ON detection_rule_deployments (run_id)`,
 
 		// jobs / job_targets: generic fleet-job infrastructure. internal/jobs
 		// knows nothing about what a given Job.Type actually does -- that's
@@ -1762,6 +1943,27 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE job_schedules ADD COLUMN IF NOT EXISTS initiative_id text NOT NULL DEFAULT ''`,
 		`CREATE INDEX IF NOT EXISTS idx_job_schedules_initiative_id ON job_schedules (initiative_id) WHERE initiative_id <> ''`,
 
+		// scheduled_blackouts: change-freeze windows in which scheduled assessments do not start. "once" covers
+		// [starts_at, ends_at); "daily" covers time_from..time_to in timezone, between valid_from and valid_to when set.
+		// Enforced in jobs.Dispatcher.spawnDueSchedules; validated in jobs.ValidateBlackout before insert.
+		`CREATE TABLE IF NOT EXISTS scheduled_blackouts (
+			id          text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			name        text        NOT NULL,
+			kind        text        NOT NULL CHECK (kind IN ('once', 'daily')),
+			starts_at   timestamptz,
+			ends_at     timestamptz,
+			time_from   text        NOT NULL DEFAULT '',
+			time_to     text        NOT NULL DEFAULT '',
+			timezone    text        NOT NULL DEFAULT 'UTC',
+			valid_from  date,
+			valid_to    date,
+			created_by  text        NOT NULL DEFAULT '',
+			created_at  timestamptz NOT NULL DEFAULT now()
+		)`,
+		// Optional day filters on a daily window: weekdays "mon,tue,..." and month_days "1,-1" (negative counts from the end).
+		`ALTER TABLE scheduled_blackouts ADD COLUMN IF NOT EXISTS weekdays   text NOT NULL DEFAULT ''`,
+		`ALTER TABLE scheduled_blackouts ADD COLUMN IF NOT EXISTS month_days text NOT NULL DEFAULT ''`,
+
 		// fail_reason: a genuine, human-readable explanation for why a run's
 		// status became 'failed' (dispatch-time only -- e.g. agent offline,
 		// malformed scenario content, every step lab-only in a non-lab mode).
@@ -1783,6 +1985,10 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// the System Tree surface that gap immediately instead of only after
 		// a run fails.
 		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS transport text NOT NULL DEFAULT 'legacy'`,
+		// trusted_root_fps: SHA-256 fingerprints of the CA roots the agent reports trusting (planned CA rotation).
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS trusted_root_fps jsonb`,
+		// superseded_at: set when an expired certificate has been used once for restricted recovery (audit F-03/F-06).
+		`ALTER TABLE agent_certificates ADD COLUMN IF NOT EXISTS superseded_at timestamptz`,
 
 		// posture_findings: persisted lifecycle for CIS Security Configuration
 		// + Identity posture-check findings, keyed (agent_id, check_id) --
@@ -1925,6 +2131,25 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 				(verdict = 'SKIPPED' AND skip_reason IS NOT NULL) OR
 				(verdict <> 'SKIPPED' AND skip_reason IS NULL)),
 			CONSTRAINT rw_capres_identity UNIQUE (run_id, action, capability)
+		)`,
+
+		// ── AD Mastery: native control-decision evidence (DCSync vertical) ────
+		// Persists adefficacy.ControlDecision for a real, attributable run so
+		// admatrix can eventually report execution/detection validation from
+		// genuine evidence instead of the honest "not_executed" default.
+		`CREATE TABLE IF NOT EXISTS ad_control_verifications (
+			id              text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			run_id          text        NOT NULL,
+			primitive_id    text        NOT NULL,
+			technique_id    text        NOT NULL,
+			action          text        NOT NULL,
+			drsuapi_result  text        NOT NULL CHECK (drsuapi_result IN ('access_denied','succeeded','indeterminate')),
+			corroboration   text        NOT NULL DEFAULT 'unknown',
+			correlated      boolean     NOT NULL DEFAULT false,
+			detail          text        NOT NULL DEFAULT '',
+			observed_at     timestamptz NOT NULL DEFAULT NOW(),
+
+			CONSTRAINT ad_ctrlver_identity UNIQUE (run_id, action)
 		)`,
 
 		// ── Backup Assurance Engine (sub-project #4) ──────────────────────────
@@ -2119,8 +2344,8 @@ func GetComplianceScores(ctx context.Context, pool *pgxpool.Pool, agentID string
 	return out, nil
 }
 
-// GetFleetComplianceScores returns the worst-case (minimum) compliance percentage
-// per framework aggregated across all agents — the fleet-wide CISO view.
+// GetFleetComplianceScores returns, per framework, the snapshot of the agent with the most completed runs (the most
+// evidence), so a barely tested endpoint never sets the fleet figure. Each figure is that one agent's own, not a blend.
 func GetFleetComplianceScores(ctx context.Context, pool *pgxpool.Pool) ([]ComplianceSnapshot, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT DISTINCT ON (framework_id)
@@ -2130,7 +2355,7 @@ func GetFleetComplianceScores(ctx context.Context, pool *pgxpool.Pool) ([]Compli
 		       passing_controls, failing_controls, manual_controls,
 		       COUNT(*) OVER (PARTITION BY framework_id) AS enrolled_agent_count
 		FROM compliance_snapshots
-		ORDER BY framework_id, compliance_pct ASC, snapshot_at DESC`)
+		ORDER BY framework_id, run_count DESC, snapshot_at DESC`)
 	if err != nil {
 		return nil, err
 	}

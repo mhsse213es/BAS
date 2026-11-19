@@ -58,8 +58,13 @@ func TestBuildFleetExposure_MatchesDirectCalls(t *testing.T) {
 		if gotExp.Assets[0].CriticalityRisk != wantSummaries[0].CriticalityRisk {
 			t.Errorf("Assets[0].CriticalityRisk = %d, want %d (already computed inside exposure.Build, just surfaced)", gotExp.Assets[0].CriticalityRisk, wantSummaries[0].CriticalityRisk)
 		}
-		if gotExp.FleetAvgScore != wantSummaries[0].ExposureScore {
-			t.Errorf("FleetAvgScore = %d, want %d (average of the single asset's score)", gotExp.FleetAvgScore, wantSummaries[0].ExposureScore)
+		// Phase 1: the fleet average is over measured assets only.
+		if wantSummaries[0].ExposureMeasurable {
+			if gotExp.FleetAvgScore != wantSummaries[0].ExposureScore || !gotExp.Measurable {
+				t.Errorf("FleetAvgScore = %d measurable=%v, want %d (the single measured asset)", gotExp.FleetAvgScore, gotExp.Measurable, wantSummaries[0].ExposureScore)
+			}
+		} else if gotExp.Measurable || gotExp.FleetAvgScore != 0 {
+			t.Errorf("FleetAvgScore = %d measurable=%v, want not measurable (asset has no measured exposure)", gotExp.FleetAvgScore, gotExp.Measurable)
 		}
 	})
 }

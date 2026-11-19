@@ -1,0 +1,31 @@
+id: apt36-persistence-evasion
+product_line: killchain
+name: "APT36 Mastery - Persistence and Defense Evasion"
+description: >
+  Five persistence and defense-evasion behaviors attributed to APT36 (Transparent Tribe) tradecraft: a WMI
+  permanent event subscription, a Startup-folder script, a Windows service created/started/stopped/deleted, a
+  per-user COM CLSID override, and a Defender exclusion add/verify/remove. The WMI, service and Defender steps
+  are gated by an exact flag and administrator only, because they touch shared subsystems (WMI, the service
+  control manager, live AV configuration) rather than only a run-tagged file or registry value; the Defender
+  step never runs live in this repo's own CI and reports the verdict from live Get-MpPreference state, not the
+  command's exit code.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - apt36
+  - transparent-tribe
+  - projectm
+  - apt36-mastery
+  - persistence
+  - defense-evasion
+  - t1546
+  - t1547
+  - t1543
+  - t1562
+mitre_phases:
+  - persistence
+  - defense-evasion
+
+steps:

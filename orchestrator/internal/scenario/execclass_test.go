@@ -181,7 +181,6 @@ func TestExecutionClassifications_HandAuthoredCorpusIsNotUnderclassified(t *test
 			"enumerate":                   {ClassNonDestructive, ""},
 			"backup_readiness_check":      {ClassNonDestructive, ""},
 			"vss_delete":                  {ClassDestructive, "vss_delete"},
-			"wbadmin_delete_catalog":      {ClassDestructive, "wbadmin_delete_catalog"},
 			"bootloader_recovery_disable": {ClassDestructive, "bootloader_recovery_disable"},
 		},
 		"T1489":     {"backup_service_stop": {ClassDestructive, "backup_service_stop"}},

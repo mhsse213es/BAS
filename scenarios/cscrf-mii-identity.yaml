@@ -1,0 +1,881 @@
+id: "cscrf-mii-identity"
+product_line: common
+name: "CSCRF-MII Identity and Privileged Access Control Validation (P0)"
+description: >
+  Internal control-validation checks for identity and privileged access. Verdicts are internal control
+  references (CSCRF-ID-*), not SEBI clause identifiers. Read-only checks run anywhere. Steps that create
+  or change accounts or group membership run only with BAS_CONFIRM_IDENTITY_CHANGE=true, use synthetic
+  accounts only, and remove them in undo with a residue check. id-09 (remote privileged login) is not in
+  this pack: it needs a second lab host. Passing a check does not establish CSCRF compliance.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cscrf-mii
+  - identity
+  - privileged-access
+  - p0
+mitre_phases:
+  - persistence
+  - privilege-escalation
+  - credential-access
+
+steps:
+
+  # -------------------------------------------------------------------------
+  - id: id-01
+    name: "Privileged Group Membership Change (T1098, internal ref CSCRF-ID-01)"
+    technique_id: T1098
+    action_key: cscrf_id_priv_group_change
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Creates one synthetic local account, adds it to and removes it from Administrators, and deletes it in undo. Runs only with BAS_CONFIRM_IDENTITY_CHANGE=true."
+    telemetry:
+      - "Group membership change"
+      - "Account creation"
+    detection:
+      - "Privileged group change alert (EID 4732)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:AdminSid = 'S-1-5-32-544'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-ID-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgIdentityGate { return ($env:BAS_CONFIRM_IDENTITY_CHANGE -eq 'true') }
+      function New-CgIdName { return 'bas-id-' + $script:CgRun }
+      function New-CgSynthPassword { return ([Guid]::NewGuid().ToString('N') + 'Aa1!') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgAdminMemberShortNames {
+      $names = @()
+      foreach ($m in (Get-LocalGroupMember -SID $script:AdminSid -ErrorAction Stop)) { $names += (($m.Name -split '\\')[-1]) }
+      return $names
+      }
+      Add-Type -Namespace BasId -Name Logon -MemberDefinition @'
+      [System.Runtime.InteropServices.DllImport("advapi32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+      public static extern bool LogonUser(string user, string domain, string password, int logonType, int logonProvider, out System.IntPtr token);
+      [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+      public static extern bool CloseHandle(System.IntPtr handle);
+      '@
+      if (-not (Test-CgIdentityGate)) { Complete-CgStep @{ Outcome = 'skip'; Reason = 'BAS_CONFIRM_IDENTITY_CHANGE not true; no account or group changed [CSCRF-ID-01]' } 'id-01' }
+      $name = New-CgIdName
+      New-CgUndoRecord 'id-01' @{ scenario = 'id-01'; accountName = $name }
+      try {
+      New-LocalUser -Name $name -Password (ConvertTo-SecureString (New-CgSynthPassword) -AsPlainText -Force) -AccountNeverExpires -ErrorAction Stop | Out-Null
+      } catch { Complete-CgStep @{ Outcome = 'error'; Reason = "could not create synthetic account: $($_.Exception.Message) [CSCRF-ID-01]" } 'id-01' }
+      try {
+      Add-LocalGroupMember -SID $script:AdminSid -Member $name -ErrorAction Stop
+      } catch {
+      Complete-CgStep @{ Outcome = 'pass'; Reason = "privileged group add refused: $($_.Exception.Message) [CSCRF-ID-01]" } 'id-01'
+      }
+      Remove-LocalGroupMember -SID $script:AdminSid -Member $name -ErrorAction SilentlyContinue
+      Complete-CgStep @{ Outcome = 'fail'; Reason = "privileged group add succeeded and was reverted; verify the EID 4732 alert in the SIEM [CSCRF-ID-01]" } 'id-01'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:AdminSid = 'S-1-5-32-544'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-ID-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgIdentityGate { return ($env:BAS_CONFIRM_IDENTITY_CHANGE -eq 'true') }
+      function New-CgIdName { return 'bas-id-' + $script:CgRun }
+      function New-CgSynthPassword { return ([Guid]::NewGuid().ToString('N') + 'Aa1!') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgAdminMemberShortNames {
+      $names = @()
+      foreach ($m in (Get-LocalGroupMember -SID $script:AdminSid -ErrorAction Stop)) { $names += (($m.Name -split '\\')[-1]) }
+      return $names
+      }
+      Add-Type -Namespace BasId -Name Logon -MemberDefinition @'
+      [System.Runtime.InteropServices.DllImport("advapi32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+      public static extern bool LogonUser(string user, string domain, string password, int logonType, int logonProvider, out System.IntPtr token);
+      [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+      public static extern bool CloseHandle(System.IntPtr handle);
+      '@
+      $rec = Read-CgUndoRecord 'id-01'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'PASS: Cleanup complete (no record)'; exit 0 }
+      Remove-LocalGroupMember -SID 'S-1-5-32-544' -Member $rec.accountName -ErrorAction SilentlyContinue
+      Remove-LocalUser -Name $rec.accountName -ErrorAction SilentlyContinue
+      if (Get-LocalUser -Name $rec.accountName -ErrorAction SilentlyContinue) { Write-Output "FAIL: residue account $($rec.accountName) survived undo"; exit 0 }
+      Remove-CgUndoRecord 'id-01'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: id-02
+    name: "Local Administrator Account Creation (T1136.001, internal ref CSCRF-ID-02)"
+    technique_id: T1136.001
+    action_key: cscrf_id_local_admin_create
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Creates one synthetic local account placed directly in Administrators, deleted in undo. Runs only with BAS_CONFIRM_IDENTITY_CHANGE=true."
+    telemetry:
+      - "Account creation"
+      - "Group membership change"
+    detection:
+      - "Local admin account creation alert (EID 4720 with 4732)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:AdminSid = 'S-1-5-32-544'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-ID-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgIdentityGate { return ($env:BAS_CONFIRM_IDENTITY_CHANGE -eq 'true') }
+      function New-CgIdName { return 'bas-id-' + $script:CgRun }
+      function New-CgSynthPassword { return ([Guid]::NewGuid().ToString('N') + 'Aa1!') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgAdminMemberShortNames {
+      $names = @()
+      foreach ($m in (Get-LocalGroupMember -SID $script:AdminSid -ErrorAction Stop)) { $names += (($m.Name -split '\\')[-1]) }
+      return $names
+      }
+      Add-Type -Namespace BasId -Name Logon -MemberDefinition @'
+      [System.Runtime.InteropServices.DllImport("advapi32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+      public static extern bool LogonUser(string user, string domain, string password, int logonType, int logonProvider, out System.IntPtr token);
+      [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+      public static extern bool CloseHandle(System.IntPtr handle);
+      '@
+      if (-not (Test-CgIdentityGate)) { Complete-CgStep @{ Outcome = 'skip'; Reason = 'BAS_CONFIRM_IDENTITY_CHANGE not true; no account created [CSCRF-ID-02]' } 'id-02' }
+      $name = New-CgIdName
+      New-CgUndoRecord 'id-02' @{ scenario = 'id-02'; accountName = $name }
+      try {
+      New-LocalUser -Name $name -Password (ConvertTo-SecureString (New-CgSynthPassword) -AsPlainText -Force) -AccountNeverExpires -ErrorAction Stop | Out-Null
+      } catch { Complete-CgStep @{ Outcome = 'error'; Reason = "could not create synthetic account: $($_.Exception.Message) [CSCRF-ID-02]" } 'id-02' }
+      try {
+      Add-LocalGroupMember -SID $script:AdminSid -Member $name -ErrorAction Stop
+      } catch {
+      Complete-CgStep @{ Outcome = 'pass'; Reason = "adding the new account to Administrators was refused: $($_.Exception.Message) [CSCRF-ID-02]" } 'id-02'
+      }
+      Complete-CgStep @{ Outcome = 'fail'; Reason = "new account placed in Administrators; verify EID 4720 with EID 4732 alerts in the SIEM [CSCRF-ID-02]" } 'id-02'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:AdminSid = 'S-1-5-32-544'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-ID-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgIdentityGate { return ($env:BAS_CONFIRM_IDENTITY_CHANGE -eq 'true') }
+      function New-CgIdName { return 'bas-id-' + $script:CgRun }
+      function New-CgSynthPassword { return ([Guid]::NewGuid().ToString('N') + 'Aa1!') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgAdminMemberShortNames {
+      $names = @()
+      foreach ($m in (Get-LocalGroupMember -SID $script:AdminSid -ErrorAction Stop)) { $names += (($m.Name -split '\\')[-1]) }
+      return $names
+      }
+      Add-Type -Namespace BasId -Name Logon -MemberDefinition @'
+      [System.Runtime.InteropServices.DllImport("advapi32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+      public static extern bool LogonUser(string user, string domain, string password, int logonType, int logonProvider, out System.IntPtr token);
+      [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+      public static extern bool CloseHandle(System.IntPtr handle);
+      '@
+      $rec = Read-CgUndoRecord 'id-02'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'PASS: Cleanup complete (no record)'; exit 0 }
+      Remove-LocalGroupMember -SID 'S-1-5-32-544' -Member $rec.accountName -ErrorAction SilentlyContinue
+      Remove-LocalUser -Name $rec.accountName -ErrorAction SilentlyContinue
+      if (Get-LocalUser -Name $rec.accountName -ErrorAction SilentlyContinue) { Write-Output "FAIL: residue account $($rec.accountName) survived undo"; exit 0 }
+      Remove-CgUndoRecord 'id-02'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: id-03
+    name: "Privileged Account Logon Monitoring (T1078, internal ref CSCRF-ID-03)"
+    technique_id: T1078
+    action_key: cscrf_id_logon_audit_presence
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only query of the Security log for recent logon events."
+    telemetry:
+      - "Security log query"
+    detection:
+      - "Logon auditing presence"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:AdminSid = 'S-1-5-32-544'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-ID-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgIdentityGate { return ($env:BAS_CONFIRM_IDENTITY_CHANGE -eq 'true') }
+      function New-CgIdName { return 'bas-id-' + $script:CgRun }
+      function New-CgSynthPassword { return ([Guid]::NewGuid().ToString('N') + 'Aa1!') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgAdminMemberShortNames {
+      $names = @()
+      foreach ($m in (Get-LocalGroupMember -SID $script:AdminSid -ErrorAction Stop)) { $names += (($m.Name -split '\\')[-1]) }
+      return $names
+      }
+      Add-Type -Namespace BasId -Name Logon -MemberDefinition @'
+      [System.Runtime.InteropServices.DllImport("advapi32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+      public static extern bool LogonUser(string user, string domain, string password, int logonType, int logonProvider, out System.IntPtr token);
+      [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+      public static extern bool CloseHandle(System.IntPtr handle);
+      '@
+      try {
+      $events = Get-WinEvent -FilterHashtable @{ LogName = 'Security'; Id = 4624; StartTime = (Get-Date).AddHours(-24) } -MaxEvents 500 -ErrorAction Stop
+      $n = @($events).Count
+      } catch {
+      if ($_.Exception.Message -match 'No events') { $n = 0 } else { Complete-CgStep @{ Outcome = 'error'; Reason = 'Security log could not be read (privilege or audit configuration) [CSCRF-ID-03]' } 'id-03' }
+      }
+      if ($n -gt 0) { Complete-CgStep @{ Outcome = 'pass'; Reason = "$n logon event(s) (EID 4624) recorded in the last 24h [CSCRF-ID-03]" } 'id-03' }
+      Complete-CgStep @{ Outcome = 'fail'; Reason = 'no logon event (EID 4624) recorded in the last 24h; logon auditing may be off or the host was idle [CSCRF-ID-03]' } 'id-03'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:AdminSid = 'S-1-5-32-544'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-ID-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgIdentityGate { return ($env:BAS_CONFIRM_IDENTITY_CHANGE -eq 'true') }
+      function New-CgIdName { return 'bas-id-' + $script:CgRun }
+      function New-CgSynthPassword { return ([Guid]::NewGuid().ToString('N') + 'Aa1!') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgAdminMemberShortNames {
+      $names = @()
+      foreach ($m in (Get-LocalGroupMember -SID $script:AdminSid -ErrorAction Stop)) { $names += (($m.Name -split '\\')[-1]) }
+      return $names
+      }
+      Add-Type -Namespace BasId -Name Logon -MemberDefinition @'
+      [System.Runtime.InteropServices.DllImport("advapi32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+      public static extern bool LogonUser(string user, string domain, string password, int logonType, int logonProvider, out System.IntPtr token);
+      [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+      public static extern bool CloseHandle(System.IntPtr handle);
+      '@
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: id-04
+    name: "Excessive Administrators Membership (T1078, internal ref CSCRF-ID-04)"
+    technique_id: T1078
+    action_key: cscrf_id_excessive_privilege
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only query of Administrators group membership."
+    telemetry:
+      - "Group membership query"
+    detection:
+      - "Excess privilege review"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:AdminSid = 'S-1-5-32-544'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-ID-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgIdentityGate { return ($env:BAS_CONFIRM_IDENTITY_CHANGE -eq 'true') }
+      function New-CgIdName { return 'bas-id-' + $script:CgRun }
+      function New-CgSynthPassword { return ([Guid]::NewGuid().ToString('N') + 'Aa1!') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgAdminMemberShortNames {
+      $names = @()
+      foreach ($m in (Get-LocalGroupMember -SID $script:AdminSid -ErrorAction Stop)) { $names += (($m.Name -split '\\')[-1]) }
+      return $names
+      }
+      Add-Type -Namespace BasId -Name Logon -MemberDefinition @'
+      [System.Runtime.InteropServices.DllImport("advapi32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+      public static extern bool LogonUser(string user, string domain, string password, int logonType, int logonProvider, out System.IntPtr token);
+      [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+      public static extern bool CloseHandle(System.IntPtr handle);
+      '@
+      $allow = $env:BAS_ADMIN_ALLOWLIST
+      if (-not $allow) { Complete-CgStep @{ Outcome = 'skip'; Reason = 'BAS_ADMIN_ALLOWLIST not set; no approved membership to compare [CSCRF-ID-04]' } 'id-04' }
+      $approved = @($allow -split ',' | ForEach-Object { $_.Trim().ToLowerInvariant() } | Where-Object { $_ })
+      try { $members = Get-CgAdminMemberShortNames } catch { Complete-CgStep @{ Outcome = 'error'; Reason = 'Administrators membership could not be read [CSCRF-ID-04]' } 'id-04' }
+      $extra = @($members | Where-Object { $approved -notcontains $_.ToLowerInvariant() })
+      if ($extra.Count -gt 0) { Complete-CgStep @{ Outcome = 'fail'; Reason = ('Administrators members not on the approved allowlist: ' + ($extra -join ', ') + ' [CSCRF-ID-04]') } 'id-04' }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = "all $(@($members).Count) Administrators members are on the approved allowlist [CSCRF-ID-04]" } 'id-04'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:AdminSid = 'S-1-5-32-544'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-ID-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgIdentityGate { return ($env:BAS_CONFIRM_IDENTITY_CHANGE -eq 'true') }
+      function New-CgIdName { return 'bas-id-' + $script:CgRun }
+      function New-CgSynthPassword { return ([Guid]::NewGuid().ToString('N') + 'Aa1!') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgAdminMemberShortNames {
+      $names = @()
+      foreach ($m in (Get-LocalGroupMember -SID $script:AdminSid -ErrorAction Stop)) { $names += (($m.Name -split '\\')[-1]) }
+      return $names
+      }
+      Add-Type -Namespace BasId -Name Logon -MemberDefinition @'
+      [System.Runtime.InteropServices.DllImport("advapi32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+      public static extern bool LogonUser(string user, string domain, string password, int logonType, int logonProvider, out System.IntPtr token);
+      [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+      public static extern bool CloseHandle(System.IntPtr handle);
+      '@
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: id-05
+    name: "Disabled Account Logon Attempt (T1078, internal ref CSCRF-ID-05)"
+    technique_id: T1078
+    action_key: cscrf_id_disabled_logon
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Creates one synthetic local account, disables it, attempts a logon with its own credentials, and deletes it in undo. Runs only with BAS_CONFIRM_IDENTITY_CHANGE=true."
+    telemetry:
+      - "Account creation"
+      - "Failed logon for a disabled account"
+    detection:
+      - "Disabled account logon attempt alert (EID 4625)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:AdminSid = 'S-1-5-32-544'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-ID-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgIdentityGate { return ($env:BAS_CONFIRM_IDENTITY_CHANGE -eq 'true') }
+      function New-CgIdName { return 'bas-id-' + $script:CgRun }
+      function New-CgSynthPassword { return ([Guid]::NewGuid().ToString('N') + 'Aa1!') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgAdminMemberShortNames {
+      $names = @()
+      foreach ($m in (Get-LocalGroupMember -SID $script:AdminSid -ErrorAction Stop)) { $names += (($m.Name -split '\\')[-1]) }
+      return $names
+      }
+      Add-Type -Namespace BasId -Name Logon -MemberDefinition @'
+      [System.Runtime.InteropServices.DllImport("advapi32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+      public static extern bool LogonUser(string user, string domain, string password, int logonType, int logonProvider, out System.IntPtr token);
+      [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+      public static extern bool CloseHandle(System.IntPtr handle);
+      '@
+      if (-not (Test-CgIdentityGate)) { Complete-CgStep @{ Outcome = 'skip'; Reason = 'BAS_CONFIRM_IDENTITY_CHANGE not true; no account created [CSCRF-ID-05]' } 'id-05' }
+      $name = New-CgIdName
+      $plain = New-CgSynthPassword
+      New-CgUndoRecord 'id-05' @{ scenario = 'id-05'; accountName = $name }
+      try {
+      New-LocalUser -Name $name -Password (ConvertTo-SecureString $plain -AsPlainText -Force) -AccountNeverExpires -ErrorAction Stop | Out-Null
+      Disable-LocalUser -Name $name -ErrorAction Stop
+      } catch { Complete-CgStep @{ Outcome = 'error'; Reason = "could not create or disable synthetic account: $($_.Exception.Message) [CSCRF-ID-05]" } 'id-05' }
+      $token = [IntPtr]::Zero
+      $ok = [BasId.Logon]::LogonUser($name, $env:COMPUTERNAME, $plain, 3, 0, [ref]$token)
+      if ($ok) { [BasId.Logon]::CloseHandle($token) | Out-Null; Complete-CgStep @{ Outcome = 'fail'; Reason = 'disabled synthetic account authenticated; disabled accounts are accepted [CSCRF-ID-05]' } 'id-05' }
+      $err = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+      Complete-CgStep @{ Outcome = 'pass'; Reason = "logon with the disabled synthetic account was refused (Win32 error $err) [CSCRF-ID-05]" } 'id-05'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:AdminSid = 'S-1-5-32-544'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-ID-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgIdentityGate { return ($env:BAS_CONFIRM_IDENTITY_CHANGE -eq 'true') }
+      function New-CgIdName { return 'bas-id-' + $script:CgRun }
+      function New-CgSynthPassword { return ([Guid]::NewGuid().ToString('N') + 'Aa1!') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgAdminMemberShortNames {
+      $names = @()
+      foreach ($m in (Get-LocalGroupMember -SID $script:AdminSid -ErrorAction Stop)) { $names += (($m.Name -split '\\')[-1]) }
+      return $names
+      }
+      Add-Type -Namespace BasId -Name Logon -MemberDefinition @'
+      [System.Runtime.InteropServices.DllImport("advapi32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+      public static extern bool LogonUser(string user, string domain, string password, int logonType, int logonProvider, out System.IntPtr token);
+      [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+      public static extern bool CloseHandle(System.IntPtr handle);
+      '@
+      $rec = Read-CgUndoRecord 'id-05'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'PASS: Cleanup complete (no record)'; exit 0 }
+      Remove-LocalUser -Name $rec.accountName -ErrorAction SilentlyContinue
+      if (Get-LocalUser -Name $rec.accountName -ErrorAction SilentlyContinue) { Write-Output "FAIL: residue account $($rec.accountName) survived undo"; exit 0 }
+      Remove-CgUndoRecord 'id-05'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: id-06
+    name: "Local Password Policy Baseline (CSCRF-ID-06)"
+    technique_id: T1201
+    action_key: cscrf_id_password_policy
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only query of the local account policy."
+    telemetry:
+      - "net accounts query"
+    detection:
+      - "Password policy review"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:AdminSid = 'S-1-5-32-544'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-ID-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgIdentityGate { return ($env:BAS_CONFIRM_IDENTITY_CHANGE -eq 'true') }
+      function New-CgIdName { return 'bas-id-' + $script:CgRun }
+      function New-CgSynthPassword { return ([Guid]::NewGuid().ToString('N') + 'Aa1!') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgAdminMemberShortNames {
+      $names = @()
+      foreach ($m in (Get-LocalGroupMember -SID $script:AdminSid -ErrorAction Stop)) { $names += (($m.Name -split '\\')[-1]) }
+      return $names
+      }
+      Add-Type -Namespace BasId -Name Logon -MemberDefinition @'
+      [System.Runtime.InteropServices.DllImport("advapi32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+      public static extern bool LogonUser(string user, string domain, string password, int logonType, int logonProvider, out System.IntPtr token);
+      [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+      public static extern bool CloseHandle(System.IntPtr handle);
+      '@
+      $out = (net accounts) -join "`n"
+      $minLen = [regex]::Match($out, 'Minimum password length:\s+(\d+)')
+      $lock = [regex]::Match($out, 'Lockout threshold:\s+(\S+)')
+      if (-not $minLen.Success -or -not $lock.Success) { Complete-CgStep @{ Outcome = 'error'; Reason = 'account policy could not be parsed (locale or query failure) [CSCRF-ID-06]' } 'id-06' }
+      $min = [int]$minLen.Groups[1].Value
+      $thr = $lock.Groups[1].Value
+      $problems = @()
+      if ($min -lt 12) { $problems += "minimum length $min < 12" }
+      if ($thr -eq 'Never' -or [int]$thr -lt 1 -or [int]$thr -gt 10) { $problems += "lockout threshold $thr outside 1-10" }
+      if ($problems.Count -gt 0) { Complete-CgStep @{ Outcome = 'fail'; Reason = ('password policy below baseline: ' + ($problems -join '; ') + ' [CSCRF-ID-06]') } 'id-06' }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = "password policy meets baseline (min length $min, lockout threshold $thr) [CSCRF-ID-06]" } 'id-06'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:AdminSid = 'S-1-5-32-544'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-ID-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgIdentityGate { return ($env:BAS_CONFIRM_IDENTITY_CHANGE -eq 'true') }
+      function New-CgIdName { return 'bas-id-' + $script:CgRun }
+      function New-CgSynthPassword { return ([Guid]::NewGuid().ToString('N') + 'Aa1!') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgAdminMemberShortNames {
+      $names = @()
+      foreach ($m in (Get-LocalGroupMember -SID $script:AdminSid -ErrorAction Stop)) { $names += (($m.Name -split '\\')[-1]) }
+      return $names
+      }
+      Add-Type -Namespace BasId -Name Logon -MemberDefinition @'
+      [System.Runtime.InteropServices.DllImport("advapi32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+      public static extern bool LogonUser(string user, string domain, string password, int logonType, int logonProvider, out System.IntPtr token);
+      [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+      public static extern bool CloseHandle(System.IntPtr handle);
+      '@
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: id-07
+    name: "MFA Enforcement (CSCRF-ID-07)"
+    technique_id: T1078
+    action_key: cscrf_id_mfa_enforcement
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "None. Reports SKIP; no identity provider is integrated."
+    telemetry: []
+    detection:
+      - "MFA enforcement review"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:AdminSid = 'S-1-5-32-544'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-ID-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgIdentityGate { return ($env:BAS_CONFIRM_IDENTITY_CHANGE -eq 'true') }
+      function New-CgIdName { return 'bas-id-' + $script:CgRun }
+      function New-CgSynthPassword { return ([Guid]::NewGuid().ToString('N') + 'Aa1!') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgAdminMemberShortNames {
+      $names = @()
+      foreach ($m in (Get-LocalGroupMember -SID $script:AdminSid -ErrorAction Stop)) { $names += (($m.Name -split '\\')[-1]) }
+      return $names
+      }
+      Add-Type -Namespace BasId -Name Logon -MemberDefinition @'
+      [System.Runtime.InteropServices.DllImport("advapi32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+      public static extern bool LogonUser(string user, string domain, string password, int logonType, int logonProvider, out System.IntPtr token);
+      [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+      public static extern bool CloseHandle(System.IntPtr handle);
+      '@
+      Complete-CgStep @{ Outcome = 'skip'; Reason = 'MFA enforcement needs an identity provider integration, which this pack does not have; not validated [CSCRF-ID-07]' } 'id-07'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:AdminSid = 'S-1-5-32-544'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-ID-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgIdentityGate { return ($env:BAS_CONFIRM_IDENTITY_CHANGE -eq 'true') }
+      function New-CgIdName { return 'bas-id-' + $script:CgRun }
+      function New-CgSynthPassword { return ([Guid]::NewGuid().ToString('N') + 'Aa1!') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgAdminMemberShortNames {
+      $names = @()
+      foreach ($m in (Get-LocalGroupMember -SID $script:AdminSid -ErrorAction Stop)) { $names += (($m.Name -split '\\')[-1]) }
+      return $names
+      }
+      Add-Type -Namespace BasId -Name Logon -MemberDefinition @'
+      [System.Runtime.InteropServices.DllImport("advapi32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+      public static extern bool LogonUser(string user, string domain, string password, int logonType, int logonProvider, out System.IntPtr token);
+      [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+      public static extern bool CloseHandle(System.IntPtr handle);
+      '@
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: id-08
+    name: "Service Account Administrator Rights (T1078.003, internal ref CSCRF-ID-08)"
+    technique_id: T1078.003
+    action_key: cscrf_id_service_account_admin
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only query of service accounts and Administrators membership."
+    telemetry:
+      - "Service configuration query"
+    detection:
+      - "Service account privilege review"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:AdminSid = 'S-1-5-32-544'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-ID-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgIdentityGate { return ($env:BAS_CONFIRM_IDENTITY_CHANGE -eq 'true') }
+      function New-CgIdName { return 'bas-id-' + $script:CgRun }
+      function New-CgSynthPassword { return ([Guid]::NewGuid().ToString('N') + 'Aa1!') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgAdminMemberShortNames {
+      $names = @()
+      foreach ($m in (Get-LocalGroupMember -SID $script:AdminSid -ErrorAction Stop)) { $names += (($m.Name -split '\\')[-1]) }
+      return $names
+      }
+      Add-Type -Namespace BasId -Name Logon -MemberDefinition @'
+      [System.Runtime.InteropServices.DllImport("advapi32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+      public static extern bool LogonUser(string user, string domain, string password, int logonType, int logonProvider, out System.IntPtr token);
+      [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+      public static extern bool CloseHandle(System.IntPtr handle);
+      '@
+      try {
+      $svcs = Get-CimInstance Win32_Service -ErrorAction Stop
+      $admins = Get-CgAdminMemberShortNames
+      } catch { Complete-CgStep @{ Outcome = 'error'; Reason = 'services or Administrators membership could not be read [CSCRF-ID-08]' } 'id-08' }
+      $builtin = '^(LocalSystem|NT AUTHORITY\\|NT SERVICE\\|$)'
+      $hits = @()
+      foreach ($s in $svcs) {
+      if (-not $s.StartName -or $s.StartName -match $builtin) { continue }
+      $short = ($s.StartName -split '\\')[-1]
+      if ($admins -contains $short) { $hits += "$($s.Name) runs as $($s.StartName)" }
+      }
+      if ($hits.Count -gt 0) { Complete-CgStep @{ Outcome = 'fail'; Reason = ('service account(s) with administrator rights: ' + ($hits -join '; ') + ' [CSCRF-ID-08]') } 'id-08' }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = 'no non-built-in service account is an Administrators member [CSCRF-ID-08]' } 'id-08'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:AdminSid = 'S-1-5-32-544'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-ID-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgIdentityGate { return ($env:BAS_CONFIRM_IDENTITY_CHANGE -eq 'true') }
+      function New-CgIdName { return 'bas-id-' + $script:CgRun }
+      function New-CgSynthPassword { return ([Guid]::NewGuid().ToString('N') + 'Aa1!') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgAdminMemberShortNames {
+      $names = @()
+      foreach ($m in (Get-LocalGroupMember -SID $script:AdminSid -ErrorAction Stop)) { $names += (($m.Name -split '\\')[-1]) }
+      return $names
+      }
+      Add-Type -Namespace BasId -Name Logon -MemberDefinition @'
+      [System.Runtime.InteropServices.DllImport("advapi32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+      public static extern bool LogonUser(string user, string domain, string password, int logonType, int logonProvider, out System.IntPtr token);
+      [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+      public static extern bool CloseHandle(System.IntPtr handle);
+      '@
+      Write-Output 'PASS: Cleanup complete'
+      exit 0

@@ -14,10 +14,13 @@ import (
 
 // Snapshot is the fleet-wide posture at the moment Compute was called.
 type Snapshot struct {
-	AvgRiskScore      int `json:"avgRiskScore"`
-	ExposureScore     int `json:"exposureScore"`
-	DetectionCoverage int `json:"detectionCoverage"`
-	AssetCount        int `json:"assetCount"`
+	AvgRiskScore int `json:"avgRiskScore"`
+	// RiskMeasurable is false when no scored run completed in the last 30 days. AvgRiskScore is then 0 only
+	// because there is nothing to average; it is not a clean bill of health.
+	RiskMeasurable    bool `json:"riskMeasurable"`
+	ExposureScore     int  `json:"exposureScore"`
+	DetectionCoverage int  `json:"detectionCoverage"`
+	AssetCount        int  `json:"assetCount"`
 	// HasAttackPathData is false when no attack-path collection has ever
 	// been ingested (attackpath_collections is empty). In that state,
 	// ExposureScore/DetectionCoverage read a "vacuous 100" (see
@@ -27,6 +30,16 @@ type Snapshot struct {
 	// tells the two states apart instead of presenting an empty-data 100 as
 	// a real score.
 	HasAttackPathData bool `json:"hasAttackPathData"`
+	// DetectionMeasurable is false when there were no weighted attack paths to
+	// score (pathcorrelation.AttackPathCorrelation.Measurable). In that state
+	// DetectionCoverage is a placeholder 100 and must not be shown as a result.
+	DetectionMeasurable bool `json:"detectionMeasurable"`
+	// ExposureMeasurable is false when no asset had measured exposure. In that
+	// state ExposureScore is 0 and must be shown as not measurable.
+	ExposureMeasurable bool `json:"exposureMeasurable"`
+	// ExposureMeasuredAssets / AssetCount say how many assets the exposure
+	// average is built from, so the figure's denominator is visible.
+	ExposureMeasuredAssets int `json:"exposureMeasuredAssets"`
 }
 
 // Compute builds today's fleet-wide snapshot. Nil-safe: an empty fleet (no
@@ -54,10 +67,14 @@ func Compute(ctx context.Context, pool *pgxpool.Pool) (Snapshot, error) {
 	}
 
 	return Snapshot{
-		AvgRiskScore:      risk.FleetAvgScore,
-		ExposureScore:     expSummary.FleetAvgScore,
-		DetectionCoverage: corr.Score,
-		AssetCount:        len(expSummary.Assets),
-		HasAttackPathData: hasAttackPathData,
+		AvgRiskScore:           risk.FleetAvgScore,
+		RiskMeasurable:         risk.Measurable,
+		ExposureScore:          expSummary.FleetAvgScore,
+		ExposureMeasurable:     expSummary.Measurable,
+		ExposureMeasuredAssets: expSummary.MeasuredAssets,
+		DetectionCoverage:      corr.Score,
+		DetectionMeasurable:    corr.Measurable,
+		AssetCount:             len(expSummary.Assets),
+		HasAttackPathData:      hasAttackPathData,
 	}, nil
 }

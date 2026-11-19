@@ -1,0 +1,56 @@
+id: "API-BAS-INTEG-403"
+name: "LOG-001: shopper reports their own shipment delivered through the carrier callback"
+category: INTEG
+claim: function_level
+attack_objective: "Shopper A calls the carrier delivery callback to mark their own in-transit shipment delivered."
+threat_model:
+  attacker: "authenticated shopper A"
+  identity: shopper-a
+  access_level: "shopper, valid token, owns SHIP-A-001, not the carrier"
+  objective: "Shopper A calls the carrier delivery callback to mark their own in-transit shipment delivered."
+preconditions:
+  fixture: commerce-telecom-two-tenant
+  identities: [shopper-a, carrier-1]
+  object: SHIP-A-001
+steps:
+  - id: "baseline-owner"
+    role: baseline
+    identity: shopper-a
+    auth: valid
+    method: GET
+    path: "/api/retail/shipments/SHIP-A-001"
+    hypothesis: "Shopper A, the owner, reads their own shipment. If this fails, the scenario is not testable."
+  - id: "attack-integ-403"
+    role: attack
+    identity: shopper-a
+    auth: valid
+    method: POST
+    path: "/api/retail/shipments/SHIP-A-001/callback"
+    body: '{"status":"delivered"}'
+    hypothesis: "Shopper A's delivery report on SHIP-A-001 is refused, and the shipment stays in transit."
+denied_statuses: [403]
+expected_control: "Only the carrier can report delivery. The shopper's callback is refused and the shipment status is unchanged."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The state shows SHIP-A-001 unchanged after shopper A's delivery report.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-025
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The callback names a shipment and the caller is a shopper, not the carrier, so REL-025 fires on the attempt in either build. Graded against the access event by the named rule. Fixture-validated, not live-SIEM-validated."
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+industry_mapping:
+  - "Logistics: supply-chain integration and callback trust failure"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-INTEG-403 against the fixed build must PASS"
+  - "API-BAS-INTEG-403 against the vulnerable build must FAIL (exploited)"

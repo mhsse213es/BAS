@@ -4,7 +4,9 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"sync/atomic"
@@ -144,16 +146,33 @@ func startMutatePipeListener(pipePath string, expectedClientPID func() int32, ha
 		return fmt.Errorf("resolve own executable path: %w", err)
 	}
 
-	go func() {
-		for {
-			conn, err := l.Accept()
-			if err != nil {
+	go serveListener(l, func(conn net.Conn) {
+		serveMutateConn(conn, expectedClientPID(), expectedImagePath, handler)
+	}, time.Second, log.Printf)
+	return nil
+}
+
+// serveListener hands each accepted connection to handle on its own goroutine until the listener is closed. A failed
+// Accept is logged and retried after backoff, never fatal: this loop used to return on the first error, which left
+// the pipe visible to clients but never answering them.
+func serveListener(l net.Listener, handle func(net.Conn), backoff time.Duration, logf func(string, ...any)) {
+	failures := 0
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			if errors.Is(err, net.ErrClosed) {
 				return
 			}
-			go serveMutateConn(conn, expectedClientPID(), expectedImagePath, handler)
+			failures++
+			if failures == 1 || failures%60 == 0 {
+				logf("[!] mutate pipe: accept failed (%d in a row): %v", failures, err)
+			}
+			time.Sleep(backoff)
+			continue
 		}
-	}()
-	return nil
+		failures = 0
+		go handle(conn)
+	}
 }
 
 // serveMutateConn's identity check is against the connecting process's
@@ -201,10 +220,8 @@ func serveMutateConn(conn net.Conn, wantParentPID int32, wantImagePath string, h
 // entirely.
 var resolvePipeSDDL = currentUserPipeSDDL
 
-// currentUserPipeSDDL builds a security descriptor restricted to the
-// exact logged-in interactive user's SID: D:(A;;GA;;;<SID>) grants that
-// SID generic-all access and nothing to anyone else, so no other
-// same-machine account (even another interactive user) can open this pipe.
+// currentUserPipeSDDL builds the pipe's security descriptor: the exact logged-in interactive user and the identity that
+// creates the pipe (SYSTEM, the service), and nobody else, so no other account on the machine can open it.
 func currentUserPipeSDDL() (string, error) {
 	tok, ok := activeUserToken()
 	if !ok {
@@ -215,5 +232,20 @@ func currentUserPipeSDDL() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("get token user: %w", err)
 	}
-	return fmt.Sprintf("D:(A;;GA;;;%s)", tu.User.Sid.String()), nil
+	self, err := windows.GetCurrentProcessToken().GetTokenUser()
+	if err != nil {
+		return "", fmt.Errorf("get service identity: %w", err)
+	}
+	return pipeSDDL(tu.User.Sid.String(), self.User.Sid.String()), nil
+}
+
+// pipeSDDL grants generic-all to the logged-in user and to the creator, once each. The creator must be listed:
+// go-winio creates every pipe instance after the first by opening the existing pipe with read/write access, so a
+// descriptor naming only the user makes the service's own Accept fail with "Access is denied" and the pipe never
+// opens for anyone.
+func pipeSDDL(userSID, creatorSID string) string {
+	if userSID == creatorSID {
+		return "D:(A;;GA;;;" + creatorSID + ")"
+	}
+	return "D:(A;;GA;;;" + creatorSID + ")(A;;GA;;;" + userSID + ")"
 }

@@ -34,7 +34,7 @@ func signedStepFor(def dbprobe.ProbeDef) ScenarioStep {
 func TestEveryCatalogProbeIsRunnableThroughB5(t *testing.T) {
 	for _, id := range dbprobe.ProbeIDs() {
 		def, _ := dbprobe.LookupProbe(id)
-		if v := gateStep(signedStepFor(def)); v != nil {
+		if v := gateStep(signedStepFor(def), "test-run"); v != nil {
 			t.Errorf("probe %q (class %s, signed %s) is vetoed by gateStep (%s: %s): no registered probe may be unrunnable. "+
 				"A true mutation-class probe needs a conscious B5/approval design decision, not a registration",
 				id, def.Class, expectedExecClass(def.Class), v.source, v.reason)
@@ -48,7 +48,7 @@ func TestTask14StepsPassRealGateThenExecutor(t *testing.T) {
 	for _, id := range []string{dbprobe.ProbeAuthAfterRevoke, dbprobe.ProbeReadClassifiedFixture} {
 		def, _ := dbprobe.LookupProbe(id)
 		step := signedStepFor(def)
-		if v := gateStep(step); v != nil {
+		if v := gateStep(step, "test-run"); v != nil {
 			t.Fatalf("%s vetoed by real gateStep: %s %s", id, v.source, v.reason)
 		}
 		// The agent-local allowance is still required after B5.

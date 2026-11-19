@@ -5,19 +5,21 @@ import "fmt"
 // scenarioID constants name every real scenario this catalog references,
 // matching scenarios/dlp-exfiltration-*.yaml's own id: fields exactly.
 const (
-	scenarioValidation   = "dlp-exfiltration-validation"
-	scenarioSinkHTTPS    = "dlp-exfiltration-sink-https"
-	scenarioDNSTunnel    = "dlp-exfiltration-dns-tunnel"
-	scenarioSFTP         = "dlp-exfiltration-sftp"
-	scenarioSMTP         = "dlp-exfiltration-smtp"
-	scenarioCloudStorage = "dlp-exfiltration-cloud-storage"
-	scenarioWebhook      = "dlp-exfiltration-webhook"
-	scenarioCodeRepo     = "dlp-exfiltration-coderepo"
-	scenarioTelnet       = "dlp-exfiltration-telnet"
-	scenarioMultichannel = "dlp-exfiltration-multichannel"
-	scenarioFileCarriers = "dlp-exfiltration-file-carriers"
-	scenarioAIPrompt     = "dlp-exfiltration-ai-prompt"
-	scenarioDBExport     = "dlp-exfiltration-db-export"
+	scenarioValidation    = "dlp-exfiltration-validation"
+	scenarioSinkHTTPS     = "dlp-exfiltration-sink-https"
+	scenarioDNSTunnel     = "dlp-exfiltration-dns-tunnel"
+	scenarioSFTP          = "dlp-exfiltration-sftp"
+	scenarioSMTP          = "dlp-exfiltration-smtp"
+	scenarioCloudStorage  = "dlp-exfiltration-cloud-storage"
+	scenarioWebhook       = "dlp-exfiltration-webhook"
+	scenarioCodeRepo      = "dlp-exfiltration-coderepo"
+	scenarioTelnet        = "dlp-exfiltration-telnet"
+	scenarioMultichannel  = "dlp-exfiltration-multichannel"
+	scenarioFileCarriers  = "dlp-exfiltration-file-carriers"
+	scenarioAIPrompt      = "dlp-exfiltration-ai-prompt"
+	scenarioDBExport      = "dlp-exfiltration-db-export"
+	scenarioDataTypes     = "dlp-exfiltration-data-types"
+	scenarioBrowserUpload = "dlp-exfiltration-browser-upload"
 )
 
 // AllFixtures returns Audspect's real, current seed catalog of every
@@ -60,6 +62,7 @@ func AllFixtures() ([]Fixture, error) {
 			{scenarioMultichannel, "DLP Validation — SFTP Exfiltration (T1048.002)"},
 			{scenarioMultichannel, "DLP Validation — SMTP Exfiltration (T1048.003)"},
 			{scenarioSinkHTTPS, "DLP Validation — Sink-Verified HTTPS Exfiltration (T1567)"},
+			{scenarioBrowserUpload, "DLP Validation — Simulated Upload, browser-style multipart request (T1567) [simulated_upload]"},
 			{scenarioDNSTunnel, "DLP Validation — DNS Tunneling Exfiltration (T1071.004)"},
 			{scenarioSFTP, "DLP Validation — SFTP Exfiltration (T1048.002)"},
 			{scenarioSMTP, "DLP Validation — SMTP Exfiltration (T1048.003)"},
@@ -306,9 +309,74 @@ func AllFixtures() ([]Fixture, error) {
 			{scenarioFileCarriers, "DLP Validation — XLSX Carrier Staging of Regulated Data (T1074.001)"},
 			{scenarioFileCarriers, "DLP Validation — PDF Carrier Staging of Regulated Data (T1074.001)"},
 			{scenarioFileCarriers, "DLP Validation — PNG Image Carrier Staging of Regulated Data (T1074.001)"},
+			{scenarioFileCarriers, "DLP Validation — PPTX Carrier Staging of Regulated Data (T1074.001)"},
+			{scenarioFileCarriers, "DLP Validation — ZIP Archive Carrier Staging of Regulated Data (T1074.001)"},
 			{scenarioFileCarriers, "DLP Validation — Password-Protected Archive of Regulated Data (T1560.001)"},
 		},
 		"carrier formats are deterministic base64 templates in the scenario file; the value is the expected plaintext each step verifies against, so drift protection covers both the bytes' text and each step's registration")); err != nil {
+		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
+	}
+
+	if err := add(NewFixture("datatype-javascript", "Fabricated JavaScript source code",
+		[]string{"// [BAS-SIM-DLP-DATATYPE] proprietary pricing module"},
+		[]Occurrence{
+			{scenarioDataTypes, "DLP Validation — JavaScript source code Staging (T1074.001)"},
+		},
+		"the first line of the fabricated record this step writes; drift protection covers the value and the step's registration")); err != nil {
+		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
+	}
+
+	if err := add(NewFixture("datatype-cpp", "Fabricated C++ source code",
+		[]string{"// [BAS-SIM-DLP-DATATYPE] proprietary scoring engine"},
+		[]Occurrence{
+			{scenarioDataTypes, "DLP Validation — C++ source code Staging (T1074.001)"},
+		},
+		"the first line of the fabricated record this step writes; drift protection covers the value and the step's registration")); err != nil {
+		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
+	}
+
+	if err := add(NewFixture("datatype-mysql", "Fabricated MySQL source code",
+		[]string{"-- [BAS-SIM-DLP-DATATYPE] customer ledger schema"},
+		[]Occurrence{
+			{scenarioDataTypes, "DLP Validation — MySQL source code Staging (T1074.001)"},
+		},
+		"the first line of the fabricated record this step writes; drift protection covers the value and the step's registration")); err != nil {
+		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
+	}
+
+	if err := add(NewFixture("datatype-ipv6", "Fabricated IPv6 addresses (documentation range)",
+		[]string{"[BAS-SIM-DLP-DATATYPE] 2001:db8:85a3::8a2e:370:7334 2001:db8::ff00:42:8329"},
+		[]Occurrence{
+			{scenarioDataTypes, "DLP Validation — IPv6 addresses Staging (T1074.001)"},
+		},
+		"the first line of the fabricated record this step writes; drift protection covers the value and the step's registration")); err != nil {
+		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
+	}
+
+	if err := add(NewFixture("datatype-mac", "Fabricated MAC addresses (documentation range)",
+		[]string{"[BAS-SIM-DLP-DATATYPE] 00:00:5E:00:53:AF 02:00:00:00:00:01"},
+		[]Occurrence{
+			{scenarioDataTypes, "DLP Validation — MAC addresses Staging (T1074.001)"},
+		},
+		"the first line of the fabricated record this step writes; drift protection covers the value and the step's registration")); err != nil {
+		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
+	}
+
+	if err := add(NewFixture("datatype-pii", "Fabricated names, addresses and e-mail addresses",
+		[]string{"[BAS-SIM-DLP-DATATYPE] Priya Raghunathan, 14 Example Road, Pune 411001, priya.raghunathan@example.test"},
+		[]Occurrence{
+			{scenarioDataTypes, "DLP Validation — Names, addresses and e-mail addresses Staging (T1074.001)"},
+		},
+		"the first line of the fabricated record this step writes; drift protection covers the value and the step's registration")); err != nil {
+		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
+	}
+
+	if err := add(NewFixture("datatype-medical", "Fabricated medical progress note",
+		[]string{"[BAS-SIM-DLP-DATATYPE] PROGRESS NOTE 2026-10-02: patient FAKE-0001 reports improved symptoms; plan: continue current regimen, review in 4 weeks."},
+		[]Occurrence{
+			{scenarioDataTypes, "DLP Validation — A medical progress note Staging (T1074.001)"},
+		},
+		"the first line of the fabricated record this step writes; drift protection covers the value and the step's registration")); err != nil {
 		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
 	}
 

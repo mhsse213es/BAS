@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -115,4 +116,39 @@ func fiSize(fi os.FileInfo) int64 {
 		return -1
 	}
 	return fi.Size()
+}
+
+func TestOpenLogFileInKeepsFiveRotatedLogs(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, logFileName)
+	for i := 1; i <= 7; i++ {
+		if err := os.WriteFile(path, make([]byte, maxLogBytes+1), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		f, err := openLogFileIn(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fmt.Fprintf(f, "marker-%d", i)
+		f.Close()
+		if i < 7 {
+			// make the next round rotate by growing the file again
+			continue
+		}
+	}
+	for n := 1; n <= logKeepRotated; n++ {
+		if _, err := os.Stat(fmt.Sprintf("%s.%d", path, n)); err != nil {
+			t.Errorf("expected %s.%d to be kept: %v", logFileName, n, err)
+		}
+	}
+	if _, err := os.Stat(fmt.Sprintf("%s.%d", path, logKeepRotated+1)); err == nil {
+		t.Errorf("only %d rotated logs may be kept", logKeepRotated)
+	}
+}
+
+func TestAgentLogIsTriedFirstAtTheAdvertisedLocation(t *testing.T) {
+	c := logDirCandidates()
+	if len(c) < 2 || c[0] != agentLogDir() {
+		t.Fatalf("the first place tried must be agentLogDir() = %q, got %v", agentLogDir(), c)
+	}
 }

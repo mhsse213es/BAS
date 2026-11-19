@@ -1,0 +1,112 @@
+id: collection-remote-share-discovery
+product_line: dlp
+name: Remote Share Discovery Probe
+description: >
+  Telemetry-safe emulation of an adversary who looks for shares on other hosts
+  before choosing what to collect from them. The target comes from the
+  BAS_REMOTE_SHARE_TARGET environment variable. If it is not set, the target is a
+  generated RFC-6761 .invalid name, which cannot resolve, so the scenario only
+  records the attempt. Set the variable to a lab host to enumerate that host's
+  shares for real. The scenario lists share names and top-level file names only.
+  It reads and copies no file content.
+
+  KILL CHAIN STAGES:
+    1. Remote Share Enumeration — list shares on the target with net view (T1135)
+    2. Remote Share Listing     — list top-level file names in the first share found, read-only (T1039)
+
+  SAFETY: Read-only. It runs only against the target the operator sets, or against a
+  .invalid name by default. It never scans a range or a host list. Nothing is
+  copied, opened, or written. Windows only. Telemetry mode.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - discovery
+  - collection
+  - network-share
+  - dlp
+  - t1135
+  - t1039
+  - mitre
+mitre_phases:
+  - discovery
+  - collection
+
+live_policy:
+  block_on_domain_controller: true
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Remote Share Enumeration (T1135)
+  # ---------------------------------------------------------------------------
+  - name: "Remote Share 1 — Share Enumeration on the Target (T1135)"
+    technique_id: T1135
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 45
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Runs net view against one target host, BAS_REMOTE_SHARE_TARGET or a generated .invalid name. Lists share names only. Does not scan other hosts and does not connect to any share."
+    telemetry:
+      - "Security EID 5145 on the target, if it is reachable: share enumeration"
+      - "Sysmon EID 1: net.exe view against a remote host"
+    detection:
+      - "EDR/NDR: net view against a non-local host from a user context — remote discovery IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $target = if ($env:BAS_REMOTE_SHARE_TARGET) { $env:BAS_REMOTE_SHARE_TARGET } else { "bas-sim-share-$runId.invalid" }
+      $out = & cmd.exe /c "net view \\$target 2>&1"
+      $shares = @($out | Where-Object { $_ -match '^\S+\s+Disk' } | ForEach-Object { ($_ -split '\s+')[0] })
+      Write-Output "EXEC T1135: enumerated $($shares.Count) share(s) on target $target. Names only; nothing was connected to. Remote Stage 1. [BAS-SIM-RSH-S1]"
+      if ($shares.Count -gt 0) {
+        Write-Output "FAIL: Shares on a remote host were enumerated from a user context with no alert. Remote share discovery should be detected before collection."
+      } else {
+        Write-Output "SKIP: No shares were found on target $target. The target may be unreachable or a .invalid placeholder. Remote Stage 1. [BAS-SIM-RSH-S1]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Remote Share Listing (T1039)
+  # ---------------------------------------------------------------------------
+  - name: "Remote Share 2 — Top-Level Listing of the First Remote Share (T1039)"
+    technique_id: T1039
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 45
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Lists top-level file names in the first non-administrative share found on the target. Reads and copies no content. Recursion is not used."
+    telemetry:
+      - "Security EID 5145 on the target: share access, if reachable"
+    detection:
+      - "DLP/EDR: directory listing of a remote share from a user context — collection precursor"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $target = if ($env:BAS_REMOTE_SHARE_TARGET) { $env:BAS_REMOTE_SHARE_TARGET } else { "bas-sim-share-$runId.invalid" }
+      $out = & cmd.exe /c "net view \\$target 2>&1"
+      $share = $out | Where-Object { $_ -match '^(\S+)\s+Disk' -and $_ -notmatch '^(ADMIN|IPC|C|print)\$?\s' } | Select-Object -First 1
+      if (-not $share) {
+        Write-Output "SKIP: No non-administrative share was found on $target, so nothing was listed. [BAS-SIM-RSH-S2]"
+        exit 0
+      }
+      $name = ($share -split '\s+')[0]
+      $names = @(Get-ChildItem -Path "\\$target\$name" -File -ErrorAction SilentlyContinue | Select-Object -First 500)
+      Write-Output "EXEC T1039: listed $($names.Count) top-level file name(s) on share $name of $target. No content was read or copied. Remote Stage 2. [BAS-SIM-RSH-S2]"
+      if ($names.Count -gt 0) {
+        Write-Output "FAIL: A remote share's contents were listed from a user context with no alert. Collection targeting from remote shares should be detected."
+      }
+    cleanup: ""

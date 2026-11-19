@@ -1,0 +1,23 @@
+id: "cscrf-mii-data-protection"
+product_line: common
+name: "CSCRF-MII Data Protection and DLP Configuration Checks (P1)"
+description: >
+  Internal control-validation checks for data protection. Verdicts are internal control references
+  (CSCRF-DP-*), not SEBI clause identifiers. Read-only checks cover encryption at rest and in transit, ACLs on
+  a named data path, and whether a DLP agent service is present. The marker-egress step writes one synthetic
+  test pattern (no real data) to a named share and requires BAS_CONFIRM_DP_TEST=true; it cleans up in undo.
+  Deferred: DLP detection and blocking of the marker (needs a named DLP product and a policy). A PASS shows a
+  configuration is in place; it does not show that a DLP control blocks real data.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cscrf-mii
+  - data-protection
+  - dlp
+  - p1
+mitre_phases:
+  - exfiltration
+
+steps:

@@ -93,3 +93,13 @@ func RecoveryResultFor(tech Technique, result SurvivalResult, obsErr error, corr
 	}
 	return RecoveryFromSurvival(tech, result, corroboratingDetail)
 }
+
+// FixedRecoveryObserver reports one survival result for every attempt. It is
+// for results the caller has already graded from evidence in the same run.
+type FixedRecoveryObserver struct {
+	Result SurvivalResult
+}
+
+func (f FixedRecoveryObserver) ObserveSurvival(context.Context, AttemptKey) (SurvivalResult, error) {
+	return f.Result, nil
+}

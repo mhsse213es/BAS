@@ -1,0 +1,74 @@
+[
+  {
+    "id": "appctl-f01-dll-search-order",
+    "n": 1,
+    "name": "Application control Advanced Loading: DLL resolved by name from the application directory (T1574.001)",
+    "technique_id": "T1574.001",
+    "timeout_sec": 150,
+    "blast_radius": "Compiles an unsigned test library and a test program in a private temp directory; the program loads the library by bare name, which resolves from its own directory. Everything is deleted by the step.",
+    "telemetry": [
+      "AppLocker EXE and DLL event 8004 naming the DLL, if AppLocker DLL rules enforced",
+      "Code Integrity 3077 naming the DLL, if WDAC enforced",
+      "Sysmon EID 7: image load from a user-writable path"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ]
+  },
+  {
+    "id": "appctl-f02-com-scriptlet",
+    "n": 2,
+    "name": "Application control Advanced Loading: COM scriptlet activation through scrobj.dll (T1546.015)",
+    "technique_id": "T1546.015",
+    "timeout_sec": 120,
+    "blast_radius": "Lab-gated by BAS_CONFIRM_APPCONTROL_COM_REGISTER=true (exact). Registers a temporary per-user COM class that points at scrobj.dll and a scriptlet that writes one marker file, activates it once, then removes every key. Without the gate the step is skipped.",
+    "telemetry": [
+      "AppLocker EXE and DLL event 8004 naming scrobj.dll, if DLL rules enforced",
+      "Code Integrity 3077 naming scrobj.dll, if WDAC enforced",
+      "Registry events (Sysmon EID 12/13) under HKCU Software Classes CLSID"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ],
+    "risk": "medium",
+    "cleanup_extra": "\nGet-ChildItem 'HKCU:\\Software\\Classes' -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'BasSim.*' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue\nGet-ChildItem 'HKCU:\\Software\\Classes\\CLSID' -ErrorAction SilentlyContinue | Where-Object { (Get-ItemProperty -Path $_.PSPath -ErrorAction SilentlyContinue).'(default)' -eq 'BAS-SIM-APPCTL' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue"
+  },
+  {
+    "id": "appctl-f03-scheduled-task",
+    "n": 3,
+    "name": "Application control Advanced Loading: program launched by a scheduled task (T1053.005)",
+    "technique_id": "T1053.005",
+    "timeout_sec": 150,
+    "blast_radius": "Lab-gated by BAS_CONFIRM_APPCONTROL_TASK_CREATE=true (exact). Compiles an unsigned test program, registers a temporary scheduled task for the current user that runs it once, starts the task and then unregisters it. Without the gate the step is skipped.",
+    "telemetry": [
+      "AppLocker EXE and DLL event 8004 naming the program, if Exe rules enforced",
+      "Code Integrity 3077 naming the program, if WDAC enforced",
+      "Task Scheduler events 106/200/201 and Security 4698/4699"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ],
+    "risk": "medium",
+    "cleanup_extra": "\nGet-ScheduledTask -TaskName 'BAS-SIM-APPCTL-*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue",
+    "action_key": "schtask_create_delete"
+  },
+  {
+    "id": "appctl-f04-service-launch",
+    "n": 4,
+    "name": "Application control Advanced Loading: program launched by the service manager (T1543.003)",
+    "technique_id": "T1543.003",
+    "timeout_sec": 150,
+    "blast_radius": "Lab-gated by BAS_CONFIRM_APPCONTROL_SERVICE_CREATE=true (exact) and administrator only. Compiles an unsigned test program, creates a temporary demand-start service whose command line is that program, starts it and deletes the service. The program is not a real service, so the start times out; only the launch matters. Without the gate the step is skipped.",
+    "telemetry": [
+      "AppLocker EXE and DLL event 8004 naming the program, if Exe rules enforced",
+      "Code Integrity 3077 naming the program, if WDAC enforced",
+      "Service Control Manager events 7045/7009 and Security 4697"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ],
+    "risk": "medium",
+    "cleanup_extra": "\nGet-Service -Name 'BASSIM*' -ErrorAction SilentlyContinue | ForEach-Object { & (Join-Path $env:SystemRoot 'System32\\sc.exe') stop $_.Name 2>&1 | Out-Null; & (Join-Path $env:SystemRoot 'System32\\sc.exe') delete $_.Name 2>&1 | Out-Null }",
+    "action_key": "service_create_start_stop_delete"
+  }
+]

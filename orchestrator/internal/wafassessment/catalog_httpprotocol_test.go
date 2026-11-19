@@ -7,12 +7,12 @@ import (
 	"github.com/audspect/bas/internal/wafval"
 )
 
-func TestAudspectHTTPProtocolIntegrityScenario_ReferencesExactTwoVectors(t *testing.T) {
+func TestAudspectHTTPProtocolIntegrityScenario_ReferencesExactThreeVectors(t *testing.T) {
 	scenario, err := AudspectHTTPProtocolIntegrityScenario()
 	if err != nil {
 		t.Fatalf("AudspectHTTPProtocolIntegrityScenario: %v", err)
 	}
-	want := []string{"HTTPPARSE-001", "HTTPPARSE-002"}
+	want := []string{"HTTPPARSE-001", "HTTPPARSE-002", "HTTPPARSE-003"}
 	if len(scenario.ContributingVectorIDs) != len(want) {
 		t.Fatalf("len(ContributingVectorIDs) = %d, want %d", len(scenario.ContributingVectorIDs), len(want))
 	}
@@ -74,5 +74,49 @@ func TestAudspectHTTPProtocolIntegrityFixtures_ThroughEvaluateScenario_ReturnsFa
 	}
 	if !sawHTTPPARSE001Missed {
 		t.Error("HTTPPARSE-001 not found in Assertions")
+	}
+}
+
+// Review Focus: closes WAF QA log item #3 for this scenario -- a third,
+// deliberately-fixture-omitted vector (HTTPPARSE-003) must be a real
+// contributing ID that the fixture set never supplies, so this scenario
+// itself exercises the UntestedVectorIDs/Incomplete path, not just the
+// suite overall through unrelated scenarios' own seed data.
+func TestAudspectHTTPProtocolIntegrityFixtures_HTTPPARSE003IsDeliberatelyUntested(t *testing.T) {
+	scenario, err := AudspectHTTPProtocolIntegrityScenario()
+	if err != nil {
+		t.Fatalf("AudspectHTTPProtocolIntegrityScenario: %v", err)
+	}
+	fixtures, err := AudspectHTTPProtocolIntegrityFixtures()
+	if err != nil {
+		t.Fatalf("AudspectHTTPProtocolIntegrityFixtures: %v", err)
+	}
+	if _, ok := fixtures["HTTPPARSE-003"]; ok {
+		t.Fatal("HTTPPARSE-003 has a fixture -- it must stay deliberately untested to exercise the Incomplete path")
+	}
+	catalog, err := wafcatalog.AudspectWAFAttackCatalog()
+	if err != nil {
+		t.Fatalf("AudspectWAFAttackCatalog: %v", err)
+	}
+
+	result, err := EvaluateScenario(scenario, fixtures, catalog)
+	if err != nil {
+		t.Fatalf("EvaluateScenario: %v", err)
+	}
+	// HTTPPARSE-001 is still seeded Missed, so Fail wins over Incomplete
+	// by the non-offsetting precedence rule -- but HTTPPARSE-003 must
+	// still show up as untested, proving the path is real for this
+	// scenario and not silently folded into the pass/fail count.
+	if result.Outcome != ScenarioFail {
+		t.Fatalf("Outcome = %q, want %q", result.Outcome, ScenarioFail)
+	}
+	found := false
+	for _, id := range result.UntestedVectorIDs {
+		if id == "HTTPPARSE-003" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("UntestedVectorIDs = %v, want it to contain %q", result.UntestedVectorIDs, "HTTPPARSE-003")
 	}
 }

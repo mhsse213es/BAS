@@ -48,3 +48,22 @@ func TestDetectedTechniques_SweepDataTakesPrecedenceOverEventClassifier(t *testi
 		t.Errorf("DetectedTechniques() = %v, want T1059 detected from sweep data alone", got)
 	}
 }
+
+func TestDetectedTechniques_ATelemetryProbeCanBeDetectedFromItsEvents(t *testing.T) {
+	// "1116:Microsoft-Windows-Windows Defender/Operational" is a Defender detection event.
+	ev := []string{"1116:Microsoft-Windows-Windows Defender/Operational"}
+	if ClassifyDetectionStatus(ev) != "Detected" {
+		t.Fatal("test fixture is not a detecting event")
+	}
+	results := []models.SimulationResult{
+		{Technique: models.AttackTechnique{ID: "T1135"}, Result: models.ResultSkipped, SkipReason: models.SkipReasonTelemetryOnly, Events: ev},
+		{Technique: models.AttackTechnique{ID: "T1098"}, Result: models.ResultSkipped, SkipReason: models.SkipReasonPlatformUnavailable, Events: ev},
+	}
+	got := DetectedTechniques(nil, results)
+	if !got["T1135"] {
+		t.Errorf("a telemetry probe with a detecting event should count as detected, got %v", got)
+	}
+	if got["T1098"] {
+		t.Errorf("an ordinary skip must never count as detected, got %v", got)
+	}
+}

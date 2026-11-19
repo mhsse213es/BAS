@@ -1,0 +1,8 @@
+{"positive": [
+  {"EventID": "4768", "TargetUserName": "bassim3"},
+  {"EventID": "4769", "TargetUserName": "bassim1", "ServiceName": "krbtgt"}
+],
+"negative": [
+  {"EventID": "4768", "TargetUserName": "alice.ops"},
+  {"EventID": "4672", "TargetUserName": "bassim1"}
+]}

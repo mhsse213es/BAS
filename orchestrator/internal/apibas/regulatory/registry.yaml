@@ -49,6 +49,124 @@ mappings:
     reviewed_on: ""
     reviewed_hash: ""
 
+  - control_ref: IN-DPDP-S8-5
+    framework: Digital Personal Data Protection Act, 2023 (India)
+    issuing_authority: Government of India, Ministry of Electronics and Information Technology
+    document_title: The Digital Personal Data Protection Act, 2023 (No. 22 of 2023)
+    document_date: "2023-08-11"
+    version: Act No. 22 of 2023, as published in The Gazette of India Extraordinary, Part II, 11 August 2023
+    source_url: https://www.meity.gov.in/static/uploads/2024/02/Digital-Personal-Data-Protection-Act-2023.pdf
+    source_file: sources/in-dpdp-act-2023.pdf
+    source_sha256: 4deb23981d3010c8225a2ff6149e7243dc2268455b299e283afebdd7b72a7d15
+    retrieved_on: "2026-10-21"
+    source_provision: Section 8(5)
+    clause_text: "A Data Fiduciary shall protect personal data in its possession or under its control, including in respect of any processing undertaken by it or on its behalf by a Data Processor, by taking reasonable security safeguards to prevent personal data breach."
+    entity_category: Data Fiduciary, for the processing of digital personal data
+    jurisdiction: India
+    applicability_conditions:
+      - the tested processing is of digital personal data within the Act's scope (section 3)
+      - the tested system's operator is the Data Fiduciary for that processing
+      - the data tested is personal data about an identifiable individual, here a patient
+    exclusions:
+      - processing exempted under the Act (section 17) is outside this mapping
+    commencement: not_verified
+    commencement_evidence: ""
+    effective_date: ""
+    mapped_scenarios:
+      - API-BAS-AUTHZ-301
+      - API-BAS-AUTHZ-302
+      - API-BAS-AUTHZ-303
+      - API-BAS-AUTHZ-305
+      - API-BAS-DATA-301
+      - API-BAS-DATA-302
+      - API-BAS-DATA-303
+      - API-BAS-INTEG-301
+    scenario_coverage:
+      - scenario_id: API-BAS-AUTHZ-301
+        scenario_state: implemented_validated
+        control_requirement: "a patient cannot obtain another patient's record"
+        expected_behaviour: "patient A's read of patient B's record is refused and returns no diagnosis or insurance number"
+        evidence: "the response status and body of the cross-patient read"
+        gaps:
+          - "only the lab's synthetic fixture is tested; no real patient data, health information system or FHIR server was exercised"
+          - "whether \"reasonable security safeguards\" is met overall is a legal judgement; this scenario tests one access-control safeguard on one path"
+          - "the exemptions and the Rules made under the Act are not tested"
+          - "commencement of section 8 is not verified against a notification"
+      - scenario_id: API-BAS-AUTHZ-302
+        scenario_state: implemented_validated
+        control_requirement: "a clinician without a treating relationship cannot obtain a patient's record"
+        expected_behaviour: "clinician B's read of patient A's record is refused and returns no diagnosis or insurance number"
+        evidence: "the response status and body of the read"
+        gaps:
+          - "only the lab's synthetic fixture is tested; no real patient data, health information system or FHIR server was exercised"
+          - "whether \"reasonable security safeguards\" is met overall is a legal judgement; this scenario tests one access-control safeguard on one path"
+          - "the exemptions and the Rules made under the Act are not tested"
+          - "commencement of section 8 is not verified against a notification"
+      - scenario_id: API-BAS-AUTHZ-303
+        scenario_state: implemented_validated
+        control_requirement: "a clinician who does not treat the patient cannot alter the prescription"
+        expected_behaviour: "clinician B's change to patient A's prescription is refused and the dose is unchanged"
+        evidence: "persisted state of the prescription after the change"
+        gaps:
+          - "only the lab's synthetic fixture is tested; no real patient data, health information system or FHIR server was exercised"
+          - "whether \"reasonable security safeguards\" is met overall is a legal judgement; this scenario tests one access-control safeguard on one path"
+          - "the exemptions and the Rules made under the Act are not tested"
+          - "commencement of section 8 is not verified against a notification"
+      - scenario_id: API-BAS-AUTHZ-305
+        scenario_state: implemented_validated
+        control_requirement: "a delegate receives no more than the patient's consent allows"
+        expected_behaviour: "the delegate receives the consented summary and no diagnosis or insurance number"
+        evidence: "the response status and body of the delegate's read"
+        gaps:
+          - "only the lab's synthetic fixture is tested; no real patient data, health information system or FHIR server was exercised"
+          - "whether \"reasonable security safeguards\" is met overall is a legal judgement; this scenario tests one access-control safeguard on one path"
+          - "the exemptions and the Rules made under the Act are not tested"
+          - "commencement of section 8 is not verified against a notification"
+      - scenario_id: API-BAS-DATA-301
+        scenario_state: implemented_validated
+        control_requirement: "a patient cannot download another patient's medical image"
+        expected_behaviour: "patient A's download of patient B's image is refused and returns no storage reference"
+        evidence: "the response status and body of the download"
+        gaps:
+          - "only the lab's synthetic fixture is tested; no real patient data, health information system or FHIR server was exercised"
+          - "whether \"reasonable security safeguards\" is met overall is a legal judgement; this scenario tests one access-control safeguard on one path"
+          - "the exemptions and the Rules made under the Act are not tested"
+          - "commencement of section 8 is not verified against a notification"
+      - scenario_id: API-BAS-DATA-302
+        scenario_state: implemented_validated
+        control_requirement: "a patient cannot read another patient's FHIR Observation"
+        expected_behaviour: "patient A's read of patient B's Observation is refused and returns no report reference"
+        evidence: "the response status and body of the read"
+        gaps:
+          - "only the lab's synthetic fixture is tested; no real patient data, health information system or FHIR server was exercised"
+          - "whether \"reasonable security safeguards\" is met overall is a legal judgement; this scenario tests one access-control safeguard on one path"
+          - "the exemptions and the Rules made under the Act are not tested"
+          - "commencement of section 8 is not verified against a notification"
+      - scenario_id: API-BAS-DATA-303
+        scenario_state: implemented_validated
+        control_requirement: "an export contains only records the caller owns or treats"
+        expected_behaviour: "the export returns the caller's own record and no other patient's identifier or diagnosis"
+        evidence: "the response body of the export"
+        gaps:
+          - "only the lab's synthetic fixture is tested; no real patient data, health information system or FHIR server was exercised"
+          - "whether \"reasonable security safeguards\" is met overall is a legal judgement; this scenario tests one access-control safeguard on one path"
+          - "the exemptions and the Rules made under the Act are not tested"
+          - "commencement of section 8 is not verified against a notification"
+      - scenario_id: API-BAS-INTEG-301
+        scenario_state: implemented_validated
+        control_requirement: "a device cannot alter a result it is not registered to"
+        expected_behaviour: "device B's post to patient A's result is refused and the value is unchanged"
+        evidence: "persisted state of the result after the post"
+        gaps:
+          - "only the lab's synthetic fixture is tested; no real patient data, health information system or FHIR server was exercised"
+          - "whether \"reasonable security safeguards\" is met overall is a legal judgement; this scenario tests one access-control safeguard on one path"
+          - "the exemptions and the Rules made under the Act are not tested"
+          - "commencement of section 8 is not verified against a notification"
+    status: unverified
+    reviewer: ""
+    reviewed_on: ""
+    reviewed_hash: ""
+
   - control_ref: IN-RBI-ITGRC-19A
     framework: Reserve Bank of India, Master Direction on Information Technology Governance, Risk, Controls and Assurance Practices, 2023
     issuing_authority: Reserve Bank of India

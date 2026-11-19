@@ -1,0 +1,54 @@
+id: "API-BAS-AUTHZ-302"
+name: "HC-002: clinician reads a record of a patient they do not treat"
+category: AUTHZ
+claim: function_level
+attack_objective: "Clinician B reads patient A's record without a treating relationship."
+threat_model:
+  attacker: "authenticated clinician B"
+  identity: clinician-b
+  access_level: "clinician, valid token, treats patient B only"
+  objective: "Clinician B reads patient A's record without a treating relationship."
+preconditions:
+  fixture: healthcare-two-patient
+  identities: [clinician-a, clinician-b, patient-a]
+  object: REC-A-001
+steps:
+  - id: "baseline-owner"
+    role: baseline
+    identity: patient-a
+    auth: valid
+    method: GET
+    path: "/api/health/records/REC-A-001"
+    hypothesis: "Patient A, the owner, reads their own record. If this fails, the scenario is not testable."
+  - id: "attack-authz-302"
+    role: attack
+    identity: clinician-b
+    auth: valid
+    method: GET
+    path: "/api/health/records/REC-A-001"
+    hypothesis: "Clinician B's read of REC-A-001 is refused, because clinician B does not treat patient A."
+denied_statuses: [403, 404]
+forbidden_values: ["BAS-SIM-DX-A", "BAS-SIM-INS-A"]
+expected_control: "A clinician can read only the records of patients they treat. The read is refused and no protected value is returned."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The response to clinician B's read of REC-A-001 carries no diagnosis or insurance number of patient A.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The read names REC-A-001, owned by patient A, from a clinician. The rule keys on the owner, so it cannot tell a treating clinician from one with no relationship; a legitimate treating read would also fire it. Graded against the access event by APIBAS-REL-004. Fixture-validated, not live-SIEM-validated."
+side_effect_class: READ_ONLY
+evidence:
+  - sanitized_request
+  - sanitized_response
+industry_mapping:
+  - "Healthcare: clinician access without a treating relationship (role and relationship confusion)"
+regulatory_mapping:
+  - IN-DPDP-S8-5
+negative_tests:
+  - "API-BAS-AUTHZ-302 against the fixed build must PASS"
+  - "API-BAS-AUTHZ-302 against the vulnerable build must FAIL (exploited)"

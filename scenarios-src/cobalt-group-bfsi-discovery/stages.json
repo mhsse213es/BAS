@@ -1,0 +1,99 @@
+[
+  {
+    "id": "bfsi-01",
+    "n": 1,
+    "name": "BFSI Discovery - Core Banking Application Enumeration (Custom)",
+    "technique_id": "T1046",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "medium",
+    "blast_radius": "Queries banking-simulator API for core banking application instances; returns synthetic service names. Read-only reconnaissance. Verifies detection of banking infrastructure discovery.",
+    "telemetry": [
+      "HTTP requests to /api/banking/apps",
+      "Service discovery queries"
+    ],
+    "detection": [
+      "Network: anomalous API enumeration patterns",
+      "WAF/IDS: banking service reconnaissance"
+    ],
+    "cleanup": "",
+    "action_key": "bfsi_banking_app_discovery",
+    "no_default_cleanup": false,
+    "reversible": true
+  },
+  {
+    "id": "bfsi-02",
+    "n": 2,
+    "name": "BFSI Discovery - Payment Gateway Enumeration (Custom)",
+    "technique_id": "T1046",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "medium",
+    "blast_radius": "Queries banking-simulator API for payment gateway endpoints; returns synthetic gateway names. Read-only reconnaissance. Verifies detection of payment infrastructure discovery.",
+    "telemetry": [
+      "HTTP requests to /api/payments/gateways",
+      "Payment service enumeration"
+    ],
+    "detection": [
+      "Network: suspicious payment gateway queries",
+      "WAF/IDS: payment service reconnaissance"
+    ],
+    "cleanup": "",
+    "action_key": "bfsi_payment_gateway_discovery",
+    "no_default_cleanup": false,
+    "reversible": true
+  },
+  {
+    "id": "bfsi-03",
+    "n": 3,
+    "name": "BFSI Discovery - ATM Switch and Infrastructure Enumeration (Custom)",
+    "technique_id": "T1046",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "medium",
+    "blast_radius": "Queries banking-simulator API for ATM switch endpoints; returns synthetic ATM infrastructure names. Read-only reconnaissance. Verifies detection of ATM infrastructure discovery.",
+    "telemetry": [
+      "HTTP requests to /api/atm/switches",
+      "ATM infrastructure enumeration"
+    ],
+    "detection": [
+      "Network: suspicious ATM infrastructure queries",
+      "WAF/IDS: ATM network reconnaissance"
+    ],
+    "cleanup": "",
+    "action_key": "bfsi_atm_discovery",
+    "no_default_cleanup": false,
+    "reversible": true
+  },
+  {
+    "id": "bfsi-04",
+    "n": 4,
+    "name": "BFSI Discovery - Cardholder Data Storage Location Discovery (Custom)",
+    "technique_id": "T1046",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "high",
+    "blast_radius": "Queries banking-simulator API for cardholder data storage locations; returns synthetic data-store identifiers. Read-only reconnaissance. Verifies detection of sensitive data location discovery.",
+    "telemetry": [
+      "HTTP requests to /api/data/cardholder-locations",
+      "Sensitive data location enumeration"
+    ],
+    "detection": [
+      "Network: suspicious sensitive data queries",
+      "WAF/IDS: cardholder data reconnaissance",
+      "Data classification: unauthorized data location queries"
+    ],
+    "cleanup": "",
+    "action_key": "bfsi_cardholder_data_discovery",
+    "no_default_cleanup": false,
+    "reversible": true
+  }
+]

@@ -1,14 +1,18 @@
 import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { debCommand } from './deb-command.js';
 import { on } from '../core/actions.js';
 import { ago, showToast } from '../core/util.js';
 import { loadAgents } from './attack-path.js';
 import { buildReportFilename, showDownloadOptions, triggerDownload } from './evidence.js';
 import { apArrow, apNodePill } from './openaev.js';
 import { openModal } from './reports.js';
-import { _riskScoreColor, _riskTrendBadge } from './shell.js';
+import { ROLE, _riskScoreColor, _riskTrendBadge } from './shell.js';
 import { setDisplay } from '../core/inline-style.js';
+import { kpi, card, grid, bar as kitBar, chip, kv as kitKv, icon as kitIcon } from '../core/kit.js';
+import * as M from './agt-model.js';
+import { chartSlot, CHART_COLORS } from '../core/charts.js';
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -27,7 +31,7 @@ export function updateLinuxDownloadCmd(arch, type) {
   // arch: 'amd64' or 'arm64'
   // type: 'deb' or 'rpm'
   if (type === 'deb') {
-    document.getElementById('linux-deb-cmd').textContent = 'sudo dpkg -i bas-agent-linux-' + arch + '.deb && sudo systemctl start bas-agent';
+    document.getElementById('linux-deb-cmd').textContent = debCommand((document.getElementById('linux-cli-cmd') || {}).textContent, arch);
   } else if (type === 'rpm') {
     document.getElementById('linux-rpm-cmd').textContent = 'sudo rpm -i bas-agent-linux-' + arch + '.rpm && sudo systemctl start bas-agent';
   }
@@ -35,7 +39,8 @@ export function updateLinuxDownloadCmd(arch, type) {
 
 export function openAgentDetail(agentId) {
   _agtDetailId = agentId;
-  document.getElementById('agt-detail-title').textContent = 'Agent: ' + agentId.substring(0,12) + '…';
+  document.getElementById('agt-detail-title').textContent = agentId.substring(0,12) + '…';
+  var subEl = document.getElementById('agt-detail-sub'); if (subEl) subEl.textContent = '';
   document.getElementById('agent-detail-overlay').classList.add('open');
   showAgentTab('overview');
 }
@@ -65,77 +70,104 @@ export function showAgentTab(tab) {
 }
 
 // ── Overview tab ──────────────────────────────────────────────────────────────
+// A key/value list; labels are plain text, values are trusted markup built from escaped pieces.
+function dl(rows) {
+  return '<dl class="rk-kv">' + rows.map(function(r) { return '<dt>' + x(r[0]) + '</dt><dd>' + r[1] + '</dd>'; }).join('') + '</dl>';
+}
+function note(tone, html) { return '<div class="agt-note tone-' + tone + '">' + html + '</div>'; }
+function pill(text, tone) { return '<span class="rk-pill tone-' + tone + '">' + x(text) + '</span>'; }
+var LIFE_TONE = { active: 'ok', enrolling: 'info', restricted: 'warn', quarantined: 'bad', revoked: 'bad', retired: 'muted', uninstalling: 'info', uninstalled: 'muted' };
+function actBtn(label, ic, action, args, cls) {
+  return '<button type="button" class="btn btn-outline btn-sm' + (cls ? ' ' + cls : '') + '"' + on.apply(null, ['click', action].concat(args)) + '>' + (ic ? kitIcon(ic) : '') + x(label) + '</button>';
+}
+
+function overviewHtml(a) {
+  var id = a.agentId, host = a.hostname || id;
+  var offline = a.status === 'offline';
+  var admin = ROLE === 'admin';
+  var life = a.state || 'active';
+  var conn = pill(M.STATUS_LABEL[M.bucketOf(a)], M.STATUS_TONE[M.bucketOf(a)]) +
+    // Heartbeat (HTTP, every 30s) and the WebSocket task-delivery channel are separate connections, and a fresh
+    // heartbeat alone does not mean a run can reach this agent -- same gap the table row flags.
+    (!offline && !a.wsConnected ? ' <span class="agt-flag" title="Heartbeat is reaching the server, but the WebSocket task channel is down -- dispatching a run to this agent will fail until it reconnects. Often a proxy/firewall blocking the WS Upgrade handshake.">' + kitIcon('alert') + 'Task channel down</span>' : '') +
+    // Same class of silent gap for mTLS: the agent never completed certificate bootstrap and cannot receive signed commands.
+    (!offline && a.transport === 'legacy' ? ' <span class="agt-flag" title="This agent is on legacy transport -- it never completed mTLS bootstrap and cannot receive signed commands. Scenario dispatch will fail. Usually means it was installed without --ca-root; see the Deploy agent page for the current install command, or fetch the CA root manually from /api/config/ca-root.">' + kitIcon('alert') + 'Legacy transport</span>' : '');
+  var rows = M.facts(a).map(function(r) { return [r[0], r[2] === 'mono' ? '<code class="mono">' + x(r[1]) + '</code>' : x(r[1])]; });
+  rows.push(['Status', conn]);
+  rows.push(['Lifecycle', pill(life, LIFE_TONE[life] || 'muted')]);
+  rows.push(['Last seen', x(ago(a.lastUpdate))]);
+  rows.push(['Enrolled', x(a.enrolledAt ? ago(a.enrolledAt) : '—')]);
+  // Three distinct states, from the server's trust result (not binaryTrusted alone):
+  //   Verified   = binary is the current approved release (binaryTrusted).
+  //   Outdated   = binary is a previous signed, still-trusted release (state 'outdated').
+  //   Unverified = unknown, modified or revoked binary (anything else).
+  var binaryLabel = a.binaryTrusted ? pill('Verified', 'ok')
+    : (life === 'outdated' ? pill('Outdated', 'info') : pill('Unverified', 'warn'));
+  // Admins can revoke the binary this agent runs (every agent on that exact hash is quarantined).
+  // A revoked binary shows as Revoked. A console revocation can be reversed; one in the signed release cannot.
+  var rev = (state.revokedBinaries || {})[a.binaryHash];
+  var revokeBtn = '';
+  if (rev) {
+    binaryLabel = pill('Revoked', 'bad') + (rev.source === 'release' ? ' <span class="muted">in the signed release; only a new release reverses it</span>' : '');
+    if (ROLE === 'admin' && rev.reversible) revokeBtn = ' <button type="button" class="btn btn-outline btn-sm"' + on('click', 'unrevokeAgentBinary', a.binaryHash) + '>Un-revoke binary</button>';
+  } else if (ROLE === 'admin' && a.binaryHash) {
+    revokeBtn = ' <button type="button" class="btn btn-outline btn-sm"' + on('click', 'revokeAgentBinary', a.binaryHash) + '>Revoke binary</button>';
+  }
+  rows.push(['Binary', binaryLabel + revokeBtn]);
+  rows.push(['Agent version', a.agentVersion ? '<code class="mono">' + x(a.agentVersion) + '</code>' : '&mdash;']);
+
+  var notes = '';
+  if (life === 'quarantined') notes += note('bad', '&#9888; Agent is QUARANTINED — binary hash mismatch detected. Scenario dispatch is blocked. Restore to Active once the binary is verified.');
+  if (a.belowMinVersion) notes += note('warn', '&#9888; This agent (' + x(a.agentVersion || 'unknown version') + ') is below the fleet minimum agent version' + (a.minAgentVersion ? ' ' + x(a.minAgentVersion) : '') + '. It keeps running; upgrade it to the current release.');
+  if (life === 'restricted') notes += note('warn', '&#9888; Agent is RESTRICTED — scenario dispatch is blocked by policy. Restore to Active to re-enable.');
+  if (a.forceRemoved) notes += note('bad', '&#128683; Agent was FORCE-REMOVED by an administrator. This is permanent: it cannot be restored, and no state change is possible.');
+  else if (life === 'retired') notes += note('muted', '&#128683; Agent is RETIRED — decommissioned and blocked from running scenarios. Restore to Active to re-enable.');
+  if (life === 'uninstalling') notes += note('info', '&#8987; Uninstall in progress — waiting for the endpoint to confirm.');
+  if (life === 'uninstalled') notes += note('muted', '&#10003; Agent confirmed it uninstalled itself.');
+  if (a.uninstallError) notes += note('bad', '&#9888; Uninstall failed: ' + x(a.uninstallError) + (a.uninstallErrorAt ? ' (' + x(new Date(a.uninstallErrorAt).toLocaleString()) + ')' : ''));
+  if (a.stoppedBy) notes += note('bad', '&#9209; Agent was stopped by ' + x(a.stoppedByName || a.stoppedBy) + ' on ' + x(new Date(a.stoppedAt).toLocaleString()) + (a.stopReason ? ': ' + x(a.stopReason) : ''));
+
+  var policy = a.policy || {};
+  var pol = Object.keys(policy).length
+    ? '<h4 class="agt-h4">Policy bundle</h4>' + dl([
+        ['Log level', x(policy.logLevel || 'info')],
+        ['Max concurrent', x(policy.maxConcurrentRuns || 'unlimited')],
+        ['Heartbeat interval', x((policy.heartbeatIntervalS || 30) + 's')],
+        ['Exec window', x(policy.executionWindow || 'unrestricted')],
+      ])
+    : '';
+
+  var acts = [actBtn('Run simulation', 'play', 'rowMenuRunSimulation', [id])];
+  if (admin) acts.push(actBtn('Move to Group', 'layers', 'rowMenuMoveGroup', [id]));
+  var stateBtn = { active: ['Restore to Active', 'shield'], quarantined: ['Quarantine', 'alert'], restricted: ['Restrict', 'lock'], retired: ['Retire', 'x'] };
+  M.stateTargets(life, a.forceRemoved).forEach(function(s) { acts.push(actBtn(stateBtn[s][0], stateBtn[s][1], 'setAgentState', [id, s])); });
+  if (admin && !offline && !a.forceRemoved) acts.push(actBtn('Stop Agent', 'pause', 'rowMenuStopAgent', [id, host]));
+  if (admin && !a.forceRemoved && life !== 'retired' && life !== 'uninstalled') {
+    acts.push(life === 'revoked'
+      ? actBtn('Reinstate…', 'refresh', 'rowMenuReinstateAgent', [id, host])
+      : actBtn('Revoke…', 'x', 'rowMenuRevokeAgent', [id, host], 'agt-danger'));
+  }
+  if (admin && !a.forceRemoved) {
+    if (life !== 'revoked' && life !== 'retired' && life !== 'uninstalled') acts.push(actBtn('Allow reinstall…', 'refresh', 'rowMenuAllowReinstall', [id, host]));
+    acts.push(actBtn('Uninstall Agent', 'x', 'rowMenuUninstallAgent', [id, host], 'agt-danger'));
+    acts.push(actBtn('Force Remove Agent', 'alert', 'rowMenuRemoveAgent', [id, host], 'agt-danger'));
+  }
+  return '<div class="agt-ov">' + notes + dl(rows) + pol +
+    '<h4 class="agt-h4">Actions</h4><div class="agt-actions">' + acts.join('') + '</div>' +
+    '<div class="agt-hint">Quarantine / Restrict / Retire all block scenario dispatch. Only <b>Restore to Active</b> re-enables the agent.</div></div>';
+}
+
 function loadAgtOverview(agentId) {
   var pane = document.getElementById('agt-tab-overview');
-  pane.innerHTML = '<div style="color:var(--muted);padding:1rem">Loading…</div>';
+  pane.innerHTML = '<div class="empty">Loading…</div>';
   apicall('/api/agents').then(function(data) {
     var a = (data || []).find(function(ag) { return ag.agentId === agentId; });
-    if (!a) { pane.innerHTML = '<div style="padding:1rem;color:var(--danger)">Agent not found</div>'; return; }
-    document.getElementById('agt-detail-title').textContent = 'Agent: ' + x(a.hostname || agentId);
-    var stateColor = {active:'var(--success)',enrolling:'var(--accent)',restricted:'var(--warning)',quarantined:'var(--danger)',retired:'var(--muted)',uninstalling:'var(--accent)',uninstalled:'var(--muted)'}[a.state] || 'var(--muted)';
-    var policy = a.policy || {};
-    pane.innerHTML =
-      '<div style="padding:1rem 1.25rem">' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem 1.5rem;margin-bottom:1rem">' +
-      kv('Hostname',     x(a.hostname))    + kv('Agent ID', '<code style="font-size:0.75rem">' + x(a.agentId) + '</code>') +
-      kv('IP Address',   x(a.ipAddress))   + kv('OS', x(a.osVersion || '—')) +
-      kv('Username',     x(a.username))    + kv('Environment', x(a.envLabel || '—')) +
-      kv('Connectivity', '<span class="sbadge s-' + x(a.status||'idle') + '">' + x(a.status||'idle') + '</span>' +
-        // Same gap the System Tree table row already guards against (see
-        // renderAgentRows): heartbeat (HTTP, every 30s) and the WebSocket
-        // task-delivery channel are separate connections, and a fresh
-        // heartbeat alone doesn't mean a run/sweep can actually reach this
-        // agent. Previously this drawer showed only the heartbeat status,
-        // so an agent could read "idle" here while genuinely unable to
-        // receive any dispatch -- exactly what caused a stuck EM sweep to
-        // look like nothing was wrong from this view.
-        (a.status !== 'offline' && !a.wsConnected ? ' <span class="sbadge s-paused" title="Heartbeat is reaching the server, but the WebSocket task channel is down -- dispatching a run to this agent will fail until it reconnects. Often a proxy/firewall blocking the WS Upgrade handshake.">&#9888; Task channel down</span>' : '') +
-        // Same class of silent gap as Task channel down, but for mTLS: this
-        // agent's own heartbeat reports it never completed certificate
-        // bootstrap, so it can't receive signed commands even though it
-        // looks perfectly healthy otherwise. See renderAgentRows' matching
-        // badge and models.Agent.Transport's doc comment.
-        (a.status !== 'offline' && a.transport === 'legacy' ? ' <span class="sbadge s-paused" title="This agent is on legacy transport -- it never completed mTLS bootstrap and cannot receive signed commands. Scenario dispatch will fail. Usually means it was installed without --ca-root; see the Deploy agent page for the current install command.">&#9888; Legacy transport</span>' : '')) +
-      kv('Lifecycle',    '<span class="sbadge s-' + x(a.state||'active') + '" style="color:' + stateColor + '">' + x(a.state||'active') + '</span>') +
-      kv('Last Seen',    ago(a.lastUpdate)) + kv('Enrolled', a.enrolledAt ? ago(a.enrolledAt) : '—') +
-      kv('Binary Trusted', a.binaryTrusted ? '<span class="u-success">&#10003; Verified</span>' : '<span class="u-warning">&#9888; Unverified</span>') +
-      '</div>' +
-      (a.state === 'quarantined' ? '<div style="background:rgba(218,54,51,.12);border:1px solid var(--danger);border-radius:4px;padding:0.6rem 0.85rem;color:var(--danger);font-size:0.78rem;margin-bottom:0.75rem">&#9888; Agent is QUARANTINED — binary hash mismatch detected. Scenario dispatch is blocked. Restore to Active once the issue is resolved.</div>' : '') +
-      (a.state === 'restricted'  ? '<div style="background:rgba(210,153,34,.12);border:1px solid var(--warning);border-radius:4px;padding:0.6rem 0.85rem;color:var(--warning);font-size:0.78rem;margin-bottom:0.75rem">&#9888; Agent is RESTRICTED — scenario dispatch is blocked by policy. Restore to Active to re-enable.</div>' : '') +
-      (a.state === 'retired'     ? '<div style="background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.4);border-radius:4px;padding:0.6rem 0.85rem;color:#94a3b8;font-size:0.78rem;margin-bottom:0.75rem">&#128683; Agent is RETIRED — decommissioned and blocked from running scenarios. Restore to Active to re-enable.</div>' : '') +
-      (a.state === 'uninstalling' ? '<div style="background:rgba(47,129,247,.12);border:1px solid rgba(47,129,247,.4);border-radius:4px;padding:0.6rem 0.85rem;color:var(--accent);font-size:0.78rem;margin-bottom:0.75rem">&#8987; Uninstall in progress — waiting for the endpoint to confirm.</div>' : '') +
-      (a.state === 'uninstalled'  ? '<div style="background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.4);border-radius:4px;padding:0.6rem 0.85rem;color:#94a3b8;font-size:0.78rem;margin-bottom:0.75rem">&#10003; Agent confirmed it uninstalled itself.</div>' : '') +
-      (a.uninstallError ? '<div style="background:rgba(218,54,51,.12);border:1px solid var(--danger);border-radius:4px;padding:0.6rem 0.85rem;color:var(--danger);font-size:0.78rem;margin-bottom:0.75rem">&#9888; Uninstall failed: ' + x(a.uninstallError) + (a.uninstallErrorAt ? ' (' + x(new Date(a.uninstallErrorAt).toLocaleString()) + ')' : '') + '</div>' : '') +
-      (a.stoppedBy ? '<div style="background:rgba(218,54,51,.12);border:1px solid var(--danger);border-radius:4px;padding:0.6rem 0.85rem;color:var(--danger);font-size:0.78rem;margin-bottom:0.75rem">&#9209; Agent was stopped by ' + x(a.stoppedByName || a.stoppedBy) + ' on ' + x(new Date(a.stoppedAt).toLocaleString()) + ': ' + x(a.stopReason || '') + '. It will not restart automatically. Physical/console access to the endpoint is required to bring it back.</div>' : '') +
-      (Object.keys(policy).length ? '<div style="background:var(--elevated);border:1px solid var(--border);border-radius:4px;padding:0.7rem 0.9rem;margin-bottom:0.75rem">' +
-        '<div style="font-weight:600;font-size:0.78rem;margin-bottom:0.4rem;color:var(--muted)">POLICY BUNDLE</div>' +
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.3rem 1rem;font-size:0.77rem">' +
-        kv('Log Level', x(policy.logLevel || 'info')) +
-        kv('Max Concurrent', policy.maxConcurrentRuns || 'unlimited') +
-        kv('Heartbeat Interval', (policy.heartbeatIntervalS || 30) + 's') +
-        kv('Exec Window', x(policy.executionWindow || 'unrestricted')) +
-        '</div>' +
-      '</div>' : '') +
-      '<div style="border-top:1px solid var(--border);padding-top:0.85rem;margin-top:0.25rem">' +
-        '<div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:0.55rem">Lifecycle Controls</div>' +
-        '<div style="display:flex;gap:0.5rem;flex-wrap:wrap">' +
-          (a.state !== 'active' ?
-            '<button class="btn btn-primary btn-sm" '+ on('click', 'setAgentState', a.agentId, 'active') + '>&#10003; Restore to Active</button>' : '') +
-          (a.state !== 'quarantined' ?
-            '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger-border)" '+ on('click', 'setAgentState', a.agentId, 'quarantined') + '>&#9888; Quarantine</button>' : '') +
-          (a.state !== 'restricted' ?
-            '<button class="btn btn-outline btn-sm" style="color:var(--warning);border-color:var(--warning-border)" '+ on('click', 'setAgentState', a.agentId, 'restricted') + '>&#128274; Restrict</button>' : '') +
-          (a.state !== 'retired' ?
-            '<button class="btn btn-outline btn-sm u-muted" '+ on('click', 'setAgentState', a.agentId, 'retired') + '>&#128683; Retire</button>' : '') +
-        '</div>' +
-        '<div style="font-size:0.7rem;color:var(--muted);margin-top:0.45rem">Quarantine / Restrict / Retire all block scenario dispatch. Only <strong>Restore to Active</strong> re-enables the agent.</div>' +
-      '</div>' +
-      '</div>';
-  }).catch(function(e) { pane.innerHTML = '<div style="padding:1rem;color:var(--danger)">' + x(e.message) + '</div>'; });
-}
-function kv(label, val) {
-  return '<div><div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:0.1rem">' + label + '</div>' +
-         '<div style="font-size:0.82rem">' + val + '</div></div>';
+    if (!a) { pane.innerHTML = '<div class="empty u-danger">Agent not found</div>'; return; }
+    document.getElementById('agt-detail-title').textContent = a.hostname || agentId;
+    var sub = document.getElementById('agt-detail-sub');
+    if (sub) sub.textContent = M.drawerSub(a);
+    pane.innerHTML = overviewHtml(a);
+  }).catch(function(e) { pane.innerHTML = '<div class="empty u-danger">' + x(e.message) + '</div>'; });
 }
 
 export function setAgentState(agentId, newState) {
@@ -384,11 +416,18 @@ function loadAgtRisk(agentId) {
     renderAgtRisk(d);
   }).catch(function(e) { if (panel) panel.innerHTML = '<div class="empty">' + x(e.message) + '</div>'; });
 }
-function _riskCategoryCard(c) {
+// A category's note says what its score does or does not rest on (for example compliance frameworks left out for too
+// little testing). A category that is not scored still lists its findings: a failed control is real at any coverage.
+export function _riskCategoryCard(c) {
+  var note = c.note ? '<div class="cmp-warn">' + x(c.note) + '</div>' : '';
   if (!c.collected) {
-    return '<div class="dash-panel" style="margin-bottom:0.75rem;opacity:0.6"><div class="dash-panel-body" style="padding:0.85rem">' +
+    var open = (c.findings || []).length
+      ? '<div class="tiny muted">' + c.findings.length + ' failed control finding(s) are listed below though the category is not scored.</div>' +
+        '<ul style="margin:0.3rem 0 0;padding-left:1.1rem;color:var(--muted)">' + c.findings.map(function(f) { return '<li>' + x(f.title) + ' (' + x(f.severity) + ')</li>'; }).join('') + '</ul>'
+      : '';
+    return '<div class="dash-panel" style="margin-bottom:0.75rem' + (c.note ? '' : ';opacity:0.6') + '"><div class="dash-panel-body" style="padding:0.85rem">' +
       '<div style="font-weight:700;color:var(--text)">' + x(c.name) + '</div>' +
-      '<div class="tiny muted">Not yet collected</div></div></div>';
+      '<div class="tiny muted">' + (c.note ? 'Not scored' : 'Not yet collected') + '</div>' + note + open + '</div></div>';
   }
   var findingsHtml = (c.findings || []).map(function(f) {
     return '<li><strong>' + x(f.title) + '</strong> (' + x(f.severity) + ') — ' + x(f.risk) +
@@ -401,7 +440,7 @@ function _riskCategoryCard(c) {
   return '<div class="dash-panel" style="margin-bottom:0.75rem"><div class="dash-panel-body" style="padding:0.85rem">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem">' +
     '<div style="font-weight:700;color:var(--text)">' + x(c.name) + '</div>' +
-    '<div style="color:' + _riskScoreColor(c.score) + ';font-weight:700">' + c.score + '</div></div>' +
+    '<div style="color:' + _riskScoreColor(c.score) + ';font-weight:700">' + c.score + '</div></div>' + note +
     (findingsHtml ? '<ul style="margin:0;padding-left:1.1rem;color:var(--muted);display:flex;flex-direction:column;gap:0.3rem">' + findingsHtml + '</ul>' : '<div class="tiny muted">No open findings.</div>') +
     '</div></div>';
 }
@@ -662,86 +701,59 @@ export function loadComplianceReport() {
 
 function renderComplianceReport(r) {
   var s = r.summary || {};
+  var fw = r.framework || {};
   var pct = +(s.compliancePct || 0);
   var cvr = +(s.coveragePct || 0);
-  var pctColor = pct >= 70 ? '#22d3a6' : pct >= 40 ? '#f59e0b' : '#ef4444';
-  var radius = 54, circ = 2 * Math.PI * radius;
-  var dash = circ * pct / 100, gap = circ - dash;
-  var fwId = (r.framework.id || '').toLowerCase();
-  var fwColorMap = {'sebi-cscrf':'#4f8ef7','sebi':'#4f8ef7','rbi':'#22d3a6','irdai':'#a78bfa','cert-in':'#f59e0b','cert_in':'#f59e0b','iso27001':'#ef4444','iso-27001':'#ef4444','nist-csf':'#2fd8c3','nist':'#2fd8c3'};
-  var fwColor = fwColorMap[fwId] || '#4f8ef7';
-  var totalControls = s.totalControls || ((s.passing||0)+(s.failing||0)+(s.partial||0)+(s.untested||0)+(s.manual||0));
+  var totalControls = s.totalControls || 0;
+  var resisted = s.resistedControls || 0, failed = s.failingControls || 0, partial = s.partialControls || 0;
+  var inconclusive = s.inconclusiveControls || 0;
+  var untested = Math.max(0, (s.untestedControls || 0) - inconclusive);
+  var manual = s.manualControls || 0;
+  var tested = s.testedControls || 0, testable = s.testableControls || 0;
+  var gen = r.generatedAt ? new Date(r.generatedAt) : null;
+  var genText = gen && !isNaN(gen.getTime()) ? gen.toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'}) : '—';
 
-  // Header card with ring gauge
+  // Header: framework identity and narrative, the status donut (centre = compliance %), run metadata.
   document.getElementById('cmp-header-area').innerHTML =
-    '<div class="cmp-header-card" style="border-top:3px solid ' + fwColor + '">' +
-      '<div class="cmp-header-left">' +
-        '<div class="cmp-fw-badge" style="color:' + fwColor + ';background:' + fwColor + '22;border-color:' + fwColor + '44">' + x(r.framework.id || '') + '</div>' +
-        '<div class="cmp-fw-name">' + x(r.framework.name || '') + '</div>' +
-        '<div class="cmp-fw-version">' + x(r.framework.version || '') + '</div>' +
-        '<div class="cmp-header-narrative" style="margin-top:0.5rem;font-size:0.85rem;line-height:1.5;color:var(--text-dim);max-width:520px">' +
-          x(r.narrative || '') +
-        '</div>' +
-      '</div>' +
-      '<div class="cmp-header-gauge">' +
-        '<svg width="128" height="128" viewBox="0 0 130 130">' +
-          '<circle cx="65" cy="65" r="' + radius + '" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="10"/>' +
-          '<circle cx="65" cy="65" r="' + radius + '" fill="none" stroke="' + pctColor + '" stroke-width="10"' +
-            ' stroke-dasharray="' + dash.toFixed(1) + ' ' + gap.toFixed(1) + '"' +
-            ' stroke-dashoffset="' + (circ * 0.25).toFixed(1) + '"' +
-            ' stroke-linecap="round" style="transition:stroke-dasharray 0.8s ease"/>' +
-          '<text x="65" y="59" text-anchor="middle" fill="' + pctColor + '" font-family="Space Grotesk,sans-serif" font-size="22" font-weight="700">' + pct.toFixed(0) + '%</text>' +
-          '<text x="65" y="75" text-anchor="middle" fill="rgba(154,169,188,0.9)" font-family="Inter,sans-serif" font-size="9" letter-spacing="1.2">COMPLIANT</text>' +
-          '<text x="65" y="91" text-anchor="middle" fill="rgba(154,169,188,0.6)" font-family="Inter,sans-serif" font-size="8">' + cvr.toFixed(0) + '% coverage</text>' +
-        '</svg>' +
-      '</div>' +
-      '<div class="cmp-header-right">' +
-        '<div class="cmp-hdr-meta-row"><span class="cmp-hdr-meta-lbl">Agent</span><span class="cmp-hdr-meta-val">' + x(r.agentId || '') + '</span></div>' +
-        '<div class="cmp-hdr-meta-row"><span class="cmp-hdr-meta-lbl">Generated</span><span class="cmp-hdr-meta-val">' + new Date(r.generatedAt).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) + '</span></div>' +
-        '<div class="cmp-hdr-meta-row"><span class="cmp-hdr-meta-lbl">Total Controls</span><span class="cmp-hdr-meta-val">' + totalControls + '</span></div>' +
-        '<div class="cmp-hdr-meta-row"><span class="cmp-hdr-meta-lbl">Scope</span><span class="cmp-hdr-meta-val" style="font-size:0.7rem;color:var(--muted)">' + x((r.scenarioName || r.runId || 'Aggregated').substring(0,40)) + '</span></div>' +
-      '</div>' +
-    '</div>';
+    '<section class="rk-card g3-cmp-head">' +
+      '<div>' + chip(fw.id || 'Framework', 'accent') + '<h2>' + x(fw.name || '') + '</h2>' +
+        '<span class="rk-hd-sub">' + x(fw.version || '') + '</span>' +
+        (r.narrative ? '<p>' + x(r.narrative) + '</p>' : '') +
+        (s.coverageNote ? '<p class="cmp-warn">' + x(s.coverageNote) + '</p>' : '') +
+        (fw.mappingWarning ? '<p class="cmp-warn"><b>Mapping note.</b> ' + x(fw.mappingWarning) + '</p>' : '') + '</div>' +
+      '<div>' + chartSlot({ type: 'donut', h: 170, center: pct.toFixed(0) + '%', centerSub: 'resistance rate', segments: [
+        { label: 'Resisted', value: resisted, color: CHART_COLORS.ok },
+        { label: 'Failed', value: failed, color: CHART_COLORS.bad },
+        { label: 'Partial', value: partial, color: CHART_COLORS.warn },
+        { label: 'Inconclusive', value: inconclusive, color: CHART_COLORS.muted },
+        { label: 'Untested', value: untested, color: CHART_COLORS.muted },
+        { label: 'Manual', value: manual, color: CHART_COLORS.muted }
+      ] }) + '</div>' +
+      '<div>' + kitKv([
+        ['Agent', r.agentId || ''], ['Generated', genText], ['Total controls', String(totalControls)],
+        ['Control coverage', tested + ' of ' + testable + ' (' + cvr.toFixed(1) + '%)'],
+        ['Techniques tested', (s.techniquesTested || 0) + ' of ' + (s.techniquesMapped || 0)],
+        ['Scope', (r.scenarioName || r.runId || 'Aggregated').substring(0, 40)]
+      ]) + '</div>' +
+    '</section>';
 
-  // KPI row
-  var kpis = [
-    {label:'Compliant',     val:s.passing||0,                    color:'#22d3a6', dim:'rgba(34,211,166,0.1)',  border:'rgba(34,211,166,0.3)',  icon:'✓', sub:(s.passing||0)+' controls passing'},
-    {label:'Non-Compliant', val:s.failing||0,                    color:'#ef4444', dim:'rgba(239,68,68,0.1)',   border:'rgba(239,68,68,0.3)',   icon:'✗', sub:(s.failing||0)+' controls failing'},
-    {label:'Partial',       val:s.partial||0,                    color:'#f59e0b', dim:'rgba(245,158,11,0.1)',  border:'rgba(245,158,11,0.3)',  icon:'◑', sub:'Mixed pass/fail evidence'},
-    {label:'Not Tested',    val:(s.untested||0)+(s.manual||0),  color:'var(--muted)', dim:'rgba(122,148,176,0.08)', border:'var(--border)', icon:'○', sub:(s.manual||0)+' manual attestation'},
-  ];
-  document.getElementById('cmp-kpi-area').innerHTML =
-    '<div class="cmp-kpi-row">' +
-    kpis.map(function(k) {
-      return '<div class="cmp-kpi-card" style="border-left:3px solid ' + k.border + '">' +
-        '<div class="cmp-kpi-icon" style="color:' + k.color + ';background:' + k.dim + '">' + k.icon + '</div>' +
-        '<div class="cmp-kpi-value" style="color:' + k.color + '">' + k.val + '</div>' +
-        '<div class="cmp-kpi-label">' + k.label + '</div>' +
-        '<div class="cmp-kpi-sub">' + k.sub + '</div>' +
-      '</div>';
-    }).join('') + '</div>';
+  document.getElementById('cmp-kpi-area').innerHTML = grid(4, [
+    kpi({ label: 'Resisted', value: resisted, sub: 'Every mapped technique ran; none succeeded', icon: 'ok', tone: 'ok' }),
+    kpi({ label: 'Failed', value: failed, sub: 'At least one executed technique succeeded', icon: 'warn', tone: failed ? 'bad' : 'muted' }),
+    kpi({ label: 'Partial', value: partial, sub: 'Only some mapped techniques ran; none succeeded', icon: 'trend', tone: partial ? 'warn' : 'muted' }),
+    kpi({ label: 'Not Tested', value: untested + inconclusive, sub: inconclusive + ' inconclusive · ' + manual + ' manual attestation', icon: 'eye', tone: 'muted' })
+  ]);
 
-  // Domain grid
-  document.getElementById('cmp-domain-area').innerHTML =
-    '<div class="cmp-section-hdr">Domain Breakdown</div>' +
-    '<div class="cmp-domain-grid">' +
-    (r.domains || []).map(function(d) {
-      var tested = (d.passing||0) + (d.failing||0) + (d.partial||0);
-      var p = tested > 0 ? +(d.compliancePct||0) : null;
-      var barColor = p === null ? 'rgba(122,148,176,0.3)' : p >= 70 ? '#22d3a6' : p >= 40 ? '#f59e0b' : '#ef4444';
-      return '<div class="cmp-domain-card" style="border-left:3px solid ' + barColor + '">' +
-        '<div class="cmp-dc-header">' +
-          '<span class="cmp-dc-name">' + x(d.name) + '</span>' +
-          '<span class="cmp-dc-pct" style="color:' + barColor + '">' + (p !== null ? p.toFixed(0) + '%' : '—') + '</span>' +
-        '</div>' +
-        '<div class="cmp-dc-bar-wrap"><div class="cmp-dc-bar" style="width:' + (p||0) + '%;background:' + barColor + '"></div></div>' +
-        '<div class="cmp-dc-stats">' +
-          '<span class="cmp-dc-stat" style="color:#22d3a6">' + (d.passing||0) + ' Pass</span>' +
-          '<span class="cmp-dc-stat" style="color:#ef4444">' + (d.failing||0) + ' Fail</span>' +
-          '<span class="cmp-dc-stat u-muted">' + (d.untested||0) + ' Untested</span>' +
-        '</div>' +
-      '</div>';
-    }).join('') + '</div>';
+  // Domain breakdown: one card per domain, bar = compliance over the tested controls only.
+  var doms = r.domains || [];
+  document.getElementById('cmp-domain-area').innerHTML = doms.length ? card('Domain breakdown',
+    '<div class="rk-grid g3">' + doms.map(function(d) {
+      var dTested = (d.passing||0) + (d.failing||0);
+      var p = dTested > 0 ? +(d.compliancePct||0) : null;
+      return '<div class="g3-dom"><div class="g3-dom-top"><span>' + x(d.name) + '</span><span>' + (p !== null ? p.toFixed(0) + '%' : '—') + '</span></div>' +
+        kitBar(p || 0, p === null ? 'muted' : (p >= 70 ? 'ok' : p >= 40 ? 'warn' : 'bad'), true) +
+        '<div class="g3-dom-st"><span>' + (d.resisted||0) + ' resisted</span><span>' + (d.partial||0) + ' partial</span><span>' + (d.failing||0) + ' failed</span><span>' + (d.untested||0) + ' untested</span></div></div>';
+    }).join('') + '</div>') : '';
 
   renderControlsTable(r.controls, _cmpFilter);
 }
@@ -752,7 +764,7 @@ function renderControlsTable(controls, filter) {
     b.classList.toggle('active', (b.dataset.filter || '') === (filter || ''));
   });
 
-  var statusLabel = {pass:'✓ Compliant', fail:'✗ Non-Compliant', partial:'◑ Partial', untested:'○ Untested', manual:'✎ Manual'};
+  var statusLabel = {resisted:'✓ Resisted', failed:'✗ Failed', partial:'◑ Partial', inconclusive:'? Inconclusive', untested:'○ Untested', manual:'✎ Manual'};
   var rows = (controls || []).filter(function(c) { return !filter || c.status === filter; });
   document.getElementById('cmp-controls-body').innerHTML = rows.map(function(c, i) {
     var badge = '<span class="cmp-badge ' + c.status + '">' + (statusLabel[c.status] || c.status) + '</span>';
@@ -767,7 +779,7 @@ function renderControlsTable(controls, filter) {
     var hasEv = c.evidence && c.evidence.length > 0;
     var evHtml = hasEv ? '<div class="cmp-evidence" id="' + evId + '">' +
       (c.evidence || []).map(function(ev) {
-        var rc = (ev.result === 'pass' || ev.result === 'blocked') ? 'pass' : 'fail';
+        var rc = (ev.result === 'pass' || ev.result === 'blocked') ? 'pass' : (ev.result === 'fail' ? 'fail' : 'warn');
         return '<div class="cmp-ev-row">' +
           '<span class="cmp-ev-tech">' + x(ev.techniqueId || '') + '</span>' +
           '<span class="cmp-ev-badge ' + rc + '">' + x((ev.result || '').toUpperCase()) + '</span>' +
@@ -777,7 +789,7 @@ function renderControlsTable(controls, filter) {
     var expandBtn = hasEv ? '<span class="cmp-expand-btn" '+ on('click', 'toggleEvidence', evId) + '>&#9658; ' + c.evidence.length + ' tests</span>' : '';
     return '<tr><td>' + badge + '</td>' +
       '<td><span class="cmp-ctrl-id">' + x(c.id) + '</span></td>' +
-      '<td>' + x(c.name) + expandBtn + evHtml + '</td>' +
+      '<td>' + x(c.name) + expandBtn + '<div class="cmp-tech-cov">' + (c.techniquesTested||0) + ' of ' + (c.techniquesMapped||0) + ' mapped techniques tested' + (c.reference ? ' · source ' + x(c.reference) : '') + '</div>' + evHtml + '</td>' +
       '<td><span class="cmp-domain-chip">' + x(c.domain||'') + '</span></td>' +
       '<td style="text-align:center;color:var(--text-dim)">' + (c.tested||0) + '</td>' +
       '<td style="text-align:center;color:#22d3a6;font-weight:600">' + (c.passed||0) + '</td>' +

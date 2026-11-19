@@ -24,10 +24,10 @@ import (
 // cannot import internal/api (internal/api already imports internal/db),
 // same reason emailgwrun.EmailGWRun.Result itself stays json.RawMessage.
 type EmailGWMetricsSnapshotRow struct {
-	ID                      int64                   `json:"id"`
-	SnapshotDate            time.Time               `json:"snapshotDate"`
-	Environment             emailgwrun.Environment  `json:"environment"`
-	MetricDefinitionVersion int                     `json:"metricDefinitionVersion"`
+	ID                      int64                  `json:"id"`
+	SnapshotDate            time.Time              `json:"snapshotDate"`
+	Environment             emailgwrun.Environment `json:"environment"`
+	MetricDefinitionVersion int                    `json:"metricDefinitionVersion"`
 	// HasData mirrors dashboard.Snapshot's own HasAttackPathData
 	// convention: true only when the snapshot's own metrics were
 	// computed over at least one real run for this environment that

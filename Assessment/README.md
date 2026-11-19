@@ -13,6 +13,7 @@ Independent codebase, maturity, security, and competitive assessment.
 | [AUDSPECT_Findings_Tracker.xlsx](AUDSPECT_Findings_Tracker.xlsx) | Live Excel tracker — Dashboard (auto-updating KPIs + charts), Findings Tracker (dropdowns, auto risk score, conditional formatting), Legend. Manual issue tracking. |
 | [COMPETITIVE_ANALYSIS.md](COMPETITIVE_ANALYSIS.md) | Honest comparison vs Cymulate / Picus / AttackIQ / SafeBreach; corrects the "only on-prem BAS" claim. |
 | [FOCUS_AREAS_STRATEGY.md](FOCUS_AREAS_STRATEGY.md) | Where to focus to win: turning gaps into moats (air-gapped + compliance-native + Indian BFSI). |
+| [SECRET_ROTATION_RUNBOOK.md](SECRET_ROTATION_RUNBOOK.md) | Step-by-step: rotate the exposed credentials and purge them from git history (finding A1). |
 
 ## Headline
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -92,7 +93,7 @@ func (c *MISPClient) Fetch() ([]ThreatActor, error) {
 
 		actor := c.extractActor(ev, detail)
 		if actor != nil {
-			observedAt, _ := parseTimestamp(ev.Timestamp)
+			observedAt := observedAtOrNow(ev.Timestamp)
 			for _, tech := range actor.Techniques {
 				c.lastRawClaims = append(c.lastRawClaims, evidence.RawClaim{
 					ActorName: actor.Name, TechniqueID: tech.ID, ExternalID: ev.ID,
@@ -417,10 +418,24 @@ func isATTACKID(s string) bool {
 	return s[0] == 'T' && s[1] >= '1' && s[1] <= '9'
 }
 
+// observedAtOrNow returns the parsed MISP timestamp, or the current time when
+// the event carries no parseable timestamp. It never returns the Go zero time,
+// which would otherwise stamp 0001-01-01 into the threat clock and the
+// threat_observed SLA event (the OpenCTI connector already guards this way).
+func observedAtOrNow(ts string) time.Time {
+	if t, err := parseTimestamp(ts); err == nil && !t.IsZero() {
+		return t
+	}
+	return time.Now()
+}
+
 func parseTimestamp(ts string) (time.Time, error) {
-	// MISP timestamps are Unix epoch as string
-	var epoch int64
-	if _, err := fmt.Sscanf(ts, "%d", &epoch); err == nil {
+	ts = strings.TrimSpace(ts)
+	// MISP timestamps are usually a Unix epoch as a string. Require the WHOLE
+	// string to be an integer, so an RFC3339 value (which begins with a 4-digit
+	// year) is not mis-read as a tiny epoch — fmt.Sscanf("%d") would consume the
+	// leading "2026" and return 1970+2026s — and falls through to time.Parse.
+	if epoch, err := strconv.ParseInt(ts, 10, 64); err == nil {
 		return time.Unix(epoch, 0), nil
 	}
 	return time.Parse(time.RFC3339, ts)

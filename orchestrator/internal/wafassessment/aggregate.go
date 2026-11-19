@@ -90,11 +90,15 @@ func EvaluateScenarioWithSeverities(scenario EnterpriseScenario, fixtures map[st
 		if err != nil {
 			return VectorAssertion{}, false, fmt.Errorf("evaluating vector %q: %w", vectorID, err)
 		}
+		src := fixture.EvidenceSource
+		if src == "" {
+			src = EvidenceSourceFixture
+		}
 		return VectorAssertion{
 			VectorID:       vectorID,
 			Severity:       severityByID[vectorID],
 			Verdict:        result.Verdict,
-			EvidenceSource: EvidenceSourceFixture,
+			EvidenceSource: src,
 			Reason:         result.Reason,
 		}, true, nil
 	})

@@ -1,0 +1,27 @@
+id: apt29-command-control
+product_line: killchain
+name: "APT29 Mastery - Command and Control"
+description: >
+  Three command-and-control behaviors attributed to APT29 on MITRE ATT&CK group G0016, kept on the loopback and
+  the reserved .invalid domain so nothing leaves the host: five HTTP beacons with jitter and an uncommon user agent,
+  a burst of generated non-resolving names, and a local port proxy. The beacon and DNS steps validate host telemetry
+  only (a PASS means the telemetry recorded the pattern); periodicity analytics and SIEM ingestion are not
+  verified. The port proxy is gated by an exact flag and administrator only. Encrypted-channel and domain-fronting
+  tests are not built: loopback TLS would be invisible to network sensors and fronting needs real egress.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - apt29
+  - cozy-bear
+  - nobelium
+  - apt29-mastery
+  - command-and-control
+  - t1071
+  - t1568
+  - t1090
+mitre_phases:
+  - command-and-control
+
+steps:

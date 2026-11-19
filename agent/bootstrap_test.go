@@ -83,6 +83,7 @@ type csrRecord struct {
 	mu            sync.Mutex
 	calls         int
 	token         string
+	enrollToken   string // X-Enrollment-Token as received
 	clientCertCN  string
 	hadClientCert bool
 }
@@ -103,6 +104,7 @@ func newMockOrchestrator(t *testing.T, ca testCA, clientAuth tls.ClientAuthType,
 		rec.mu.Lock()
 		rec.calls++
 		rec.token = r.Header.Get("X-Agent-Token")
+		rec.enrollToken = r.Header.Get("X-Enrollment-Token")
 		if r.TLS != nil && len(r.TLS.PeerCertificates) > 0 {
 			rec.hadClientCert = true
 			rec.clientCertCN = r.TLS.PeerCertificates[0].Subject.CommonName
@@ -147,6 +149,7 @@ func newMockOrchestratorWithSigningTrust(t *testing.T, ca testCA, signingCertPEM
 		rec.mu.Lock()
 		rec.calls++
 		rec.token = r.Header.Get("X-Agent-Token")
+		rec.enrollToken = r.Header.Get("X-Enrollment-Token")
 		if r.TLS != nil && len(r.TLS.PeerCertificates) > 0 {
 			rec.hadClientCert = true
 			rec.clientCertCN = r.TLS.PeerCertificates[0].Subject.CommonName
@@ -385,13 +388,11 @@ func TestEnsureCertificate_RenewsExpiringCertViaMTLSNotBootstrapSecret(t *testin
 	}
 }
 
-// An EXPIRED certificate cannot authenticate an mTLS renewal. Per the
-// locked security invariant, an already-enrolled identity must NOT fall
-// back to a fresh bootstrap via the shared secret in this case -- that
-// would be exactly the "legacy transport as a recovery mechanism for an
-// enrolled identity" the design explicitly prohibits. It halts instead
-// (errBlocked), with zero calls to the bootstrap endpoint.
-func TestEnsureCertificate_EnrolledExpiredCertHaltsWithoutRebootstrapping(t *testing.T) {
+// An EXPIRED certificate cannot authenticate an mTLS renewal, and a running
+// agent that was offline past expiry would otherwise be stranded forever
+// (audit F-06). The agent therefore re-enrols ONCE through the TLS enrolment
+// listener with the shared secret. It never uses legacy transport for this.
+func TestEnsureCertificate_EnrolledExpiredCertReEnrolsOverEnrolmentListener(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("BAS_CERT_DIR", dir)
 	ca := newTestCA(t)
@@ -410,18 +411,44 @@ func TestEnsureCertificate_EnrolledExpiredCertHaltsWithoutRebootstrapping(t *tes
 	rec := &csrRecord{}
 	srv := newMockOrchestrator(t, ca, tls.NoClientCert, http.StatusOK, rec)
 	t.Setenv("BAS_ENROLL_PORT", portOf(t, srv.URL))
-	t.Setenv("BAS_MTLS_PORT", unusedPort(t)) // a renewal attempt would fail here
+	t.Setenv("BAS_MTLS_PORT", unusedPort(t))
 
-	_, err = ensureCertificate(context.Background(), Config{ServerURL: "https://127.0.0.1:9443", AgentSecret: "secret"}, "abc123deadbeef01")
+	if _, err = ensureCertificate(context.Background(), Config{ServerURL: "https://127.0.0.1:9443", AgentSecret: "secret"}, "abc123deadbeef01"); err != nil {
+		t.Fatalf("ensureCertificate = %v, want a successful re-enrolment", err)
+	}
+	if rec.calls != 1 {
+		t.Errorf("expected exactly one enrolment call, got %d", rec.calls)
+	}
+	if c := mustLoadCert(t); !time.Now().Before(c.NotAfter) {
+		t.Error("expected a fresh, unexpired certificate on disk")
+	}
+}
+
+// If the re-enrolment fails the agent stays blocked. It must not fall back to
+// legacy transport, and the expired certificate stays untouched.
+func TestEnsureCertificate_EnrolledExpiredCertReEnrolmentFailureStaysBlocked(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BAS_CERT_DIR", dir)
+	ca := newTestCA(t)
+	seedDeploymentCA(t, dir, ca)
+	key, _ := loadOrGenerateAgentKey()
+	if err := saveAgentCertificate(caSignedCertPEM(t, ca, &key.PublicKey, "abc123deadbeef01", -400*24*time.Hour, -time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if err := markEnrolled(); err != nil {
+		t.Fatal(err)
+	}
+	rec := &csrRecord{}
+	srv := newMockOrchestrator(t, ca, tls.NoClientCert, http.StatusInternalServerError, rec)
+	t.Setenv("BAS_ENROLL_PORT", portOf(t, srv.URL))
+
+	_, err := ensureCertificate(context.Background(), Config{ServerURL: "https://127.0.0.1:9443", AgentSecret: "secret"}, "abc123deadbeef01")
 	var blocked *errBlocked
 	if !errors.As(err, &blocked) {
 		t.Fatalf("ensureCertificate error = %v, want an *errBlocked", err)
 	}
-	if rec.calls != 0 {
-		t.Errorf("expected zero bootstrap calls for an enrolled identity's expired certificate, got %d", rec.calls)
-	}
 	if c := mustLoadCert(t); time.Now().Before(c.NotAfter) {
-		t.Error("expected the still-expired certificate to remain untouched on disk")
+		t.Error("the expired certificate must remain untouched after a failed re-enrolment")
 	}
 }
 
@@ -600,10 +627,9 @@ func TestResolveOperationalConfig_EnrolledCheckMTLSUsableFailureIsBlocked(t *tes
 	}
 }
 
-// TestResolveOperationalConfig_EnrolledExpiredCertIsBlocked covers the
-// "Enrolled + cert expired" row: must halt (outcomeBlocked), never
-// re-bootstrap via the shared secret.
-func TestResolveOperationalConfig_EnrolledExpiredCertIsBlocked(t *testing.T) {
+// TestResolveOperationalConfig_EnrolledExpiredCertRecovers: "Enrolled + cert
+// expired" now recovers through the enrolment listener (audit F-06).
+func TestResolveOperationalConfig_EnrolledExpiredCertRecovers(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("BAS_CERT_DIR", dir)
 	ca := newTestCA(t)
@@ -623,16 +649,13 @@ func TestResolveOperationalConfig_EnrolledExpiredCertIsBlocked(t *testing.T) {
 	srv := newMockOrchestrator(t, ca, tls.NoClientCert, http.StatusOK, rec)
 	t.Setenv("BAS_ENROLL_PORT", portOf(t, srv.URL))
 
-	configured := Config{ServerURL: "http://orchestrator.local:9000", AgentSecret: "secret"}
-	got, outcome, _ := resolveOperationalConfig(context.Background(), configured, "abc123deadbeef01")
-	if outcome != outcomeBlocked {
-		t.Fatalf("outcome = %v, want outcomeBlocked", outcome)
+	configured := Config{ServerURL: "http://127.0.0.1:9000", AgentSecret: "secret"}
+	_, outcome, _ := resolveOperationalConfig(context.Background(), configured, "abc123deadbeef01")
+	if outcome != outcomeMTLSReady {
+		t.Fatalf("outcome = %v, want outcomeMTLSReady", outcome)
 	}
-	if got != configured {
-		t.Errorf("config changed while blocked: %+v", got)
-	}
-	if rec.calls != 0 {
-		t.Error("an enrolled identity's expired certificate must never trigger a bootstrap-secret call")
+	if rec.calls != 1 {
+		t.Errorf("expected one enrolment call, got %d", rec.calls)
 	}
 }
 

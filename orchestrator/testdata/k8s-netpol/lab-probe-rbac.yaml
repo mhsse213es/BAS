@@ -1,0 +1,62 @@
+# Probe identity for the lab network checks S9 and S10 (docs/k8s-bas/SPEC-first-wave.md section 7.1).
+# Lab cluster only. It lets the probe account create, read, read logs of and delete short-lived probe pods in np-app,
+# and read pods in np-db. It can change nothing else. Apply after lab-fixtures.yaml.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: bas-probe
+  namespace: np-app
+  labels:
+    bas-probe: "true"
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: bas-probe-pods
+  namespace: np-app
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["create", "get", "list", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: bas-probe-pods
+  namespace: np-app
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: bas-probe-pods
+subjects:
+  - kind: ServiceAccount
+    name: bas-probe
+    namespace: np-app
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: bas-probe-read-db
+  namespace: np-db
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: bas-probe-read-db
+  namespace: np-db
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: bas-probe-read-db
+subjects:
+  - kind: ServiceAccount
+    name: bas-probe
+    namespace: np-app

@@ -40,6 +40,13 @@ type AttackTechnique struct {
 	Description string `json:"description,omitempty"`
 }
 
+// Closed set of ExecutedAtSource values. Anything else (including the empty
+// legacy value) is treated as unknown provenance.
+const (
+	ExecutedAtSourceAgent                = "agent"
+	ExecutedAtSourceOrchestratorFallback = "orchestrator_fallback"
+)
+
 // SimulationResult is the normalised output of a single technique execution.
 // Every framework (ART, Caldera, Sigma, custom) produces this format.
 type SimulationResult struct {
@@ -68,18 +75,31 @@ type SimulationResult struct {
 	// of silent -- a parser (e.g. Application Risk's installed-software
 	// parser) can detect incomplete evidence rather than unknowingly working
 	// with a partial list.
-	Truncated           bool             `json:"truncated,omitempty"`
-	OriginalOutputBytes int              `json:"originalOutputBytes,omitempty"`
-	DurationMs          int64            `json:"durationMs"`
-	ExecutedAt          time.Time        `json:"executedAt"`
-	Framework           string           `json:"framework"`                  // art | caldera | sigma | custom
-	Events              []string         `json:"events,omitempty"`           // Windows Event IDs observed (per-step tokens)
-	DetectionVerdict    string           `json:"detectionVerdict,omitempty"` // prevented | detected | undetected (populated after agent posts detections)
-	DetectionAlert      *DetectionAlert  `json:"detectionAlert,omitempty"`   // matched EDR/AV alert when DetectionVerdict=detected
-	CleanupVerdict      string           `json:"cleanupVerdict,omitempty"`   // reverted | partial | leaked (populated from agent cleanup exit code)
-	CleanupResidual     []string         `json:"cleanupResidual,omitempty"`  // normalized snapshot-diff keys still present after the step's own cleanup ran
-	CleanupError        string           `json:"cleanupError,omitempty"`     // the cleanup command's own stderr+exit code when CleanupVerdict is partial/leaked
-	BlockingControl     *BlockingControl `json:"blockingControl,omitempty"`  // specific control that prevented the technique (populated when DetectionVerdict=prevented)
+	// ExecutionFailure explains an ERROR result in normalised form (see execution_failure.go). Details keeps the raw text.
+	ExecutionFailure    *ExecutionFailure `json:"executionFailure,omitempty"`
+	Truncated           bool              `json:"truncated,omitempty"`
+	OriginalOutputBytes int               `json:"originalOutputBytes,omitempty"`
+	DurationMs          int64             `json:"durationMs"`
+	ExecutedAt          time.Time         `json:"executedAt"`
+	// ExecutedAtSource records who supplied ExecutedAt. Empty means unknown:
+	// results stored before this field existed never say where their timestamp
+	// came from, so they must not be read as agent-observed.
+	ExecutedAtSource string           `json:"executedAtSource,omitempty"`
+	Framework        string           `json:"framework"`                  // art | caldera | sigma | custom
+	Events           []string         `json:"events,omitempty"`           // Windows Event IDs observed (per-step tokens)
+	DetectionVerdict string           `json:"detectionVerdict,omitempty"` // prevented | detected | undetected (populated after agent posts detections)
+	DetectionAlert   *DetectionAlert  `json:"detectionAlert,omitempty"`   // matched EDR/AV alert when DetectionVerdict=detected
+	CleanupVerdict   string           `json:"cleanupVerdict,omitempty"`   // reverted | partial | leaked (populated from agent cleanup exit code)
+	CleanupResidual  []string         `json:"cleanupResidual,omitempty"`  // normalized snapshot-diff keys still present after the step's own cleanup ran
+	CleanupError     string           `json:"cleanupError,omitempty"`     // the cleanup command's own stderr+exit code when CleanupVerdict is partial/leaked
+	BlockingControl  *BlockingControl `json:"blockingControl,omitempty"`  // specific control that prevented the technique (populated when DetectionVerdict=prevented)
+	// FraudControl is the banking-application control verdict for a fraud step.
+	// It is independent of the endpoint result above. Nil for non-fraud steps.
+	FraudControl *FraudControl `json:"fraudControl,omitempty"`
+	// EndpointResult is the endpoint verdict before the fraud-control verdict
+	// was folded into Result (see ApplyFraudControl). Empty when there is no
+	// fraud record, in which case Result is the endpoint verdict.
+	EndpointResult CheckResult `json:"endpointResult,omitempty"`
 	// VetoedActionKey/VetoedExecutionClass/VetoedBlockSource are populated
 	// only when Result == ResultVetoed -- structured mirrors of the free-
 	// text explanation already embedded in Details, so a report/UI/export
@@ -291,6 +311,17 @@ const SkipReasonPrerequisiteMissing = "prerequisite-missing"
 // policy decision, the opposite of SkipReasonPlatformUnavailable.
 const SkipReasonCircuitOpen = "circuit-open"
 
+// SkipReasonTelemetryOnly marks a step that really ran its harmless command but has no control outcome to score, such
+// as share or file enumeration. It stays out of the prevention score (a skip is never a pass or a fail), yet it is not
+// an environment gap: the activity happened, so detection can still be graded on it, from SIEM alerts, host events or a
+// reviewed verification. See IsTelemetryProbe.
+const SkipReasonTelemetryOnly = "telemetry-only"
+
+// IsTelemetryProbe reports whether the step ran as a telemetry-only probe (see SkipReasonTelemetryOnly).
+func (r SimulationResult) IsTelemetryProbe() bool {
+	return r.Result == ResultSkipped && r.SkipReason == SkipReasonTelemetryOnly
+}
+
 // DetectionAlert is the alert record that matched this technique during the
 // post-run detection sweep. Mirrors detect.AlertRecord (server-side package)
 // but kept in models so it serialises cleanly with SimulationResult.
@@ -451,6 +482,10 @@ type Score struct {
 	Classification          string `json:"classification"`          // Protected | Low Risk | Medium Risk | High Risk | Critical
 	Confidence              int    `json:"confidence"`              // % of non-skipped results
 	PreventionEffectiveness int    `json:"preventionEffectiveness"` // = round(PreventionScore)
+	// NotAssessed is true when no step executed (every step was vetoed, skipped or errored). The scores are then
+	// not a measurement, and Classification reads "Not assessed". It is omitted for assessed runs, so scores stored
+	// before this field existed still read as assessed.
+	NotAssessed bool `json:"notAssessed,omitempty"`
 }
 
 // AgentState is the lifecycle state of a registered agent.
@@ -527,6 +562,9 @@ type PolicyBundle struct {
 	ExecutionWindow   string   `json:"executionWindow"`    // "09:00-18:00 IST" — empty = unrestricted
 	MaxConcurrentRuns int      `json:"maxConcurrentRuns"`  // 0 = unlimited
 	HeartbeatInterval int      `json:"heartbeatIntervalS"` // seconds; 0 = agent default
+	// HideTrayIcon is the RESOLVED tray-icon visibility the server tells the agent on each heartbeat (the
+	// agent's own override, else the fleet default). It is never read back from policy_json.
+	HideTrayIcon bool `json:"hideTrayIcon"`
 }
 
 // Agent represents a registered endpoint.
@@ -558,9 +596,25 @@ type Agent struct {
 	BinaryHash    string        `json:"binaryHash,omitempty"`
 	BinaryTrusted bool          `json:"binaryTrusted"`
 	Policy        *PolicyBundle `json:"policy,omitempty"`
-	EnrolledAt    *time.Time    `json:"enrolledAt,omitempty"`
-	LastUpdate    time.Time     `json:"lastUpdate"`
-	Sims          int           `json:"sims"` // scenario runs dispatched to this agent (all time)
+	// TrayHidden is this agent's own tray-icon override: nil = follows the fleet default, true = hidden,
+	// false = forced visible.
+	TrayHidden *bool `json:"trayHidden"`
+	// ForceRemoved is true once an administrator force-removed the agent. That is permanent: the console offers
+	// no way to reactivate it, and the database refuses the change.
+	ForceRemoved bool `json:"forceRemoved"`
+	// FactoryLab is true for the one agent Audspect has designated as the Threat Factory validation lab. The server
+	// sets it from the configured lab agent ID at startup (validationlab.EnsureSoleFactoryLabAgent); the console
+	// cannot change it. It is read-only here: the console only marks the agent.
+	FactoryLab bool       `json:"factoryLab"`
+	EnrolledAt *time.Time `json:"enrolledAt,omitempty"`
+	// AgentVersion is the version the agent last reported (enrolment or heartbeat). Not a trust signal.
+	AgentVersion string `json:"agentVersion"`
+	// BelowMinVersion is true when a fleet minimum is set and this agent's version is lower. The agent still runs.
+	BelowMinVersion bool `json:"belowMinVersion"`
+	// MinAgentVersion is the fleet minimum in force when the agent was listed ("" = no minimum). Shown in the drawer.
+	MinAgentVersion string `json:"minAgentVersion,omitempty"`
+	LastUpdate time.Time  `json:"lastUpdate"`
+	Sims       int        `json:"sims"` // scenario runs dispatched to this agent (all time)
 	// StoppedBy/StoppedAt/StopReason are set when an Admin dispatches a
 	// durable remote stop (see StopAgent handler); cleared on re-enroll.
 	// StoppedBy holds the raw user ID (matches audit_logs.actor_id);
@@ -604,6 +658,9 @@ type Heartbeat struct {
 	Transport string `json:"transport,omitempty"`
 
 	SecurityProducts []string `json:"securityProducts,omitempty"` // installed AV/EDR inventory (presence only)
+
+	// TrustedRootFingerprints: SHA-256 fingerprints of the CA roots the agent trusts (planned CA rotation).
+	TrustedRootFingerprints []string `json:"trustedRootFingerprints,omitempty"`
 
 	// Attack-path job progress — only populated when the agent is actively running
 	// a collection job. The server uses this to update the job's progress column
@@ -677,6 +734,10 @@ const (
 	// and autostart artifacts, report the real outcome to the server, then
 	// exit. Payload: {"reason": string}.
 	MsgCommandUninstallAgent = "command_uninstall_agent"
+	// MsgCommandTrustCA delivers a new deployment CA root during a planned CA rotation (audit F-09).
+	// Payload: {"rootPem": string, "crossPem": string}; the agent accepts it only if the CA it already
+	// pins vouches for the root through the cross-certificate.
+	MsgCommandTrustCA = "command_trust_ca"
 )
 
 // ── ATT&CK Normalisation ──────────────────────────────────────────────────────

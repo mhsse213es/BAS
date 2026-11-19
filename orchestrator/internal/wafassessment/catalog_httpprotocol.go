@@ -7,15 +7,18 @@ import (
 )
 
 // AudspectHTTPProtocolIntegrityScenario returns Audspect's real, current
-// seed "HTTP Protocol Integrity and Parser Consistency" scenario: the 2
+// seed "HTTP Protocol Integrity and Parser Consistency" scenario: the 3
 // real wafcatalog HTTP-parser vectors, validated against the real
-// catalog before returning.
+// catalog before returning. HTTPPARSE-003 is deliberately left out of
+// AudspectHTTPProtocolIntegrityFixtures so this scenario's own
+// UntestedVectorIDs/Incomplete path is exercised directly, not just the
+// suite overall through unrelated scenarios' seed data.
 func AudspectHTTPProtocolIntegrityScenario() (EnterpriseScenario, error) {
 	scenario, err := NewEnterpriseScenario(
 		"WAFSCENARIO-HTTP-PROTOCOL-INTEGRITY",
 		"HTTP Protocol Integrity and Parser Consistency",
-		"evaluate whether the WAF's HTTP parser resolves ambiguous or conflicting request framing the same way the origin does, preventing request smuggling and verb-based access-control bypass",
-		[]string{"HTTPPARSE-001", "HTTPPARSE-002"},
+		"evaluate whether the WAF's HTTP parser resolves ambiguous or conflicting request framing the same way the origin does, preventing request smuggling, verb-based access-control bypass, and response-splitting via header injection",
+		[]string{"HTTPPARSE-001", "HTTPPARSE-002", "HTTPPARSE-003"},
 		"target exposes an HTTP endpoint reachable through the WAF whose origin parser behavior is known (for Content-Length/Transfer-Encoding conflict resolution and verb-based routing)",
 		"a WAF-mechanism CollectionResult per contributing vector, fixture-backed in this phase",
 		"manually authored from the user's enterprise-scenario critique, scenario 02",
@@ -38,7 +41,8 @@ func AudspectHTTPProtocolIntegrityScenario() (EnterpriseScenario, error) {
 // deliberately NOT a uniform pass. HTTPPARSE-001 (SeverityCritical,
 // request smuggling) is seeded as Missed, a deliberate simulated
 // bypass, so the scenario genuinely resolves to ScenarioFail.
-// HTTPPARSE-002 is seeded as Blocked.
+// HTTPPARSE-002 is seeded as Blocked. HTTPPARSE-003 is deliberately
+// absent (untested).
 func AudspectHTTPProtocolIntegrityFixtures() (map[string]VectorFixture, error) {
 	return map[string]VectorFixture{
 		"HTTPPARSE-001": missed("HTTPPARSE-001"),

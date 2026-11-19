@@ -1,0 +1,804 @@
+id: "cloud-vm-data-access"
+product_line: cloud
+name: "Cloud VM Mastery - Cloud Data Access and Exfiltration (gated)"
+description: >
+  Cloud data access and egress from a workload VM: Azure Blob container listing, S3 object metadata, cloud
+  database inventory, synthetic secret retrieval, and a gated upload of a synthetic object with verified
+  deletion. Only operator-designated synthetic test resources are touched; no blob or object body is read, and
+  the exfiltration step is gated and defaults to SKIP. Egress is FAIL when an upload to cloud storage succeeds
+  from a workload VM.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cloud
+  - data-access
+  - exfiltration
+  - storage
+  - cloud-vm-mastery
+  - t1530
+  - t1526
+  - t1555
+  - t1567.002
+mitre_phases:
+  - collection
+  - exfiltration
+  - credential-access
+  - discovery
+
+steps:
+
+  # -------------------------------------------------------------------------
+  - id: cv-e32
+    name: "Cloud VM Data 32 - Azure Blob Container Listing (T1530)"
+    technique_id: T1530
+    action_key: cloud_object_list_read
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Lists container names on a designated synthetic test account. No blob is read."
+    telemetry:
+      - "Storage analytics: List Containers (cloud side)"
+    detection:
+      - "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CvRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CvTag = 'bas_cv_' + $script:CvRun
+      function Test-CvGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Get-CvEnv { param([string]$Name) return [string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value }
+      function Write-CvVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-SIM-' + $Id + ']')
+      }
+      function Complete-CvStep { param($Res, [string]$Id) Write-CvVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CvAzureInstance {
+      try { return Invoke-RestMethod -Headers @{ Metadata = 'true' } -Method GET -Uri 'http://169.254.169.254/metadata/instance?api-version=2021-02-01' -TimeoutSec 2 -ErrorAction Stop } catch { return $null }
+      }
+      function Get-CvAzureToken { param([string]$Resource)
+      $r = @{ Token = ''; Code = 0 }
+      try {
+      $t = Invoke-RestMethod -Headers @{ Metadata = 'true' } -Method GET -Uri ('http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=' + [uri]::EscapeDataString($Resource)) -TimeoutSec 5 -ErrorAction Stop
+      $r.Token = [string]$t.access_token; $r.Code = 200
+      } catch { try { $r.Code = [int]$_.Exception.Response.StatusCode } catch {} }
+      return $r
+      }
+      function Invoke-CvHttp { param([string]$Method, [string]$Uri, [string]$Token, [string]$Body = '', [string]$Version = '')
+      $h = @{ Authorization = ('Bearer ' + $Token) }
+      if ($Version -ne '') { $h['x-ms-version'] = $Version }
+      try {
+      if ($Body -ne '') { $b = Invoke-RestMethod -Method $Method -Uri $Uri -Headers $h -Body $Body -ContentType 'application/json' -TimeoutSec 15 -ErrorAction Stop }
+      else { $b = Invoke-RestMethod -Method $Method -Uri $Uri -Headers $h -TimeoutSec 15 -ErrorAction Stop }
+      return @{ Code = 200; Body = $b; Text = '' }
+      } catch {
+      $code = 0; $text = ''
+      try { $code = [int]$_.Exception.Response.StatusCode } catch {}
+      try { $text = [string]$_.ErrorDetails.Message } catch {}
+      return @{ Code = $code; Body = $null; Text = $text }
+      }
+      }
+      function Resolve-CvHttp { param($Res, [string]$What, [string]$ExpectGate = 'BAS_CLOUD_EXPECT_ENUMERATION')
+      if ($Res.Code -ge 200 -and $Res.Code -lt 300) {
+      if (Test-CvGate $ExpectGate) { return @{ Outcome = 'skip'; Reason = ($What + ' succeeded, which the operator documents as expected for this workload, so no control verdict is scored') } }
+      return @{ Outcome = 'fail'; Reason = ($What + ' succeeded for an identity the operator did not expect to have this access') }
+      }
+      if ($Res.Code -eq 401 -or $Res.Code -eq 403) { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control (HTTP ' + $Res.Code + ')') } }
+      return @{ Outcome = 'error'; Reason = ($What + ' returned HTTP ' + $Res.Code + ', which cannot be classified as a control result') }
+      }
+      function Get-CvJson { param([string]$Text)
+      $i = $Text.IndexOf('{'); $j = $Text.LastIndexOf('}')
+      if ($i -lt 0 -or $j -le $i) { return $null }
+      try { return ($Text.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
+      }
+      function Test-CvAwsCli { return [bool](Get-Command aws -ErrorAction SilentlyContinue) }
+      function Invoke-CvAws { param([string[]]$CliArgs)
+      $out = (& aws @CliArgs --output json 2>&1 | Out-String)
+      return @{ Code = $LASTEXITCODE; Text = $out.Trim() }
+      }
+      function Resolve-CvAws { param($Res, [string]$What, [string]$ExpectGate = 'BAS_CLOUD_EXPECT_ENUMERATION')
+      if ($Res.Code -eq 0) {
+      if (Test-CvGate $ExpectGate) { return @{ Outcome = 'skip'; Reason = ($What + ' succeeded, which the operator documents as expected for this workload, so no control verdict is scored') } }
+      return @{ Outcome = 'fail'; Reason = ($What + ' succeeded for an identity the operator did not expect to have this access') }
+      }
+      if ($Res.Text -match 'Unable to locate credentials|NoCredentialProviders|NoCredentials') { return @{ Outcome = 'skip'; Reason = ('no AWS identity is available to this host, so ' + $What + ' was not attempted') } }
+      if ($Res.Text -match 'AccessDenied|UnauthorizedOperation|AuthFailure|not authorized|Forbidden') { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control') } }
+      return @{ Outcome = 'error'; Reason = ($What + ' failed without a classifiable control answer') }
+      }
+      function Get-CvAwsToken { try { return [string](Invoke-RestMethod -Method PUT -Uri 'http://169.254.169.254/latest/api/token' -Headers @{ 'X-aws-ec2-metadata-token-ttl-seconds' = '60' } -TimeoutSec 2 -ErrorAction Stop) } catch { return '' } }
+      function Get-CvAwsMeta { param([string]$Path)
+      $t = Get-CvAwsToken
+      if ($t -eq '') { return $null }
+      try { return [string](Invoke-RestMethod -Headers @{ 'X-aws-ec2-metadata-token' = $t } -Uri ('http://169.254.169.254/latest/meta-data/' + $Path) -TimeoutSec 2 -ErrorAction Stop) } catch { return $null }
+      }
+      function Set-CvAwsRegion { if (-not $env:AWS_DEFAULT_REGION) { $r = Get-CvAwsMeta 'placement/region'; if ($r) { $env:AWS_DEFAULT_REGION = $r.Trim() } } }
+      function Get-CvAwsRoleName { $r = Get-CvAwsMeta 'iam/security-credentials/'; if (-not $r) { return '' }; return ((($r -split "`n")[0]).Trim()) }
+      function Get-CvUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cv-undo\' + $Id + '.json')) }
+      function New-CvUndoRecord { param([string]$Id, $Data)
+      $p = Get-CvUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CvUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CvUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CvUndoRecord { param([string]$Id)
+      $p = Get-CvUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CvUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CvUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      $acct = Get-CvEnv 'BAS_CLOUD_TEST_STORAGE_ACCOUNT'
+      if ((Get-CvAzureInstance) -eq $null) { Complete-CvStep @{ Outcome = 'skip'; Reason = 'Azure IMDS is unreachable from this host, so this is not an Azure VM' } 'CV-E32' }
+      if ($acct -eq '') { Complete-CvStep @{ Outcome = 'skip'; Reason = 'no test storage account configured (BAS_CLOUD_TEST_STORAGE_ACCOUNT); use a synthetic-data account only' } 'CV-E32' }
+      $t = Get-CvAzureToken 'https://storage.azure.com/'
+      if ($t.Token -eq '') { Complete-CvStep @{ Outcome = 'skip'; Reason = 'no managed-identity token for Azure Storage (no identity attached to this VM)' } 'CV-E32' }
+      $res = Invoke-CvHttp 'GET' ('https://' + $acct + '.blob.core.windows.net/?comp=list') $t.Token '' '2021-08-06'
+      $n = 0; if ($res.Code -eq 200) { $n = @($res.Body.EnumerationResults.Containers.Container).Count }
+      Write-Output ('EXEC T1530: blob container names listed on the test account only; http=' + $res.Code + ' containers=' + $n + '. No blob was read.')
+      Complete-CvStep (Resolve-CvHttp $res 'Azure Blob container access') 'CV-E32'
+    cleanup: |
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+
+  # -------------------------------------------------------------------------
+  - id: cv-e33
+    name: "Cloud VM Data 33 - S3 Object Metadata Access (T1530)"
+    technique_id: T1530
+    action_key: cloud_object_head_read
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "HEAD request on one designated synthetic object. The body is never requested."
+    telemetry:
+      - "CloudTrail: HeadObject (cloud side)"
+    detection:
+      - "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CvRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CvTag = 'bas_cv_' + $script:CvRun
+      function Test-CvGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Get-CvEnv { param([string]$Name) return [string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value }
+      function Write-CvVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-SIM-' + $Id + ']')
+      }
+      function Complete-CvStep { param($Res, [string]$Id) Write-CvVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CvAzureInstance {
+      try { return Invoke-RestMethod -Headers @{ Metadata = 'true' } -Method GET -Uri 'http://169.254.169.254/metadata/instance?api-version=2021-02-01' -TimeoutSec 2 -ErrorAction Stop } catch { return $null }
+      }
+      function Get-CvAzureToken { param([string]$Resource)
+      $r = @{ Token = ''; Code = 0 }
+      try {
+      $t = Invoke-RestMethod -Headers @{ Metadata = 'true' } -Method GET -Uri ('http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=' + [uri]::EscapeDataString($Resource)) -TimeoutSec 5 -ErrorAction Stop
+      $r.Token = [string]$t.access_token; $r.Code = 200
+      } catch { try { $r.Code = [int]$_.Exception.Response.StatusCode } catch {} }
+      return $r
+      }
+      function Invoke-CvHttp { param([string]$Method, [string]$Uri, [string]$Token, [string]$Body = '', [string]$Version = '')
+      $h = @{ Authorization = ('Bearer ' + $Token) }
+      if ($Version -ne '') { $h['x-ms-version'] = $Version }
+      try {
+      if ($Body -ne '') { $b = Invoke-RestMethod -Method $Method -Uri $Uri -Headers $h -Body $Body -ContentType 'application/json' -TimeoutSec 15 -ErrorAction Stop }
+      else { $b = Invoke-RestMethod -Method $Method -Uri $Uri -Headers $h -TimeoutSec 15 -ErrorAction Stop }
+      return @{ Code = 200; Body = $b; Text = '' }
+      } catch {
+      $code = 0; $text = ''
+      try { $code = [int]$_.Exception.Response.StatusCode } catch {}
+      try { $text = [string]$_.ErrorDetails.Message } catch {}
+      return @{ Code = $code; Body = $null; Text = $text }
+      }
+      }
+      function Resolve-CvHttp { param($Res, [string]$What, [string]$ExpectGate = 'BAS_CLOUD_EXPECT_ENUMERATION')
+      if ($Res.Code -ge 200 -and $Res.Code -lt 300) {
+      if (Test-CvGate $ExpectGate) { return @{ Outcome = 'skip'; Reason = ($What + ' succeeded, which the operator documents as expected for this workload, so no control verdict is scored') } }
+      return @{ Outcome = 'fail'; Reason = ($What + ' succeeded for an identity the operator did not expect to have this access') }
+      }
+      if ($Res.Code -eq 401 -or $Res.Code -eq 403) { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control (HTTP ' + $Res.Code + ')') } }
+      return @{ Outcome = 'error'; Reason = ($What + ' returned HTTP ' + $Res.Code + ', which cannot be classified as a control result') }
+      }
+      function Get-CvJson { param([string]$Text)
+      $i = $Text.IndexOf('{'); $j = $Text.LastIndexOf('}')
+      if ($i -lt 0 -or $j -le $i) { return $null }
+      try { return ($Text.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
+      }
+      function Test-CvAwsCli { return [bool](Get-Command aws -ErrorAction SilentlyContinue) }
+      function Invoke-CvAws { param([string[]]$CliArgs)
+      $out = (& aws @CliArgs --output json 2>&1 | Out-String)
+      return @{ Code = $LASTEXITCODE; Text = $out.Trim() }
+      }
+      function Resolve-CvAws { param($Res, [string]$What, [string]$ExpectGate = 'BAS_CLOUD_EXPECT_ENUMERATION')
+      if ($Res.Code -eq 0) {
+      if (Test-CvGate $ExpectGate) { return @{ Outcome = 'skip'; Reason = ($What + ' succeeded, which the operator documents as expected for this workload, so no control verdict is scored') } }
+      return @{ Outcome = 'fail'; Reason = ($What + ' succeeded for an identity the operator did not expect to have this access') }
+      }
+      if ($Res.Text -match 'Unable to locate credentials|NoCredentialProviders|NoCredentials') { return @{ Outcome = 'skip'; Reason = ('no AWS identity is available to this host, so ' + $What + ' was not attempted') } }
+      if ($Res.Text -match 'AccessDenied|UnauthorizedOperation|AuthFailure|not authorized|Forbidden') { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control') } }
+      return @{ Outcome = 'error'; Reason = ($What + ' failed without a classifiable control answer') }
+      }
+      function Get-CvAwsToken { try { return [string](Invoke-RestMethod -Method PUT -Uri 'http://169.254.169.254/latest/api/token' -Headers @{ 'X-aws-ec2-metadata-token-ttl-seconds' = '60' } -TimeoutSec 2 -ErrorAction Stop) } catch { return '' } }
+      function Get-CvAwsMeta { param([string]$Path)
+      $t = Get-CvAwsToken
+      if ($t -eq '') { return $null }
+      try { return [string](Invoke-RestMethod -Headers @{ 'X-aws-ec2-metadata-token' = $t } -Uri ('http://169.254.169.254/latest/meta-data/' + $Path) -TimeoutSec 2 -ErrorAction Stop) } catch { return $null }
+      }
+      function Set-CvAwsRegion { if (-not $env:AWS_DEFAULT_REGION) { $r = Get-CvAwsMeta 'placement/region'; if ($r) { $env:AWS_DEFAULT_REGION = $r.Trim() } } }
+      function Get-CvAwsRoleName { $r = Get-CvAwsMeta 'iam/security-credentials/'; if (-not $r) { return '' }; return ((($r -split "`n")[0]).Trim()) }
+      function Get-CvUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cv-undo\' + $Id + '.json')) }
+      function New-CvUndoRecord { param([string]$Id, $Data)
+      $p = Get-CvUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CvUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CvUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CvUndoRecord { param([string]$Id)
+      $p = Get-CvUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CvUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CvUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      $bucket = Get-CvEnv 'BAS_CLOUD_TEST_BUCKET'
+      $key = Get-CvEnv 'BAS_CLOUD_TEST_OBJECT_KEY'
+      if ($bucket -eq '' -or $key -eq '') { Complete-CvStep @{ Outcome = 'skip'; Reason = 'no test bucket or synthetic object key configured (BAS_CLOUD_TEST_BUCKET, BAS_CLOUD_TEST_OBJECT_KEY)' } 'CV-E33' }
+      if ((Get-CvAwsToken) -eq '') { Complete-CvStep @{ Outcome = 'skip'; Reason = 'AWS IMDS is unreachable from this host, so this is not an EC2 instance' } 'CV-E33' }
+      if (-not (Test-CvAwsCli)) { Complete-CvStep @{ Outcome = 'skip'; Reason = 'AWS CLI is not installed on this host' } 'CV-E33' }
+      Set-CvAwsRegion
+      $r = Invoke-CvAws @('s3api', 'head-object', '--bucket', $bucket, '--key', $key)
+      Write-Output ('EXEC T1530: metadata-only head-object on the synthetic test object; exit=' + $r.Code + '. The object body was never requested.')
+      Complete-CvStep (Resolve-CvAws $r 'S3 object access') 'CV-E33'
+    cleanup: |
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+
+  # -------------------------------------------------------------------------
+  - id: cv-e34
+    name: "Cloud VM Data 34 - Cloud Database Inventory (T1526)"
+    technique_id: T1526
+    action_key: cloud_inventory_read
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Lists database servers or instances (first page). Read-only."
+    telemetry:
+      - "Azure Activity Log / CloudTrail: database list (cloud side)"
+    detection:
+      - "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CvRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CvTag = 'bas_cv_' + $script:CvRun
+      function Test-CvGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Get-CvEnv { param([string]$Name) return [string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value }
+      function Write-CvVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-SIM-' + $Id + ']')
+      }
+      function Complete-CvStep { param($Res, [string]$Id) Write-CvVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CvAzureInstance {
+      try { return Invoke-RestMethod -Headers @{ Metadata = 'true' } -Method GET -Uri 'http://169.254.169.254/metadata/instance?api-version=2021-02-01' -TimeoutSec 2 -ErrorAction Stop } catch { return $null }
+      }
+      function Get-CvAzureToken { param([string]$Resource)
+      $r = @{ Token = ''; Code = 0 }
+      try {
+      $t = Invoke-RestMethod -Headers @{ Metadata = 'true' } -Method GET -Uri ('http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=' + [uri]::EscapeDataString($Resource)) -TimeoutSec 5 -ErrorAction Stop
+      $r.Token = [string]$t.access_token; $r.Code = 200
+      } catch { try { $r.Code = [int]$_.Exception.Response.StatusCode } catch {} }
+      return $r
+      }
+      function Invoke-CvHttp { param([string]$Method, [string]$Uri, [string]$Token, [string]$Body = '', [string]$Version = '')
+      $h = @{ Authorization = ('Bearer ' + $Token) }
+      if ($Version -ne '') { $h['x-ms-version'] = $Version }
+      try {
+      if ($Body -ne '') { $b = Invoke-RestMethod -Method $Method -Uri $Uri -Headers $h -Body $Body -ContentType 'application/json' -TimeoutSec 15 -ErrorAction Stop }
+      else { $b = Invoke-RestMethod -Method $Method -Uri $Uri -Headers $h -TimeoutSec 15 -ErrorAction Stop }
+      return @{ Code = 200; Body = $b; Text = '' }
+      } catch {
+      $code = 0; $text = ''
+      try { $code = [int]$_.Exception.Response.StatusCode } catch {}
+      try { $text = [string]$_.ErrorDetails.Message } catch {}
+      return @{ Code = $code; Body = $null; Text = $text }
+      }
+      }
+      function Resolve-CvHttp { param($Res, [string]$What, [string]$ExpectGate = 'BAS_CLOUD_EXPECT_ENUMERATION')
+      if ($Res.Code -ge 200 -and $Res.Code -lt 300) {
+      if (Test-CvGate $ExpectGate) { return @{ Outcome = 'skip'; Reason = ($What + ' succeeded, which the operator documents as expected for this workload, so no control verdict is scored') } }
+      return @{ Outcome = 'fail'; Reason = ($What + ' succeeded for an identity the operator did not expect to have this access') }
+      }
+      if ($Res.Code -eq 401 -or $Res.Code -eq 403) { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control (HTTP ' + $Res.Code + ')') } }
+      return @{ Outcome = 'error'; Reason = ($What + ' returned HTTP ' + $Res.Code + ', which cannot be classified as a control result') }
+      }
+      function Get-CvJson { param([string]$Text)
+      $i = $Text.IndexOf('{'); $j = $Text.LastIndexOf('}')
+      if ($i -lt 0 -or $j -le $i) { return $null }
+      try { return ($Text.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
+      }
+      function Test-CvAwsCli { return [bool](Get-Command aws -ErrorAction SilentlyContinue) }
+      function Invoke-CvAws { param([string[]]$CliArgs)
+      $out = (& aws @CliArgs --output json 2>&1 | Out-String)
+      return @{ Code = $LASTEXITCODE; Text = $out.Trim() }
+      }
+      function Resolve-CvAws { param($Res, [string]$What, [string]$ExpectGate = 'BAS_CLOUD_EXPECT_ENUMERATION')
+      if ($Res.Code -eq 0) {
+      if (Test-CvGate $ExpectGate) { return @{ Outcome = 'skip'; Reason = ($What + ' succeeded, which the operator documents as expected for this workload, so no control verdict is scored') } }
+      return @{ Outcome = 'fail'; Reason = ($What + ' succeeded for an identity the operator did not expect to have this access') }
+      }
+      if ($Res.Text -match 'Unable to locate credentials|NoCredentialProviders|NoCredentials') { return @{ Outcome = 'skip'; Reason = ('no AWS identity is available to this host, so ' + $What + ' was not attempted') } }
+      if ($Res.Text -match 'AccessDenied|UnauthorizedOperation|AuthFailure|not authorized|Forbidden') { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control') } }
+      return @{ Outcome = 'error'; Reason = ($What + ' failed without a classifiable control answer') }
+      }
+      function Get-CvAwsToken { try { return [string](Invoke-RestMethod -Method PUT -Uri 'http://169.254.169.254/latest/api/token' -Headers @{ 'X-aws-ec2-metadata-token-ttl-seconds' = '60' } -TimeoutSec 2 -ErrorAction Stop) } catch { return '' } }
+      function Get-CvAwsMeta { param([string]$Path)
+      $t = Get-CvAwsToken
+      if ($t -eq '') { return $null }
+      try { return [string](Invoke-RestMethod -Headers @{ 'X-aws-ec2-metadata-token' = $t } -Uri ('http://169.254.169.254/latest/meta-data/' + $Path) -TimeoutSec 2 -ErrorAction Stop) } catch { return $null }
+      }
+      function Set-CvAwsRegion { if (-not $env:AWS_DEFAULT_REGION) { $r = Get-CvAwsMeta 'placement/region'; if ($r) { $env:AWS_DEFAULT_REGION = $r.Trim() } } }
+      function Get-CvAwsRoleName { $r = Get-CvAwsMeta 'iam/security-credentials/'; if (-not $r) { return '' }; return ((($r -split "`n")[0]).Trim()) }
+      function Get-CvUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cv-undo\' + $Id + '.json')) }
+      function New-CvUndoRecord { param([string]$Id, $Data)
+      $p = Get-CvUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CvUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CvUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CvUndoRecord { param([string]$Id)
+      $p = Get-CvUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CvUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CvUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      if ((Get-CvAzureInstance) -ne $null) {
+      $t = Get-CvAzureToken 'https://management.azure.com/'
+      if ($t.Token -eq '') { Complete-CvStep @{ Outcome = 'skip'; Reason = 'no managed-identity token for the Azure management plane (no identity attached to this VM)' } 'CV-E34' }
+      $inst = Get-CvAzureInstance
+      $res = Invoke-CvHttp 'GET' ('https://management.azure.com/subscriptions/' + [string]$inst.compute.subscriptionId + '/providers/Microsoft.Sql/servers?api-version=2021-11-01') $t.Token
+      $n = 0; if ($res.Code -eq 200) { $n = @($res.Body.value).Count }
+      Write-Output ('EXEC T1526: database server inventory (Azure SQL); http=' + $res.Code + ' servers=' + $n)
+      Complete-CvStep (Resolve-CvHttp $res 'cloud database discovery') 'CV-E34'
+      }
+      if ((Get-CvAwsToken) -ne '' -and (Test-CvAwsCli)) {
+      Set-CvAwsRegion
+      $r = Invoke-CvAws @('rds', 'describe-db-instances', '--max-items', '5')
+      Write-Output ('EXEC T1526: database instance inventory (first page, RDS); exit=' + $r.Code)
+      Complete-CvStep (Resolve-CvAws $r 'cloud database discovery') 'CV-E34'
+      }
+      Complete-CvStep @{ Outcome = 'skip'; Reason = 'neither Azure IMDS nor the AWS instance metadata service with a CLI is available on this host' } 'CV-E34'
+    cleanup: |
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+
+  # -------------------------------------------------------------------------
+  - id: cv-e35
+    name: "Cloud VM Data 35 - Synthetic Secret Retrieval Attempt (T1555)"
+    technique_id: T1555
+    action_key: cloud_secret_value_read
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: high
+    reversible: true
+    blast_radius: "Gated (BAS_CONFIRM_CLOUD_SECRET_READ). Requests the value of one designated synthetic test secret. Only its length is observed; the value is discarded."
+    telemetry:
+      - "Key Vault audit: SecretGet / CloudTrail: GetSecretValue (cloud side)"
+    detection:
+      - "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CvRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CvTag = 'bas_cv_' + $script:CvRun
+      function Test-CvGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Get-CvEnv { param([string]$Name) return [string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value }
+      function Write-CvVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-SIM-' + $Id + ']')
+      }
+      function Complete-CvStep { param($Res, [string]$Id) Write-CvVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CvAzureInstance {
+      try { return Invoke-RestMethod -Headers @{ Metadata = 'true' } -Method GET -Uri 'http://169.254.169.254/metadata/instance?api-version=2021-02-01' -TimeoutSec 2 -ErrorAction Stop } catch { return $null }
+      }
+      function Get-CvAzureToken { param([string]$Resource)
+      $r = @{ Token = ''; Code = 0 }
+      try {
+      $t = Invoke-RestMethod -Headers @{ Metadata = 'true' } -Method GET -Uri ('http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=' + [uri]::EscapeDataString($Resource)) -TimeoutSec 5 -ErrorAction Stop
+      $r.Token = [string]$t.access_token; $r.Code = 200
+      } catch { try { $r.Code = [int]$_.Exception.Response.StatusCode } catch {} }
+      return $r
+      }
+      function Invoke-CvHttp { param([string]$Method, [string]$Uri, [string]$Token, [string]$Body = '', [string]$Version = '')
+      $h = @{ Authorization = ('Bearer ' + $Token) }
+      if ($Version -ne '') { $h['x-ms-version'] = $Version }
+      try {
+      if ($Body -ne '') { $b = Invoke-RestMethod -Method $Method -Uri $Uri -Headers $h -Body $Body -ContentType 'application/json' -TimeoutSec 15 -ErrorAction Stop }
+      else { $b = Invoke-RestMethod -Method $Method -Uri $Uri -Headers $h -TimeoutSec 15 -ErrorAction Stop }
+      return @{ Code = 200; Body = $b; Text = '' }
+      } catch {
+      $code = 0; $text = ''
+      try { $code = [int]$_.Exception.Response.StatusCode } catch {}
+      try { $text = [string]$_.ErrorDetails.Message } catch {}
+      return @{ Code = $code; Body = $null; Text = $text }
+      }
+      }
+      function Resolve-CvHttp { param($Res, [string]$What, [string]$ExpectGate = 'BAS_CLOUD_EXPECT_ENUMERATION')
+      if ($Res.Code -ge 200 -and $Res.Code -lt 300) {
+      if (Test-CvGate $ExpectGate) { return @{ Outcome = 'skip'; Reason = ($What + ' succeeded, which the operator documents as expected for this workload, so no control verdict is scored') } }
+      return @{ Outcome = 'fail'; Reason = ($What + ' succeeded for an identity the operator did not expect to have this access') }
+      }
+      if ($Res.Code -eq 401 -or $Res.Code -eq 403) { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control (HTTP ' + $Res.Code + ')') } }
+      return @{ Outcome = 'error'; Reason = ($What + ' returned HTTP ' + $Res.Code + ', which cannot be classified as a control result') }
+      }
+      function Get-CvJson { param([string]$Text)
+      $i = $Text.IndexOf('{'); $j = $Text.LastIndexOf('}')
+      if ($i -lt 0 -or $j -le $i) { return $null }
+      try { return ($Text.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
+      }
+      function Test-CvAwsCli { return [bool](Get-Command aws -ErrorAction SilentlyContinue) }
+      function Invoke-CvAws { param([string[]]$CliArgs)
+      $out = (& aws @CliArgs --output json 2>&1 | Out-String)
+      return @{ Code = $LASTEXITCODE; Text = $out.Trim() }
+      }
+      function Resolve-CvAws { param($Res, [string]$What, [string]$ExpectGate = 'BAS_CLOUD_EXPECT_ENUMERATION')
+      if ($Res.Code -eq 0) {
+      if (Test-CvGate $ExpectGate) { return @{ Outcome = 'skip'; Reason = ($What + ' succeeded, which the operator documents as expected for this workload, so no control verdict is scored') } }
+      return @{ Outcome = 'fail'; Reason = ($What + ' succeeded for an identity the operator did not expect to have this access') }
+      }
+      if ($Res.Text -match 'Unable to locate credentials|NoCredentialProviders|NoCredentials') { return @{ Outcome = 'skip'; Reason = ('no AWS identity is available to this host, so ' + $What + ' was not attempted') } }
+      if ($Res.Text -match 'AccessDenied|UnauthorizedOperation|AuthFailure|not authorized|Forbidden') { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control') } }
+      return @{ Outcome = 'error'; Reason = ($What + ' failed without a classifiable control answer') }
+      }
+      function Get-CvAwsToken { try { return [string](Invoke-RestMethod -Method PUT -Uri 'http://169.254.169.254/latest/api/token' -Headers @{ 'X-aws-ec2-metadata-token-ttl-seconds' = '60' } -TimeoutSec 2 -ErrorAction Stop) } catch { return '' } }
+      function Get-CvAwsMeta { param([string]$Path)
+      $t = Get-CvAwsToken
+      if ($t -eq '') { return $null }
+      try { return [string](Invoke-RestMethod -Headers @{ 'X-aws-ec2-metadata-token' = $t } -Uri ('http://169.254.169.254/latest/meta-data/' + $Path) -TimeoutSec 2 -ErrorAction Stop) } catch { return $null }
+      }
+      function Set-CvAwsRegion { if (-not $env:AWS_DEFAULT_REGION) { $r = Get-CvAwsMeta 'placement/region'; if ($r) { $env:AWS_DEFAULT_REGION = $r.Trim() } } }
+      function Get-CvAwsRoleName { $r = Get-CvAwsMeta 'iam/security-credentials/'; if (-not $r) { return '' }; return ((($r -split "`n")[0]).Trim()) }
+      function Get-CvUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cv-undo\' + $Id + '.json')) }
+      function New-CvUndoRecord { param([string]$Id, $Data)
+      $p = Get-CvUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CvUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CvUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CvUndoRecord { param([string]$Id)
+      $p = Get-CvUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CvUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CvUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      if (-not (Test-CvGate 'BAS_CONFIRM_CLOUD_SECRET_READ')) { Complete-CvStep @{ Outcome = 'skip'; Reason = 'lab gate BAS_CONFIRM_CLOUD_SECRET_READ is not set to true; this step requests a secret value, which only a deliberate test run may do' } 'CV-E35' }
+      $vault = Get-CvEnv 'BAS_CLOUD_TEST_KEYVAULT'
+      $secret = Get-CvEnv 'BAS_CLOUD_TEST_SECRET_NAME'
+      if ($secret -eq '') { Complete-CvStep @{ Outcome = 'skip'; Reason = 'no synthetic test secret configured (BAS_CLOUD_TEST_SECRET_NAME); use a test secret holding synthetic data only' } 'CV-E35' }
+      if ($vault -ne '' -and (Get-CvAzureInstance) -ne $null) {
+      $t = Get-CvAzureToken 'https://vault.azure.net'
+      if ($t.Token -eq '') { Complete-CvStep @{ Outcome = 'skip'; Reason = 'no managed-identity token for Key Vault (no identity attached to this VM)' } 'CV-E35' }
+      $res = Invoke-CvHttp 'GET' ('https://' + $vault + '.vault.azure.net/secrets/' + $secret + '?api-version=7.4') $t.Token
+      $len = 0; if ($res.Code -eq 200) { $len = ([string]$res.Body.value).Length }
+      $res.Body = $null
+      Write-Output ('EXEC T1555: Key Vault secret value requested for the synthetic test secret; http=' + $res.Code + '. Only the length (' + $len + ') was observed; the value was discarded.')
+      Complete-CvStep (Resolve-CvHttp $res 'Key Vault secret retrieval') 'CV-E35'
+      }
+      if ((Get-CvAwsToken) -ne '' -and (Test-CvAwsCli)) {
+      Set-CvAwsRegion
+      $r = Invoke-CvAws @('secretsmanager', 'get-secret-value', '--secret-id', $secret)
+      $len = 0; if ($r.Code -eq 0) { try { $len = ([string](($r.Text | ConvertFrom-Json).SecretString)).Length } catch {} }
+      $res = Resolve-CvAws $r 'Secrets Manager secret retrieval'
+      $r = $null
+      Write-Output ('EXEC T1555: Secrets Manager value requested for the synthetic test secret; value_length=' + $len + '. The value was discarded.')
+      Complete-CvStep $res 'CV-E35'
+      }
+      Complete-CvStep @{ Outcome = 'skip'; Reason = 'no cloud identity path is available to retrieve the synthetic test secret on this host' } 'CV-E35'
+    cleanup: ""
+
+  # -------------------------------------------------------------------------
+  - id: cv-e36
+    name: "Cloud VM Data 36 - Gated Synthetic Cloud Storage Upload (T1567.002)"
+    technique_id: T1567.002
+    action_key: cloud_synthetic_upload
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: false
+    blast_radius: "Gated (BAS_CONFIRM_CLOUD_EXFIL_SIM). Writes one 1 KB synthetic file to a designated test container or bucket, verifies, deletes it, and removes the local copy."
+    telemetry:
+      - "Storage analytics: PutBlob / CloudTrail: PutObject (cloud side)"
+      - "Sysmon EID 3: egress to storage endpoint"
+    detection:
+      - "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CvRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CvTag = 'bas_cv_' + $script:CvRun
+      function Test-CvGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Get-CvEnv { param([string]$Name) return [string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value }
+      function Write-CvVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-SIM-' + $Id + ']')
+      }
+      function Complete-CvStep { param($Res, [string]$Id) Write-CvVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CvAzureInstance {
+      try { return Invoke-RestMethod -Headers @{ Metadata = 'true' } -Method GET -Uri 'http://169.254.169.254/metadata/instance?api-version=2021-02-01' -TimeoutSec 2 -ErrorAction Stop } catch { return $null }
+      }
+      function Get-CvAzureToken { param([string]$Resource)
+      $r = @{ Token = ''; Code = 0 }
+      try {
+      $t = Invoke-RestMethod -Headers @{ Metadata = 'true' } -Method GET -Uri ('http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=' + [uri]::EscapeDataString($Resource)) -TimeoutSec 5 -ErrorAction Stop
+      $r.Token = [string]$t.access_token; $r.Code = 200
+      } catch { try { $r.Code = [int]$_.Exception.Response.StatusCode } catch {} }
+      return $r
+      }
+      function Invoke-CvHttp { param([string]$Method, [string]$Uri, [string]$Token, [string]$Body = '', [string]$Version = '')
+      $h = @{ Authorization = ('Bearer ' + $Token) }
+      if ($Version -ne '') { $h['x-ms-version'] = $Version }
+      try {
+      if ($Body -ne '') { $b = Invoke-RestMethod -Method $Method -Uri $Uri -Headers $h -Body $Body -ContentType 'application/json' -TimeoutSec 15 -ErrorAction Stop }
+      else { $b = Invoke-RestMethod -Method $Method -Uri $Uri -Headers $h -TimeoutSec 15 -ErrorAction Stop }
+      return @{ Code = 200; Body = $b; Text = '' }
+      } catch {
+      $code = 0; $text = ''
+      try { $code = [int]$_.Exception.Response.StatusCode } catch {}
+      try { $text = [string]$_.ErrorDetails.Message } catch {}
+      return @{ Code = $code; Body = $null; Text = $text }
+      }
+      }
+      function Resolve-CvHttp { param($Res, [string]$What, [string]$ExpectGate = 'BAS_CLOUD_EXPECT_ENUMERATION')
+      if ($Res.Code -ge 200 -and $Res.Code -lt 300) {
+      if (Test-CvGate $ExpectGate) { return @{ Outcome = 'skip'; Reason = ($What + ' succeeded, which the operator documents as expected for this workload, so no control verdict is scored') } }
+      return @{ Outcome = 'fail'; Reason = ($What + ' succeeded for an identity the operator did not expect to have this access') }
+      }
+      if ($Res.Code -eq 401 -or $Res.Code -eq 403) { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control (HTTP ' + $Res.Code + ')') } }
+      return @{ Outcome = 'error'; Reason = ($What + ' returned HTTP ' + $Res.Code + ', which cannot be classified as a control result') }
+      }
+      function Get-CvJson { param([string]$Text)
+      $i = $Text.IndexOf('{'); $j = $Text.LastIndexOf('}')
+      if ($i -lt 0 -or $j -le $i) { return $null }
+      try { return ($Text.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
+      }
+      function Test-CvAwsCli { return [bool](Get-Command aws -ErrorAction SilentlyContinue) }
+      function Invoke-CvAws { param([string[]]$CliArgs)
+      $out = (& aws @CliArgs --output json 2>&1 | Out-String)
+      return @{ Code = $LASTEXITCODE; Text = $out.Trim() }
+      }
+      function Resolve-CvAws { param($Res, [string]$What, [string]$ExpectGate = 'BAS_CLOUD_EXPECT_ENUMERATION')
+      if ($Res.Code -eq 0) {
+      if (Test-CvGate $ExpectGate) { return @{ Outcome = 'skip'; Reason = ($What + ' succeeded, which the operator documents as expected for this workload, so no control verdict is scored') } }
+      return @{ Outcome = 'fail'; Reason = ($What + ' succeeded for an identity the operator did not expect to have this access') }
+      }
+      if ($Res.Text -match 'Unable to locate credentials|NoCredentialProviders|NoCredentials') { return @{ Outcome = 'skip'; Reason = ('no AWS identity is available to this host, so ' + $What + ' was not attempted') } }
+      if ($Res.Text -match 'AccessDenied|UnauthorizedOperation|AuthFailure|not authorized|Forbidden') { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control') } }
+      return @{ Outcome = 'error'; Reason = ($What + ' failed without a classifiable control answer') }
+      }
+      function Get-CvAwsToken { try { return [string](Invoke-RestMethod -Method PUT -Uri 'http://169.254.169.254/latest/api/token' -Headers @{ 'X-aws-ec2-metadata-token-ttl-seconds' = '60' } -TimeoutSec 2 -ErrorAction Stop) } catch { return '' } }
+      function Get-CvAwsMeta { param([string]$Path)
+      $t = Get-CvAwsToken
+      if ($t -eq '') { return $null }
+      try { return [string](Invoke-RestMethod -Headers @{ 'X-aws-ec2-metadata-token' = $t } -Uri ('http://169.254.169.254/latest/meta-data/' + $Path) -TimeoutSec 2 -ErrorAction Stop) } catch { return $null }
+      }
+      function Set-CvAwsRegion { if (-not $env:AWS_DEFAULT_REGION) { $r = Get-CvAwsMeta 'placement/region'; if ($r) { $env:AWS_DEFAULT_REGION = $r.Trim() } } }
+      function Get-CvAwsRoleName { $r = Get-CvAwsMeta 'iam/security-credentials/'; if (-not $r) { return '' }; return ((($r -split "`n")[0]).Trim()) }
+      function Get-CvUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cv-undo\' + $Id + '.json')) }
+      function New-CvUndoRecord { param([string]$Id, $Data)
+      $p = Get-CvUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CvUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CvUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CvUndoRecord { param([string]$Id)
+      $p = Get-CvUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CvUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CvUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      if (-not (Test-CvGate 'BAS_CONFIRM_CLOUD_EXFIL_SIM')) { Complete-CvStep @{ Outcome = 'skip'; Reason = 'lab gate BAS_CONFIRM_CLOUD_EXFIL_SIM is not set to true; this step uploads a synthetic object to cloud storage and deletes it' } 'CV-E36' }
+      $payload = Join-Path $env:TEMP ($script:CvTag + '.txt')
+      $acct = Get-CvEnv 'BAS_CLOUD_TEST_STORAGE_ACCOUNT'
+      $bucket = Get-CvEnv 'BAS_CLOUD_TEST_BUCKET'
+      $key = 'bas-synthetic/' + $script:CvTag + '.txt'
+      $outcome = $null
+      $undo = @{ azure_url = ''; s3_bucket = ''; s3_key = '' }
+      try { New-CvUndoRecord 'cv-e36' $undo } catch { Complete-CvStep @{ Outcome = 'error'; Reason = 'the undo record could not be written (one from an earlier run may still be present), so nothing was uploaded' } 'CV-E36' }
+      try {
+      ('BAS SYNTHETIC DATA - NOT REAL. ' * 40) | Set-Content -LiteralPath $payload -Encoding ASCII
+      if ($acct -ne '' -and (Get-CvAzureInstance) -ne $null) {
+      $t = Get-CvAzureToken 'https://storage.azure.com/'
+      if ($t.Token -ne '') {
+      $code = 0
+      try {
+      $h = @{ Authorization = ('Bearer ' + $t.Token); 'x-ms-version' = '2021-08-06'; 'x-ms-blob-type' = 'BlockBlob' }
+      $undo.azure_url = ('https://' + $acct + '.blob.core.windows.net/bas-synthetic/' + $script:CvTag + '.txt'); Set-CvUndoRecord 'cv-e36' $undo
+      $null = Invoke-RestMethod -Method Put -Uri ('https://' + $acct + '.blob.core.windows.net/bas-synthetic/' + $script:CvTag + '.txt') -Headers $h -InFile $payload -ContentType 'text/plain' -TimeoutSec 30 -ErrorAction Stop
+      $code = 201
+      } catch { try { $code = [int]$_.Exception.Response.StatusCode } catch {} }
+      if ($code -eq 201) {
+      $h2 = @{ Authorization = ('Bearer ' + $t.Token); 'x-ms-version' = '2021-08-06' }
+      try { Invoke-RestMethod -Method Delete -Uri ('https://' + $acct + '.blob.core.windows.net/bas-synthetic/' + $script:CvTag + '.txt') -Headers $h2 -TimeoutSec 30 -ErrorAction Stop | Out-Null; $cleaned = $true } catch { $cleaned = $false }
+      $cl = 'NOT verified, delete bas-synthetic/' + $script:CvTag + '.txt manually'
+      if ($cleaned) { $cl = 'verified' }
+      if (Test-CvGate 'BAS_CLOUD_EXPECT_EXFIL_SIM') { $outcome = @{ Outcome = 'skip'; Reason = ('a synthetic upload to Azure Blob storage succeeded and is documented as expected; cleanup ' + $cl) } }
+      else { $outcome = @{ Outcome = 'fail'; Reason = ('a synthetic object was uploaded to Azure Blob storage from this VM; egress to cloud storage is not restricted; cleanup ' + $cl) } }
+      } else {
+      $outcome = (Resolve-CvHttp @{ Code = $code } 'upload of a synthetic object to Azure Blob storage' 'BAS_CLOUD_EXPECT_EXFIL_SIM')
+      }
+      }
+      }
+      if ($null -eq $outcome -and $bucket -ne '' -and (Test-CvAwsCli) -and (Get-CvAwsToken) -ne '') {
+      Set-CvAwsRegion
+      $undo.s3_bucket = $bucket; $undo.s3_key = $key; Set-CvUndoRecord 'cv-e36' $undo
+      $up = Invoke-CvAws @('s3', 'cp', $payload, ('s3://' + $bucket + '/' + $key))
+      if ($up.Code -eq 0) {
+      $del = Invoke-CvAws @('s3api', 'delete-object', '--bucket', $bucket, '--key', $key)
+      $cl = 'NOT verified, delete ' + $key + ' manually'
+      if ($del.Code -eq 0) { $cl = 'verified' }
+      if (Test-CvGate 'BAS_CLOUD_EXPECT_EXFIL_SIM') { $outcome = @{ Outcome = 'skip'; Reason = ('a synthetic upload to S3 succeeded and is documented as expected; cleanup ' + $cl) } }
+      else { $outcome = @{ Outcome = 'fail'; Reason = ('a synthetic object was uploaded to S3 from this instance; egress to cloud storage is not restricted; cleanup ' + $cl) } }
+      } else { $outcome = Resolve-CvAws $up 'upload of a synthetic object to S3' 'BAS_CLOUD_EXPECT_EXFIL_SIM' }
+      }
+      } finally {
+      Remove-Item -LiteralPath $payload -Force -ErrorAction SilentlyContinue
+      }
+      if ($null -eq $outcome) { Complete-CvStep @{ Outcome = 'skip'; Reason = 'no test storage target and identity path is configured on this host' } 'CV-E36' }
+      Complete-CvStep $outcome 'CV-E36'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CvRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CvTag = 'bas_cv_' + $script:CvRun
+      function Test-CvGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Get-CvEnv { param([string]$Name) return [string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value }
+      function Write-CvVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-SIM-' + $Id + ']')
+      }
+      function Complete-CvStep { param($Res, [string]$Id) Write-CvVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CvAzureInstance {
+      try { return Invoke-RestMethod -Headers @{ Metadata = 'true' } -Method GET -Uri 'http://169.254.169.254/metadata/instance?api-version=2021-02-01' -TimeoutSec 2 -ErrorAction Stop } catch { return $null }
+      }
+      function Get-CvAzureToken { param([string]$Resource)
+      $r = @{ Token = ''; Code = 0 }
+      try {
+      $t = Invoke-RestMethod -Headers @{ Metadata = 'true' } -Method GET -Uri ('http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=' + [uri]::EscapeDataString($Resource)) -TimeoutSec 5 -ErrorAction Stop
+      $r.Token = [string]$t.access_token; $r.Code = 200
+      } catch { try { $r.Code = [int]$_.Exception.Response.StatusCode } catch {} }
+      return $r
+      }
+      function Invoke-CvHttp { param([string]$Method, [string]$Uri, [string]$Token, [string]$Body = '', [string]$Version = '')
+      $h = @{ Authorization = ('Bearer ' + $Token) }
+      if ($Version -ne '') { $h['x-ms-version'] = $Version }
+      try {
+      if ($Body -ne '') { $b = Invoke-RestMethod -Method $Method -Uri $Uri -Headers $h -Body $Body -ContentType 'application/json' -TimeoutSec 15 -ErrorAction Stop }
+      else { $b = Invoke-RestMethod -Method $Method -Uri $Uri -Headers $h -TimeoutSec 15 -ErrorAction Stop }
+      return @{ Code = 200; Body = $b; Text = '' }
+      } catch {
+      $code = 0; $text = ''
+      try { $code = [int]$_.Exception.Response.StatusCode } catch {}
+      try { $text = [string]$_.ErrorDetails.Message } catch {}
+      return @{ Code = $code; Body = $null; Text = $text }
+      }
+      }
+      function Resolve-CvHttp { param($Res, [string]$What, [string]$ExpectGate = 'BAS_CLOUD_EXPECT_ENUMERATION')
+      if ($Res.Code -ge 200 -and $Res.Code -lt 300) {
+      if (Test-CvGate $ExpectGate) { return @{ Outcome = 'skip'; Reason = ($What + ' succeeded, which the operator documents as expected for this workload, so no control verdict is scored') } }
+      return @{ Outcome = 'fail'; Reason = ($What + ' succeeded for an identity the operator did not expect to have this access') }
+      }
+      if ($Res.Code -eq 401 -or $Res.Code -eq 403) { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control (HTTP ' + $Res.Code + ')') } }
+      return @{ Outcome = 'error'; Reason = ($What + ' returned HTTP ' + $Res.Code + ', which cannot be classified as a control result') }
+      }
+      function Get-CvJson { param([string]$Text)
+      $i = $Text.IndexOf('{'); $j = $Text.LastIndexOf('}')
+      if ($i -lt 0 -or $j -le $i) { return $null }
+      try { return ($Text.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
+      }
+      function Test-CvAwsCli { return [bool](Get-Command aws -ErrorAction SilentlyContinue) }
+      function Invoke-CvAws { param([string[]]$CliArgs)
+      $out = (& aws @CliArgs --output json 2>&1 | Out-String)
+      return @{ Code = $LASTEXITCODE; Text = $out.Trim() }
+      }
+      function Resolve-CvAws { param($Res, [string]$What, [string]$ExpectGate = 'BAS_CLOUD_EXPECT_ENUMERATION')
+      if ($Res.Code -eq 0) {
+      if (Test-CvGate $ExpectGate) { return @{ Outcome = 'skip'; Reason = ($What + ' succeeded, which the operator documents as expected for this workload, so no control verdict is scored') } }
+      return @{ Outcome = 'fail'; Reason = ($What + ' succeeded for an identity the operator did not expect to have this access') }
+      }
+      if ($Res.Text -match 'Unable to locate credentials|NoCredentialProviders|NoCredentials') { return @{ Outcome = 'skip'; Reason = ('no AWS identity is available to this host, so ' + $What + ' was not attempted') } }
+      if ($Res.Text -match 'AccessDenied|UnauthorizedOperation|AuthFailure|not authorized|Forbidden') { return @{ Outcome = 'pass'; Reason = ($What + ' was refused by the cloud control') } }
+      return @{ Outcome = 'error'; Reason = ($What + ' failed without a classifiable control answer') }
+      }
+      function Get-CvAwsToken { try { return [string](Invoke-RestMethod -Method PUT -Uri 'http://169.254.169.254/latest/api/token' -Headers @{ 'X-aws-ec2-metadata-token-ttl-seconds' = '60' } -TimeoutSec 2 -ErrorAction Stop) } catch { return '' } }
+      function Get-CvAwsMeta { param([string]$Path)
+      $t = Get-CvAwsToken
+      if ($t -eq '') { return $null }
+      try { return [string](Invoke-RestMethod -Headers @{ 'X-aws-ec2-metadata-token' = $t } -Uri ('http://169.254.169.254/latest/meta-data/' + $Path) -TimeoutSec 2 -ErrorAction Stop) } catch { return $null }
+      }
+      function Set-CvAwsRegion { if (-not $env:AWS_DEFAULT_REGION) { $r = Get-CvAwsMeta 'placement/region'; if ($r) { $env:AWS_DEFAULT_REGION = $r.Trim() } } }
+      function Get-CvAwsRoleName { $r = Get-CvAwsMeta 'iam/security-credentials/'; if (-not $r) { return '' }; return ((($r -split "`n")[0]).Trim()) }
+      function Get-CvUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cv-undo\' + $Id + '.json')) }
+      function New-CvUndoRecord { param([string]$Id, $Data)
+      $p = Get-CvUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CvUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CvUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CvUndoRecord { param([string]$Id)
+      $p = Get-CvUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CvUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CvUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      $rec = Read-CvUndoRecord 'cv-e36'
+      if ($null -eq $rec) { Write-Output 'UNDO CV-E36: no undo record, nothing to remove' }
+      elseif ($rec -eq 'unreadable') { Write-Output 'UNDO CV-E36: undo record is unreadable; left in place for manual review' }
+      else {
+      $ok = $true; $notes = @()
+      if ([string]$rec.azure_url -ne '') {
+      $t = Get-CvAzureToken 'https://storage.azure.com/'
+      if ($t.Token -eq '') { $ok = $false; $notes += 'no storage token for the Azure object' }
+      else {
+      $code = 0
+      try { Invoke-RestMethod -Method Delete -Uri ([string]$rec.azure_url) -Headers @{ Authorization = ('Bearer ' + $t.Token); 'x-ms-version' = '2021-08-06' } -TimeoutSec 30 -ErrorAction Stop | Out-Null; $code = 200 } catch { try { $code = [int]$_.Exception.Response.StatusCode } catch {} }
+      if (-not (($code -ge 200 -and $code -lt 300) -or $code -eq 404)) { $ok = $false; $notes += ('Azure delete returned ' + $code) }
+      }
+      }
+      if ([string]$rec.s3_bucket -ne '') {
+      if (-not (Test-CvAwsCli)) { $ok = $false; $notes += 'AWS CLI missing for the S3 object' }
+      else {
+      Set-CvAwsRegion
+      $d = Invoke-CvAws @('s3api', 'delete-object', '--bucket', [string]$rec.s3_bucket, '--key', [string]$rec.s3_key)
+      if ($d.Code -ne 0) { $ok = $false; $notes += 'S3 delete failed' }
+      }
+      }
+      if ($ok) { Remove-CvUndoRecord 'cv-e36'; Write-Output 'UNDO CV-E36: every synthetic object in the record is gone; undo record removed' }
+      else { Write-Output ('UNDO CV-E36: not verified (' + ($notes -join '; ') + '); undo record kept') }
+      }

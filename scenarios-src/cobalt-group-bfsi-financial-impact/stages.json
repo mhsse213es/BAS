@@ -1,0 +1,157 @@
+[
+  {
+    "id": "fin-01",
+    "n": 1,
+    "name": "Financial Impact - Transaction Record Manipulation Attempt (Custom)",
+    "technique_id": "T1565.001",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "high",
+    "blast_radius": "Creates one synthetic baseline transaction in the lab bfsisim ledger, then attempts to overwrite it with a tampered amount. SKIP when the simulator is unreachable.",
+    "telemetry": [
+      "HTTP POST to lab-local ledger (duplicate-id attempt)"
+    ],
+    "detection": [
+      "Transaction-integrity control: rejection of in-place amount changes"
+    ],
+    "cleanup": "",
+    "action_key": "financial_transaction_manipulation",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "fin-02",
+    "n": 2,
+    "name": "Financial Impact - Payment Instruction Manipulation Attempt (Custom)",
+    "technique_id": "T1565.001",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "high",
+    "blast_radius": "Creates one synthetic payment-instruction-shaped transaction (beneficiary account field), then attempts an unauthorized overwrite of that field via the same id. SKIP when the simulator is unreachable.",
+    "telemetry": [
+      "HTTP POST to lab-local ledger (duplicate-id attempt)"
+    ],
+    "detection": [
+      "Payment-instruction integrity control: rejection of unauthorized field mutation"
+    ],
+    "cleanup": "",
+    "action_key": "financial_payment_instruction_manipulation",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "fin-03",
+    "n": 3,
+    "name": "Financial Impact - ATM Dispense Workflow Manipulation Attempt (Custom)",
+    "technique_id": "T1565.001",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "high",
+    "blast_radius": "Creates one synthetic ATM-dispense-shaped transaction above a synthetic configured limit, then reconciles against a total that excludes it, checking the control flags the mismatch. SKIP when the simulator is unreachable.",
+    "telemetry": [
+      "HTTP POST + reconcile to lab-local ledger"
+    ],
+    "detection": [
+      "Reconciliation control: unauthorized dispense request flagged"
+    ],
+    "cleanup": "",
+    "action_key": "financial_atm_dispense_manipulation",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "fin-04",
+    "n": 4,
+    "name": "Financial Impact - Fraudulent Transaction Pattern Simulation (Custom)",
+    "technique_id": "T1565.001",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "high",
+    "blast_radius": "Creates several small synthetic transactions in rapid succession under one synthetic account (structuring pattern), then checks the account's running total via reconcile. SKIP when the simulator is unreachable.",
+    "telemetry": [
+      "Multiple rapid HTTP POSTs to lab-local ledger under one account"
+    ],
+    "detection": [
+      "Fraud detection: structuring / rapid small-transaction pattern correlation"
+    ],
+    "cleanup": "",
+    "action_key": "financial_fraud_pattern_simulation",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "fin-05",
+    "n": 5,
+    "name": "Financial Impact - Transaction Limit Bypass Attempt (Custom)",
+    "technique_id": "T1565.001",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "high",
+    "blast_radius": "Posts one synthetic transaction with an amount exceeding a synthetic per-transaction limit, checking whether the test itself correctly detects the over-limit condition on acceptance. SKIP when the simulator is unreachable.",
+    "telemetry": [
+      "HTTP POST to lab-local ledger exceeding a synthetic limit constant"
+    ],
+    "detection": [
+      "Transaction-limit enforcement control"
+    ],
+    "cleanup": "",
+    "action_key": "financial_transaction_limit_bypass",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "fin-06",
+    "n": 6,
+    "name": "Financial Impact - Financial Reconciliation Manipulation Attempt (Custom)",
+    "technique_id": "T1565.001",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "high",
+    "blast_radius": "Creates one synthetic transaction, then calls reconcile with a deliberately wrong expected total, checking that the mismatch is correctly flagged rather than silently accepted. SKIP when the simulator is unreachable.",
+    "telemetry": [
+      "HTTP POST + reconcile with a deliberately incorrect expectedTotal"
+    ],
+    "detection": [
+      "Reconciliation control: discrepancy detection"
+    ],
+    "cleanup": "",
+    "action_key": "financial_reconciliation_manipulation",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "fin-07",
+    "n": 7,
+    "name": "Financial Impact - Recovery and Service Disruption Check (Custom)",
+    "technique_id": "T1499",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Read-only resilience smoke check: confirms the lab ledger stays reachable across a short burst of prior scenarios' writes. Not a disruption attempt against any real system. SKIP when the simulator is unreachable; ERROR (not FAIL) on a timeout.",
+    "telemetry": [
+      "HTTP GET to lab-local ledger before/after a write burst"
+    ],
+    "detection": [
+      "Resilience / availability monitoring"
+    ],
+    "cleanup": "",
+    "note": "T1499 is approximate: this step checks availability under prior steps' write load, it does not attempt denial of service against any system.",
+    "action_key": "financial_resilience_check",
+    "no_default_cleanup": false,
+    "reversible": true
+  }
+]

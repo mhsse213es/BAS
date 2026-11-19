@@ -15,7 +15,7 @@ const preflightTimeout = 2 * time.Minute
 
 // POST /api/cloud-preflight -- runs the prerequisite checks for one account and
 // returns every check, without reading inventory. It makes read-only calls to the
-// account, using the same server-side credentials as discovery.
+// account, so it passes the same allow-list and concurrency gate as discovery.
 func (h *Handler) TriggerCloudPreflight(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Account cloudgraph.AccountScope `json:"account"`
@@ -29,7 +29,19 @@ func (h *Handler) TriggerCloudPreflight(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	d, err := cloudDiscovererFor(r.Context(), body.Account)
+	settings := h.cloudSettings()
+	if err := settings.permitAccount(body.Account); err != nil {
+		h.refuseCloudRequest(w, r, "cloud.preflight", body.Account, err)
+		return
+	}
+	release, err := settings.gate.Acquire(r.Context(), body.Account)
+	if err != nil {
+		h.refuseCloudRequest(w, r, "cloud.preflight", body.Account, err)
+		return
+	}
+	defer release()
+
+	d, err := cloudDiscovererFor(r.Context(), settings, body.Account)
 	if err != nil {
 		h.auditLog(r, "cloud.preflight", body.Account.AccountID, map[string]any{
 			"provider": body.Account.Provider, "error": err.Error(),

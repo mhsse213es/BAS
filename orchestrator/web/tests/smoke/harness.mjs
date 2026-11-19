@@ -89,7 +89,7 @@ export const DRAWERS = [
   { name: 'live run', action: 'openRunPanelAction', args: ['run-smoke-1', 'Run', 2, '', ''], selector: '#run-live-timeline', marker: 'T1059' },
   { name: 'run results', action: 'viewRunResults', args: [{ id: 'run-smoke-1', name: 'Smoke run', status: 'completed', results: [] }], selector: '#results-title', marker: 'Smoke run' },
   { name: 'finding', action: 'openFinding', args: ['finding-smoke-1'], selector: '#results-title', marker: 'Finding' },
-  { name: 'agent detail', action: 'rowMenuDetail', args: ['agent-smoke-1'], selector: '#agt-detail-title', marker: 'Agent: host' },
+  { name: 'agent detail', action: 'rowMenuDetail', args: ['agent-smoke-1'], selector: '#agt-detail-title', marker: 'host' },
   { name: 'campaign detail', action: 'openCampaignDetail', args: ['campaign-smoke-1'], selector: 'body', marker: 'Campaign "><img' },
 ];
 

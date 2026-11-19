@@ -37,6 +37,10 @@ var rawGroups []byte
 // ATT&CK-derived enrichment appears (MITRE's terms of use).
 const Attribution = "Threat-intelligence context derived from MITRE ATT&CK®. © The MITRE Corporation. ATT&CK® is a registered trademark of The MITRE Corporation."
 
+// D3fendAttribution is the MITRE D3FEND notice shown wherever D3FEND countermeasures appear. The D3FEND Terms of Use
+// require MITRE's copyright designation and licence to be reproduced in any copy.
+const D3fendAttribution = "Defensive countermeasures: MITRE D3FEND™ ATT&CK mapping (D3FEND 1.6.0). © The MITRE Corporation. Used under the MITRE D3FEND Terms of Use (https://d3fend.mitre.org/tou)."
+
 // Mitigation is an ATT&CK course-of-action recommended against a technique.
 type Mitigation struct {
 	Name        string `json:"name"`

@@ -1,0 +1,53 @@
+id: "API-BAS-AUTHZ-201"
+name: "MFG-001: planner reads another plant's production order"
+category: AUTHZ
+claim: cross_identity
+attack_objective: "Planner A reads plant B's production order, including its customer price."
+threat_model:
+  attacker: "authenticated planner at plant A"
+  identity: planner-a
+  access_level: "planner, valid token, owns PROD-A-001 only"
+  objective: "Planner A reads plant B's production order, including its customer price."
+preconditions:
+  fixture: manufacturing-two-plant
+  identities: [planner-a, planner-b]
+  object: PROD-B-001
+steps:
+  - id: "baseline-owner"
+    role: baseline
+    identity: planner-b
+    auth: valid
+    method: GET
+    path: "/api/mfg/orders/PROD-B-001"
+    hypothesis: "Planner B, the owner, reads their own production order. If this fails, the scenario is not testable."
+  - id: "attack-authz-201"
+    role: attack
+    identity: planner-a
+    auth: valid
+    method: GET
+    path: "/api/mfg/orders/PROD-B-001"
+    hypothesis: "Planner A's read of PROD-B-001 is refused, and no protected value of that order comes back."
+denied_statuses: [403, 404]
+forbidden_values: ["BAS-SIM-MFG-PRICE-B"]
+expected_control: "A planner cannot read another plant's production order. The read is refused and no protected value of PROD-B-001 is returned."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The response to planner A's read of PROD-B-001 carries no protected value of that order.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The read names PROD-B-001, owned by plant B, from a plant A identity. Graded against the access event by APIBAS-REL-004. Fixture-validated, not live-SIEM-validated."
+side_effect_class: READ_ONLY
+evidence:
+  - sanitized_request
+  - sanitized_response
+industry_mapping:
+  - "Manufacturing: ERP and MES production orders are visible only to the owning plant (cross-plant order access)"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-AUTHZ-201 against the fixed build must PASS"
+  - "API-BAS-AUTHZ-201 against the vulnerable build must FAIL (exploited)"

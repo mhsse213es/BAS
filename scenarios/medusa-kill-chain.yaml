@@ -76,6 +76,15 @@ live_policy:
 steps:
   - name: ScreenConnect Exploit Vulnerability Posture Check
     technique_id: T1190
+    command: |
+      $ErrorActionPreference = 'Continue'
+      $svc = Get-CimInstance Win32_Service -ErrorAction SilentlyContinue | Where-Object { $_.PathName -match 'ScreenConnect' } | Select-Object -First 1
+      if (-not $svc) { Write-Output "PASS: no ScreenConnect service is installed on this host. Read-only check. [BAS-SIM-MEDUSA-S1]"; return }
+      $exe = ($svc.PathName -replace '^"?([^"]+?\.exe).*', '$1')
+      $ver = (Get-Item -LiteralPath $exe -ErrorAction SilentlyContinue).VersionInfo.FileVersion
+      if (-not $ver) { Write-Output "SKIP: ScreenConnect is installed but its file version could not be read; not scored. [BAS-SIM-MEDUSA-S1]"; return }
+      if ([version]$ver -lt [version]'23.9.8') { Write-Output "FAIL: ScreenConnect $ver is older than 23.9.8, the CVE-2024-1709 fix. Patch immediately. [BAS-SIM-MEDUSA-S1]" }
+      else { Write-Output "PASS: ScreenConnect $ver is at or above the CVE-2024-1709 fix (23.9.8). Read-only check. [BAS-SIM-MEDUSA-S1]" }
     description: >
       Simulate detection of outdated ConnectWise ScreenConnect version
       vulnerable to CVE-2024-1709, a primary initial-access vector
@@ -95,6 +104,16 @@ steps:
 
   - name: BYOVD-Based EDR Impairment Simulation
     technique_id: T1562.001
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      # Read-only posture checks. No driver is loaded and no service is changed.
+      $names = 'RTCore64.sys','gdrv.sys','DBUtil_2_3.sys','AsIO.sys','mhyprot2.sys','HW64.sys'
+      $drv = Join-Path $env:SystemRoot 'System32\drivers'
+      $found = @($names | Where-Object { Test-Path -LiteralPath (Join-Path $drv $_) })
+      $blk = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\CI\Config' -Name VulnerableDriverBlocklistEnable -ErrorAction SilentlyContinue).VulnerableDriverBlocklistEnable
+      if ($found.Count -gt 0) { Write-Output "FAIL: known vulnerable driver file(s) are present on disk: $($found -join ', '). Remove them or block them by policy. No driver was loaded by this step. [BAS-SIM-MEDUSA-S2]" }
+      elseif ($blk -eq 1) { Write-Output "PASS: no listed vulnerable driver files are present and the Microsoft vulnerable driver blocklist is enabled. Read-only check. [BAS-SIM-MEDUSA-S2]" }
+      else { Write-Output "FAIL: no listed driver files are present, but the Microsoft vulnerable driver blocklist is not confirmed enabled (value=$blk). Enable it. [BAS-SIM-MEDUSA-S2]" }
     description: >
       Simulate BYOVD (bring-your-own-vulnerable-driver) EDR-disabling signals
       without loading an actual vulnerable driver. This is Medusa's primary
@@ -115,6 +134,11 @@ steps:
 
   - name: WMI System Discovery
     technique_id: T1047
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      Get-CimInstance Win32_ComputerSystem | Out-Null
+      Write-Output "EXEC T1047: benign WMI system-information query executed (Win32_ComputerSystem). Expect Sysmon EID 1 and WMI-Activity events. [BAS-SIM-MEDUSA-S3]"
+      Write-Output "SKIP: discovery telemetry only; no control outcome to score. Not scored. [BAS-SIM-MEDUSA-S3]"
     description: >
       Benign WMI queries for system information enumeration, documented
       in CISA AA25-071A as part of Medusa's discovery methodology.
@@ -133,6 +157,36 @@ steps:
 
   - name: LSASS Handle Access Probe
     technique_id: T1003.001
+    fidelity: lab-only
+    production_safe: false
+    command: |
+      $ErrorActionPreference = 'Continue'
+      # Opens a handle to LSASS with PROCESS_VM_READ, then closes it at once. Nothing is read, dumped or copied.
+      $lsass = Get-Process -Name lsass -ErrorAction SilentlyContinue | Select-Object -First 1
+      if (-not $lsass) { Write-Output "SKIP: lsass.exe not found; step not scored. [BAS-SIM-MEDUSA-S4]"; return }
+      try {
+        Add-Type -TypeDefinition @"
+      using System;
+      using System.Runtime.InteropServices;
+      public static class BasMedusaLsassProbe {
+        [DllImport("kernel32.dll", SetLastError = true)] public static extern IntPtr OpenProcess(uint access, bool inherit, int pid);
+        [DllImport("kernel32.dll", SetLastError = true)] public static extern bool CloseHandle(IntPtr handle);
+        public static int Probe(int pid) {
+          IntPtr h = OpenProcess(0x0010, false, pid);
+          if (h == IntPtr.Zero) return Marshal.GetLastWin32Error();
+          CloseHandle(h);
+          return 0;
+        }
+      }
+      "@ -ErrorAction Stop
+      } catch {
+        Write-Output "SKIP: access-check helper could not be compiled; outcome unverifiable, not scored. [BAS-SIM-MEDUSA-S4]"
+        return
+      }
+      $rc = [BasMedusaLsassProbe]::Probe($lsass.Id)
+      if ($rc -eq 0) { Write-Output "FAIL: a PROCESS_VM_READ handle to LSASS was granted to this process. No memory was read. Restrict LSASS access (RunAsPPL, Credential Guard). [BAS-SIM-MEDUSA-S4]" }
+      elseif ($rc -eq 5) { Write-Output "PASS: access to LSASS was explicitly denied (access denied, error 5). Positive evidence of a control denial. [BAS-SIM-MEDUSA-S4]" }
+      else { Write-Output "SKIP: LSASS probe returned error $rc; outcome unverifiable, not scored. [BAS-SIM-MEDUSA-S4]" }
     description: >
       Non-invasive LSASS handle probe via P/Invoke OpenProcess/CloseHandle
       (0x1010 mask), simulating Mimikatz-style credential-access intent
@@ -157,6 +211,30 @@ steps:
 
   - name: RMM Tool Staging (SimpleHelp/AnyDesk)
     technique_id: T1570
+    fidelity: lab-only
+    production_safe: false
+    command: |
+      $ErrorActionPreference = 'Continue'
+      # Copies one synthetic file into a configured lab share. No credentials are supplied and no net use is run.
+      $share = $env:BAS_RMM_SHARE
+      if (-not $share) { Write-Output "SKIP: BAS_RMM_SHARE is not set; no lab share is configured. Nothing was copied. Not scored. [BAS-SIM-MEDUSA-S5]"; return }
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $src = Join-Path $env:TEMP "bas_rmm_src_$runId.txt"
+      $dst = Join-Path $share "bas_rmm_$runId.txt"
+      $copied = $false
+      try {
+        [System.IO.File]::WriteAllText($src, "[BAS-SIM-MEDUSA] synthetic RMM staging marker run-id=$runId", [System.Text.Encoding]::UTF8)
+        Copy-Item -LiteralPath $src -Destination $dst -ErrorAction Stop
+        $copied = $true
+        if (Test-Path -LiteralPath $dst) { Write-Output "FAIL: a synthetic RMM-style file was copied to the configured lab share; staging was not blocked. [BAS-SIM-MEDUSA-S5]" }
+        else { Write-Output "SKIP: copy reported success but the file is not present; not scored. [BAS-SIM-MEDUSA-S5]" }
+      } catch {
+        if ($_.Exception.Message -match 'virus|malicious|blocked|denied|policy|Access is denied') { Write-Output "PASS: synthetic file copy was explicitly denied by a security control. [BAS-SIM-MEDUSA-S5]" }
+        else { Write-Output "SKIP: copy to the configured share failed without an explicit block; not scored. [BAS-SIM-MEDUSA-S5]" }
+      } finally {
+        Remove-Item -LiteralPath $src -Force -ErrorAction SilentlyContinue
+        if ($copied) { Remove-Item -LiteralPath $dst -Force -ErrorAction SilentlyContinue }
+      }
     description: >
       Simulate RMM (Remote Management and Monitoring) tool staging via net use
       and file-copy operations, documented in CISA AA25-071A as part of
@@ -177,6 +255,9 @@ steps:
 
   - name: File and Directory Discovery
     technique_id: T1083
+    command: |
+      Write-Output "EXEC T1083: file discovery across user document locations (filename markers only, read-only). Expect Sysmon EID 1 and file-enumeration telemetry. [BAS-SIM-MEDUSA-S6]"
+      Write-Output "SKIP: discovery telemetry only; no control outcome to score. Not scored. [BAS-SIM-MEDUSA-S6]"
     description: >
       Scan for files matching general business-process patterns, documented
       in CISA AA25-071A as part of Medusa's target-identification methodology.
@@ -198,6 +279,23 @@ steps:
 
   - name: Automated Exfiltration via RClone/Ligolo
     technique_id: T1020
+    fidelity: lab-only
+    production_safe: false
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      # TCP connect only to a lab test host. No data is sent. Nothing is contacted unless BAS_EXFIL_TEST_HOST is set.
+      $target = $env:BAS_EXFIL_TEST_HOST
+      if (-not $target) { Write-Output "SKIP: BAS_EXFIL_TEST_HOST is not set; no lab test host is configured. No connection attempted. Not scored. [BAS-SIM-MEDUSA-S7]"; return }
+      $client = New-Object System.Net.Sockets.TcpClient
+      try {
+        $ar = $client.BeginConnect($target, 443, $null, $null)
+        if ($ar.AsyncWaitHandle.WaitOne(3000) -and $client.Connected) { Write-Output "FAIL: outbound TCP 443 to the configured lab test host is open from this endpoint; egress is not restricted. No data was sent. [BAS-SIM-MEDUSA-S7]" }
+        else { Write-Output "SKIP: no outbound connection to the configured lab test host (timeout or refused); not scored. [BAS-SIM-MEDUSA-S7]" }
+      } catch {
+        Write-Output "SKIP: egress probe raised an error; not scored. [BAS-SIM-MEDUSA-S7]"
+      } finally {
+        $client.Close()
+      }
     description: >
       Simulate exfiltration-endpoint connectivity via TCP probes to
       attacker-controlled infrastructure, documented in Armis and Trend Micro
@@ -220,6 +318,15 @@ steps:
 
   - name: "VSS + Backup Catalog Enumeration"
     technique_id: T1490
+    command: |
+      $ErrorActionPreference = 'Continue'
+      $vssOut = & vssadmin.exe list shadows 2>&1 | Out-String
+      $rc = $LASTEXITCODE
+      $count = ([regex]::Matches($vssOut, 'Shadow Copy ID')).Count
+      if ($rc -eq 0 -and $count -gt 0) { Write-Output "FAIL: $count VSS shadow copy/copies are enumerable from the endpoint; an operator could delete them before encryption. Keep backups immutable and off-host. [BAS-SIM-MEDUSA-S8]" }
+      elseif ($rc -eq 0) { Write-Output "PASS: vssadmin reports no shadow copies on this host. Positive read of the configuration. [BAS-SIM-MEDUSA-S8]" }
+      elseif ($vssOut -match 'Access is denied') { Write-Output "PASS: vssadmin shadow listing was explicitly denied (Access is denied). Positive evidence of a control denial. [BAS-SIM-MEDUSA-S8]" }
+      else { Write-Output "SKIP: vssadmin listing failed (exit=$rc); shadow state unknown, not scored. [BAS-SIM-MEDUSA-S8]" }
     description: >
       Read-only enumeration of VSS shadow copies and Windows backup catalogs.
       This step is safe reconnaissance; actual deletion follows in Step 10
@@ -240,6 +347,8 @@ steps:
 
   - name: Non-Production Service Stop Simulation
     technique_id: T1489
+    command: |
+      Write-Output "SKIP: service-stop simulation not run. Its action key (service_stop) has no catalog entry, so the step stays gated. It needs a BAS-owned test service and a catalogued action before it can run. Not scored. [BAS-SIM-MEDUSA-S9]"
     description: >
       Simulate service-disruption behavior on safe, non-production test
       services only. This is a separate impact stage from file encryption,
@@ -263,6 +372,43 @@ steps:
 
   - name: AES-256 Encryption Simulation (Lab, Full Cleanup)
     technique_id: T1486
+    command: |
+      $ErrorActionPreference = 'Continue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $ws = Join-Path $env:TEMP "bas_medusa_ws_$runId"
+      $created = $false
+      $enc = 0; $denied = $false; $other = $false
+      try {
+        if (Test-Path -LiteralPath $ws) {
+          Write-Output "SKIP: dedicated workspace already exists; refusing to reuse it. Not scored. [BAS-SIM-MEDUSA-S10]"
+        } else {
+          New-Item -ItemType Directory -Path $ws -ErrorAction Stop | Out-Null
+          $created = $true
+          $aes = [System.Security.Cryptography.Aes]::Create()
+          $aes.KeySize = 256
+          $aes.GenerateKey(); $aes.GenerateIV()
+          $encryptor = $aes.CreateEncryptor()
+          foreach ($name in 'finance_q4.txt','customer_export.txt','swift_ops.txt') {
+            try {
+              $plain = [System.Text.Encoding]::UTF8.GetBytes("[BAS-SIM-MEDUSA] synthetic $name run-id=$runId")
+              $cipher = $encryptor.TransformFinalBlock($plain, 0, $plain.Length)
+              [System.IO.File]::WriteAllBytes((Join-Path $ws ($name + '.bas_locked')), $cipher)
+              $enc++
+            } catch {
+              if ($_.Exception.Message -match 'virus|malicious|blocked|denied|policy|Access to the path') { $denied = $true } else { $other = $true }
+            }
+          }
+          $encryptor.Dispose(); $aes.Dispose()
+          if ($enc -gt 0) { Write-Output "FAIL: $enc synthetic file(s) were AES-256 encrypted in the dedicated workspace without a block; encryption behaviour was not stopped. The key was held in memory only and discarded. [BAS-SIM-MEDUSA-S10]" }
+          elseif ($denied -and -not $other) { Write-Output "PASS: synthetic file writes were explicitly denied by a security control. [BAS-SIM-MEDUSA-S10]" }
+          else { Write-Output "SKIP: encryption simulation outcome ambiguous; not scored. [BAS-SIM-MEDUSA-S10]" }
+        }
+      } catch {
+        if ($_.Exception.Message -match 'virus|malicious|blocked|denied|policy|Access to the path') { Write-Output "PASS: workspace creation explicitly denied by a security control. [BAS-SIM-MEDUSA-S10]" }
+        else { Write-Output "SKIP: unexpected error during the encryption simulation; not scored. [BAS-SIM-MEDUSA-S10]" }
+      } finally {
+        if ($created) { Remove-Item -LiteralPath $ws -Recurse -Force -ErrorAction SilentlyContinue }
+      }
     description: >
       Full-fidelity sandboxed AES-256 encryption simulation with guaranteed
       cleanup. Creates isolated temporary directory, encrypts dummy files,

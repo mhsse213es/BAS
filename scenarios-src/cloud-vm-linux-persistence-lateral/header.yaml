@@ -1,0 +1,28 @@
+id: "cloud-vm-linux-persistence-lateral"
+product_line: cloud
+name: "Cloud VM Mastery - Cloud Persistence and Lateral Movement (Linux, gated)"
+description: >
+  Cloud role assumption, access key creation, service principal credential addition, remote management exposure
+  and startup-location writability. The three write steps (role assumption, access key, client secret) are gated
+  behind explicit lab gates, act only on operator-named test identities, verify and attempt cleanup, and default
+  to SKIP. Remote management and startup-location checks are read-only. Never run against production identities.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [linux]
+tags:
+  - cloud
+  - persistence
+  - lateral-movement
+  - iam
+  - cloud-vm-mastery
+  - t1098
+  - t1021
+  - t1574
+mitre_phases:
+  - persistence
+  - lateral-movement
+  - privilege-escalation
+
+steps:
+

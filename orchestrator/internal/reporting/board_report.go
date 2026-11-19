@@ -219,7 +219,7 @@ func boardTmpl() (*template.Template, error) {
 				return fmt.Sprintf("%v", t)
 			}
 		},
-	}).Parse(boardReportHTML)
+	}).Parse(strings.Replace(boardReportHTML, "<style>:root", "<style>"+reportDesignCSS()+"@page{margin:10mm 0 12mm 0}@page :first{margin:10mm 0 12mm 0;counter-reset:page 0}</style><style>:root", 1))
 	if err != nil {
 		return nil, err
 	}
@@ -386,6 +386,14 @@ body{font-family:"Segoe UI",system-ui,-apple-system,Helvetica,Arial,sans-serif;c
   </div>
 
   <!-- attestation footer -->
+  {{if .RiskQuantification}}
+  <div class="card" style="margin-bottom:12px">
+    <div class="lbl">Estimated annual loss (customer inputs)</div>
+    <div style="font-size:1.4rem;font-weight:700">{{.RiskQuantification.Currency}} {{printf "%.0f" .RiskQuantification.Total.Low}} &ndash; {{printf "%.0f" .RiskQuantification.Total.High}}</div>
+    <div style="color:var(--muted);font-size:.74rem">Likely {{.RiskQuantification.Currency}} {{printf "%.0f" .RiskQuantification.Total.Likely}}. Quantified exposures only.{{if .RiskQuantification.Unquantified}} Not quantified: {{len .RiskQuantification.Unquantified}} (no inputs supplied).{{end}}</div>
+    <div style="color:var(--muted);font-size:.7rem;margin-top:4px">{{.RiskQuantification.Method}} {{.RiskQuantification.Limitations}}</div>
+  </div>
+  {{end}}
   <div class="foot">
     <b>Tamper-evidence ({{.Attestation.Algorithm}}).</b> Digest (SHA-256): <span class="mono">{{.Attestation.ContentSHA256}}</span>.
     Tool {{.Attestation.ToolVersion}} &middot; Generated {{.Attestation.GeneratedAt.Format "02 Jan 2006 15:04 UTC"}}{{if .Attestation.GeneratedBy}} &middot; by {{.Attestation.GeneratedBy}}{{end}}.

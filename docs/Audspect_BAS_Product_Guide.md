@@ -547,6 +547,29 @@ From the **Agents** view, click an agent → **Reports** → select format. For 
 
 ---
 
+### 12.6 Grouping Work into Initiatives
+
+An initiative is a named goal that groups related jobs, such as "Close the Q4 patch backlog", and shows how far that work has got. Use one when several jobs serve the same purpose and you want a single progress figure for them.
+
+**Create an initiative**
+
+1. Navigate to **Initiatives** in the left sidebar
+2. Click **New Initiative**, enter a name and an optional description, and save
+
+**Add jobs to it.** There are two ways:
+
+- **Automatically:** in **Scheduled Assessments**, choose the initiative in the **Initiative (optional)** field when you create the schedule. Each job that schedule produces joins the initiative.
+- **Manually:** open the initiative, click **Attach Job**, and pick a job that has no initiative yet. To remove a job, use the detach action on its row in the initiative's job list.
+
+**Track progress.** Each card shows "X of Y jobs completed". Open the card to see the overall progress and every attached job.
+
+**Close or archive.** When the goal is met, click **Close**. A closed initiative no longer accepts new jobs. Archive it to move it out of the active list. Closing or archiving does not remove its jobs. Only a user with remediation approval rights can delete an initiative.
+
+Notes:
+
+- A job belongs to one initiative at a time. To move a job, detach it first, then attach it to the other initiative.
+- Jobs from batch remediation are not added automatically. Attach them by hand.
+
 ## 13. REST API Overview
 
 All API endpoints are served at `http://<server>:9443` (or `https://` if TLS is enabled). Authentication uses JWT tokens issued by `POST /api/auth/login`, sent as an HttpOnly cookie or `Authorization: Bearer <token>` header.

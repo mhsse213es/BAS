@@ -8,8 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/audspect/bas/internal/ws"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/ws"
 )
 
 // scopeAuditRows returns the recorded allowlist rows, oldest first.

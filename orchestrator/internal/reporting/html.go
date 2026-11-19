@@ -517,6 +517,14 @@ func _loadLogos() {
 // can resolve regardless of obfuscation. Consequently every type reachable from
 // here must carry json tags on the fields the template uses.
 func GenerateHTML(w io.Writer, r *FullReport, compliance []ComplianceSummaryRow) error {
+	// Reports built outside the engine (e.g. campaign aggregates) may carry an
+	// AttackFlow without its grouped view; derive it here so the table is never empty.
+	if r.AttackFlowGroups == nil && len(r.AttackFlow) > 0 {
+		r.AttackFlowGroups = groupAttackFlow(r.AttackFlow)
+	}
+	if r.TechniqueMatrixGroups == nil && len(r.TechniqueMatrix) > 0 {
+		r.TechniqueMatrixGroups = groupTechniqueMatrix(r.TechniqueMatrix)
+	}
 	// appControlSections is what the template ranges over: one page per run
 	// section. A single run contributes its own section; a campaign contributes
 	// one per child run; a run with no application-control steps contributes none.
@@ -564,8 +572,14 @@ type ComplianceSummaryRow struct {
 	Passing       int     `json:"passing"`
 	Failing       int     `json:"failing"`
 	Untested      int     `json:"untested"`
-	CompliancePct float64 `json:"compliancePct"`
+	CompliancePct float64 `json:"compliancePct"` // the resistance rate
 	CoveragePct   float64 `json:"coveragePct"`
+	// Partial is the number of tested controls where only some mapped techniques ran (included in Passing).
+	Partial int `json:"partial"`
+	// CoverageNote is set when coverage is too low for a framework-level conclusion; MappingWarning when the
+	// framework's control mapping is unverified. Both are shown beside the figures.
+	CoverageNote   string `json:"coverageNote"`
+	MappingWarning string `json:"mappingWarning"`
 }
 
 // ── Template ──────────────────────────────────────────────────────────────────
@@ -665,8 +679,16 @@ code{font-family:"Cascadia Code","Consolas","SF Mono",monospace;font-size:0.85em
      document wide, so a future regression names itself. */
   table{table-layout:fixed}
   th,td{white-space:normal !important;overflow-wrap:anywhere;padding:5px 6px}
+  .det-matrix{font-size:0.7rem;table-layout:fixed;width:100%}
+  .det-matrix td.thr{overflow-wrap:anywhere;word-break:normal}
+  .det-matrix th{font-size:0.6rem;letter-spacing:0.02em;padding:4px 3px}
+  .det-matrix td{padding:4px 3px}
 
-  .fc,.scard,.gloss-item{page-break-inside:avoid;break-inside:avoid}
+  .fc,.scard,.gloss-item,.exec-card{page-break-inside:avoid;break-inside:avoid}
+  /* Steps of one technique share a row group: keep their cells neutral so the group reads as one block. */
+  table tbody tr.step-row td{background:#fff}
+  /* Keep a section title with the content under it, so it is never left alone at the foot of a page. */
+  .stitle,.ph-title,h2,h3{break-after:avoid;page-break-after:avoid}
   thead{display:table-header-group}
 
   /* Per-section header/footer bars must not print (2026-09-04).
@@ -763,7 +785,7 @@ code{font-family:"Cascadia Code","Consolas","SF Mono",monospace;font-size:0.85em
   padding:6px 13px;border-radius:20px;font-size:0.72rem;font-weight:700;letter-spacing:0.03em;margin-top:14px}
 .cover-bottom{padding:24px 48px;border-top:1px solid rgba(255,255,255,0.06);
   display:flex;justify-content:space-between;align-items:center;position:relative;z-index:1}
-.cover-bottom-copy{font-size:0.62rem;color:#2a4a6a;line-height:1.6}
+.cover-bottom-copy{font-size:0.62rem;color:#ffffff;line-height:1.6}
 .cover-scores{display:flex;gap:22px}
 .cs-item{text-align:center}
 .cs-num{font-size:1.45rem;font-weight:900;line-height:1}
@@ -825,11 +847,12 @@ code{font-family:"Cascadia Code","Consolas","SF Mono",monospace;font-size:0.85em
 h1{font-size:1.28rem;font-weight:900;color:#0b1420;letter-spacing:-0.025em;
   line-height:1.15;margin:0 0 16px;padding-left:13px;border-left:4px solid #0d9488}
 .toc-list{display:flex;flex-direction:column;margin-top:8px}
-.toc-item{display:flex;align-items:baseline;gap:14px;padding:9px 0;
+.toc-item{display:flex;align-items:baseline;gap:14px;padding:14px 0;
   border-bottom:1px solid var(--line2);text-decoration:none;color:var(--ink)}
 .toc-item:hover{color:var(--accent)}
-.toc-num{font-size:0.7rem;font-weight:700;color:var(--muted);min-width:28px;flex-shrink:0}
-.toc-title{font-size:0.86rem;font-weight:600}
+.toc-num{font-size:0.95rem;font-weight:700;color:var(--muted);min-width:34px;flex-shrink:0}
+.toc-title{font-size:1.1rem;font-weight:600;flex:1;border-bottom:1px dotted #9aa5b5;padding-bottom:3px}
+.toc-pg{font-size:1.1rem;font-weight:700;min-width:34px;text-align:right;flex-shrink:0;color:var(--ink)}
 h2{font-size:0.88rem;font-weight:800;color:#0b1420;margin:18px 0 10px;letter-spacing:-0.01em}
 h3{font-size:0.63rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#6e7681;margin:14px 0 7px}
 p{margin-bottom:9px;font-size:0.82rem}
@@ -860,7 +883,10 @@ a{color:#2563eb;text-decoration:none}
 .kpi-bar-fill{height:100%;border-radius:2px;background:var(--c,#0d9488)}
 
 /* ── Score cards (backward-compat) ── */
-.score-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:11px;margin-bottom:18px}
+.score-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px;margin-bottom:18px}
+/* Three columns keeps 5 or 6 summary cards in balanced rows (3+2, 3+3); the
+   old auto-fit grid put 4 in the first row and left the trend card alone. */
+@media (max-width:700px){.score-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .scard{background:#fff;border:1px solid #e7eaf0;border-radius:10px;padding:15px 15px 13px}
 .scard-label{font-size:0.57rem;text-transform:uppercase;letter-spacing:0.1em;color:#9aa5b5;font-weight:700;margin-bottom:7px}
 .scard-value{font-size:1.55rem;font-weight:900;color:#0b1420;letter-spacing:-0.02em;line-height:1;margin-bottom:5px}
@@ -1012,6 +1038,42 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 .sev-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 .sd-c{background:#dc2626}.sd-h{background:#ea580c}.sd-m{background:#d97706}.sd-l{background:#0d9488}
 .gloss-item{margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #e5e7eb}
+@media print{
+  :root{--muted:#000;--faint:#000;--line:#999}
+  html,body{background:#fff !important}
+  .cover{height:297mm;max-height:297mm;overflow:hidden}
+  /* Every section starts on its own sheet (table of contents included). */
+  .page{break-before:page;page-break-before:always}
+  .page:first-child{break-before:auto;page-break-before:auto}
+  /* Light tints off the printed sheet: cards and table cells print white. */
+  .fc,.scard,.gloss-item,.ctrl,table th,table td{background:#fff !important}
+  /* The Executive Summary hero is a dark panel by design: keep it dark and its text light. */
+  .risk-hero{background:#0b1420 !important;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .risk-hero *:not([style*="color"]){color:#fff !important}
+  .risk-hero [style*="#6e7681"]{color:#9aa5b5 !important}
+  /* Paragraphs: one alignment, and black text throughout. */
+  .page p,.page li{text-align:left !important}
+  .page p,.page li,.page td:not([style*="color"]),.page th:not([style*="color"]),
+  [style*="#6e7681"],[style*="#9aa5b5"],[style*="#8b949e"]{color:#000 !important}
+  .runsheet>tfoot,.runsheet>tfoot td{text-align:left !important}
+  .runsheet>tfoot td,.runsheet>tfoot td *:not([style*="color"]){color:#000 !important}
+  /* Running footer now lives in the page margin boxes (see the style before the
+     runsheet table): it repeats at the bottom of every sheet, so it can never
+     sit mid-page. The table footer is hidden in print. */
+  @page{size:A4;margin:14mm 0 16mm 0}
+  @page :first{margin:0}
+  .runsheet>tfoot{display:none !important}
+  @page{@bottom-left{content:"Audspect BAS \00b7 Generated report";font-size:7pt;color:#000;background:#f3f6fa}}
+  @page{@bottom-right{content:"Confidential \2014 Authorised Recipients Only";font-size:7pt;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#c2410c;background:#f3f6fa}}
+  html{background:#f3f6fa !important}
+  body{background:transparent !important}
+  /* The inline footer in the last section is the same running footer: hide it, the margin boxes print it. */
+  .runfoot,.runfoot *{display:none !important}
+  .page:not(.cover){background-color:transparent !important;min-height:calc(297mm - 30mm);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='794' height='1009' viewBox='0 0 794 1009'%3E%3Ctext x='397' y='505' transform='rotate(-35 397 505)' text-anchor='middle' font-family='Arial' font-weight='700' font-size='110' fill='%23000' fill-opacity='0.08'%3ECONFIDENTIAL%3C/text%3E%3C/svg%3E") !important;background-repeat:repeat-y !important;background-size:210mm 267mm !important;background-position:0 0 !important}
+  .runsheet>tbody>tr>td{background:#f3f6fa !important}
+  /* Each section tag opens its own sheet, so it can never be stranded at the foot of the previous one. */
+  .stag{break-before:page;page-break-before:always}
+}
 </style>
 </head>
 <body>
@@ -1135,7 +1197,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
         <div class="cs-lbl">Prevention</div>
       </div>
       <div class="cs-item">
-        <div class="cs-num" style="color:#2563eb">{{fmtScore .summary.detectionScore}}%</div>
+        <div class="cs-num" style="color:#2563eb">{{if .summary.detectionMeasured}}{{fmtScore .summary.detectionScore}}%{{else}}N/A{{end}}</div>
         <div class="cs-lbl">Detection</div>
       </div>
       <div class="cs-item">
@@ -1149,6 +1211,15 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 
 <!-- Everything past the cover is wrapped in one table so its tfoot repeats the
      classification bar on every printed sheet, with space reserved for it. -->
+<style>
+@page{@bottom-left{content:"Audspect BAS \00b7 {{.agent.hostname}}{{if .agent.ipAddress}} \00b7 {{.agent.ipAddress}}{{end}} \00b7 Generated {{fmtTime .generatedAt}}";font-size:7pt;color:#000;background:#f3f6fa}}
+@page{@bottom-right{content:"Confidential \2014 Authorised Recipients Only";font-size:7pt;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#c2410c;background:#f3f6fa}}
+@page :first{@bottom-left{content:none}}
+@page :first{@bottom-right{content:none}}
+@page :first{counter-reset:page -1}
+@page{@bottom-center{content:counter(page);font-size:7pt;color:#000;background:#f3f6fa}}
+@page :first{@bottom-center{content:none}}
+</style>
 <table class="runsheet">
 <tfoot><tr><td>
   <div class="runfoot">
@@ -1176,7 +1247,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <div class="stitle" role="heading" aria-level="1">Executive Summary</div>
 
 
-<div class="risk-hero">
+<div class="risk-hero exec-card">
   <div class="rh-ring"></div>
   <!-- SVG donut — prevention score ring -->
   <svg width="120" height="120" viewBox="0 0 100 100" style="flex-shrink:0">
@@ -1373,7 +1444,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 
 <div class="score-row" style="margin-top:20px;margin-bottom:20px">
-  <div class="scard" style="flex:1;min-width:100%;border-left:4px solid {{if eq .attackSurfaceSLAStatus "critical-sla"}}#da3633{{else if eq .attackSurfaceSLAStatus "over-sla"}}#d29922{{else}}#0d9488{{end}};background:#f7f9fc;padding:12px 16px;border-radius:6px;display:block">
+  <div class="scard" style="grid-column:1 / -1;flex:1;min-width:100%;border-left:4px solid {{if eq .attackSurfaceSLAStatus "critical-sla"}}#da3633{{else if eq .attackSurfaceSLAStatus "over-sla"}}#d29922{{else}}#0d9488{{end}};background:#f7f9fc;padding:12px 16px;border-radius:6px;display:block">
     <div class="scard-label" style="font-size:0.72rem;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Attack Surface Age</div>
     <div class="scard-value" style="font-size:1.15rem;font-weight:700;color:var(--navy)">Exposed weakness present for {{.attackSurfaceAge}} days</div>
     <div style="font-size:0.75rem;color:var(--muted);margin-top:4px">
@@ -1401,7 +1472,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 
 {{if .perfCpuBefore}}
 <div class="score-row" style="margin-top:20px;margin-bottom:20px">
-  <div class="scard" style="flex:1;min-width:100%;border-left:4px solid #0d9488;background:#f7f9fc;padding:12px 16px;border-radius:6px;display:block">
+  <div class="scard" style="grid-column:1 / -1;flex:1;min-width:100%;border-left:4px solid #0d9488;background:#f7f9fc;padding:12px 16px;border-radius:6px;display:block">
     <div class="scard-label" style="font-size:0.72rem;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Endpoint Stability Check</div>
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
       <div style="flex:1;min-width:180px">
@@ -1446,7 +1517,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   <tr><td>Executed</td><td><strong>{{addInt .summary.passedTechniques .summary.failedTechniques}}</strong></td>
       <td>Succeeded</td><td style="color:#0d9488"><strong>{{.summary.passedTechniques}}</strong></td></tr>
   <tr><td>Failed</td><td style="color:#da3633"><strong>{{.summary.failedTechniques}}</strong></td>
-      <td></td><td></td></tr>
+      <td>Vetoed by Audspect policy</td><td><strong>{{.summary.vetoedTechniques}}</strong> <span style="color:#6e7681">not tested, not a failure</span></td></tr>
   <tr><td>Skipped (Policy)</td><td><strong>{{.skipBreakdown.policy}}</strong></td>
       <td>Skipped (Content)</td><td><strong>{{.skipBreakdown.content}}</strong></td></tr>
   <tr><td>Skipped (Platform)</td><td><strong>{{.skipBreakdown.platform}}</strong></td>
@@ -1774,45 +1845,54 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 
+{{$hasCtl := false}}{{range .attackFlow}}{{if .controlName}}{{$hasCtl = true}}{{end}}{{end}}
 <table>
   <thead>
     <tr>
-      <th style="width:9%">Technique</th>
-      <th style="width:25%">Name</th>
-      <th style="width:14%">Tactic</th>
-      <th style="width:14%">Verdict</th>
-      <th>Security Control</th>
-      <th style="width:8%">Severity</th>
-      <th style="width:7%">Duration</th>
+      {{if $hasCtl}}
+      <th style="width:12%">Technique</th>
+      <th style="width:24%">Name</th>
+      <th style="width:13%">Tactic</th>
+      <th style="width:13%">Verdict</th>
+      <th style="width:12%">Security Control</th>
+      <th style="width:14%">Severity</th>
+      <th style="width:12%">Duration</th>
+      {{else}}
+      <th style="width:14%">Technique</th>
+      <th style="width:29%">Name</th>
+      <th style="width:16%">Tactic</th>
+      <th style="width:17%">Verdict</th>
+      <th style="width:12%">Severity</th>
+      <th style="width:12%">Duration</th>
+      {{end}}
     </tr>
   </thead>
   <tbody>
   {{$prevTactic := ""}}
-  {{range .attackFlow}}
+  {{range .attackFlowGroups}}
   {{if ne .tactic $prevTactic}}
   {{$prevTactic = .tactic}}
   <tr>
-    <td colspan="7" style="background:#161b22;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:#58a6ff;padding:5px 8px;border-left:3px solid #58a6ff">{{humanize .tactic}}</td>
+    <td colspan="{{if $hasCtl}}7{{else}}6{{end}}" style="background:#161b22;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:#58a6ff;padding:5px 8px;border-left:3px solid #58a6ff">{{humanize .tactic}}</td>
   </tr>
   {{end}}
-  {{$vc := "#6e7681"}}
-  {{if eq .verdict "blocked"}}{{$vc = "#238636"}}{{end}}
-  {{if eq .verdict "detected"}}{{$vc = "#d29922"}}{{end}}
-  {{if eq .verdict "logged"}}{{$vc = "#b58800"}}{{end}}
-  {{if eq .verdict "bypassed"}}{{$vc = "#da3633"}}{{end}}
-  {{if eq .verdict "error"}}{{$vc = "#6e7681"}}{{end}}
-  <tr>
-    <td><code>{{.techniqueId}}</code></td>
-    <td>{{.techniqueName}}{{if and .stepName (ne .stepName .techniqueName)}}<br><span style="font-weight:400;font-size:0.75rem;color:#6e7681">{{.stepName}}</span>{{end}}</td>
-    <td style="font-size:0.7rem;color:#6e7681">{{humanize .tactic}}</td>
-    <td style="font-weight:600;color:{{$vc}}">{{.verdictLabel}}</td>
-    <td>
-      {{if .controlName}}{{.controlName}}{{if .alertName}} <span style="color:#6e7681;font-size:0.75rem">· {{.alertName}}</span>{{end}}{{else}}<span style="color:#6e7681">—</span>{{end}}
-      {{if .isStopPoint}}<div style="font-size:0.68rem;color:#238636;font-weight:600;margin-top:2px">&#9940; Attack stopped here</div>{{end}}
-    </td>
-    <td style="font-size:0.8rem">{{if .severity}}{{.severity}}{{else}}—{{end}}</td>
-    <td style="font-size:0.8rem;color:#6e7681">{{if .durationMs}}{{.durationMs}}ms{{else}}—{{end}}</td>
+  {{$gname := .techniqueName}}
+  {{$gid := .techniqueId}}
+  {{$gtac := .tactic}}
+  {{$gsev := .severity}}
+  {{$n := len .steps}}
+  {{range $i, $s := .steps}}
+  <tr class="step-row">
+    {{if eq $i 0}}<td rowspan="{{$n}}" style="vertical-align:top"><code>{{$gid}}</code><div style="font-size:0.75rem;color:#374151">{{$gname}}</div>{{if gt $n 1}}<div style="font-size:0.68rem;color:#6e7681">{{$n}} steps</div>{{end}}</td>{{end}}
+    <td>{{if $s.stepName}}{{$s.stepName}}{{else}}{{$gname}}{{end}}</td>
+    {{if eq $i 0}}<td rowspan="{{$n}}" style="font-size:0.7rem;color:#6e7681;vertical-align:top">{{humanize $gtac}}</td>{{end}}
+    {{$vc := "#6e7681"}}{{if eq $s.verdict "blocked"}}{{$vc = "#238636"}}{{end}}{{if eq $s.verdict "detected"}}{{$vc = "#d29922"}}{{end}}{{if eq $s.verdict "logged"}}{{$vc = "#b58800"}}{{end}}{{if eq $s.verdict "bypassed"}}{{$vc = "#da3633"}}{{end}}
+    <td style="font-weight:600;color:{{$vc}}">{{$s.verdictLabel}}</td>
+    {{if $hasCtl}}<td>{{if $s.controlName}}{{$s.controlName}}{{else}}<span style="color:#6e7681">—</span>{{end}}{{if $s.isStopPoint}} <span style="font-size:0.68rem;color:#238636;font-weight:600">&#9940; stopped here</span>{{end}}</td>{{end}}
+    {{if eq $i 0}}<td rowspan="{{$n}}" style="font-size:0.8rem;vertical-align:top">{{if $gsev}}{{$gsev}}{{else}}—{{end}}</td>{{end}}
+    <td style="font-size:0.8rem;color:#6e7681">{{if $s.durationMs}}{{$s.durationMs}}ms{{else}}—{{end}}</td>
   </tr>
+  {{end}}
   {{end}}
   </tbody>
 </table>
@@ -2225,6 +2305,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 
 <!-- ═══ 10b. EPSS PRIORITY INDEX ═══════════════════════════════════════════ -->
 {{if .priorityScores}}
+{{$hasKEV := false}}{{$hasEPSS := false}}{{range .priorityScores}}{{if .kev}}{{$hasKEV = true}}{{end}}{{if gt .epssScore 0.0}}{{$hasEPSS = true}}{{end}}{{end}}
 <div class="page">
 <div class="inner">
 <div class="ph">
@@ -2252,8 +2333,8 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     <th>Tactic</th>
     <th style="text-align:right">Score</th>
     <th>Tier</th>
-    <th style="text-align:center">KEV</th>
-    <th style="text-align:right">EPSS</th>
+    {{if $hasKEV}}<th style="text-align:center">KEV</th>{{end}}
+    {{if $hasEPSS}}<th style="text-align:right">EPSS</th>{{end}}
     <th style="text-align:right">Actors</th>
     <th>Verdict</th>
   </tr></thead>
@@ -2282,12 +2363,12 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
         {{$p.priorityTier}}
       </span>
     </td>
-    <td style="text-align:center">
+    {{if $hasKEV}}<td style="text-align:center">
       {{if $p.kev}}<span style="background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;border-radius:3px;padding:1px 5px;font-size:0.68rem;font-weight:700">KEV</span>{{else}}<span style="color:#e5e7eb">—</span>{{end}}
-    </td>
-    <td style="text-align:right;font-size:0.8rem;color:#6e7681">
+    </td>{{end}}
+    {{if $hasEPSS}}<td style="text-align:right;font-size:0.8rem;color:#6e7681">
       {{if gt $p.epssScore 0.0}}{{printf "%.4f" $p.epssScore}}<div style="font-size:0.65rem">{{printf "%.0f" $p.epssPercentile}}th %ile</div>{{else}}—{{end}}
-    </td>
+    </td>{{end}}
     <td style="text-align:right;font-size:0.85rem">{{$p.threatActorCount}}</td>
     <td>
       <span style="font-size:0.75rem;font-weight:600;color:{{if eq $p.verdict "fail"}}#da3633{{else if eq $p.verdict "pass"}}#0d9488{{else if eq $p.verdict "blocked"}}#0d9488{{else}}#6e7681{{end}}">
@@ -2705,11 +2786,11 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <div class="stag">Section 14</div>
 <div class="stitle" role="heading" aria-level="1">Regulatory Compliance Status</div>
 
-<p style="color:#6e7681;margin-bottom:14px">Compliance percentages are derived from BAS evidence over the <em>BAS-testable</em> control subset. A control is <em>Passing</em> when all mapped techniques passed; <em>Failing</em> when at least one failed; <em>Untested</em> when no mapped techniques were included in the run. <em>Manual</em> controls are governance/process requirements (board policy, asset inventory, risk-assessment cadence, IR/DR planning, data residency) that cannot be validated by simulation and require manual attestation — they are excluded from the Compliance and Coverage percentages.</p>
+<p style="color:#6e7681;margin-bottom:14px">These figures show how controls resisted simulated attack techniques; they are not a determination of compliance. The resistance rate is taken over tested controls only and must be read with control coverage. A control counts as <em>Resisted</em> when no executed technique succeeded (<em>Partial</em> when only some mapped techniques were executed), <em>Failing</em> when at least one succeeded, and <em>Untested</em> when no mapped technique was executed. <em>Manual</em> controls are governance/process requirements (board policy, asset inventory, risk-assessment cadence, IR/DR planning, data residency) that cannot be validated by simulation and require manual attestation — they are excluded from the resistance rate and coverage percentages.</p>
 {{if .compliance}}
 <table>
   <thead><tr>
-    <th>Framework</th><th>Total Controls</th><th>Manual</th><th>Tested</th><th>Passing</th><th>Failing</th><th>Untested</th><th>Compliance</th><th>Coverage</th>
+    <th>Framework</th><th>Total Controls</th><th>Manual</th><th>Tested</th><th>Resisted</th><th>Failing</th><th>Untested</th><th>Resistance rate</th><th>Control coverage</th>
   </tr></thead>
   <tbody>
   {{range .compliance}}
@@ -2724,6 +2805,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     <td class="comp-pct" style="color:{{compColor .compliancePct}}">{{pct .compliancePct}}</td>
     <td style="color:#2f81f7">{{pct .coveragePct}}</td>
   </tr>
+  {{if or .coverageNote .mappingWarning}}<tr><td colspan="9" style="color:#b45309;font-size:.78rem">{{if .coverageNote}}{{.coverageNote}}.{{end}} {{if .mappingWarning}}Mapping note: {{.mappingWarning}}{{end}}</td></tr>{{end}}
   {{end}}
   </tbody>
 </table>
@@ -3014,6 +3096,17 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   <div style="font-size:0.88rem;line-height:1.5;color:#374151">{{.envRestoration.execSummary}}</div>
 </div>
 
+{{if .envRestoration.restoreIssues}}
+<div style="background:#fef2f2;border:2px solid #fca5a5;border-radius:8px;padding:14px 18px;margin:14px 0;page-break-inside:avoid">
+  <div style="font-weight:800;color:#b91c1c;font-size:0.95rem;margin-bottom:6px">&#9888; Not fully restored</div>
+  <div style="font-size:0.84rem;line-height:1.5;color:#374151;margin-bottom:8px">After this run the agent could not put back, or could not verify, the items below. The endpoint may behave differently until they are fixed.</div>
+  <ul style="margin:0 0 0 18px;padding:0;font-size:0.84rem;line-height:1.55;color:#7f1d1d">
+    {{range .envRestoration.restoreIssues}}<li>{{.}}</li>
+    {{end}}
+  </ul>
+</div>
+{{end}}
+
 {{/* ── KPI tiles ── */}}
 <div class="score-row">
   <div class="scard" style="border-left:3px solid {{if gt .envRestoration.cleanupRate 99.9}}#0d9488{{else if gt .envRestoration.cleanupRate 79.9}}#d29922{{else}}#da3633{{end}}">
@@ -3252,6 +3345,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 {{end}}
 
 <h3 style="margin-top:16px;margin-bottom:8px">Detection Source Ranking</h3>
+{{if not .detectionSources}}
+<p style="color:#6e7681;font-size:0.85rem;margin-bottom:20px">No security product recorded a detection for this assessment, so there is nothing to rank. This is the case when no EDR, AV or SIEM is connected to Audspect, when protection was switched off on the endpoint, or when nothing alerted.</p>
+{{else}}
 <p style="color:#6e7681;font-size:0.85rem;margin-bottom:12px">Ranking of security products based on total detection count (most often) and speed (first to detect/lowest minimum MTTD).</p>
 <table style="width:100%;margin-bottom:20px;max-width:600px">
   <thead>
@@ -3275,45 +3371,51 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     {{end}}
   </tbody>
 </table>
+{{end}}
 
 {{if .techniqueMatrix}}
-<table>
+<table class="det-matrix" style="table-layout:fixed;width:100%">
+  <colgroup>
+    <col style="width:13%"><col style="width:9%"><col style="width:6%"><col style="width:7%"><col style="width:7%"><col style="width:6%"><col style="width:10%"><col style="width:10%"><col style="width:6%"><col style="width:8%"><col style="width:5%"><col style="width:8%"><col style="width:5%">
+  </colgroup>
   <thead><tr>
-    <th>Technique</th><th>Tactic</th><th>Sev</th><th>Execution</th><th>Requested Priv</th><th>Executed As</th><th>Detection</th><th>Alert Source</th><th>Event&nbsp;ID</th><th>Threat&nbsp;/&nbsp;Process</th><th>MTTD</th><th>Cleanup</th><th>Blocking Control</th>
+    <th>Technique</th><th>Tactic</th><th>Sev</th><th>Exec</th><th>Req.&nbsp;Priv</th><th>Ran&nbsp;As</th><th>Detection</th><th>Alert&nbsp;Source</th><th>Event</th><th>Threat</th><th>MTTD</th><th>Clean&nbsp;Up</th><th>Blocked&nbsp;By</th>
   </tr></thead>
   <tbody>
-  {{range .techniqueMatrix}}
-  <tr>
-    <td><code style="font-size:0.78rem">{{.techniqueId}}</code><br><span style="font-size:0.8rem">{{.techniqueName}}</span>{{if and .stepName (ne .stepName .techniqueName)}}<br><span style="font-size:0.72rem;color:#9aa5b5">{{.stepName}}</span>{{end}}</td>
-    <td style="font-size:0.8rem;color:#6e7681">{{humanize .tactic}}</td>
-    <td><span class="dot" style="background:{{sevColor .severity}}"></span>{{.severity}}</td>
-    <td><span style="font-size:0.78rem;font-weight:600;color:{{execVerdictColor .execVerdict}}">{{upper .execVerdict}}</span></td>
+  {{range .techniqueMatrixGroups}}{{$g := .}}{{range $i, $s := .steps}}
+  <tr style="{{if eq $i 0}}border-top:2px solid #d0d7de{{end}}">
+    {{if eq $i 0}}
+    <td rowspan="{{len $g.steps}}"><code style="font-size:0.78rem">{{$g.techniqueId}}</code><br><span style="font-size:0.8rem">{{$g.techniqueName}}</span></td>
+    <td rowspan="{{len $g.steps}}" style="font-size:0.8rem;color:#6e7681">{{humanize $g.tactic}}</td>
+    <td rowspan="{{len $g.steps}}"><span class="dot" style="background:{{sevColor $g.severity}}"></span>{{$g.severity}}</td>
+    {{end}}
+    <td><span style="font-size:0.78rem;font-weight:600;color:{{execVerdictColor $s.execVerdict}}">{{upper $s.execVerdict}}</span>{{if and $s.stepName (ne $s.stepName $g.techniqueName)}}<br><span style="font-size:0.7rem;color:#9aa5b5">{{$s.stepName}}</span>{{end}}</td>
     <td style="font-size:0.78rem;color:#6e7681;white-space:nowrap">
-      {{.requestedPriv}}
-      {{if and .requestedPrivMin (ne .requestedPrivMin "Legacy") (ne .requestedPrivPref "")}}<span style="font-size:0.65rem;color:#9aa5b5;display:block">min:{{.requestedPrivMin}} / pref:{{.requestedPrivPref}}</span>{{end}}
+      {{$s.requestedPriv}}
+      {{if and $s.requestedPrivMin (ne $s.requestedPrivMin "Legacy") (ne $s.requestedPrivPref "")}}<span style="font-size:0.65rem;color:#9aa5b5;display:block">min:{{$s.requestedPrivMin}} / pref:{{$s.requestedPrivPref}}</span>{{end}}
     </td>
-    <td style="font-size:0.78rem;white-space:nowrap;{{if contains .executedAs "→"}}color:#d29922;font-weight:600{{else if eq .executedAs "Legacy"}}color:#6e7681{{else}}color:#9aa9bc{{end}}">{{.executedAs}}</td>
+    <td style="font-size:0.78rem;white-space:nowrap;{{if contains $s.executedAs "→"}}color:#d29922;font-weight:600{{else if eq $s.executedAs "Legacy"}}color:#6e7681{{else}}color:#9aa9bc{{end}}">{{$s.executedAs}}</td>
     <td>
-      {{if .detectionVerdict}}
-      <span style="font-size:0.78rem;font-weight:700;color:{{detVerdictColor .detectionVerdict}}">{{detVerdictLabel .detectionVerdict}}</span>
-      {{if eq .confidence "high"}}<span style="font-size:0.68rem;color:#6e7681;margin-left:4px">high conf</span>{{end}}
+      {{if $s.detectionVerdict}}
+      <span style="font-size:0.78rem;font-weight:700;color:{{detVerdictColor $s.detectionVerdict}}">{{detVerdictLabel $s.detectionVerdict}}</span>
+      {{if eq $s.confidence "high"}}<span style="font-size:0.68rem;color:#6e7681;margin-left:4px">high conf</span>{{end}}
       {{else}}
       <span style="font-size:0.78rem;color:#6e7681">NO DATA</span>
       {{end}}
     </td>
-    <td style="font-size:0.75rem;color:#6e7681;max-width:140px;word-break:break-all">{{.alertProvider}}{{if and .alertProvider .alertChannel}}<br>{{end}}{{.alertChannel}}</td>
-    <td style="font-size:0.78rem;text-align:center">{{if .alertEventId}}{{.alertEventId}}{{else}}—{{end}}</td>
-    <td style="font-size:0.75rem;max-width:160px;word-break:break-all">
-      {{if .alertThreatName}}<strong>{{.alertThreatName}}</strong>{{if .alertCommandLine}}<br>{{end}}{{end}}
-      {{if .alertCommandLine}}<span style="color:#6e7681">{{.alertCommandLine}}</span>{{end}}
+    <td style="font-size:0.75rem;color:#6e7681;max-width:140px;word-break:break-all">{{$s.alertProvider}}{{if and $s.alertProvider $s.alertChannel}}<br>{{end}}{{$s.alertChannel}}</td>
+    <td style="font-size:0.78rem;text-align:center">{{if $s.alertEventId}}{{$s.alertEventId}}{{else}}—{{end}}</td>
+    <td class="thr" style="font-size:0.75rem">
+      {{if $s.alertThreatName}}<strong>{{$s.alertThreatName}}</strong>{{if $s.alertCommandLine}}<br>{{end}}{{end}}
+      {{if $s.alertCommandLine}}<span style="color:#6e7681">{{$s.alertCommandLine}}</span>{{end}}
     </td>
-    <td style="font-size:0.78rem;white-space:nowrap">{{if .mttdMs}}{{mttd .mttdMs}}{{else}}—{{end}}</td>
-    <td style="font-size:0.78rem;font-weight:600;white-space:nowrap;color:{{cleanupVerdictColor .cleanupVerdict}}">{{cleanupVerdictLabel .cleanupVerdict}}</td>
+    <td style="font-size:0.78rem;white-space:nowrap">{{if $s.mttdMs}}{{mttd $s.mttdMs}}{{else}}—{{end}}</td>
+    <td style="font-size:0.78rem;font-weight:600;white-space:nowrap;color:{{cleanupVerdictColor $s.cleanupVerdict}}">{{cleanupVerdictLabel $s.cleanupVerdict}}</td>
     <td style="font-size:0.75rem;max-width:160px">
-      {{if .controlName}}<strong>{{.controlName}}</strong>{{if .controlRuleId}}<br><code style="font-size:0.65rem;color:#6e7681">{{.controlRuleId}}</code>{{end}}{{else}}—{{end}}
+      {{if $s.controlName}}<strong>{{$s.controlName}}</strong>{{if $s.controlRuleId}}<br><code style="font-size:0.65rem;color:#6e7681">{{$s.controlRuleId}}</code>{{end}}{{else}}—{{end}}
     </td>
   </tr>
-  {{end}}
+  {{end}}{{end}}
   </tbody>
 </table>
 {{else}}
@@ -3404,6 +3506,53 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 {{end}}{{end}}
+
+<!-- ═══ 18b. DETECTION ENGINEERING RECOMMENDATIONS ══════════════════════ -->
+{{if .detectionGaps.hasData}}{{$dg := .detectionGaps}}
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{if .scope}}{{.scope.title}}{{else}}{{.summary.lastScenarioName}}{{end}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{if .scope}}Campaign{{else}}{{.agent.hostname}}{{end}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 18b</div>
+<div class="stitle" role="heading" aria-level="1">Detection Engineering Recommendations</div>
+
+<p style="color:#6e7681;margin-bottom:14px"><strong>{{$dg.gaps}}</strong> of {{$dg.assessed}} techniques in this run executed and were reviewed as <strong>not detected</strong>. For each, the Sigma rule that targets the technique and its translation for common SIEMs are listed. A rule being available does not mean it would have detected this simulation: <strong>effectiveness is not validated</strong> until the rule is deployed and the technique is re-tested.</p>
+
+{{range $dg.rows}}
+<h3 style="margin-top:16px;margin-bottom:4px">{{.techniqueId}} &mdash; {{.name}}</h3>
+<p style="font-size:0.82rem;color:#3a4656;margin-bottom:6px">{{.reason}} &middot; <strong>{{.availability}}</strong> &middot; Effectiveness: <strong>{{.effectiveness}}</strong>{{if gt .ruleCount 1.0}} &middot; {{.ruleCount}} rules available (showing the highest severity; the export includes up to 25 per technique){{end}}</p>
+{{range .rules}}
+<p style="font-size:0.85rem;margin:6px 0 2px"><strong>{{.id}}</strong> {{.title}} <span style="color:#6e7681">[{{.severity}}{{if eq .match "parent"}}, parent technique only{{end}}] &middot; {{.source}}</span></p>
+{{range .queries}}
+<div style="margin:6px 0 10px">
+  <div style="font-size:0.74rem;color:#3a4656"><strong>{{.backend}}</strong> ({{.language}}) &mdash; {{.note}}</div>
+  <pre style="font-size:0.7rem;white-space:pre-wrap;word-break:break-all;background:#f6f8fa;border:1px solid #d0d7de;border-radius:4px;padding:6px;margin:3px 0">{{.query}}{{if .truncated}}
+... (truncated; full query in the export){{end}}</pre>
+</div>
+{{end}}
+{{else}}
+<p style="font-size:0.85rem;color:#9a6700;margin:6px 0 10px">No Sigma rule is available for this technique. Nothing has been invented; this needs a custom detection.</p>
+{{end}}
+{{end}}
+
+<p style="font-size:0.72rem;color:#6e7681;margin-top:14px">{{$dg.attribution}}</p>
+
+<div class="pf">
+  <span>Detection Engineering Recommendations</span>
+  {{template "pf-right" $}}
+</div>
+</div>
+</div>
+{{end}}
 
 <!-- ═══ 19. COVERAGE ANALYTICS ══════════════════════════════════════════ -->
 <div class="page">

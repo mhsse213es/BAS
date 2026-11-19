@@ -1,0 +1,53 @@
+id: "API-BAS-AUTHZ-504"
+name: "UPI-004: customer reads another customer's standing-instruction mandate"
+category: AUTHZ
+claim: cross_identity
+attack_objective: "UPI customer B, who holds no relationship to the mandate, reads customer A's MANDATE-A-001."
+threat_model:
+  attacker: "authenticated UPI customer B"
+  identity: upi-cust-b
+  access_level: "standard customer, valid token, neither owner nor assignee of MANDATE-A-001"
+  objective: "Customer B reads customer A's standing-instruction mandate, including its debit account and cap."
+preconditions:
+  fixture: upi-two-customer
+  identities: [upi-cust-a, upi-cust-b]
+  object: MANDATE-A-001
+steps:
+  - id: "baseline-owner-mandate"
+    role: baseline
+    identity: upi-cust-a
+    auth: valid
+    method: GET
+    path: "/api/upi/mandates/MANDATE-A-001"
+    hypothesis: "Customer A, the owner, reads their own mandate. If this fails, the scenario is not testable."
+  - id: "attack-read-other-mandate"
+    role: attack
+    identity: upi-cust-b
+    auth: valid
+    method: GET
+    path: "/api/upi/mandates/MANDATE-A-001"
+    hypothesis: "Customer B's read of MANDATE-A-001 is refused, and no protected value of that mandate comes back."
+denied_statuses: [403, 404]
+forbidden_values: ["BAS-SIM-UPI-ACC-A"]
+expected_control: "Customer B cannot read customer A's mandate. The read is refused and no protected value of MANDATE-A-001 is returned."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The response to customer B's read of MANDATE-A-001 carries no protected value of that mandate.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The cross-owner read is an access event naming another owner's mandate (REL-004). Graded against the access event by the named rule. Fixture-validated, not live-SIEM-validated."
+side_effect_class: READ_ONLY
+evidence:
+  - sanitized_request
+  - sanitized_response
+industry_mapping:
+  - "UPI / open banking: a standing-instruction mandate's debit account and cap are disclosed to its owner alone"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-AUTHZ-504 against the fixed build must PASS"
+  - "API-BAS-AUTHZ-504 against the vulnerable build must FAIL (exploited)"

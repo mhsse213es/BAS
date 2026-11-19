@@ -366,3 +366,21 @@ func ApplyDefenderExclusion(exePath string) error {
 	log.Printf("[tamper] Windows Defender exclusion added for %s", exePath)
 	return nil
 }
+
+// refreshStoredIntegrity re-stores the running binary's hash. The MSI runs
+// `--refresh-integrity` from the installed path after it has replaced the
+// binary on upgrade or repair, so the startup self-check compares against the
+// new binary instead of the previous one.
+func refreshStoredIntegrity(hash func() (string, error), store func(string) error) error {
+	h, err := hash()
+	if err != nil {
+		return fmt.Errorf("hash binary: %w", err)
+	}
+	if h == "" {
+		return fmt.Errorf("hash binary: empty result")
+	}
+	if err := store(h); err != nil {
+		return fmt.Errorf("store binary hash: %w", err)
+	}
+	return nil
+}

@@ -35,6 +35,8 @@ type ExerciseReport struct {
 	Score     *exercise.ExerciseScore  `json:"score,omitempty"`
 	ChainOK   bool                     `json:"chain_ok"`
 	ChainErr  string                   `json:"chain_error,omitempty"`
+	// Purple is the detection debrief for the BAS runs this exercise started; nil when it started none.
+	Purple *PurpleDebrief `json:"purple,omitempty"`
 	// Flat timeline sorted by timestamp — built by BuildTimeline.
 	Timeline []TimelineEntry `json:"timeline,omitempty"`
 }
@@ -390,13 +392,13 @@ func evClass(summary string) string {
 
 // ── HTML template ─────────────────────────────────────────────────────────────
 
-const exerciseReportTmpl = `<!DOCTYPE html>
+var exerciseReportTmpl = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Exercise Report — {{.Execution.Name}}</title>
-<style>
+<style>` + reportDesignCSS() + `
 /* ── reset ── */
 *{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:13px}
@@ -746,6 +748,19 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 {{else}}
 <p style="color:#9aa9bc;font-style:italic;padding:24px 0">Score not yet computed for this execution.</p>
+{{end}}
+{{if .Purple}}
+<h3 style="margin-top:28px">Purple-team debrief: what the defenders saw</h3>
+<div class="stat-row"><span class="stat-lbl">Detection rate</span><span class="stat-val">{{.Purple.RateLabel}}</span></div>
+<div class="stat-row"><span class="stat-lbl">Awaiting an approved verdict</span><span class="stat-val">{{.Purple.Unresolved}}</span></div>
+{{if .Purple.SuccessCriteria}}<p style="font-size:.8rem;color:#9aa9bc">Success criteria: {{.Purple.SuccessCriteria}}</p>{{end}}
+{{range .Purple.Techniques}}
+<div class="stat-row"><span class="stat-lbl">{{.TechniqueID}}{{if .Providers}} &middot; {{range $i, $p := .Providers}}{{if $i}}, {{end}}{{$p}}{{end}}{{end}}</span>
+  <span class="stat-val {{if eq .Outcome "detected"}}ok{{else if eq .Outcome "missed"}}fail{{end}}">{{.Outcome}}</span></div>
+{{end}}
+{{if .Purple.Gaps}}<h3 style="margin-top:16px">Gaps for the SOC to close</h3>{{range .Purple.Gaps}}<div class="stat-row"><span class="stat-lbl">{{.}}</span></div>{{end}}{{end}}
+{{if .Purple.NoExpectation}}<p style="font-size:.8rem;color:#9aa9bc">No detection expectation was recorded for: {{range $i, $t := .Purple.NoExpectation}}{{if $i}}, {{end}}{{$t}}{{end}}. These were not judged either way.</p>{{end}}
+{{if .Purple.DiscussionPrompts}}<h3 style="margin-top:16px">Discussion prompts</h3>{{range .Purple.DiscussionPrompts}}<div class="stat-row"><span class="stat-lbl">{{.}}</span></div>{{end}}{{end}}
 {{end}}
 
 <div class="pf">

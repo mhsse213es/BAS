@@ -22,6 +22,9 @@ func (h *Handler) SubmitRunDetections(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	runID := chi.URLParam(r, "runId")
+	if !h.runsBelongToCertificateAgent(w, r, runID) {
+		return
+	}
 	var body struct {
 		Alerts    []detect.AlertRecord `json:"alerts"`
 		Truncated bool                 `json:"truncated"`

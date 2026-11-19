@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/k8sscenario"
@@ -22,7 +23,17 @@ func NewK8sScenarioAudit(pool *pgxpool.Pool) *K8sScenarioAudit {
 }
 
 // Write records one engine event. The action is prefixed so scenario events are easy to filter.
+// auditExecer is satisfied by the pool and by a transaction, so an audit row can be written inside the same transaction
+// as the change it records.
+type auditExecer interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
 func (a *K8sScenarioAudit) Write(ctx context.Context, e k8sscenario.Event) error {
+	return writeScenarioAuditRow(ctx, a.pool, e)
+}
+
+func writeScenarioAuditRow(ctx context.Context, q auditExecer, e k8sscenario.Event) error {
 	detail := map[string]any{"run": e.RunID}
 	for k, v := range e.Fields {
 		detail[k] = v
@@ -32,7 +43,7 @@ func (a *K8sScenarioAudit) Write(ctx context.Context, e k8sscenario.Event) error
 		return fmt.Errorf("k8s scenario audit: %w", err)
 	}
 	actor := e.Fields["requester"]
-	_, err = a.pool.Exec(ctx, `
+	_, err = q.Exec(ctx, `
 		INSERT INTO audit_logs (actor_id, action, resource, detail, outcome)
 		VALUES ($1, $2, $3, $4, $5)`,
 		actor, e.Type, e.RunID, raw, outcomeOf(e))
@@ -46,7 +57,7 @@ func (a *K8sScenarioAudit) Write(ctx context.Context, e k8sscenario.Event) error
 // are "denied" so they stand out in the audit view.
 func outcomeOf(e k8sscenario.Event) string {
 	switch {
-	case e.Type == k8sscenario.EventRefused:
+	case e.Type == k8sscenario.EventRefused, e.Type == "k8s.profile.refused", e.Type == "k8s.authorization.denied":
 		return "denied"
 	case e.Type == k8sscenario.EventOutcome:
 		switch e.Fields["state"] {

@@ -1,0 +1,149 @@
+[
+  {
+    "id": "lat-01",
+    "n": 1,
+    "name": "Lateral Movement - RDP Connectivity and Session Negotiation (T1021.001)",
+    "technique_id": "T1021.001",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "high",
+    "blast_radius": "Tests RDP port 3389 connectivity to a lab target; performs protocol negotiation only. Does not log in or modify remote system. Verifies detection of RDP enumeration.",
+    "telemetry": [
+      "Network: port 3389 connection attempts",
+      "RDP protocol negotiation traffic"
+    ],
+    "detection": [
+      "Network monitoring: RDP connection attempts",
+      "Firewall logs: RDP port access"
+    ],
+    "cleanup": "",
+    "action_key": "lateral_rdp_connectivity",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "lat-02",
+    "n": 2,
+    "name": "Lateral Movement - SMB Admin Share Access (T1021.002)",
+    "technique_id": "T1021.002",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "high",
+    "blast_radius": "Enumerates and lists contents of SMB admin shares (C$, Admin$, IPC$) on a lab target using authorized test account. Does not modify shares. Verifies detection of SMB reconnaissance.",
+    "telemetry": [
+      "SMB connection and enumeration (port 445)",
+      "Share access attempts (admin shares)"
+    ],
+    "detection": [
+      "SIEM: SMB enumeration patterns",
+      "Network: suspicious SMB traffic",
+      "Event Log: share access audits"
+    ],
+    "cleanup": "",
+    "action_key": "lateral_smb_shares",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "lat-03",
+    "n": 3,
+    "name": "Lateral Movement - WinRM Remote Session and Event Log Access (T1021.006)",
+    "technique_id": "T1021.006",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "high",
+    "blast_radius": "Establishes WinRM remote session to a lab target; queries event log via remote session. Does not modify remote system. Verifies detection of WinRM lateral movement.",
+    "telemetry": [
+      "WinRM connection (port 5985/5986)",
+      "Remote event log queries"
+    ],
+    "detection": [
+      "SIEM: WinRM lateral movement patterns",
+      "Event Log: WinRM session creation",
+      "Network: WinRM traffic"
+    ],
+    "cleanup": "",
+    "action_key": "lateral_winrm_session",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "lat-04",
+    "n": 4,
+    "name": "Lateral Movement - Remote Service Execution Simulation (T1569.002)",
+    "technique_id": "T1569.002",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "high",
+    "blast_radius": "Simulates remote service execution on a lab target; does not actually execute commands. Verifies detection of service-based lateral movement.",
+    "telemetry": [
+      "RPC/SMB service control manager access",
+      "Service creation/modification attempts"
+    ],
+    "detection": [
+      "Event Log: service creation audits",
+      "SIEM: service-based lateral movement detection"
+    ],
+    "cleanup": "",
+    "action_key": "lateral_remote_service",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "lat-05",
+    "n": 5,
+    "name": "Lateral Movement - Remote System Discovery (T1018)",
+    "technique_id": "T1018",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "medium",
+    "blast_radius": "Discovers systems on lab network via ping sweep, port scans, or service enumeration. Read-only reconnaissance. Verifies detection of lateral reconnaissance.",
+    "telemetry": [
+      "ICMP echo requests",
+      "Port scan traffic (TCP/UDP)"
+    ],
+    "detection": [
+      "Network: anomalous ping/port scan patterns",
+      "Intrusion detection: network reconnaissance"
+    ],
+    "cleanup": "",
+    "action_key": "lateral_system_discovery",
+    "no_default_cleanup": false,
+    "reversible": true
+  },
+  {
+    "id": "lat-06",
+    "n": 6,
+    "name": "Lateral Movement - Lateral Tool Transfer to Sandbox Location (T1570)",
+    "technique_id": "T1570",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "high",
+    "blast_radius": "Transfers a benign test file to a lab target via SMB; deletes it immediately. Verifies detection of tool staging during lateral movement.",
+    "telemetry": [
+      "SMB file transfer (port 445)",
+      "File creation on remote system"
+    ],
+    "detection": [
+      "SIEM: suspicious file transfer patterns",
+      "EDR: lateral tool transfer detection",
+      "File integrity: unexpected file writes"
+    ],
+    "cleanup": "",
+    "action_key": "lateral_tool_transfer",
+    "no_default_cleanup": true,
+    "reversible": false
+  }
+]

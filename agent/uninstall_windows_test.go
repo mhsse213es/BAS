@@ -163,6 +163,7 @@ func TestScheduleBinaryDeleteOnReboot_ExistingFileSucceeds(t *testing.T) {
 	if err := scheduleBinaryDeleteOnReboot(path); err != nil {
 		t.Fatalf("scheduleBinaryDeleteOnReboot: %v", err)
 	}
+	t.Cleanup(func() { _, _ = cancelPendingDeletes(path) }) // do not leave a delete order in the real system registry
 }
 
 func TestScheduleBinaryDeleteOnReboot_MissingFileIsNotAnError(t *testing.T) {
@@ -173,6 +174,7 @@ func TestScheduleBinaryDeleteOnReboot_MissingFileIsNotAnError(t *testing.T) {
 	if err := scheduleBinaryDeleteOnReboot(path); err != nil {
 		t.Fatalf("scheduleBinaryDeleteOnReboot on a missing path should not error, got: %v", err)
 	}
+	t.Cleanup(func() { _, _ = cancelPendingDeletes(path) }) // do not leave a delete order in the real system registry
 }
 
 func TestScheduleBinaryDeleteOnReboot_EmptyPathErrors(t *testing.T) {

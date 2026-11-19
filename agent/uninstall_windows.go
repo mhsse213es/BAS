@@ -212,7 +212,12 @@ func removeShortcutAt(path string) error {
 // createTrayShortcut (installer/main.go) creates at install time, using the
 // identical path construction so uninstall targets the same file.
 func removeTrayShortcut() error {
-	startMenu := filepath.Join(os.Getenv("ProgramData"), `Microsoft\Windows\Start Menu\Programs`)
-	shortcutPath := filepath.Join(startMenu, "Audspect Agent - Show Tray Icon.lnk")
-	return removeShortcutAt(shortcutPath)
+	// Both the current and the older shortcut name; the MSI removes its own entries itself.
+	var firstErr error
+	for _, name := range []string{trayShortcutName, legacyTrayShortcutName} {
+		if err := removeShortcutAt(filepath.Join(startMenuProgramsDir(), name)); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }

@@ -1,0 +1,31 @@
+# SWIFT secure zone isolation (pack: swift).
+# Rules: fw/rules/swift.sh (corp<->swift denied on 8443) on top of default-deny.
+#
+# Positive control: the SWIFT pack has no routed authorized path, so its allow
+# probe is same-zone (probe-swift -> swift-gateway). It never crosses seg-fw, so
+# it proves the target is reachable and the probe is working, not that a rule
+# allows the path. Recorded as a deliberate decision in the design spec.
+id: swift-isolation
+name: SWIFT secure zone isolation
+probes:
+  - id: corp-to-swift
+    src: corp
+    dst: swift
+    port: 8443
+    proto: tcp
+    expect: deny
+    note: Corporate IT must not reach the SWIFT gateway.
+  - id: swift-to-corp
+    src: swift
+    dst: corp
+    port: 8443
+    proto: tcp
+    expect: deny
+    note: The SWIFT zone must not reach Corporate IT.
+  - id: swift-local-control
+    src: swift
+    dst: swift
+    port: 8443
+    proto: tcp
+    expect: allow
+    note: Same-zone positive control; no firewall crossing.

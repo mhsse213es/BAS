@@ -1,0 +1,43 @@
+{
+  "CVE-2017-7269": {
+    "month": "2017-Mar",
+    "status": "NOT_IN_MONTH_DOC",
+    "entries": []
+  },
+  "CVE-2017-8543": {
+    "month": "2017-Jun",
+    "status": "NO_WINDOWS_FIXED_BUILD",
+    "windows_product_count": 0,
+    "entries": []
+  },
+  "CVE-2019-0708": {
+    "month": "2019-May",
+    "status": "NO_WINDOWS_FIXED_BUILD",
+    "windows_product_count": 0,
+    "entries": []
+  },
+  "CVE-2020-0646": {
+    "month": "2020-Jan",
+    "status": "NO_WINDOWS_FIXED_BUILD",
+    "windows_product_count": 0,
+    "entries": []
+  },
+  "CVE-2020-0796": {
+    "month": "2020-Mar",
+    "status": "NO_WINDOWS_FIXED_BUILD",
+    "windows_product_count": 0,
+    "entries": []
+  },
+  "CVE-2020-1040": {
+    "month": "2020-Jul",
+    "status": "NO_WINDOWS_FIXED_BUILD",
+    "windows_product_count": 0,
+    "entries": []
+  },
+  "CVE-2020-1350": {
+    "month": "2020-Jul",
+    "status": "NO_WINDOWS_FIXED_BUILD",
+    "windows_product_count": 0,
+    "entries": []
+  }
+}

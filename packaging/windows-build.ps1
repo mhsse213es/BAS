@@ -8,12 +8,13 @@
 #       -Version    1.6.0 `
 #       -Customer   "HDFC Bank" `
 #       -CustomerID "hdfc-prod-001" `
-#       -Days       365
+#       -Days       365 `
+#       [-LicenseType Core|Advanced|Enterprise] [-Addons aleef]
 #
 # Output:
 #   dist\bas-install-<version>\         delivery folder
 #   dist\bas-install-<version>.zip      zip to send to client
-#   <customer-id>.lic                   license to send to client
+#   <customer>-<tier>-<number>.lic      license to send to client (e.g. hdfc-enterprise-001.lic)
 #
 # Prerequisites: Docker Desktop running, Go installed (for licensegen)
 
@@ -27,6 +28,9 @@ param(
     # (Enterprise), as before tiers existed.
     [ValidateSet("", "Core", "Advanced", "Enterprise")]
     [string] $LicenseType = "",
+    # Add-on products sold outside the tiers, as a comma list. Empty issues none. Today only "aleef"
+    # (Aleef API discovery). The add-on works with any tier or none; the tier applies independently.
+    [string] $Addons = "",
     [switch] $SkipBuild,         # pass -SkipBuild to repackage without rebuilding image
 
     # -- D1 release signing (docs/superpowers/specs/2026-09-30-d1-release-signing-architecture-design.md) --
@@ -44,7 +48,18 @@ param(
     # dev). -AllowUnsignedImages is the explicit dev-only escape hatch; such a
     # bundle is refused by install.sh/setup.sh and must never be shipped.
     [Nullable[bool]] $CosignSigningRequired  = $null,
-    [switch] $AllowUnsignedImages
+    [switch] $AllowUnsignedImages,
+
+    # Also build the signed WiX MSI (packaging\windows-msi). Opt-in so existing builds are unchanged.
+    # A customer build signs it with the trusted certificate and needs the owner-approved licence text
+    # (-MsiEulaRtf); any other build dev-signs it with a clearly marked, untrusted certificate.
+    [switch] $BuildMsi,
+    [string] $MsiEulaRtf = "",
+
+    # The server may be air-gapped, so install.sh installs cosign and (when missing) Docker from files
+    # inside this bundle (tools\). A customer build refuses to run without them; this switch is the
+    # explicit dev-only escape hatch. Fetch/verify them with packaging\fetch-docker-static.ps1.
+    [switch] $AllowMissingOfflinePrereqs
 )
 
 $IsCustomerBuild = ($Customer -ne "" -and $CustomerID -ne "")
@@ -199,6 +214,20 @@ Log "  wwwroot integrity: manifest hash is computed inside the Docker build (G1c
 # -- 1. Build Docker image ----------------------------------------------------
 $OrchestratorTag = "bas-orchestrator:$Version"
 
+# The previous release's manifest: its hashes are carried into the new one as "#prev" lines (see
+# packaging/carry-previous-manifest.sh), so agents still on that release show as "outdated" instead of being
+# quarantined after the upgrade. Taken from the newest earlier release under dist\, not from git.
+. "$RepoRoot\packaging\signing\sign-orchestrator-artifacts.ps1"
+$PreviousManifestPath = Get-PreviousReleaseManifest -DistDir $DistDir -Version $Version
+if ($PreviousManifestPath) { Log "Previous release manifest: $PreviousManifestPath" }
+elseif ($env:BAS_ALLOW_NO_PREVIOUS -eq '1') { Warn "No earlier release under $DistDir; BAS_ALLOW_NO_PREVIOUS=1, so building without it. Agents on an older build will be quarantined after the upgrade." }
+else {
+    # Fail closed before the long build (matches packaging/build.sh): without the previous release's hashes, every agent
+    # still on it is quarantined after the upgrade.
+    Err "No earlier release under $DistDir. Refusing to build: agents on the release before $Version would be quarantined after the upgrade. Put that release's bas-install-<version>\BINARIES.sha256 under dist\, or set BAS_ALLOW_NO_PREVIOUS=1 for a first release."
+    exit 1
+}
+
 if (-not $SkipBuild) {
     # Obfuscation (garble -literals -tiny, scoped to our module via GOGARBLE) runs
     # inside orchestrator/Dockerfile  -  see that file for the GOGARBLE rationale.
@@ -207,7 +236,11 @@ if (-not $SkipBuild) {
     # dashboard file at startup. BAS_SIGNING_KEY is not needed  -  the public key
     # was already compiled into signing.go by step 0b-i above.
     Log "Building $OrchestratorTag (garble -literals -tiny - this takes 5-10 min)..."
-    $buildExtraArgs = @("--build-arg", "BAS_VERSION=$Version")
+    $buildExtraArgs = @("--build-arg", "BAS_VERSION=$Version", "--build-arg", "AGENT_VERSION=$Version")
+    if ($PreviousManifestPath) {
+        $prevB64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($PreviousManifestPath))
+        $buildExtraArgs += @("--build-arg", "PREVIOUS_MANIFEST_B64=$prevB64")
+    }
     # A tiered build must not put other tiers' scenarios in the image. The image is built from the
     # repo root, so give it a filtered copy of the scenarios inside the build context.
     $scenarioStage = $null
@@ -218,6 +251,7 @@ if (-not $SkipBuild) {
         $imageRemoved = Keep-TierScenarios $scenarioStage $LicenseType
         Log "  ${LicenseType}: image scenarios filtered ($imageRemoved excluded)"
         $buildExtraArgs += @("--build-arg", "SCENARIOS_DIR=.build-scenarios")
+        $buildExtraArgs += @("--build-arg", "BAS_BUILD_TIER=$LicenseType")
     }
     # docker build (BuildKit) writes routine progress to stderr; with
     # $ErrorActionPreference='Stop' (set above) PowerShell turns that into a
@@ -384,7 +418,7 @@ $env:GOGARBLE = "audspect/*"
 # windigo, and sspi un-obfuscated (same reasoning as the Dockerfile's
 # agent-builder stage).
 if (Test-Path "$InstallerDir\bas_agent.exe") { Remove-Item -Force "$InstallerDir\bas_agent.exe" }
-garble -literals build -ldflags="-s -w -H windowsgui" -o "$InstallerDir\bas_agent.exe" . 2>&1
+garble -literals build -ldflags="-s -w -H windowsgui -X main.version=$Version" -o "$InstallerDir\bas_agent.exe" . 2>&1
 if ($LASTEXITCODE -ne 0) { Err "Agent build failed." }
 $env:GOOS = ""; $env:GOARCH = ""; $env:CGO_ENABLED = ""; $env:GOGARBLE = ""
 Pop-Location
@@ -432,10 +466,11 @@ $env:GOOS = ""; $env:GOARCH = ""
 Pop-Location
 $exeSizeMB = [math]::Round((Get-Item "$OutDir\BASAgent-Setup-$Version.exe").Length / 1MB, 1)
 Log "  Installer EXE: BASAgent-Setup-$Version.exe (${exeSizeMB}MB)"
-# Size guardrail: this must stay close to its current ~14MB. A jump well past
-# that means something is being embedded again (e.g. a reverted fix), not a
-# one-off fluctuation worth silently allowing through.
-if ($exeSizeMB -gt 25) { Err "BASAgent-Setup-$Version.exe is ${exeSizeMB}MB, expected ~14MB - something is being embedded that shouldn't be (check for a go:embed regression)." }
+# Size guardrail: the agent now includes the dbsim database probe drivers
+# (pgx/v5, go-sql-driver/mysql), which put the installer at ~30MB. The limit
+# is raised to 40MB for that growth; a jump past it still means something
+# unexpected is being embedded (e.g. a reverted fix).
+if ($exeSizeMB -gt 40) { Err "BASAgent-Setup-$Version.exe is ${exeSizeMB}MB, expected ~30MB - something is being embedded that shouldn't be (check for a go:embed regression)." }
 
 # Also stage the standalone Windows agent artifact (for manual / side-by-side
 # deploy). Copied from the already-signed installer\bas_agent.exe, not
@@ -460,6 +495,24 @@ if (-not (Test-Path "$OutDir\bas-agent-windows-amd64.exe")) {
     if ($embedHash -ne $standaloneHash) {
         Err "installer\bas_agent.exe and bas-agent-windows-amd64.exe diverged after a copy -- this should be structurally impossible; investigate before shipping."
     }
+}
+
+# -- 5a1. Build the Windows MSI (opt-in) ---------------------------------------
+# Built from the same signed agent binary as the standalone artifact. The orchestrator serves it as a
+# per-request bundle (MSI + signed deployment.json + install scripts); see packaging\windows-msi.
+if ($BuildMsi) {
+    Log "Building the Windows MSI..."
+    $msiArgs = @{ AgentExe = "$InstallerDir\bas_agent.exe"; Version = $Version; OutDir = $OutDir }
+    if ($MsiEulaRtf) { $msiArgs.EulaRtf = $MsiEulaRtf }
+    if ($IsCustomerBuild) {
+        $msiArgs.Release = $true
+        $msiArgs.CertThumbprint = $WindowsCertThumbprint
+    } else {
+        $msiArgs.DevSign = $true
+    }
+    & (Join-Path $PSScriptRoot "windows-msi\build-msi.ps1") @msiArgs
+    if ($LASTEXITCODE -ne 0) { Err "MSI build failed." }
+    if (-not (Test-Path "$OutDir\AudspectAgent-x64.msi")) { Err "MSI build reported success but produced no AudspectAgent-x64.msi." }
 }
 
 # -- 5a2. Build Legacy Windows agent binary (amd64 only) ---------------------
@@ -611,7 +664,7 @@ Push-Location $AgentDir
 # agent under a name the manifest/signing flow treats as already-hardened.
 $env:GOOS = "linux"; $env:GOARCH = "amd64"; $env:CGO_ENABLED = "0"
 $env:GOGARBLE = "audspect/*"
-garble -literals build -ldflags="-s -w" -o "$OutDir\bas-agent-linux-amd64" . 2>&1
+garble -literals build -ldflags="-s -w -X main.version=$Version" -o "$OutDir\bas-agent-linux-amd64" . 2>&1
 if ($LASTEXITCODE -ne 0) {
     Warn "Linux amd64 agent build failed."
 } else {
@@ -658,6 +711,20 @@ if ($LASTEXITCODE -ne 0) {
         $entryCount = (Get-Content $BinManifestPath | Where-Object { $_ -ne "" }).Count
         Log "  $entryCount entries extracted from image"
 
+        # Carry the previous signed release's hashes into the manifest (as #prev lines),
+        # so agents still on it degrade to outdated instead of being quarantined. The
+        # previous manifest is the newest earlier release under dist/, the same source the bash build uses (not git
+        # HEAD: a build overwrites the committed manifest without committing it). Must run before the signing below.
+        if ($PreviousManifestPath) {
+            $carriedCount = & (Join-Path $RepoRoot 'packaging\carry-previous-manifest.ps1') -Manifest $BinManifestPath -Previous $PreviousManifestPath
+            Log "  carried $carriedCount previous-release hash(es) into the manifest"
+        } elseif ($env:BAS_ALLOW_NO_PREVIOUS -eq '1') {
+            Warn "  No earlier release under $DistDir; BAS_ALLOW_NO_PREVIOUS=1, so nothing carried. Agents on an older build will be quarantined after the upgrade."
+        } else {
+            Err "  No earlier release under $DistDir. Refusing to build: agents on the release before $Version would be quarantined after the upgrade. Put that release's bas-install-<version>\BINARIES.sha256 under dist\, or set BAS_ALLOW_NO_PREVIOUS=1 for a first release."
+            exit 1
+        }
+
         # RSA-sign so the orchestrator verifies the manifest was not tampered in transit.
         Push-Location $OrchestratorDir
         go run scripts/signer.go sign private_key.pem $BinManifestPath
@@ -693,7 +760,8 @@ if ($LASTEXITCODE -ne 0) {
         # replaces that narrower patch -- it's now folded into the richer
         # one below, which also bakes BINARIES.sha256.sig.
         $orchestratorPatched = Update-OrchestratorAgentArtifacts -OrchestratorTag $OrchestratorTag `
-            -OutDir $OutDir -Version $Version -OrchestratorDir $OrchestratorDir -ExpectedThumbprint $WindowsCertThumbprint
+            -OutDir $OutDir -Version $Version -OrchestratorDir $OrchestratorDir -ExpectedThumbprint $WindowsCertThumbprint `
+            -PreviousManifest $PreviousManifestPath
         if ($orchestratorPatched -ne $true -and $WindowsSigningRequired) {
             Err "Failed to inject signed Windows artifacts into the orchestrator image, and Windows signing is required for this build."
         } elseif ($orchestratorPatched -ne $true) {
@@ -873,10 +941,69 @@ Log "Copying installer files..."
 $ComposeDir = Join-Path $RepoRoot "packaging\compose"
 Copy-Item "$ComposeDir\install.sh"              "$OutDir\install.sh"
 Copy-Item "$ComposeDir\uninstall.sh"            "$OutDir\uninstall.sh"
+Copy-Item "$ComposeDir\docker-offline-lib.sh"    "$OutDir\docker-offline-lib.sh"
+# Helpers install.sh and setup.sh source or require from SCRIPT_DIR. build.sh copies the same set; a missing one
+# makes the shipped installer refuse to run.
+Copy-Item "$ComposeDir\setup.sh"  "$OutDir\setup.sh"
+Copy-Item "$ComposeDir\db-encryption-key.sh"  "$OutDir\db-encryption-key.sh"
+Copy-Item "$ComposeDir\db-tls.sh"  "$OutDir\db-tls.sh"
+Copy-Item "$ComposeDir\ca-backup.sh"  "$OutDir\ca-backup.sh"
+Copy-Item "$ComposeDir\backup-key.sh"  "$OutDir\backup-key.sh"
+Copy-Item "$ComposeDir\setup-install-state.sh"  "$OutDir\setup-install-state.sh"
 Copy-Item "$ComposeDir\setup.conf.template"     "$OutDir\setup.conf.template"
 # Ship setup.conf as a ready-to-edit copy of the template so operators can
 # run 'nano setup.conf' immediately without a manual cp step first.
 Copy-Item "$ComposeDir\setup.conf.template"     "$OutDir\setup.conf"
+
+# -- 5d. Offline prerequisites (tools\): cosign + Docker ----------------------
+# install.sh never downloads anything for these: cosign comes from tools\cosign-linux-<cpu>, and when
+# Docker is missing it is installed from tools\docker\ (static Docker + Compose, SHA-256 pinned in
+# packaging\docker-static.pin and again inside docker-offline-lib.sh). Every file is verified against
+# the pin here, so a stale or tampered copy under packaging\tools can never reach a customer bundle.
+Log "Staging offline prerequisites (cosign + Docker)..."
+$ToolsSrc = Join-Path $RepoRoot "packaging\tools"
+$ToolsOut = Join-Path $OutDir "tools"
+New-Item -ItemType Directory -Force -Path "$ToolsOut\docker" | Out-Null
+$dockerPin = @{}
+foreach ($pl in (Get-Content -LiteralPath (Join-Path $RepoRoot "packaging\docker-static.pin"))) {
+    if ($pl -match '^\s*#' -or $pl.Trim() -eq "") { continue }
+    if ($pl -cmatch '^([A-Z0-9_]+)=(\S+)$') { $dockerPin[$Matches[1]] = $Matches[2] }
+}
+$dv = $dockerPin.DOCKER_VERSION
+# cosign hashes come from the appliance pin (same release as the appliance build), so a substituted binary is refused.
+$cosignPin = @{}
+foreach ($pl in (Get-Content -LiteralPath (Join-Path $RepoRoot "packaging\appliance\cosign.pin"))) {
+    if ($pl -match '^\s*#' -or $pl.Trim() -eq "") { continue }
+    if ($pl -cmatch '^([A-Z0-9_]+)=(\S+)$') { $cosignPin[$Matches[1]] = $Matches[2] }
+}
+foreach ($k in "COSIGN_SHA256_LINUX_AMD64","COSIGN_SHA256_LINUX_ARM64") {
+    if (-not $cosignPin.ContainsKey($k)) { Err "packaging\appliance\cosign.pin is missing $k" }
+}
+$offlineFiles = @(
+    @{ Rel = "cosign-linux-amd64";                 Sha = $cosignPin.COSIGN_SHA256_LINUX_AMD64 },
+    @{ Rel = "cosign-linux-arm64";                 Sha = $cosignPin.COSIGN_SHA256_LINUX_ARM64 },
+    @{ Rel = "docker\docker-$dv-x86_64.tgz";       Sha = $dockerPin.DOCKER_SHA256_X86_64 },
+    @{ Rel = "docker\docker-$dv-aarch64.tgz";      Sha = $dockerPin.DOCKER_SHA256_AARCH64 },
+    @{ Rel = "docker\docker-compose-linux-x86_64";  Sha = $dockerPin.COMPOSE_SHA256_X86_64 },
+    @{ Rel = "docker\docker-compose-linux-aarch64"; Sha = $dockerPin.COMPOSE_SHA256_AARCH64 }
+)
+$offlineMissing = @()
+foreach ($f in $offlineFiles) {
+    $src = Join-Path $ToolsSrc $f.Rel
+    if (-not (Test-Path -LiteralPath $src -PathType Leaf)) { $offlineMissing += $f.Rel; continue }
+    if ($f.Sha) {
+        $got = (Get-FileHash -LiteralPath $src -Algorithm SHA256).Hash.ToLower()
+        if ($got -ne $f.Sha) { Err "packaging\tools\$($f.Rel) does not match its SHA-256 pin (packaging\docker-static.pin or packaging\appliance\cosign.pin). Re-fetch it with the fetch script." }
+    }
+    Copy-Item -LiteralPath $src -Destination (Join-Path $ToolsOut $f.Rel) -Force
+}
+if ($offlineMissing.Count -gt 0) {
+    $msg = "Offline prerequisites missing from packaging\tools: $($offlineMissing -join ', '). The server installer would need the internet. Run packaging\fetch-docker-static.ps1 and place cosign-linux-amd64/arm64 in packaging\tools."
+    if ($IsCustomerBuild -and -not $AllowMissingOfflinePrereqs) { Err $msg }
+    Warn "  $msg (continuing: not a customer build, or -AllowMissingOfflinePrereqs)"
+} else {
+    Log "  tools\: cosign + Docker $dv / Compose $($dockerPin.COMPOSE_VERSION) staged and verified"
+}
 Copy-Item "$ComposeDir\docker-compose.yml"      "$OutDir\docker-compose.yml"
 # Stamp the real release version into the shipped .env.example so it never
 # shows a stale placeholder inside a versioned bundle (was hardcoded 1.7.1
@@ -1058,26 +1185,33 @@ if ($Customer -ne "" -and $CustomerID -ne "") {
         Warn "License private key not found at $LicPrivKey - skipping license generation."
         Warn "Run: bash packaging/licensing/keygen.sh"
     } else {
+        $addonList = @($Addons -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" })
+        foreach ($a in $addonList) { if ($a -ne "aleef") { Err "Unknown -Addons value $a (recognised: aleef)" } }
+        $addonArgs = @()
+        if ($addonList.Count -gt 0) { $addonArgs = @("-addons", ($addonList -join ",")) }
         Push-Location $RepoRoot
+        # The file is named <customer>-<tier>-<number>.lic (hdfc-enterprise-001.lic); licensegen owns that rule.
+        $LicFileName = (go run "$LicGenDir\main.go" -id $CustomerID "-tier=$LicenseType" -name-only | Select-Object -First 1).Trim()
         go run "$LicGenDir\main.go" `
             -customer $Customer `
             -id       $CustomerID `
             -days     $Days `
-            -tier     $LicenseType `
+            "-tier=$LicenseType" `
             -key      $LicPrivKey `
-            -out      "$CustomerID.lic"
+            -out      $LicFileName `
+            @addonArgs
         Pop-Location
-        $LicensePath = Join-Path $RepoRoot "$CustomerID.lic"
+        $LicensePath = Join-Path $RepoRoot $LicFileName
         if (Test-Path $LicensePath) {
             Log "  License: $LicensePath"
-            Copy-Item $LicensePath "$OutDir\$CustomerID.lic"
+            Copy-Item $LicensePath "$OutDir\$LicFileName"
             # Shipped under its own customer-ID filename only -- no bas.lic
             # duplicate needed. docker-compose.yml now derives its mount and
             # BAS_LICENSE_PATH from LICENSE_FILE (install.sh's
             # _resolve_license_file sets this automatically from whatever
             # LIC_PATH the operator points at in setup.conf, e.g. this exact
             # $CustomerID.lic file), so there's nothing to hardcode here.
-            Log "  License shipped as $CustomerID.lic"
+            Log "  License shipped as $LicFileName"
         }
     }
 } else {

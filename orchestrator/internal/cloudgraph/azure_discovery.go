@@ -24,6 +24,15 @@ type AzureDiscoveryConfig struct {
 	SubscriptionID string
 }
 
+// String prints the config without the client secret, so a config that reaches
+// a log or an error through %v or %+v cannot leak it.
+func (c AzureDiscoveryConfig) String() string {
+	return fmt.Sprintf("AzureDiscoveryConfig{tenant=%s client=%s subscription=%s secret=[REDACTED]}", c.TenantID, c.ClientID, c.SubscriptionID)
+}
+
+// GoString is String for %#v.
+func (c AzureDiscoveryConfig) GoString() string { return c.String() }
+
 // AzureDiscoveryClient discovers real identities, resources, and role
 // assignments from a live Azure tenant and normalizes them into cloudgraph's
 // provider-agnostic CloudIdentity/CloudResource/CloudPermission types.
@@ -479,4 +488,10 @@ func (c *AzureDiscoveryClient) discoverPermissionsFrom(ctx context.Context, iden
 
 	stats.ItemsFound = len(permissions)
 	return permissions, stats, nil
+}
+
+// SetRateLimitObserver reports each rate-limiter delay this client imposes to fn.
+// Telemetry only.
+func (c *AzureDiscoveryClient) SetRateLimitObserver(fn func(time.Duration)) {
+	c.retry.OnWait = fn
 }

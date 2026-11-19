@@ -1,5 +1,9 @@
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { kpi, card, chip, hbars, empty, icon } from '../core/kit.js';
+import { setHeroStat } from './shell-ui.js';
+import * as M from './adc-model.js';
+import { chartSlot, CHART_COLORS } from '../core/charts.js';
 
 // ── Active Directory Coverage ────────────────────────────────────────────────
 // Dedicated AD capability-coverage view. It is intentionally separate from
@@ -15,34 +19,12 @@ var _adInv = null;         // last /api/ad/content-inventory response (or null)
 var _adInvError = false;   // content-inventory call failed (e.g. no permission)
 var _adFilter = { family: 'all', content: 'all', exec: 'all' };
 
-// Badge maps: value -> [sbadge-modifier, label]. Every map falls back to a grey
-// "unknown" badge so an unexpected API value is shown honestly, never dropped.
-var CONTENT_BADGE = {
-  'scenario-composable': ['s-active', 'Scenario-composable'],
-  'reusable-unmapped': ['s-restricted', 'Reusable (unmapped)'],
-  'model-only': ['s-idle', 'Model-only'],
-  'missing-executable-content': ['s-quarantined', 'Missing content'],
-};
-var EXEC_BADGE = {
-  'not_executed': ['s-idle', 'Not executed'],
-  'execution_attempted': ['s-restricted', 'Attempted'],
-  'execution_completed': ['s-active', 'Completed'],
-  'postcondition_verified': ['s-active', 'Postcondition verified'],
-};
-var DET_BADGE = {
-  'not_validated': ['s-idle', 'Not validated'],
-  'simulated_evidence_only': ['s-restricted', 'Simulated only'],
-  'telemetry_observed': ['s-active', 'Telemetry observed'],
-};
-var RISK_BADGE = {
-  'non_destructive': ['s-idle', 'Non-destructive'],
-  'potentially_destructive': ['s-restricted', 'Potentially destructive'],
-  'destructive': ['s-quarantined', 'Destructive'],
-};
+function badge(ax) { return chip(ax.label, ax.tone); }
 
-function badge(map, val) {
-  var hit = map[val] || ['s-retired', (val || 'unknown')];
-  return '<span class="sbadge ' + hit[0] + '">' + x(hit[1]) + '</span>';
+// adDistribution: how many capabilities fall in each value of one axis (counted from the report
+// itself; nothing is classified here). Unknown values keep their own bucket.
+export function adDistribution(caps, field, dflt) {
+  return M.distribution(caps, field, dflt);
 }
 
 export function loadADCoverage() {
@@ -83,41 +65,62 @@ export function renderADCoverage(report) {
   var sum = (report && report.capabilityStateSummary) || {};
   var content = (report && report.contentSummary) || {};
 
+  renderHero(sum);
   renderDisclaimer(sum);
   renderSummary(sum, content);
-  renderInventoryNote();
   renderFilters(caps);
   renderList(caps);
+  renderCharts(caps);
+  renderInventoryNote();
+}
+
+function renderHero(sum) {
+  var h = M.heroStats(sum);
+  var dash = function(v) { return v == null ? '—' : v; };
+  setHeroStat('adc-hs-total', dash(h.capabilities));
+  setHeroStat('adc-hs-composed', dash(h.composed));
+  setHeroStat('adc-hs-executed', h.executed);
+  setHeroStat('adc-hs-detected', h.detected);
 }
 
 // A persistent, unmissable statement of the gap between modeled coverage and
-// genuinely validated AD security -- the whole point of this view.
+// genuinely validated AD security -- the whole point of this view. The report exports sit inside it.
 function renderDisclaimer(sum) {
   var el = document.getElementById('adc-disclaimer');
   if (!el) return;
   var executed = sum.executed || 0;
   var detected = sum.detectionValidated || 0;
-  el.className = 'empty u-warning u-mb-1';
+  el.className = 'adc-warn';
   el.innerHTML =
-    '<strong>Modeled / content coverage — not validated against real Active Directory.</strong> ' +
+    '<div class="adc-warn-row">' + icon('alert') + '<div><strong>Modeled / content coverage — not validated against real Active Directory.</strong> ' +
     x(String(executed)) + ' capabilities executed and ' + x(String(detected)) +
-    ' detection-validated. Content availability and scenario composition do not imply a technique has run against, or been detected in, a real domain.';
+    ' detection-validated. Content availability and scenario composition do not imply a technique has run against, or been detected in, a real domain.</div></div>' +
+    '<div class="adc-warn-actions">' +
+    '<button class="btn btn-outline btn-sm" data-on-click="exportADReportPDF" title="Download the enterprise assessment report (PDF)">Export PDF</button>' +
+    '<button class="btn btn-outline btn-sm" data-on-click="exportADReportJSON" title="Download the assessment data (JSON)">JSON</button>' +
+    '</div>';
 }
 
 function renderSummary(sum, content) {
   var el = document.getElementById('adc-summary');
   if (!el) return;
-  function tile(label, val, cls) {
-    return '<div class="ca-card"><div class="ca-label">' + x(label) + '</div>' +
-      '<div class="ca-val ' + (cls || '') + '">' + x(String(val == null ? '—' : val)) + '</div></div>';
-  }
-  el.innerHTML =
-    tile('Capabilities', sum.total == null ? '—' : sum.total) +
-    tile('Modeled', sum.modeled == null ? '—' : sum.modeled) +
-    tile('Scenario-composed', sum.scenarioComposed == null ? '—' : sum.scenarioComposed) +
-    tile('Executed vs real AD', sum.executed || 0, (sum.executed ? 'u-success' : 'u-muted')) +
-    tile('Detection-validated', sum.detectionValidated || 0, (sum.detectionValidated ? 'u-success' : 'u-muted')) +
-    tile('Reusable content', content.reusableUnmapped == null ? '—' : content.reusableUnmapped, 'u-muted');
+  el.innerHTML = '<div class="rk-grid adc-tiles">' + M.summaryTiles(sum, content).map(kpi).join('') + '</div>';
+}
+
+// Content-availability donut and capabilities-by-family bars, counted from the report itself.
+function renderCharts(caps) {
+  var el = document.getElementById('adc-charts');
+  if (!el) return;
+  if (!caps || !caps.length) { el.innerHTML = ''; return; }
+  var cd = M.distribution(caps, 'contentAvailability', 'unknown');
+  var cMap = { 'scenario-composable': ['Composable', CHART_COLORS.ok], 'reusable-unmapped': ['Reusable (unmapped)', CHART_COLORS.info], 'model-only': ['Model-only', CHART_COLORS.muted], 'missing-executable-content': ['Missing content', CHART_COLORS.bad] };
+  var cSegs = Object.keys(cd).map(function(k) { return { label: (cMap[k] || [k])[0], value: cd[k], color: (cMap[k] || [0, CHART_COLORS.warn])[1] }; });
+  var fam = M.distribution(caps, 'family', '—');
+  var famKeys = Object.keys(fam).sort(function(p, q) { return fam[q] - fam[p]; });
+  el.innerHTML = '<div class="rk-grid g2">' +
+    card('Content availability', chartSlot({ type: 'donut', segments: cSegs, center: String(caps.length), centerSub: 'capabilities', legend: true, h: 150 })) +
+    card('Capabilities by family', hbars(famKeys.slice(0, 8).map(function(k) { return [k, fam[k] / caps.length * 100, 'accent', fam[k]]; }))) +
+    '</div>';
 }
 
 // Live ART/Caldera inventory completeness. Absent or partial stores must read
@@ -153,26 +156,15 @@ function pfSet(dim, options, active) {
 function renderFilters(caps) {
   var el = document.getElementById('adc-filters');
   if (!el) return;
-  var famSet = {};
-  caps.forEach(function(c) { if (c && c.family) famSet[c.family] = true; });
-  var famOpts = [['all', 'All families']].concat(Object.keys(famSet).sort().map(function(f) { return [f, f]; }));
-  var contentOpts = [['all', 'All content'], ['scenario-composable', 'Composable'], ['reusable-unmapped', 'Reusable'], ['model-only', 'Model-only'], ['missing-executable-content', 'Missing']];
-  var execOpts = [['all', 'All execution'], ['not_executed', 'Not executed'], ['execution_completed', 'Executed'], ['postcondition_verified', 'Verified']];
   el.innerHTML =
-    '<div class="u-mb-1"><span class="u-muted">Family:</span> ' + pfSet('family', famOpts, _adFilter.family) + '</div>' +
-    '<div class="u-mb-1"><span class="u-muted">Content:</span> ' + pfSet('content', contentOpts, _adFilter.content) + '</div>' +
-    '<div class="u-mb-1"><span class="u-muted">Execution:</span> ' + pfSet('exec', execOpts, _adFilter.exec) + '</div>';
+    '<div class="adc-filters">' +
+    '<div class="adc-frow"><span class="adc-flbl">Family</span><div class="adc-chips">' + pfSet('family', M.familyOptions(caps), _adFilter.family) + '</div></div>' +
+    '<div class="adc-frow"><span class="adc-flbl">Content</span><div class="adc-chips">' + pfSet('content', M.CONTENT_OPTIONS, _adFilter.content) + '</div></div>' +
+    '<div class="adc-frow"><span class="adc-flbl">Execution</span><div class="adc-chips">' + pfSet('exec', M.EXEC_OPTIONS, _adFilter.exec) + '</div></div>' +
+    '</div>';
 }
 
-function applyFilter(caps) {
-  return caps.filter(function(c) {
-    if (!c) return false;
-    if (_adFilter.family !== 'all' && c.family !== _adFilter.family) return false;
-    if (_adFilter.content !== 'all' && c.contentAvailability !== _adFilter.content) return false;
-    if (_adFilter.exec !== 'all' && (c.executionValidation || 'not_executed') !== _adFilter.exec) return false;
-    return true;
-  });
-}
+function applyFilter(caps) { return M.applyFilter(caps, _adFilter); }
 
 function detailList(label, arr) {
   if (!arr || !arr.length) return '';
@@ -190,33 +182,35 @@ function prereqText(p) {
   return parts.length ? parts.map(x).join(', ') : '—';
 }
 
+var HEAD = '<div class="adc-head"><span>Capability</span><span>Content</span><span>Composition</span><span>Execution</span><span>Validation</span><span>Safety</span></div>';
+
 function renderList(caps) {
   var el = document.getElementById('adc-list');
   var foot = document.getElementById('adc-foot');
   if (!el) return;
   if (!caps.length) {
-    el.innerHTML = '<div class="empty">No AD capabilities reported.</div>';
+    el.innerHTML = empty('shield', 'No AD capabilities reported');
     if (foot) foot.textContent = '';
     return;
   }
   var rows = applyFilter(caps);
-  el.innerHTML = rows.map(function(c) {
+  var body = rows.map(function(c) {
     var postconds = (c.expectedPostconditions || []).map(function(pc) { return (pc && pc.kind ? pc.kind : '') + (pc && pc.target ? '@' + pc.target : ''); });
     var provenance = [];
     if (c.contentSource) provenance.push('Source: ' + c.contentSource);
     if (c.contentReason) provenance.push('Reason: ' + c.contentReason);
     return '<details class="adc-cap">' +
       '<summary>' +
-        '<span class="u-fw600">' + x(c.name || c.primitiveId || '—') + '</span> ' +
-        '<span class="u-muted">' + x(c.primitiveId || '') + (c.techniqueId ? ' · ' + x(c.techniqueId) : '') + '</span> ' +
-        '<span class="tag">' + x(c.family || '—') + '</span> ' +
-        badge(CONTENT_BADGE, c.contentAvailability) + ' ' +
-        '<span class="sbadge ' + (c.scenarioComposed ? 's-active' : 's-idle') + '">' + (c.scenarioComposed ? 'Composed' : 'Not composed') + '</span> ' +
-        badge(EXEC_BADGE, c.executionValidation || 'not_executed') + ' ' +
-        badge(DET_BADGE, c.detectionValidation || 'not_validated') + ' ' +
-        badge(RISK_BADGE, c.riskClass) +
+        '<span class="adc-cell-cap"><b>' + x(c.name || c.primitiveId || '—') + '</b>' +
+          '<span class="adc-id">' + x(c.primitiveId || '') + (c.techniqueId ? ' · ' + x(c.techniqueId) : '') + '</span>' +
+          '<span class="adc-fam">' + x(c.family || '—') + '</span></span>' +
+        '<span>' + badge(M.contentAxis(c.contentAvailability)) + '</span>' +
+        '<span>' + badge(M.compositionAxis(c)) + '</span>' +
+        '<span>' + badge(M.execAxis(c.executionValidation)) + '</span>' +
+        '<span>' + badge(M.detAxis(c.detectionValidation)) + '</span>' +
+        '<span>' + badge(M.riskAxis(c.riskClass)) + '</span>' +
       '</summary>' +
-      '<div class="u-mt-06">' +
+      '<div class="adc-detail">' +
         '<div><span class="u-fw600">Prerequisites:</span> ' + prereqText(c.prerequisites) + '</div>' +
         (postconds.length ? '<div><span class="u-fw600">Expected postconditions:</span> ' + postconds.map(x).join(', ') + '</div>' : '') +
         detailList('Evidence requirements', c.evidenceRequirements) +
@@ -227,6 +221,7 @@ function renderList(caps) {
         (provenance.length ? detailList('Content provenance', provenance) : '') +
       '</div>' +
     '</details>';
-  }).join('') || '<div class="empty">No capabilities match the current filters.</div>';
+  }).join('');
+  el.innerHTML = body ? card('Capabilities', '<div class="adc-table">' + HEAD + body + '</div>') : empty('filter', 'No capabilities match the current filters');
   if (foot) foot.textContent = 'Showing ' + rows.length + ' of ' + caps.length + ' capabilities · states read from /api/ad/coverage; nothing is executed by this view.';
 }

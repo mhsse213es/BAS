@@ -56,15 +56,18 @@ func (e *Engine) WriteAuditPack(ctx context.Context, agentID string, mapper *com
 				continue
 			}
 			compSummaries = append(compSummaries, ComplianceSummaryRow{
-				Framework:     fw.Name + " " + fw.Version,
-				TotalControls: cr.Summary.TotalControls,
-				Manual:        cr.Summary.ManualControls,
-				Tested:        cr.Summary.TestedControls,
-				Passing:       cr.Summary.PassingControls,
-				Failing:       cr.Summary.FailingControls,
-				Untested:      cr.Summary.UntestedControls,
-				CompliancePct: cr.Summary.CompliancePercent,
-				CoveragePct:   cr.Summary.CoveragePercent,
+				Framework:      fw.Name + " " + fw.Version,
+				TotalControls:  cr.Summary.TotalControls,
+				Manual:         cr.Summary.ManualControls,
+				Tested:         cr.Summary.TestedControls,
+				Passing:        cr.Summary.PassingControls,
+				Failing:        cr.Summary.FailingControls,
+				Untested:       cr.Summary.UntestedControls,
+				CompliancePct:  cr.Summary.CompliancePercent,
+				CoveragePct:    cr.Summary.CoveragePercent,
+				Partial:        cr.Summary.PartialControls,
+				CoverageNote:   cr.Summary.CoverageNote,
+				MappingWarning: fw.MappingWarning,
 			})
 		}
 	}
@@ -81,7 +84,7 @@ func (e *Engine) WriteAuditPack(ctx context.Context, agentID string, mapper *com
 	if scope == "" {
 		scope = agentID
 	}
-	dirName := fmt.Sprintf("Audspect_Audit_Pack_%s_%s", sanitize(scope), time.Now().UTC().Format("2006-01-02_15-04-05"))
+	dirName := fmt.Sprintf("Audspect_Audit_Pack_%s_%s", sanitize(scope), time.Now().UTC().Format("2006-01-02"))
 	prefix := dirName + "/"
 
 	// add writes one pack file and records its SHA-256 in the manifest. Every

@@ -2,11 +2,13 @@
 package main
 
 import (
+	"crypto/ecdsa"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -23,8 +25,9 @@ import (
 // override them for non-default deployments, mirroring how BAS_SERVER_URL
 // itself is already overridable.
 const (
-	defaultMTLSPort   = "9443"
-	defaultEnrollPort = "9444"
+	defaultMTLSPort      = "9443"
+	defaultEnrollPort    = "9444"
+	defaultDashboardPort = "9543"
 )
 
 // errBlocked wraps an ensureCertificate error to signal "an already-enrolled
@@ -126,17 +129,20 @@ func ensureCertificate(ctx context.Context, cfg Config, agentID string) (string,
 		return "", fmt.Errorf("derive operational mTLS URL: %w", err)
 	}
 
+	if err := recoverPendingRotation(); err != nil {
+		log.Printf("[!] could not finish a pending certificate rotation: %v", err)
+	}
 	enrolled := isEnrolled()
 	existing, loadErr := loadAgentCertificate()
 	expired := loadErr == nil && !time.Now().Before(existing.NotAfter)
 
-	if enrolled && (loadErr != nil || expired) {
-		reason := "no usable certificate on disk for an enrolled identity"
-		if loadErr == nil && expired {
-			reason = "certificate has expired with no successful renewal"
-		}
-		return "", &errBlocked{errors.New(reason)}
+	if enrolled && loadErr != nil {
+		return "", &errBlocked{errors.New("no usable certificate on disk for an enrolled identity")}
 	}
+	// An expired certificate cannot authenticate a renewal, and a running agent that was offline
+	// past expiry would be stranded for good. It re-enrols once over the TLS enrolment listener
+	// with the shared secret (never over legacy transport). The server records the re-enrolment.
+	reEnrolling := enrolled && expired
 
 	if enrolled && !certExpiringSoon(existing) {
 		if err := checkMTLSUsable(cfg); err != nil {
@@ -166,9 +172,16 @@ func ensureCertificate(ctx context.Context, cfg Config, agentID string) (string,
 	// renewal threshold, but missing command-signing trust -- also renews
 	// over mTLS, solely to obtain it; (c) never enrolled -- initial
 	// bootstrap over the enrollment listener with the shared secret.
-	renewing := enrolled
+	renewing := enrolled && !reEnrolling
 
-	key, err := loadOrGenerateAgentKey()
+	// An enrolled identity (renewal or re-enrolment) gets a fresh key, kept in memory until the server
+	// has issued the certificate; the first bootstrap keeps using the stored key.
+	var key *ecdsa.PrivateKey
+	if enrolled {
+		key, err = newAgentKey()
+	} else {
+		key, err = loadOrGenerateAgentKey()
+	}
 	if err != nil {
 		return "", fmt.Errorf("load/generate agent key: %w", err)
 	}
@@ -209,13 +222,32 @@ func ensureCertificate(ctx context.Context, cfg Config, agentID string) (string,
 		bootstrapSecret = cfg.AgentSecret
 	}
 
-	resp, err := protocol.SubmitCSR(ctx, client, targetURL, bootstrapSecret, protocol.CSRRequest{
-		AgentID: agentID,
-		CSRPEM:  string(csrPEM),
-	})
+	// The enrolment token only ever goes to the enrolment listener; a renewal over mTLS needs none.
+	enrollmentToken := cfg.EnrollmentToken
+	if renewing {
+		enrollmentToken = ""
+	}
+	var resp protocol.CSRResponse
+	recovered := false
+	if reEnrolling {
+		// The certificate has expired. First try restricted recovery, proven by that certificate and its key
+		// (valid for 24 hours after expiry); only if the server refuses does the agent fall back to a fresh
+		// authorized enrolment with whatever credential it has been given.
+		if r, rerr := attemptRecovery(ctx, client, targetURL, agentID, string(csrPEM)); rerr == nil {
+			resp, recovered = r, true
+		} else {
+			logRecoveryFailure(rerr)
+		}
+	}
+	if !recovered {
+		resp, err = protocol.SubmitCSRWithToken(ctx, client, targetURL, bootstrapSecret, enrollmentToken, protocol.CSRRequest{
+			AgentID: agentID,
+			CSRPEM:  string(csrPEM),
+		})
+	}
 	if err != nil {
 		err = fmt.Errorf("submit CSR (renewing=%v): %w", renewing, err)
-	} else if saveErr := saveAgentCertificate([]byte(resp.CertPEM)); saveErr != nil {
+	} else if saveErr := persistIssuedCertificate(enrolled, key, []byte(resp.CertPEM)); saveErr != nil {
 		err = fmt.Errorf("save issued certificate: %w", saveErr)
 	}
 	if err != nil {
@@ -223,6 +255,10 @@ func ensureCertificate(ctx context.Context, cfg Config, agentID string) (string,
 			log.Printf("[!] certificate renewal failed, continuing with the current certificate (expires %s): %v",
 				existing.NotAfter.Format(time.RFC3339), err)
 			return opURL, nil
+		}
+		if enrolled {
+			// Never fall through to legacy transport for an enrolled identity.
+			return "", &errBlocked{fmt.Errorf("re-enrolment after certificate expiry failed: %w", err)}
 		}
 		return "", err
 	}
@@ -233,7 +269,7 @@ func ensureCertificate(ctx context.Context, cfg Config, agentID string) (string,
 			// command until this is resolved (see agent/commandsig.go),
 			// which is the correct fail-closed behavior for a missing
 			// trust anchor, not a reason to fail bootstrap/renewal itself.
-			log.Printf("[!] could not persist command-signing trust: %v", err)
+			log.Printf("[!] could not persist command-signing trust: %v -- scenario commands will be rejected until the agent installer is re-run on this host", err)
 		}
 	}
 	if !renewing {
@@ -243,6 +279,10 @@ func ensureCertificate(ctx context.Context, cfg Config, agentID string) (string,
 		if err := markEnrolled(); err != nil {
 			return "", fmt.Errorf("certificate issued but could not persist enrollment state: %w", err)
 		}
+	}
+	if reEnrolling {
+		log.Printf("[!] certificate had expired; re-enrolled through the enrolment listener (new certificate expires %s)", resp.ExpiresAt)
+		return opURL, nil
 	}
 	log.Printf("[*] certificate %s (expires %s)", map[bool]string{true: "renewed", false: "issued"}[renewing], resp.ExpiresAt)
 	return opURL, nil
@@ -285,6 +325,68 @@ func enrollmentURL(serverURL string) (string, error) {
 		return "", err
 	}
 	return "https://" + net.JoinHostPort(host, enrollPort()), nil
+}
+
+// dashboardURL returns the browser/dashboard listener URL for serverURL's
+// host -- always https://, on BAS_DASHBOARD_PORT or the 9543 default. The
+// public deployment CA root (GET /api/config/ca-root) is reachable WITHOUT a
+// client certificate only on this listener (and the legacy one): the mTLS
+// listener (:9443) requires a client cert the agent does not yet have at
+// install time, and the enrollment listener (:9444) mounts only enrollment +
+// /health, never the full router. See orchestrator/cmd/server/main.go's
+// listener wiring.
+func dashboardURL(serverURL string) (string, error) {
+	host, _, _, err := splitServerURL(serverURL)
+	if err != nil {
+		return "", err
+	}
+	port := defaultDashboardPort
+	if p := os.Getenv("BAS_DASHBOARD_PORT"); p != "" {
+		port = p
+	}
+	return "https://" + net.JoinHostPort(host, port), nil
+}
+
+// fetchDeploymentCARoot downloads the public deployment CA root from the
+// orchestrator's dashboard listener and returns its PEM bytes, so the agent's
+// --install path can place the trust anchor itself instead of requiring the
+// operator to fetch it by hand and pass --ca-root. The TLS connection is
+// deliberately unverified (InsecureSkipVerify): at install time the agent has
+// no trust anchor yet, and this endpoint serves exactly that anchor -- a
+// trust-on-first-use fetch of a PUBLIC certificate, identical to what the
+// Windows GUI installer (installer/ca_fetch.go) and the dashboard's own `-k`
+// install command already do. Every connection AFTER install verifies the
+// full chain against this root (bootstrapHTTPClient / mtlsTLSConfig), so this
+// one unverified GET only decides which self-signed CA to pin, never whether
+// to verify at all.
+func fetchDeploymentCARoot(serverURL string) ([]byte, error) {
+	dashURL, err := dashboardURL(serverURL)
+	if err != nil {
+		return nil, err
+	}
+	client := &http.Client{
+		Timeout: 20 * time.Second,
+		Transport: &http.Transport{
+			Proxy:           http.ProxyFromEnvironment,
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+	}
+	resp, err := client.Get(dashURL + "/api/config/ca-root")
+	if err != nil {
+		return nil, fmt.Errorf("GET %s/api/config/ca-root: %w", dashURL, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server returned %d from %s/api/config/ca-root", resp.StatusCode, dashURL)
+	}
+	pemBytes, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, fmt.Errorf("read ca-root response: %w", err)
+	}
+	if !strings.Contains(string(pemBytes), "BEGIN CERTIFICATE") {
+		return nil, fmt.Errorf("ca-root response from %s is not a PEM certificate (%d bytes)", dashURL, len(pemBytes))
+	}
+	return pemBytes, nil
 }
 
 // operationalURL returns the mTLS listener URL for serverURL's host, always
@@ -404,4 +506,13 @@ func verifyServerCertChain(pool *x509.CertPool) func(rawCerts [][]byte, _ [][]*x
 		}
 		return nil
 	}
+}
+
+// persistIssuedCertificate stores the issued certificate: with its new key for an enrolled identity
+// (a rotation), or against the stored key for the first bootstrap.
+func persistIssuedCertificate(rotating bool, key *ecdsa.PrivateKey, certPEM []byte) error {
+	if rotating {
+		return rotateCredentials(key, certPEM)
+	}
+	return saveAgentCertificate(certPEM)
 }

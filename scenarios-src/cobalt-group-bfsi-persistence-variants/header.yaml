@@ -1,0 +1,25 @@
+id: "cobalt-group-bfsi-persistence-variants"
+product_line: killchain
+name: "Cobalt Group BFSI - Additional Persistence Variants (P2)"
+description: >
+  Extends scenarios/cobalt-group-kill-chain.yaml's existing persistence coverage (T1543.003 Windows
+  service, T1053.005 scheduled task) with four variant persistence techniques not yet represented
+  in that campaign: registry run keys, WMI event subscription, local account creation, and account
+  manipulation via group membership. All state is tagged with a per-run synthetic identifier and
+  removed by the matching undo script; no production-sensitive registry key, WMI class, or group is
+  ever touched (Run-key value only, never the key itself; root\subscription test objects only;
+  built-in Users group only, never Administrators or any admin-equivalent group).
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cobalt-group
+  - bfsi
+  - persistence
+  - p2
+mitre_phases:
+  - persistence
+
+steps:
+

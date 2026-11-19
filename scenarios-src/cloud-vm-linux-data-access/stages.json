@@ -1,0 +1,109 @@
+[
+  {
+    "id": "cvl-e32",
+    "n": 1,
+    "name": "Cloud VM Linux Data 32 - Azure Blob Container Listing (T1530)",
+    "technique_id": "T1530",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Lists container names on a designated synthetic test account. No blob is read.",
+    "telemetry": [
+      "Storage analytics: List Containers (cloud side)"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "cloud_object_list_read",
+    "no_default_cleanup": false
+  },
+  {
+    "id": "cvl-e33",
+    "n": 2,
+    "name": "Cloud VM Linux Data 33 - S3 Object Metadata Access (T1530)",
+    "technique_id": "T1530",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "HEAD request on one designated synthetic object. The body is never requested.",
+    "telemetry": [
+      "CloudTrail: HeadObject (cloud side)"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "cloud_object_head_read",
+    "no_default_cleanup": false
+  },
+  {
+    "id": "cvl-e34",
+    "n": 3,
+    "name": "Cloud VM Linux Data 34 - Cloud Database Inventory (T1526)",
+    "technique_id": "T1526",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Lists database servers or instances (first page). Read-only.",
+    "telemetry": [
+      "Azure Activity Log / CloudTrail: database list (cloud side)"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "cloud_inventory_read",
+    "no_default_cleanup": false
+  },
+  {
+    "id": "cvl-e35",
+    "n": 4,
+    "name": "Cloud VM Linux Data 35 - Synthetic Secret Retrieval Attempt (T1555)",
+    "technique_id": "T1555",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "high",
+    "blast_radius": "Gated (BAS_CONFIRM_CLOUD_SECRET_READ). Requests the value of one designated synthetic test secret. Only its length is observed; the value is discarded.",
+    "telemetry": [
+      "Key Vault audit: SecretGet / CloudTrail: GetSecretValue (cloud side)"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "cloud_secret_value_read",
+    "no_default_cleanup": true
+  },
+  {
+    "id": "cvl-e36",
+    "n": 5,
+    "name": "Cloud VM Linux Data 36 - Gated Synthetic Cloud Storage Upload (T1567.002)",
+    "technique_id": "T1567.002",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "medium",
+    "blast_radius": "Gated (BAS_CONFIRM_CLOUD_EXFIL_SIM). Writes one 1 KB synthetic file to a designated test container or bucket, verifies, deletes it, and removes the local copy.",
+    "telemetry": [
+      "Storage analytics: PutBlob / CloudTrail: PutObject (cloud side)",
+      "Network: egress to storage endpoint"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "cloud_synthetic_upload",
+    "no_default_cleanup": true,
+    "reversible": false
+  }
+]

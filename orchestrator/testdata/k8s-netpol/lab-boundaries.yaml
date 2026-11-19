@@ -1,0 +1,27 @@
+# Owner expectations for the lab fixtures in lab-fixtures.yaml. Reviewed like scenario content. Each expectation
+# states what should happen; the analysis reports what the configured policies say.
+boundaries:
+  - name: web-to-db-5432
+    from: {namespace: np-app, labels: {app: web}}
+    to:   {namespace: np-db, labels: {app: db}}
+    port: 5432
+    protocol: TCP
+    expect: allow
+  - name: web-to-db-3306
+    from: {namespace: np-app, labels: {app: web}}
+    to:   {namespace: np-db, labels: {app: db}}
+    port: 3306
+    protocol: TCP
+    expect: block
+  - name: batch-to-db-5432
+    from: {namespace: np-app, labels: {app: batch}}
+    to:   {namespace: np-db, labels: {app: db}}
+    port: 5432
+    protocol: TCP
+    expect: block
+  - name: external-to-db-5432
+    from: {external: true}
+    to:   {namespace: np-db, labels: {app: db}}
+    port: 5432
+    protocol: TCP
+    expect: block

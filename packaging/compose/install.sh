@@ -19,6 +19,14 @@
 # confirmation before installing Docker CE from Docker's official
 # repository. --yes also grants that consent, for unattended runs.
 #
+# Aleef API token references: put one line per reference in setup.conf,
+#   ALEEF_SECRET_<NAME>=<token>      e.g. ALEEF_SECRET_LAB_ALICE=...
+# <NAME> is A-Z 0-9 _ ; the reference "lab/alice" resolves to ALEEF_SECRET_LAB_ALICE
+# (upper-case, / - . become _). Values are written (never printed) to
+# ${DATA_DIR}/aleef-secrets.env (mode 0600, always present, empty when none are set) on
+# both --install and --upgrade, and mounted read-only into the orchestrator only
+# (ALEEF_SECRETS_FILE). A value may not contain a quote, a backslash, or a newline/NUL.
+#
 # All secrets not supplied in setup.conf are auto-generated and written to
 # ${DATA_DIR}/.env which is readable only by root. setup.conf is the
 # change-management artefact approved before the maintenance window.
@@ -50,13 +58,35 @@ readonly DEFAULT_ENROLL_PORT="9444"
 readonly DEFAULT_LEGACY_PORT="9000"
 readonly DEFAULT_DASHBOARD_PORT="9543"
 readonly MIN_RAM_MB=3800
+readonly COSIGN_VERSION="v3.1.3"
+readonly COSIGN_SHA256_AMD64="4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71"
+readonly COSIGN_SHA256_ARM64="c5d324e091826b0d7a78eb16fef316450b4eb9aaec045611c08ba06f5e73220a"
 readonly MIN_DISK_MB=10240        # 10 GB -images + DB + logs
 readonly MIN_CPU_CORES=2
 readonly COMPOSE_PROJECT="audspect"
 readonly SERVICE_NAME="audspect"
 unset CDPATH
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# Interim database encryption key provisioning (db-encryption-key.sh). Functions only; nothing runs on source.
+[[ -f "${SCRIPT_DIR}/db-encryption-key.sh" ]] || { echo "missing ${SCRIPT_DIR}/db-encryption-key.sh" >&2; exit 1; }
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/db-encryption-key.sh"
+# Database server TLS material (db-tls.sh, P0.1) and CA key backup wrapping (ca-backup.sh, P0.2).
+[[ -f "${SCRIPT_DIR}/db-tls.sh" ]] || { echo "missing ${SCRIPT_DIR}/db-tls.sh" >&2; exit 1; }
+source "${SCRIPT_DIR}/db-tls.sh"
+[[ -f "${SCRIPT_DIR}/ca-backup.sh" ]] || { echo "missing ${SCRIPT_DIR}/ca-backup.sh" >&2; exit 1; }
+source "${SCRIPT_DIR}/ca-backup.sh"
+[[ -f "${SCRIPT_DIR}/backup-key.sh" ]] || { echo "missing ${SCRIPT_DIR}/backup-key.sh" >&2; exit 1; }
+source "${SCRIPT_DIR}/backup-key.sh"
 readonly SCRIPT_DIR
+
+# Bundled (offline) Docker installer, shared with setup.sh.
+# shellcheck source=docker-offline-lib.sh
+if [[ -f "${SCRIPT_DIR}/docker-offline-lib.sh" ]]; then
+  . "${SCRIPT_DIR}/docker-offline-lib.sh"
+else
+  _bundled_has() { return 1; }   # older/incomplete bundle: fall back to the ask-first online path
+fi
 
 # Read version from bundle VERSION file (written by windows-build.ps1).
 _ver="$(cat "${SCRIPT_DIR}/VERSION" 2>/dev/null || true)"
@@ -80,6 +110,7 @@ info()  { echo -e "      $*"; }
 # ── Argument parsing ──────────────────────────────────────────────────────────
 MODE=""
 CONFIG_FILE=""
+DB_KEY_RECOVERY_PATH=""
 PURGE_IMAGES=false
 YES=false
 COSIGN_PUB_FLAG=""
@@ -98,6 +129,10 @@ while [[ $# -gt 0 ]]; do
     --backup)          MODE="backup"          ;;
     --backup-request)  MODE="backup-request"  ;;
     --backup-worker)   MODE="backup-worker"   ;;
+    --export-db-key)   MODE="export-db-key"; shift; DB_KEY_RECOVERY_PATH="${1:-}" ;;
+    --import-db-key)   MODE="import-db-key"; shift; DB_KEY_RECOVERY_PATH="${1:-}" ;;
+    --export-backup-key) MODE="export-backup-key"; shift; BAS_BACKUP_KEY_RECOVERY_PATH="${1:-}" ;;
+    --import-backup-key) MODE="import-backup-key"; shift; BAS_BACKUP_KEY_RECOVERY_PATH="${1:-}" ;;
     --restore)
       MODE="restore"
       shift
@@ -156,6 +191,7 @@ fi
 
 # ── Config variables (populated by load_config) ───────────────────────────────
 DATA_DIR=""
+ALEEF_SECRET_LINES=()   # validated ALEEF_SECRET_<NAME>=<value> lines from setup.conf (never logged)
 BAS_PORT=""
 BAS_ENROLL_PORT=""
 BAS_LEGACY_PORT=""
@@ -179,6 +215,7 @@ TLS_KEY=""
 DB_PASSWORD=""
 ADMIN_EMAIL=""
 ADMIN_PASSWORD=""
+RECOVERY_PASSPHRASE=""
 LOG_RETENTION_DAYS=""
 JWT_SECRET=""
 AGENT_SECRET=""
@@ -206,6 +243,8 @@ RESTORE_ARCHIVE=""
 # TCF Phase 6 validation lab (optional). Empty agent ID keeps the lab disabled.
 VALIDATION_LAB_AGENT_ID=""
 VALIDATION_LAB_POLL_MINUTES=""
+# Lab-only spray/guessing exemption (is_spray_lab). Empty turns it off everywhere.
+SPRAY_LAB_AGENT_ID=""
 # Kubernetes state-changing scenarios (lab only). Off unless KUBE_SCENARIO_ENABLED=true.
 KUBE_SCENARIO_ENABLED=""
 KUBE_SCENARIO_API=""
@@ -323,6 +362,17 @@ load_config() {
     # trim whitespace
     key="${key#"${key%%[![:space:]]*}"}"; key="${key%"${key##*[![:space:]]}"}"
     val="${val#"${val%%[![:space:]]*}"}"; val="${val%"${val##*[![:space:]]}"}"
+    # Aleef token references: validate here (before quotes are stripped, so a quote is
+    # rejected, not silently trimmed) and collect. Messages never contain the value.
+    if [[ "$key" == ALEEF_SECRET_* ]]; then
+      [[ "$key" =~ ^ALEEF_SECRET_[A-Z0-9_]+$ ]] || { err "setup.conf: '${key}' is not a valid Aleef secret name (use ALEEF_SECRET_ then A-Z, 0-9, _ only)."; exit 1; }
+      [[ -z "$val" ]] && continue
+      case "$val" in
+        *\"*|*\'*|*\\*) err "setup.conf: ${key} contains a quote or backslash, which is not allowed. The value was not printed."; exit 1 ;;
+      esac
+      ALEEF_SECRET_LINES+=("${key}=${val}")
+      continue
+    fi
     # strip surrounding quotes
     val="${val#\'}"; val="${val%\'}"; val="${val#\"}"; val="${val%\"}"
     case "$key" in
@@ -349,6 +399,7 @@ load_config() {
       DB_PASSWORD)          DB_PASSWORD="$val"          ;;
       ADMIN_EMAIL)          ADMIN_EMAIL="$val"          ;;
       ADMIN_PASSWORD)       ADMIN_PASSWORD="$val"       ;;
+      RECOVERY_PASSPHRASE)  RECOVERY_PASSPHRASE="$val"  ;;
       LOG_RETENTION_DAYS)   LOG_RETENTION_DAYS="$val"  ;;
       JWT_SECRET)              JWT_SECRET="$val"              ;;
       AGENT_SECRET)            AGENT_SECRET="$val"            ;;
@@ -367,6 +418,7 @@ load_config() {
       REMOTE_BACKUP_RETENTION)  REMOTE_BACKUP_RETENTION="$val"  ;;
       VALIDATION_LAB_AGENT_ID)     VALIDATION_LAB_AGENT_ID="$val"     ;;
       VALIDATION_LAB_POLL_MINUTES) VALIDATION_LAB_POLL_MINUTES="$val" ;;
+      SPRAY_LAB_AGENT_ID)          SPRAY_LAB_AGENT_ID="$val"          ;;
       KUBE_SCENARIO_ENABLED)   KUBE_SCENARIO_ENABLED="$val"   ;;
       KUBE_SCENARIO_API)       KUBE_SCENARIO_API="$val"       ;;
       KUBE_SCENARIO_CLUSTER)   KUBE_SCENARIO_CLUSTER="$val"   ;;
@@ -380,6 +432,11 @@ load_config() {
       KUBE_DISCOVERY_CA_FILE)  KUBE_DISCOVERY_CA_FILE="$val"  ;;
     esac
   done < "$cfg"
+
+  # A NUL byte is dropped by `read`, so check the raw file for one on an Aleef secret line.
+  if LC_ALL=C grep -qaP '^[[:space:]]*ALEEF_SECRET_[^\n]*\x00' "$cfg" 2>/dev/null; then
+    err "setup.conf: an ALEEF_SECRET_ line contains a NUL byte, which is not allowed. The value was not printed."; exit 1
+  fi
 
   # Defaults
   [[ -z "$DATA_DIR"           ]] && DATA_DIR="$DEFAULT_DATA_DIR"
@@ -436,6 +493,24 @@ load_config() {
   [[ ${#DB_PASSWORD}    -lt 8  ]] && { err "DB_PASSWORD must be at least 8 characters.";      exit 1; }
   [[ ${#ADMIN_PASSWORD} -lt 10 ]] && { err "ADMIN_PASSWORD must be at least 10 characters.";  exit 1; }
   [[ "$ADMIN_EMAIL" != *@*     ]] && { err "ADMIN_EMAIL must be a valid email address.";       exit 1; }
+
+  # Recovery passphrase: lets an operator who forgot the administrator password set a new one from the login page.
+  # Blank on an upgrade keeps the value already installed; a fresh install must set one.
+  if [[ -z "$RECOVERY_PASSPHRASE" && -f "${DATA_DIR}/.env" ]]; then
+    # sed, not grep -P: grep -P needs a UTF-8 locale and fails silently here, which dropped the kept passphrase.
+    RECOVERY_PASSPHRASE=$(sed -n 's/^BAS_RECOVERY_PASSPHRASE=//p' "${DATA_DIR}/.env" 2>/dev/null | tail -n 1 || true)
+  fi
+  if [[ -z "$RECOVERY_PASSPHRASE" ]]; then
+    if [[ "$MODE" == "install" ]]; then
+      err "setup.conf: RECOVERY_PASSPHRASE is required (exactly 14 letters and digits). It is the only way to reset the administrator password if it is forgotten."
+      exit 1
+    elif [[ "$MODE" == "upgrade" ]]; then
+      warn "setup.conf has no RECOVERY_PASSPHRASE: password recovery from the login page stays unavailable until you add one (14 letters and digits) and run --upgrade again."
+    fi
+  elif ! [[ "$RECOVERY_PASSPHRASE" =~ ^[A-Za-z0-9]{14}$ ]]; then
+    err "RECOVERY_PASSPHRASE must be exactly 14 letters and digits (no spaces or symbols)."
+    exit 1
+  fi
   [[ -z "$DNS_SINK_BIND_IP"    ]] && { err "Could not auto-detect a host IP for DNS_SINK_BIND_IP (hostname -I returned nothing). Set DNS_SINK_BIND_IP explicitly in setup.conf."; exit 1; }
 
   [[ -z "$SINK_SFTP_PORT" ]] && SINK_SFTP_PORT="2222"
@@ -547,7 +622,7 @@ _check_os() {
 # subshell, so it cannot set NEED_DOCKER itself; mode_install sets it directly.
 _check_docker() {
   if ! command -v docker &>/dev/null; then
-    echo "INST:Docker -not installed (installer can install it with your consent)"; return
+    echo "INST:Docker -not installed (installer can install it from the bundle with your consent)"; return
   fi
   if ! docker info &>/dev/null 2>&1; then
     echo "FAIL:Docker -daemon not running (start it before install)"; return
@@ -587,9 +662,9 @@ _check_compose() {
 # packaging/windows-build.ps1, via sign-blob/verify-blob against the
 # docker-save tarball -- cosign's image subcommands all need a registry,
 # which doesn't exist here); this installer must be able to verify that
-# signature before the tarball is ever loaded. No auto-install path like
-# Docker's -- cosign is specific enough that silently installing it on an
-# operator's box is not appropriate here.
+# signature before the tarball is ever loaded. This air-gapped installer never
+# downloads cosign: the release bundle ships tools/cosign-linux-<arch>, which is
+# installed on operator consent only if its SHA-256 matches the pin above.
 # Minimum confirmed-working cosign version for the sigstore bundle format
 # sign-blob/verify-blob now always produce. Real cross-version testing
 # during review found v2.2.4/v2.4.3/v2.5.3/v2.6.1/v3.0.2 all reject a
@@ -765,15 +840,67 @@ _resolve_cosign_pub() {
   fi
 }
 
+_cosign_installed_version() {
+  cosign version 2>/dev/null | sed -n 's/^GitVersion:[[:space:]]*\(.*\)$/\1/p' | tr -d '[:space:]'
+}
+
+_cosign_arch() {
+  case "$(uname -m)" in
+    x86_64) echo amd64 ;;
+    aarch64|arm64) echo arm64 ;;
+    *) return 1 ;;
+  esac
+}
+
+_cosign_needs_install() {
+  command -v cosign &>/dev/null || return 0
+  local ver
+  ver=$(_cosign_installed_version)
+  [[ -z "$ver" ]] || ! _cosign_version_ok "$ver"
+}
+
+_install_bundled_cosign() {
+  local arch sha src
+  arch=$(_cosign_arch) || { err "No bundled cosign for this architecture ($(uname -m))."; exit 1; }
+  case "$arch" in amd64) sha="$COSIGN_SHA256_AMD64" ;; arm64) sha="$COSIGN_SHA256_ARM64" ;; esac
+  src="${SCRIPT_DIR}/tools/cosign-linux-${arch}"
+  [[ -f "$src" ]] || { err "Bundled cosign not found at ${src}. The release bundle is incomplete -- obtain a complete bundle."; exit 1; }
+  if ! echo "${sha}  ${src}" | sha256sum -c --status -; then
+    err "Bundled cosign does not match the SHA-256 pinned in this installer -- refusing to install it."; exit 1
+  fi
+  install -m 0755 "$src" /usr/local/bin/cosign
+}
+
+_ensure_cosign() {
+  _cosign_needs_install || return 0
+  echo ""
+  echo "  cosign ${COSIGN_VERSION} is required to verify the release artifact before it is loaded."
+  echo "  The installer can install it from the copy inside this release bundle (no network)."
+  echo ""
+  if ! $YES; then
+    read -rp "  Install cosign ${COSIGN_VERSION} from the bundle now? [yes/N] " confirm
+    [[ "$confirm" == "yes" ]] || { err "cosign is required to continue. Install it manually (or re-run with --yes) and re-run."; exit 1; }
+  fi
+  _install_bundled_cosign
+  if _cosign_needs_install; then err "cosign is still missing or too old after install."; exit 1; fi
+  log "cosign installed: $(_cosign_installed_version)"
+}
+
 _check_cosign() {
   if ! command -v cosign &>/dev/null; then
-    echo "FAIL:Cosign -not installed (required to verify the orchestrator artifact before install; see https://docs.sigstore.dev/cosign/system_config/installation/)"
+    local arch
+    arch=$(_cosign_arch 2>/dev/null) || arch=""
+    if [[ -n "$arch" && -f "${SCRIPT_DIR}/tools/cosign-linux-${arch}" ]]; then
+      echo "INST:Cosign -not installed (installer can install ${COSIGN_VERSION} from the release bundle, SHA-256 pinned)"
+    else
+      echo "FAIL:Cosign -not installed and not in the release bundle (tools/cosign-linux-<arch> missing; the bundle is incomplete)"
+    fi
     return
   fi
   local ver
-  ver=$(cosign version 2>/dev/null | sed -n 's/^GitVersion:[[:space:]]*\(.*\)$/\1/p' | tr -d '[:space:]')
+  ver=$(_cosign_installed_version)
   if [[ -z "$ver" ]] || ! _cosign_version_ok "$ver"; then
-    echo "FAIL:Cosign -version ${ver:-unknown} is too old (need >= v3.1.0 to verify the sigstore bundle format this bundle's signature uses)"
+    echo "INST:Cosign -version ${ver:-unknown} is too old (installer can install ${COSIGN_VERSION} from the release bundle; need >= v3.1.0)"
     return
   fi
   if [[ ! -f "$COSIGN_PUB_USED" ]]; then
@@ -1095,22 +1222,41 @@ mode_install() {
   render_checks "${results[@]}" || exit 1
   # Verify EVERY bundled image before anything is installed or written: a
   # missing images/ or any unsigned/unlisted/tampered tar aborts here.
+  _ensure_cosign
   _verify_all_images "${SCRIPT_DIR}/images" "installation"
 
   step "2/10  Docker Engine"
   if $NEED_DOCKER || $NEED_COMPOSE; then
     echo ""
     echo "  Docker and/or Docker Compose are not installed on this host."
-    echo "  The installer can download and install Docker CE from Docker's official"
-    echo "  repository (download.docker.com) and enable it as a system service."
-    echo ""
-    if ! $YES; then
-      read -rp "  Install Docker CE now from the official Docker repository? [yes/N] " confirm
-      [[ "$confirm" == "yes" ]] || { err "Docker is required to continue. Install it manually (or re-run with --yes) and re-run --install."; exit 1; }
+    local need_engine=false need_compose=false
+    $NEED_DOCKER && need_engine=true
+    { $NEED_DOCKER || $NEED_COMPOSE; } && need_compose=true
+    if { ! $need_engine || _bundled_has docker; } && { ! $need_compose || _bundled_has compose; }; then
+      # Everything missing ships inside this bundle: no network, no package manager.
+      echo "  The installer will install them from the copy inside this release bundle"
+      echo "  (Docker ${DOCKER_STATIC_VERSION}, Compose ${COMPOSE_STATIC_VERSION}; SHA-256 verified; no internet needed)."
+      echo ""
+      if ! $YES; then
+        read -rp "  Install Docker from the bundle now? [yes/N] " confirm
+        [[ "$confirm" == "yes" ]] || { err "Docker is required to continue. Install it manually (or re-run with --yes) and re-run --install."; exit 1; }
+      fi
+      $need_engine && _install_bundled_docker
+      $need_compose && _install_bundled_compose
+      docker compose version &>/dev/null || { err "Docker Compose is still unavailable after the bundled install."; exit 1; }
+      DOCKER_AUTO_INSTALLED=true
+      log "Docker installed from the bundle: $(docker --version)"
+    else
+      echo "  This bundle does not contain Docker for this CPU (${HOSTTYPE:-$(uname -m)}), so the installer would have to"
+      echo "  download Docker CE from Docker's official repository (download.docker.com)."
+      echo "  THIS NEEDS INTERNET ACCESS. Nothing is downloaded unless you answer yes."
+      echo ""
+      read -rp "  Download and install Docker CE from the internet now? [yes/N] " confirm
+      [[ "$confirm" == "yes" ]] || { err "Docker is required to continue. Install it manually and re-run --install."; exit 1; }
+      _install_docker
+      DOCKER_AUTO_INSTALLED=true
+      log "Docker CE installed: $(docker --version)"
     fi
-    _install_docker
-    DOCKER_AUTO_INSTALLED=true
-    log "Docker CE installed: $(docker --version)"
   else
     log "Docker already present -skipping"
   fi
@@ -1138,6 +1284,11 @@ mode_install() {
   chown 65532:65532 "${DATA_DIR}/signing"
   chmod 700 "${DATA_DIR}/signing"
   log "Created: ${DATA_DIR}"
+  # Interim database encryption key, kept outside DATA_DIR so dumps and the upgrade backup do not capture it.
+  DB_KEY_MARKER="${DATA_DIR}/.db-key-issued"
+  db_key_provision fresh || { err "encryption key provisioning failed; installation stopped at step 3"; exit 1; }
+  DB_TLS_DIR="${DATA_DIR}/dbtls"
+  db_tls_ensure || { err "database TLS setup failed; no service was started."; _bk_options "Your options:" "Fix the file reported above, then run the install again." "Or move ${DATA_DIR}/dbtls aside so the installer regenerates it, then run again."; exit 1; }
 
   step "4/10  Loading Docker images (air-gap safe -no pull)"
   # Fail closed: every tar was verified after the prerequisite checks (a missing
@@ -1184,14 +1335,11 @@ mode_install() {
     log "TLS certificates installed"
   fi
 
-  # Backup archive encryption key -- generated once, never touches the app
-  # container or the database. Losing this file makes existing backups
-  # unrecoverable; --status reminds the operator to preserve it.
-  if [[ ! -f "${DATA_DIR}/.backup_key" ]]; then
-    openssl rand -base64 48 > "${DATA_DIR}/.backup_key"
-    chmod 600 "${DATA_DIR}/.backup_key"
-    chown root:root "${DATA_DIR}/.backup_key"
-  fi
+  # Backup archive encryption key (backup-key.sh, P0.3): outside DATA_DIR, so
+  # a copy of the backup directory cannot be decrypted with it. Losing this
+  # file makes archives unrecoverable; keep an offline copy.
+  backup_key_provision || { err "backup encryption key could not be created; installation stopped"; exit 1; }
+  backup_key_gate || { err "installation stopped: no confirmed recovery copy of the backup key. Nothing has been started."; exit 1; }
 
   step "6/10  Writing .env (root-readable only)"
   _write_env
@@ -1240,6 +1388,19 @@ mode_upgrade() {
     exit 1
   fi
 
+  # The encryption key must exist and verify before anything changes. An upgrade never generates one: that would make
+  # every stored credential unreadable.
+  DB_KEY_MARKER="${DATA_DIR}/.db-key-issued"
+  db_key_provision upgrade || { err "encryption key check failed; the upgrade was not started"; exit 1; }
+  DB_TLS_DIR="${DATA_DIR}/dbtls"
+  db_tls_ensure || { err "database TLS check failed; the upgrade was not started. Nothing has been changed."; _bk_options "Your options:" "Fix the file reported above, then run the upgrade again." "Or move ${DATA_DIR}/dbtls aside so the installer regenerates it, then run again."; exit 1; }
+  backup_key_provision || { err "backup encryption key could not be created; the upgrade was not started"; exit 1; }
+  backup_key_gate || { err "upgrade not started: no confirmed recovery copy of the backup key. Nothing has been changed."; exit 1; }
+  if backup_key_legacy_present; then
+    warn "Legacy backup key $(_bk_legacy) is still present. It opens only archives made before this version."
+    _bk_options "Your options for the legacy key:"       "Keep it. Older archives still restore with it. It is not used for new archives."       "Remove it only after: a new backup has restored successfully on a clean host, and every older archive has been removed by secure erasure. The steps are in docs/security/req-039-customer-managed-keys.md (historical cleanup)."
+  fi
+
   # Detect an upgrade FROM a pre-mTLS install: BAS_ENROLL_PORT's absence
   # from the existing .env means the current deployment predates the
   # four-listener topology, so every enrolled agent is still configured
@@ -1266,6 +1427,7 @@ mode_upgrade() {
   # Verify EVERY bundled image before anything is backed up or replaced: a
   # missing images/ is FATAL (nothing is pulled, BAS_VERSION is not rewritten).
   local what="upgrade (the previous version is still running; nothing was replaced)"
+  _ensure_cosign
   _verify_all_images "${SCRIPT_DIR}/images" "$what"
 
   step "1/5  Backup current installation"
@@ -1278,7 +1440,15 @@ mode_upgrade() {
   # Deployment CA keypair (bind-mounted ./pki -> /etc/audspect/pki). It is
   # generated once and never regenerated, so losing it forces regenerating the
   # CA and re-enrolling every agent. -a preserves the 0600 mode on ca-key.pem.
-  [[ -d "${DATA_DIR}/pki" ]] && cp -a "${DATA_DIR}/pki" "${backup_dir}/pki"
+  if [[ -d "${DATA_DIR}/pki" ]]; then
+    ca_backup_stage "${DATA_DIR}/pki" "${backup_dir}/pki"       || { err "CA key backup could not be staged safely (database encryption key missing or unusable). The upgrade was stopped before any change."; rm -rf "$backup_dir"; exit 1; }
+  fi
+  local legacy_ca
+  legacy_ca=$(ca_backup_plaintext_report "${DATA_DIR}/backups" | grep -v "^${backup_dir}$" || true)
+  if [[ -n "$legacy_ca" ]]; then
+    warn "Earlier backups still hold a plaintext CA private key (they predate this fix). Once a current backup is verified, remove them:"
+    echo "$legacy_ca" | sed 's/^/    /'
+  fi
   echo "$BAS_VERSION" > "${backup_dir}/VERSION"
   log "Backup created: ${backup_dir}"
 
@@ -1441,6 +1611,15 @@ mode_status() {
 # MODE: --uninstall
 # ═════════════════════════════════════════════════════════════════════════════
 mode_uninstall() {
+  # One implementation: uninstall.sh (shipped beside this script) finds the install itself, protects against deleting
+  # the wrong directory, removes the backup timers too, and verifies the result. The code below is only the fallback
+  # for a bundle that lacks it.
+  if [[ -f "${SCRIPT_DIR}/uninstall.sh" ]]; then
+    local fwd=()
+    $YES && fwd+=(--yes)
+    $PURGE_IMAGES && fwd+=(--purge-images)
+    exec bash "${SCRIPT_DIR}/uninstall.sh" ${fwd[@]+"${fwd[@]}"}
+  fi
   local data_dir="$DEFAULT_DATA_DIR"
   if [[ -f /etc/systemd/system/${SERVICE_NAME}.service ]]; then
     detected=$(grep -oP '(?<=WorkingDirectory=)[^\s]+' /etc/systemd/system/${SERVICE_NAME}.service || true)
@@ -1452,9 +1631,11 @@ mode_uninstall() {
   echo ""
   echo "  This will PERMANENTLY DELETE:"
   echo "    • All running containers"
-  echo "    • Docker volumes (ALL database data)"
-  echo "    • Docker network"
-  echo "    • Install directory: ${data_dir}"
+  echo "    • PostgreSQL database : ${data_dir}/data/postgres (ALL database data)"
+  echo "    • Deployment CA       : ${data_dir}/pki (enrolled agents are locked out until reinstalled)"
+  echo "    • Command-signing key : ${data_dir}/signing"
+  echo "    • Docker volumes and network"
+  echo "    • Install directory   : ${data_dir} (settings, secrets, backups, logs)"
   echo "    • systemd service: ${SERVICE_NAME}"
   $PURGE_IMAGES && echo "    • Docker images"
   echo ""
@@ -1678,9 +1859,36 @@ _stage_k8s_discovery() {
   fi
 }
 
+# Writes the Aleef token references from setup.conf to ${DATA_DIR}/aleef-secrets.env: always
+# present (empty when none are set), mode 0600, owned by the orchestrator user (UID 65532, the
+# only account in the container that must read it; other host users cannot). Rewritten in place
+# only when the content changed, so the inode (and the container's bind mount) stays stable and a
+# re-run is a no-op. Values are never echoed.
+_write_aleef_secrets() {
+  local f="${DATA_DIR}/aleef-secrets.env" want="" line
+  for line in ${ALEEF_SECRET_LINES[@]+"${ALEEF_SECRET_LINES[@]}"}; do
+    want+="${line}"$'\n'
+  done
+  mkdir -p "$DATA_DIR"
+  if [[ -d "$f" ]]; then
+    err "${f} is a directory (Docker created it before the file existed). Remove it and re-run."
+  fi
+  if [[ ! -f "$f" ]]; then
+    ( umask 077; : > "$f" )
+  fi
+  # Lock the mode before any secret is written, so an existing file is never world-readable.
+  chown 65532:65532 "$f"
+  chmod 600 "$f"
+  if [[ "$(cat "$f")" != "${want%$'\n'}" ]]; then
+    printf '%s' "$want" > "$f"
+  fi
+  log "Aleef secret references staged: ${#ALEEF_SECRET_LINES[@]} (${f}, mode 600)"
+}
+
 _write_env() {
   _stage_k8s_scenario
   _stage_k8s_discovery
+  _write_aleef_secrets
   local env_file="${DATA_DIR}/.env"
   # In-container paths for the operator-supplied dashboard TLS cert -- only
   # set when BAS_TLS=true, so docker-compose.yml's TLS_CERT/TLS_KEY env vars
@@ -1715,6 +1923,7 @@ CALDERA_API_KEY=${_CALDERA_KEY:-$(openssl rand -hex 20)}
 CALDERA_API_KEY_BLUE=${_CALDERA_KEY_BLUE:-$(openssl rand -hex 20)}
 BAS_ADMIN_PASSWORD=${ADMIN_PASSWORD}
 BAS_ADMIN_EMAIL=${ADMIN_EMAIL}
+BAS_RECOVERY_PASSPHRASE=${RECOVERY_PASSPHRASE}
 LICENSE_FILE=${LICENSE_FILE:-bas.lic}
 BAS_PORT=${BAS_PORT}
 BAS_ENROLL_PORT=${BAS_ENROLL_PORT}
@@ -1756,6 +1965,7 @@ REMOTE_BACKUP_PATH=${REMOTE_BACKUP_PATH:-}
 REMOTE_BACKUP_RETENTION=${REMOTE_BACKUP_RETENTION}
 VALIDATION_LAB_AGENT_ID=${VALIDATION_LAB_AGENT_ID}
 VALIDATION_LAB_POLL_MINUTES=${VALIDATION_LAB_POLL_MINUTES}
+SPRAY_LAB_AGENT_ID=${SPRAY_LAB_AGENT_ID:-}
 EOF
   chmod 600 "$env_file"
 }
@@ -1771,14 +1981,21 @@ _run_pg_dump() {
 }
 
 _package_config() {
-  local out_file="$1"
+  local out_file="$1" stage
   # LIC_PATH is never set in a backup context (no --config file is loaded
   # here) -- _resolve_license_file falls back to reading the already-
   # installed .env's own LICENSE_FILE, which is exactly what's on disk.
   _resolve_license_file
-  tar -cf "$out_file" -C "${DATA_DIR}" \
-    --ignore-failed-read \
-    .env "${LICENSE_FILE}" certs scenarios docker-compose.yml pki signing 2>/dev/null || true
+  tar -cf "$out_file" -C "${DATA_DIR}"     --ignore-failed-read     .env "${LICENSE_FILE}" certs scenarios docker-compose.yml signing 2>/dev/null || true
+  # pki is staged: the CA private key is wrapped under the database encryption
+  # key and never archived in plaintext (P0.2, ca-backup.sh).
+  if [[ -d "${DATA_DIR}/pki" ]]; then
+    stage=$(mktemp -d) || return 1
+    if ! ca_backup_stage "${DATA_DIR}/pki" "${stage}/pki"; then rm -rf "$stage"; return 1; fi
+    tar -rf "$out_file" -C "$stage" pki || { rm -rf "$stage"; return 1; }
+    rm -rf "$stage"
+  fi
+  return 0
 }
 
 _write_backup_manifest() {
@@ -1801,7 +2018,7 @@ EOF
 
 _encrypt_backup_archive() {
   local in_file="$1" out_file="$2"
-  openssl enc -aes-256-cbc -pbkdf2 -salt -in "$in_file" -out "$out_file" -pass "file:${DATA_DIR}/.backup_key"
+  backup_key_encrypt "$in_file" "$out_file"
 }
 
 # _push_remote_backup copies the finished local archive to REMOTE_BACKUP_PATH.
@@ -1863,7 +2080,9 @@ _run_backup_engine() {
   if ! _run_pg_dump "${work_dir}/postgres/audspect.dump"; then
     echo "FAILED|||||pg_dump failed"; rm -rf "$work_dir"; return 1
   fi
-  _package_config "${work_dir}/config.tar"
+  if ! _package_config "${work_dir}/config.tar"; then
+    echo "FAILED|||||CA key backup could not be staged (database encryption key missing or unusable)"; rm -rf "$work_dir"; return 1
+  fi
   _write_backup_manifest "${work_dir}/manifest.json"
 
   tar_path="${work_dir}/audspect-backup-${ts}.tar"
@@ -1974,14 +2193,27 @@ mode_restore() {
     info "No .sha256 sidecar found for this archive -- skipping integrity check."
   fi
 
+  if [[ ! -s "$BACKUP_KEY_FILE" ]]; then
+    info "No backup key on this host. Restoring it from the recovery copy."
+    backup_key_prompt_inputs || exit 1
+    backup_key_import "${BAS_BACKUP_KEY_RECOVERY_PATH:-}"       || { err "Restore stopped before any change: the backup key could not be imported."; _bk_options "Your options:" "Run: sudo bash install.sh --import-backup-key <recovery file>, then run the restore again." "Non-interactive: set BAS_BACKUP_KEY_RECOVERY_PATH and BAS_BACKUP_KEY_PASSPHRASE, then run the restore again." "Stop. Nothing has been changed."; exit 1; }
+  fi
+
   step "2/8  Decrypting and reading manifest"
   local work_dir tar_path
   work_dir=$(mktemp -d)
   tar_path="${work_dir}/archive.tar"
-  openssl enc -d -aes-256-cbc -pbkdf2 -in "$archive" -out "$tar_path" -pass "file:${DATA_DIR}/.backup_key" \
-    || { err "Decryption failed -- wrong .backup_key or corrupt archive."; rm -rf "$work_dir"; exit 1; }
+  backup_key_decrypt "$archive" "$tar_path" \
+    || { err "Decryption failed: no available backup key opens this archive, or the archive is corrupt. Nothing has been changed."; _bk_options "Your options:" "If the backup key is missing on this host: run sudo bash install.sh --import-backup-key <recovery file>, then restore again." "Try another archive from your backup location." "Stop."; rm -rf "$work_dir"; exit 1; }
   tar -xf "$tar_path" -C "$work_dir"
   [[ -f "${work_dir}/manifest.json" ]] || { err "Archive missing manifest.json -- refusing to restore."; rm -rf "$work_dir"; exit 1; }
+  # Check the archive's CA key can be unwrapped BEFORE anything is changed (P0.2).
+  mkdir -p "${work_dir}/cfg" "${work_dir}/pkicheck"
+  tar -xf "${work_dir}/config.tar" -C "${work_dir}/cfg" || { err "Configuration archive unreadable -- refusing to restore."; rm -rf "$work_dir"; exit 1; }
+  if [[ -f "${work_dir}/cfg/pki/ca-key.pem.wrapped" ]]; then
+    cp "${work_dir}/cfg/pki/ca-key.pem.wrapped" "${work_dir}/pkicheck/"
+    ca_backup_unwrap "${work_dir}/pkicheck"       || { err "Restore stopped before any change: the CA key in this archive does not unwrap with this host's database encryption key."; _bk_options "Your options:" "If this is a fresh host: the installer generated a new database key, which cannot open the archive. Move /etc/audspect/secrets/db-encryption.key aside, run: sudo bash install.sh --import-db-key <recovery file>, then run the restore again." "Restore a different archive whose key this host can open." "Stop. Nothing has been changed."; rm -rf "$work_dir"; exit 1; }
+  fi
   local archive_version
   archive_version=$(grep -o '"basVersion"[^,]*' "${work_dir}/manifest.json" | grep -o '"[^"]*"$' | tr -d '"')
   info "Archive BAS version: ${archive_version:-unknown}. Installed: ${BAS_VERSION}."
@@ -2005,6 +2237,17 @@ mode_restore() {
 
   step "6/8  Restoring configuration"
   tar -xf "${work_dir}/config.tar" -C "${DATA_DIR}"
+  if [[ -f "${DATA_DIR}/pki/ca-key.pem.wrapped" ]]; then
+    # The archive's CA replaces the live one. The live key is held aside until the archived key is in place.
+    local live_ca_bak="${work_dir}/live-ca-key.pem"
+    [[ -f "${DATA_DIR}/pki/ca-key.pem" ]] && mv "${DATA_DIR}/pki/ca-key.pem" "$live_ca_bak"
+    if ! ca_backup_unwrap "${DATA_DIR}/pki"; then
+      [[ -f "$live_ca_bak" ]] && mv "$live_ca_bak" "${DATA_DIR}/pki/ca-key.pem"
+      err "CA key restore failed; the previous CA key was put back. Services have not started."; _bk_options "Your options:" "Check the error above, then run the restore again. The archive is unchanged." "Stop and keep the pre-restore snapshot listed under ${DATA_DIR}/backups."; rm -rf "$work_dir"; exit 1
+    fi
+    rm -f "$live_ca_bak"
+    if [[ "$(id -u)" == "0" ]]; then chown 65532:65532 "${DATA_DIR}/pki/ca-key.pem"; fi
+  fi
 
   step "7/8  Starting services"
   (cd "${DATA_DIR}" && docker compose -p "$COMPOSE_PROJECT" up -d --pull never --remove-orphans)
@@ -2169,6 +2412,9 @@ _print_access_info() {
     echo "                     setup.conf to use a properly-trusted certificate instead.)"
   fi
   echo "  Admin login      : ${ADMIN_EMAIL}"
+  if [[ -n "${RECOVERY_PASSPHRASE:-}" ]]; then
+    echo "  Forgot password  : use \"Forgot password?\" on the login page with the RECOVERY_PASSPHRASE from setup.conf"
+  fi
   echo "  Install log      : ${DATA_DIR}/install.log"
   echo ""
   echo "  Status check     : sudo bash install.sh --status"
@@ -2199,4 +2445,8 @@ case "$MODE" in
   backup-request) mode_backup_request ;;
   backup-worker)  mode_backup_worker  ;;
   restore)        mode_restore "$RESTORE_ARCHIVE" ;;
+  export-db-key) db_key_export "$DB_KEY_RECOVERY_PATH" ;;
+  import-db-key) db_key_import "$DB_KEY_RECOVERY_PATH" ;;
+  import-backup-key) backup_key_prompt_inputs && backup_key_import "$BAS_BACKUP_KEY_RECOVERY_PATH" || exit 1 ;;
+  export-backup-key) backup_key_prompt_inputs && backup_key_export "$BAS_BACKUP_KEY_RECOVERY_PATH" && backup_key_verify_recovery "$BAS_BACKUP_KEY_RECOVERY_PATH" && echo "Recovery copy verified." || exit 1 ;;
 esac

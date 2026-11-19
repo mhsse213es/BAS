@@ -2,12 +2,21 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
-import { daysAgo, fmtDate, showToast } from '../core/util.js';
+import { fmtDate, showToast } from '../core/util.js';
 import { covSegHtml, statTileCard } from './attack-path.js';
 import { openModal, scenarioFramework } from './reports.js';
-import { ROLE, _riskScoreColor } from './shell.js';
+import { ROLE, _riskScoreColor, showTab } from './shell.js';
 import { setDisplay } from '../core/inline-style.js';
 import { cssVars } from '../core/css-vars.js';
+import { kpi, card, grid, hbars, bar, seg, searchBox, empty, pill, kv, icon } from '../core/kit.js';
+import * as M from './fnd-model.js';
+import { openTechnique } from './coverage.js';
+import { chartSlot, CHART_COLORS } from '../core/charts.js';
+import { rateTone } from './rich-g3.js';
+import { setDashITSM } from './dash-rich.js';
+import { renderSlaReport, loadReportsHero } from './rpt-view.js';
+import { setHeroStat } from './shell-ui.js';
+import * as RM from './rem-model.js';
 
 
 // ── Findings ─────────────────────────────────────────────────────────────────
@@ -18,90 +27,26 @@ export function findingSevBadge(sev, exp) {
   return '<span class="sbadge g1-s-e02ce1a7"' + cssVars(['g1-v-97993078', col], ['g1-v-7d75dfc9', col]) + '>' + x(sev) + '</span>' + ex;
 }
 export function loadSLAReport() {
+  loadReportsHero();
   apicall('/api/sla/report').then(function(rep) {
     state._slaReport = rep;
-    var empty = document.getElementById('sla-rpt-empty');
+    var emptyEl = document.getElementById('sla-rpt-empty');
     var body = document.getElementById('sla-rpt-body');
     if (!rep.overall || rep.overall.totalEpisodes === 0) {
-      setDisplay(empty, '');
+      setDisplay(emptyEl, '');
       setDisplay(body, 'none');
       return;
     }
-    setDisplay(empty, 'none');
+    setDisplay(emptyEl, 'none');
     setDisplay(body, '');
-    renderSLAKPIs(rep.overall);
-    renderSLASeverityBars(rep.bySeverity || []);
-    renderSLAMonthlyTrend(rep.monthlyTrend || []);
-    renderSLARecentlyResolved(rep.recentlyResolved || []);
+    renderSlaReport(rep);
   }).catch(function(err) { showToast('Failed to load SLA report: ' + err.message, 'error'); });
-}
-// slaRateDisplay renders "-" instead of a misleading "0.0%" (in danger red)
-// when nothing has resolved yet in this bucket -- complianceRate is 0 by
-// definition when onTime+late===0 (see internal/slareport.complianceRate),
-// but that means "no data yet", not "failing".
-function slaRateDisplay(onTime, late, rate) {
-  if (onTime + late === 0) return { text: '—', color: 'var(--muted)' };
-  return { text: rate.toFixed(1) + '%', color: _riskScoreColor(rate) };
-}
-function renderSLAKPIs(overall) {
-  var tile = statTileCard;
-  var rate = slaRateDisplay(overall.onTime, overall.late, overall.complianceRate);
-  document.getElementById('sla-rpt-kpis').innerHTML =
-    tile('Compliance Rate', rate.text, rate.color) +
-    tile('On-Time', overall.onTime, 'var(--success)') +
-    tile('Late', overall.late, overall.late ? 'var(--danger)' : 'var(--muted)') +
-    tile('Currently Open', overall.currentlyOpen, overall.currentlyOpen ? 'var(--warning)' : 'var(--muted)');
-}
-function renderSLASeverityBars(bySeverity) {
-  // order[sev] || 9 would be wrong here -- Critical's value is 0, and
-  // 0 || 9 evaluates to 9 in JS (0 is falsy), so Critical would silently
-  // sort last instead of first. Use an explicit "in" check instead.
-  var order = { Critical: 0, High: 1, Medium: 2, Low: 3 };
-  var rank = function(sev) { return sev in order ? order[sev] : 9; };
-  var sorted = bySeverity.slice().sort(function(a, b) { return rank(a.severity) - rank(b.severity); });
-  var el = document.getElementById('sla-rpt-severity');
-  if (!sorted.length) { el.innerHTML = '<div class="empty g1-s-decac807">No severities with SLA episodes.</div>'; return; }
-  el.innerHTML = sorted.map(function(s) {
-    var rate = slaRateDisplay(s.onTime, s.late, s.complianceRate);
-    return '<div class="bar-row">' +
-      '<div class="bar-label"><span>' + x(s.severity) + '</span><span' + cssVars(['g1-v-7d75dfc9', rate.color]) + '>' + rate.text + '</span></div>' +
-      '<div class="bar-track"><div class="bar-fill"' + cssVars(['g1-v-9b890877', s.complianceRate], ['g1-v-9ffd39ba', rate.color]) + '></div></div>' +
-      '<div class="g1-s-6769b269">' + s.onTime + ' on-time &middot; ' + s.late + ' late &middot; ' + s.currentlyOpen + ' open</div>' +
-      '</div>';
-  }).join('');
-}
-function renderSLAMonthlyTrend(monthlyTrend) {
-  var sorted = monthlyTrend.slice().sort(function(a, b) { return a.month < b.month ? -1 : a.month > b.month ? 1 : 0; });
-  var body = document.getElementById('sla-rpt-trend-body');
-  if (!sorted.length) { body.innerHTML = '<tr><td colspan="4" class="empty">No resolved episodes yet.</td></tr>'; return; }
-  body.innerHTML = sorted.map(function(m) {
-    var rate = slaRateDisplay(m.onTime, m.resolved - m.onTime, m.complianceRate);
-    return '<tr><td>' + x(m.month) + '</td><td>' + m.resolved + '</td><td>' + m.onTime + '</td>' +
-      '<td' + cssVars(['g1-v-7d75dfc9', rate.color]) + '>' + rate.text + '</td></tr>';
-  }).join('');
-}
-function renderSLARecentlyResolved(recentlyResolved) {
-  var body = document.getElementById('sla-rpt-recent-body');
-  if (!recentlyResolved.length) { body.innerHTML = '<tr><td colspan="5" class="empty">No resolved episodes yet.</td></tr>'; return; }
-  body.innerHTML = recentlyResolved.map(function(r) {
-    var outcome = r.onTime
-      ? '<span class="sbadge g1-s-43c234c9">On time</span>'
-      : '<span class="sbadge g1-s-99a3db64">Late</span>';
-    return '<tr><td>' + x(r.agentId) + '</td><td>' + x(r.checkId) + '</td><td>' + findingSevBadge(r.severity) + '</td>' +
-      '<td>' + fmtDate(r.resolvedAt) + '</td><td>' + outcome + '</td></tr>';
-  }).join('');
-}
-function formatFindingAge(f) {
-  if (f.status === 'remediated') {
-    var age = f.resolvedAt ? daysAgo(f.firstSeen) - daysAgo(f.resolvedAt) : daysAgo(f.firstSeen);
-    return Math.max(0, age) + ' days (fixed)';
-  }
-  return daysAgo(f.firstSeen) + ' days';
 }
 function findingStatusClass(st) { return st === 'open' ? 'failed' : st === 'remediated' ? 'completed' : 'partial'; }
 export function loadFindings() {
   apicall('/api/findings').then(function(list) {
     state._findings = list || [];
+    FINDING_LOADED = new Date();
     renderFindingsTiles(); renderFindingsTabs(); renderFindingsRows();
     // Async: load ticket candidates to show ticket badges on rows (analyst+)
     if (ROLE === 'admin' || ROLE === 'analyst') loadTicketCandidates();
@@ -115,37 +60,92 @@ export function loadFindings() {
 }
 function renderFindingsTiles() {
   var l = state._findings || [];
-  var open = l.filter(function(f) { return f.status === 'open'; }).length;
-  var crit = l.filter(function(f) { return f.status === 'open' && f.severity === 'Critical'; }).length;
-  var reopened = l.filter(function(f) { return f.status === 'open' && f.reopenedCount > 0; }).length;
-  var since = Date.now() - 30 * 864e5;
-  var remediated = l.filter(function(f) { return f.status === 'remediated' && new Date(f.lastSeen) >= since; }).length;
-  var maxAge = 0;
-  l.filter(function(f) { return f.status === 'open'; }).forEach(function(f) {
-    var age = daysAgo(f.firstSeen);
-    if (age > maxAge) maxAge = age;
-  });
-  var ageCol = maxAge >= 90 ? 'var(--danger)' : maxAge >= 30 ? 'var(--warning)' : 'var(--success)';
-  var tile = statTileCard;
+  var s = M.tileStats(l, Date.now());
   document.getElementById('findings-tiles').innerHTML =
-    tile('Open findings', open, open ? 'var(--danger)' : 'var(--success)') +
-    tile('Attack Surface Age', open ? maxAge + ' days' : '0 days', ageCol) +
-    tile('Critical', crit, crit ? 'var(--danger)' : 'var(--muted)') +
-    tile('Reopened', reopened, reopened ? 'var(--warning)' : 'var(--muted)') +
-    tile('Remediated · 30d', remediated, 'var(--success)');
+    kpi({ label: 'Open findings', value: s.open, sub: 'of ' + s.total + ' total', icon: 'alert', tone: s.open ? 'bad' : 'ok' }) +
+    kpi({ label: 'Attack surface age', value: s.open ? s.maxAge + ' days' : '0 days', sub: s.open ? 'oldest open finding' : 'nothing open', icon: 'clock', tone: M.ageTone(s.maxAge) }) +
+    kpi({ label: 'Critical', value: s.critical, sub: 'need triage first', icon: 'shield', tone: s.critical ? 'bad' : 'ok' }) +
+    kpi({ label: 'Reopened', value: s.reopened, sub: 'regressions', icon: 'refresh', tone: s.reopened ? 'warn' : 'ok' }) +
+    kpi({ label: 'Remediated · 30d', value: s.remediated30, sub: 'closed after re-validation', icon: 'ok', tone: 'info' });
+  renderFindingsInsights(l);
 }
+function hhmm(d) {
+  var p = function(n) { return (n < 10 ? '0' : '') + n; };
+  return d ? p(d.getHours()) + ':' + p(d.getMinutes()) : '';
+}
+// Distribution cards computed from the same /api/findings response, in the demo's order: a row of
+// three (severity of what is open, how long it has been open, which control class) and a row of two
+// (severity again with the load time, and the status split of everything).
+function renderFindingsInsights(l) {
+  var el = document.getElementById('findings-insights');
+  if (!el) return;
+  if (!l.length) { el.innerHTML = ''; return; }
+  var openL = M.openOf(l);
+  var none = function(t) { return empty('ok', t, 'No open findings right now.'); };
+  var sevRow = M.sevSegments(openL, 'row');
+  var buckets = M.ageBuckets(openL, Date.now());
+  var ctrl = M.controlRows(openL, 5);
+  var three = grid(3, [
+    card('Open by severity', sevRow.length ? chartSlot({ type: 'donut', h: 150, legendRight: true, centerSub: 'open', segments: sevRow }) : none('Nothing open')),
+    card('Age of open findings', openL.length
+      ? chartSlot({ type: 'bar', h: 150, labels: buckets.map(function(b) { return b.label; }), series: [{ name: 'Findings', color: '#3b82f6', data: buckets.map(function(b) { return b.value; }) }] })
+      : none('Nothing open')),
+    card('By control', ctrl.length ? hbars(ctrl) : none('Nothing open')),
+  ]);
+  var sevCard = M.sevSegments(openL, 'card');
+  var stSeg = M.statusSegments(l);
+  var two = grid(2, [
+    card('Open findings by severity', sevCard.length ? chartSlot({ type: 'donut', h: 180, legendRight: true, centerSub: 'open', segments: sevCard }) : none('Nothing open'), { sub: FINDING_LOADED ? 'Updated ' + hhmm(FINDING_LOADED) : '' }),
+    card('Status', chartSlot({ type: 'donut', h: 180, legendRight: true, thick: 16, centerSub: 'total findings', segments: stSeg })),
+  ]);
+  el.innerHTML = '<div class="fnd-row">' + three + '</div><div class="fnd-row">' + two + '</div>';
+}
+var FINDING_Q = '';
+var FINDING_SEV = 'all';
+var FINDING_LOADED = null;
+function currentFindings() { return M.filterFindings(state._findings, { status: FINDING_TAB, sev: FINDING_SEV, q: FINDING_Q }); }
+// Two rows from the demo: the status chips with Push to ITSM / Refresh on the right (rendered into
+// #findings-statusbar), and the search box with the severity chips (#findings-toolbar).
 function renderFindingsTabs() {
   var l = state._findings || [];
-  var c = function(k) { return k === 'all' ? l.length : l.filter(function(f) { return f.status === k; }).length; };
-  document.getElementById('findings-toolbar').innerHTML = covSegHtml(
-    [['all', 'All'], ['open', 'Open'], ['triaged', 'Triaged'], ['remediated', 'Remediated'], ['risk_accepted', 'Risk-accepted']],
-    FINDING_TAB, 'setFindingTab', c
-  );
+  var canPush = ROLE === 'admin' || ROLE === 'analyst';
+  var bar1 = document.getElementById('findings-statusbar');
+  if (bar1) {
+    bar1.innerHTML = seg(M.statusOptions(l), FINDING_TAB, 'setFindingTab') +
+      '<div class="fnd-bar-r">' +
+      '<button class="btn btn-outline' + (canPush ? '' : ' is-hidden') + '" id="findings-bulk-btn"' + on('click', 'bulkPushSelectedFindings') + '>' + icon('upload') + 'Push to ITSM</button>' +
+      '<button class="btn btn-outline"' + on('click', 'loadFindings') + '>' + icon('refresh') + 'Refresh</button></div>';
+  }
+  var bar2 = document.getElementById('findings-toolbar');
+  if (bar2) {
+    bar2.innerHTML = searchBox('findings-search', 'Search findings, assets, IDs...', 'setFindingSearch') + seg(M.sevOptions(), FINDING_SEV, 'setFindingSev') + '<span class="fnd-count muted" id="findings-count"></span>';
+    var q = document.getElementById('findings-search');
+    if (q) q.value = FINDING_Q;
+  }
 }
 export function setFindingTab(v) { FINDING_TAB = v; renderFindingsTabs(); renderFindingsRows(); }
+// Opens the Findings tab already filtered to one status (e.g. 'open'), so a dashboard count and its list agree.
+export function openFindingsWithStatus(status) { FINDING_TAB = status; showTab('findings'); }
+export function setFindingSev(v) { FINDING_SEV = v; renderFindingsTabs(); renderFindingsRows(); }
+export function setFindingSearch(el) { FINDING_Q = (el && el.value) || ''; renderFindingsRows(); }
+// Export the rows the current filters show as CSV (every field quoted, formula prefixes neutralised).
+export function exportFindings() {
+  var rows = currentFindings();
+  if (!rows.length) { showToast('No findings to export', 'err'); return; }
+  var csv = M.csvText(M.CSV_HEADER, M.csvRows(rows, Date.now()));
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = 'findings.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function() { URL.revokeObjectURL(a.href); }, 1000);
+  showToast('Exported ' + rows.length + ' finding' + (rows.length === 1 ? '' : 's'), 'ok');
+}
 function renderFindingsRows() {
-  var l = (state._findings || []).filter(function(f) { return FINDING_TAB === 'all' || f.status === FINDING_TAB; });
+  var now = Date.now();
+  var l = currentFindings();
   var tb = document.getElementById('findings-body');
+  var cnt = document.getElementById('findings-count');
+  if (cnt) cnt.textContent = l.length + ' of ' + (state._findings || []).length;
   var canTriage = (ROLE === 'admin' || ROLE === 'analyst');
   var canPush = canTriage;
   var thTriage = document.getElementById('findings-th-triage');
@@ -154,8 +154,12 @@ function renderFindingsRows() {
   if (thTriage) setDisplay(thTriage, canTriage ? '' : 'none');
   if (thCheck) setDisplay(thCheck, (_findingsBulkMode && canPush) ? '' : 'none');
   if (thTicket) setDisplay(thTicket, canPush ? '' : 'none');
-  var colCount = 8 + (canTriage ? 1 : 0) + (canPush ? 1 : 0) + (_findingsBulkMode ? 1 : 0);
-  if (!l.length) { tb.innerHTML = '<tr><td colspan="' + colCount + '" class="empty">No findings' + (FINDING_TAB === 'all' ? ' yet.' : ' in this state.') + '</td></tr>'; return; }
+  var colCount = 7 + (canTriage ? 1 : 0) + (canPush ? 1 : 0) + (_findingsBulkMode ? 1 : 0);
+  if (!l.length) {
+    var none = (state._findings || []).length && (FINDING_Q || FINDING_TAB !== 'all' || FINDING_SEV !== 'all');
+    tb.innerHTML = '<tr><td colspan="' + colCount + '">' + empty('flag', none ? 'No findings match' : 'No findings yet', none ? 'Try another status or severity, or clear the search.' : 'Findings appear when a simulated technique executes without being prevented.') + '</td></tr>';
+    return;
+  }
   tb.innerHTML = l.map(function(f) {
     var checkCell = (_findingsBulkMode && canPush)
       ? '<td class="g1-s-49946d6d"' + on('click', 'stopEvent') + '><input type="checkbox" ' + (_findingsSelected[f.id] ? 'checked' : '') + ' ' + on('change', 'toggleFindingCheck', f.id) + ' class="u-pointer"></td>'
@@ -180,15 +184,17 @@ function renderFindingsRows() {
         + '>'
         + '<option value="">Set…</option>' + opts + '</select></td>';
     }
+    var sub = M.subline(f);
     return '<tr class="u-pointer"' + on('click', 'openFinding', f.id) + '>'
       + checkCell
-      + '<td class="cell-main">' + x(f.techniqueName || f.techniqueId) + (f.reopenedCount > 0 ? ' <span class="sbadge s-partial">reopened</span>' : '') + '</td>'
-      + '<td><span class="tech-id">' + x(f.techniqueId) + '</span></td>'
+      + '<td class="mono muted fnd-id" title="' + x(f.id) + '">' + x(M.shortId(f.id)) + '</td>'
+      + '<td class="cell-main"><div>' + x(f.techniqueName || f.techniqueId) + (f.reopenedCount > 0 ? ' <span class="sbadge s-partial">reopened</span>' : '') + '</div>'
+      + (sub ? '<div class="muted fnd-sub">' + x(sub) + '</div>' : '') + '</td>'
       + '<td>' + findingSevBadge(f.severity, f.exposureState) + '</td>'
-      + '<td class="tiny muted">' + x(f.controlClass) + '</td>'
-      + '<td class="tiny muted g1-s-82cece3f">' + x(f.agentId) + '</td>'
+      + '<td class="mono fnd-asset">' + x(f.agentId) + '</td>'
+      + '<td class="mono"><span class="tech-id">' + x(f.techniqueId) + '</span></td>'
       + '<td><span class="sbadge s-' + findingStatusClass(f.status) + '">' + x((f.status || '').replace('_', ' ')) + '</span></td>'
-      + '<td class="tiny muted" title="First seen: ' + fmtDate(f.firstSeen) + (f.resolvedAt ? '\nResolved: ' + fmtDate(f.resolvedAt) : '') + '">' + formatFindingAge(f) + '</td>'
+      + '<td class="muted" title="First seen: ' + fmtDate(f.firstSeen) + (f.resolvedAt ? '\nResolved: ' + fmtDate(f.resolvedAt) : '') + '">' + x(M.ageLabel(f, now)) + '</td>'
       + ticketCell
       + triageCell
       + '</tr>';
@@ -205,9 +211,8 @@ export function openFinding(id) {
   apicall('/api/findings/' + encodeURIComponent(id)).then(function(f) {
     state._currentFinding = f;
     var e = f.enrichment || {};
+    var now = Date.now();
     document.getElementById('results-title').textContent = (f.techniqueName || f.techniqueId) + ' — Finding';
-    var row = function(k, v) { return v && v.length ? '<div class="g1-display-flex g1-s-b60b87ad"><span class="g1-s-0a1d5a85">' + k + '</span><span class="u-flex1">' + v + '</span></div>' : ''; };
-    var list = function(a) { return (a || []).map(x).join(', '); };
     var canPush = (ROLE === 'admin' || ROLE === 'analyst');
     var pushBtn = canPush ? '<button class="btn btn-outline btn-sm"' + on('click', 'pushFindingToITSM', f.id) + '>+ Ticket</button>' : '';
     var respondBtn = (ROLE === 'admin') ? '<button class="btn btn-outline btn-sm"' + on('click', 'openRespondModal') + '>Respond</button>' : '';
@@ -231,8 +236,7 @@ export function openFinding(id) {
         return '<div class="cmp-ev-row"><span class="cmp-ev-badge ' + cls + '">' + label + '</span>' +
           '<span class="cmp-ev-detail">' + x((r.details || '').substring(0, 140)) + '</span></div>';
       }).join('');
-      vbHtml = '<div class="g1-s-48ee26f0">' +
-        '<div class="g1-s-29cafabe">Variant Breakdown</div>' +
+      vbHtml = '<h4 class="fnd-h">Variant breakdown</h4>' +
         '<div class="g1-s-2abdc95d">' + vb.prevented + ' of ' + vb.total + ' variants blocked (' + vbPct + '%)' +
           (vb.detectedOnly ? ', ' + vb.detectedOnly + ' detected only' : '') +
           (vb.missed ? ', ' + vb.missed + ' still missed entirely' : '') + '.' +
@@ -240,33 +244,52 @@ export function openFinding(id) {
             ? ' This finding stays open until every variant is blocked — even one bypass keeps the control marked ineffective.'
             : '') +
         '</div>' +
-        '<div class="cmp-evidence open">' + vbRows + '</div>' +
-      '</div>';
+        '<div class="cmp-evidence open">' + vbRows + '</div>';
     }
+    var evidence = M.evidenceLines(f);
+    var rec = M.recommendation(f);
+    var recHtml = rec.mitigations.length
+      ? '<ul class="fnd-rec">' + rec.mitigations.map(function(m) { return '<li><b>' + x(m.name) + '</b>' + (m.description ? '<div class="muted">' + x(m.description.substring(0, 220)) + '</div>' : '') + '</li>'; }).join('') + '</ul>'
+      : '<p class="muted fnd-p">No ATT&amp;CK mitigation guidance is on file for this technique. Fix the gap, then re-validate the scenario.</p>';
+    var rel = M.related(f).map(function(r) {
+      return '<a class="fnd-rel" role="button" tabindex="0"' + on('click', r.action, ...r.args) + '>' + icon(r.icon) + '<span class="fnd-rel-t"><b>' + x(r.label) + '</b><em>' + x(r.sub) + '</em></span>' + icon('chevron') + '</a>';
+    }).join('');
+    var foot = '<div class="fnd-foot"><button class="btn btn-outline"' + on('click', 'closeResults') + '>Close</button>' +
+      (canPush && f.status !== 'risk_accepted' ? '<button class="btn btn-outline"' + on('click', 'setFindingStatus', f.id, 'risk_accepted') + '>Accept risk</button>' : '') +
+      '<button class="btn btn-primary"' + on('click', 'fndGo', 'remediation') + '>' + icon('wrench') + 'View remediation</button></div>';
     document.getElementById('results-body').innerHTML =
-      '<div class="g1-s-462c8de6">' + findingSevBadge(f.severity, f.exposureState) +
-        ' <span class="sbadge s-' + findingStatusClass(f.status) + '">' + x((f.status || '').replace('_', ' ')) + '</span></div>' +
-      row('Technique', '<span class="tech-id">' + x(f.techniqueId) + '</span> ' + x(f.techniqueName)) +
-      row('Tactic', x(f.tactic)) + row('Expected control', x(f.controlClass)) +
-      row('Agent', x(f.agentId)) + row('Installed product', list(f.productSnapshot)) +
-      row('ATT&CK data sources', list(f.dataSources)) + row('Source', x(f.sourceType)) +
-      row('Occurrences', String(f.occurrenceCount) + (f.reopenedCount > 0 ? ' · reopened ' + f.reopenedCount + '×' : '')) +
-      row('First seen', fmtDate(f.firstSeen)) + row('Last seen', fmtDate(f.lastSeen)) +
-      row('Exposure age', formatFindingAge(f)) +
+      '<div class="g3-dwr"><div class="g3-dwr-row">' + findingSevBadge(f.severity, f.exposureState) +
+        ' <span class="sbadge s-' + findingStatusClass(f.status) + '">' + x((f.status || '').replace('_', ' ')) + '</span>' +
+        (f.techniqueId ? ' <span class="tech-id">' + x(f.techniqueId) + '</span>' : '') + '</div>' +
+      '<div class="muted mono fnd-dsub">' + x(f.id) + (f.agentId ? ' · ' + x(f.agentId) : '') + '</div>' +
+      kv(M.factRows(f, now)) +
+      '<div class="muted tiny">First seen ' + x(fmtDate(f.firstSeen)) + ' · last seen ' + x(fmtDate(f.lastSeen)) + '</div>' +
+      (evidence.length ? '<h4 class="fnd-h">Evidence</h4><div class="fnd-code">' + evidence.map(function(r) { return '<div><span class="k">' + x(r[0]) + '</span>: ' + x(r[1]) + '</div>'; }).join('') + '</div>' : '') +
       vbHtml +
+      '<h4 class="fnd-h">Recommended action</h4>' + recHtml +
+      (rec.detection ? '<p class="muted fnd-p"><b>Detection:</b> ' + x(rec.detection.substring(0, 400)) + '</p>' : '') +
       (e.description ? '<div class="g1-s-34d69e4c">' + x(e.description) + '</div>' : '') +
       (e.url ? '<div class="u-mt-06"><a href="' + x(e.url) + '" target="_blank" rel="noopener" class="g1-s-824141a9">View on attack.mitre.org →</a></div>' : '') +
       (canPush
-        ? '<div class="g1-s-48ee26f0">' +
-            '<div class="g1-s-29cafabe">ITSM Tickets</div>' +
-            '<div id="' + x(ticketSectionId) + '"><div class="tiny muted">Loading…</div></div>' +
-          '</div>'
-        : '');
+        ? '<h4 class="fnd-h">ITSM Tickets</h4>' +
+            '<div id="' + x(ticketSectionId) + '"><div class="tiny muted">Loading…</div></div>'
+        : '') +
+      '<h4 class="fnd-h">Related</h4><div class="fnd-rels">' + rel + '</div>' +
+      foot + '</div>';
     document.getElementById('results-overlay').classList.add('open');
     if (canPush) {
       loadFindingTickets(f.id, document.getElementById(ticketSectionId));
     }
   }).catch(function(e) { showToast(e.message, 'err'); });
+}
+// Jump links from the finding drawer: close the drawer first so the target page is visible.
+export function fndGo(tab) {
+  document.getElementById('results-overlay').classList.remove('open', 'run-mode');
+  showTab(tab);
+}
+export function fndTech(id) {
+  document.getElementById('results-overlay').classList.remove('open', 'run-mode');
+  openTechnique(id);
 }
 export function setFindingStatus(id, status) {
   apicall('/api/findings/' + encodeURIComponent(id) + '/status', { method: 'POST', body: JSON.stringify({ status: status }) })
@@ -276,62 +299,176 @@ export function setFindingStatus(id, status) {
 
 // ── Remediation ──────────────────────────────────────────────────────────────
 export function loadRemediations() {
-  apicall('/api/remediations').then(function(list) {
-    state._rems = list || [];
-    renderRemTiles(); renderRemList();
+  Promise.all([apicall('/api/remediations'), apicall('/api/remediations/by-endpoint')]).then(function(res) {
+    state._rems = res[0] || [];
+    state._remEps = res[1] || [];
+    var hs = RM.heroStats(state._rems);
+    setHeroStat('rem-hs-open', hs.open);
+    setHeroStat('rem-hs-critical', hs.critical);
+    renderRemTiles(); renderRemToolbar(); renderRemList();
   }).catch(function(e) { document.getElementById('rem-list').innerHTML = '<div class="empty g1-s-be6df18e">' + x(e.message) + '</div>'; });
 }
-var REM_SVG = {
-  wrench: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 1-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 1 5.4-5.4l-2.5 2.5-2-2 2.5-2.5z"/></svg>',
-  wrench16: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 1-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 1 5.4-5.4l-2.5 2.5-2-2 2.5-2.5z"/></svg>',
-  flag: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 14V2.5h8L9.5 5.5 11 8.5H3"/></svg>',
-  shield: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 1.5l5 2v4c0 3-2 5.2-5 6.5C5 12.7 3 10.5 3 7.5v-4z"/></svg>',
-  shield12: '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1.5l5 2v4c0 3-2 5.2-5 6.5C5 12.7 3 10.5 3 7.5v-4z"/></svg>',
-  agents12: '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="4" rx="1"/><rect x="2" y="9" width="12" height="4" rx="1"/></svg>',
-  layers12: '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2l6 3-6 3-6-3z"/><path d="M2 8l6 3 6-3"/></svg>',
-  eye12: '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/></svg>'
-};
+// Three tiles under the banner, same as the design demo: open fixes, findings they close, critical fixes.
 function renderRemTiles() {
-  var l = state._rems || [];
-  var findingsTotal = l.reduce(function(s, r) { return s + (r.findingCount || 0); }, 0);
-  var crit = l.filter(function(r) { return r.severity === 'Critical'; }).length;
-  var tile = function(lbl, val, col, iconBg, icon, foot) {
-    return '<div class="kpi-card stat-tile"><div class="stat-top">' +
-      '<div><div class="kpi-label">' + lbl + '</div><div class="kpi-value"' + cssVars(['g1-v-7d75dfc9', col]) + '>' + val + '</div></div>' +
-      '<div class="stat-icon"' + cssVars(['g1-v-9ffd39ba', iconBg], ['g1-v-7d75dfc9', col]) + '>' + icon + '</div></div>' +
-      '<div class="kpi-sub">' + foot + '</div></div>';
-  };
+  var t = RM.tileData(state._rems);
   document.getElementById('rem-tiles').innerHTML =
-    tile('Open remediations', l.length, l.length ? 'var(--warning)' : 'var(--success)', 'rgba(210,153,34,0.12)', REM_SVG.wrench16, 'prioritized fixes') +
-    tile('Affected findings', findingsTotal, findingsTotal ? 'var(--danger)' : 'var(--success)', 'rgba(218,54,51,0.12)', REM_SVG.flag, 'closed if all applied') +
-    tile('Critical remediations', crit, crit ? 'var(--danger)' : 'var(--muted)', crit ? 'rgba(218,54,51,0.12)' : 'rgba(154,169,188,0.12)', REM_SVG.shield, 'highest attacker value');
+    kpi({ label: 'Open remediations', value: t.open, sub: 'prioritized fixes', icon: 'wrench', tone: t.open ? 'accent' : 'ok' }) +
+    kpi({ label: 'Affected findings', value: t.findings, sub: 'closed if all applied', icon: 'flag', tone: t.findings ? 'warn' : 'ok' }) +
+    kpi({ label: 'Critical remediations', value: t.critical, sub: 'highest attacker value', icon: 'shield', tone: t.critical ? 'bad' : 'muted' });
 }
+var REM_SEV = 'all';
+var REM_Q = '';
+// Remediation views: 'endpoint' (default, one row per endpoint) or 'technique' (the original view).
+var REM_VIEW = 'endpoint';
+var REM_OPEN_EP = {};
+// Section row ("Prioritized fixes" + Showing N of M) and the filter row. The search and severity
+// filters are real (client-side over the loaded list); the row is rebuilt without touching the box
+// the user is typing in.
+function renderRemToolbar() {
+  var el = document.getElementById('rem-toolbar');
+  if (!el) return;
+  var l = state._rems || [];
+  var eps = state._remEps || [];
+  var views = seg([{ id: 'endpoint', label: 'By endpoint' }, { id: 'technique', label: 'By technique' }], REM_VIEW, 'setRemView');
+  if (REM_VIEW === 'endpoint') {
+    el.innerHTML =
+      '<div class="rem-sec"><h4 class="sec-label rem-sec-h">Endpoints</h4><span class="muted rem-sec-n">' + x(eps.length + (eps.length === 1 ? ' endpoint' : ' endpoints')) + '</span></div>' +
+      '<div class="rem-filters">' + views + '</div>';
+    return;
+  }
+  if (!l.length) { el.innerHTML = '<div class="rem-filters">' + views + '</div>'; return; }
+  var c = RM.sevCounts(l);
+  var opts = [['all', 'All'], ['Critical', 'Critical'], ['High', 'High'], ['Medium', 'Medium'], ['Low', 'Low']]
+    .map(function(o) { return { id: o[0], label: o[1], count: c[o[0]] }; });
+  var shown = RM.filterRems(l, REM_SEV, REM_Q).length;
+  el.innerHTML =
+    '<div class="rem-sec"><h4 class="sec-label rem-sec-h">Prioritized fixes</h4><span class="muted rem-sec-n" id="rem-showing">' + x(RM.showingText(shown, l.length)) + '</span></div>' +
+    '<div class="rem-filters">' + views + searchBox('rem-search', 'Search technique or control…', 'setRemSearch') + seg(opts, REM_SEV, 'setRemFilter') + '</div>';
+  var q = document.getElementById('rem-search');
+  if (q) q.value = REM_Q;
+}
+export function setRemView(v) { REM_VIEW = v === 'technique' ? 'technique' : 'endpoint'; renderRemToolbar(); renderRemList(); }
+export function toggleRemEndpoint(id) { REM_OPEN_EP[id] = !REM_OPEN_EP[id]; renderEndpointList(); }
+export function setRemFilter(v) { REM_SEV = v; renderRemToolbar(); renderRemList(); }
+export function setRemSearch(el) { REM_Q = (el && el.value) || ''; renderRemList(); }
+// Techniques whose tickets were pushed in this session (the ticketing API returns no per-technique
+// state to read back, so the card can only show what this browser tab did).
+var REM_TICKETED = {};
+// Endpoint view (default). One row per endpoint from /api/remediations/by-endpoint. The status
+// is Open, Phase 2 (a remediation request exists) or No remediation required. A request is never
+// shown as a fix: closure is verified by revalidation, not by this view.
+var EP_STATUS = { 'Open': 'Open', 'Phase 2': 'Phase 2', 'No remediation required': 'No remediation required' };
+function renderEndpointList() {
+  var el = document.getElementById('rem-list');
+  var eps = state._remEps || [];
+  if (!eps.length) { el.innerHTML = card('', empty('ok', 'No endpoints', 'No agents are registered yet.')); return; }
+  el.innerHTML = '<div class="rk-grid g2 rem-grid">' + eps.map(endpointCard).join('') + '</div>';
+}
+function endpointCard(e) {
+  var key = e.agentId;
+  var open = !!REM_OPEN_EP[key];
+  var name = e.hostname || e.agentId;
+  var sev = e.severity || {};
+  var sevLine = ['critical', 'high', 'medium', 'low'].map(function(k) {
+    return '<span>' + k.charAt(0).toUpperCase() + k.slice(1) + ' ' + (sev[k] || 0) + '</span>';
+  }).join('');
+  var head =
+    '<button type="button" class="rem-ep-head"' + on('click', 'toggleRemEndpoint', key) + ' aria-expanded="' + open + '">' +
+      '<span class="rem-ep-name">' + x(name) + (e.hostname ? '' : ' <span class="muted">(hostname unknown)</span>') + '</span>' +
+      '<span class="muted rem-ep-id">' + x(e.agentId) + '</span>' +
+      '<span class="rem-ep-stat">' + x(EP_STATUS[e.status] || e.status) + '</span>' +
+    '</button>';
+  var body =
+    '<div class="rem-ep-sum">' +
+      '<span><b>' + x(String(e.openFindings)) + '</b> open findings</span>' +
+      '<span><b>' + x(String(e.techniqueCount)) + '</b> techniques</span>' +
+      (e.requests ? '<span><b>' + x(String(e.requests.length)) + '</b> requests</span>' : '') +
+      '<span class="rem-ep-sev">' + sevLine + '</span>' +
+    '</div>';
+  if (open) {
+    var fl = e.findings || [];
+    body += '<div class="rem-ep-list"><div class="rem-ep-h">Findings on this endpoint (' + fl.length + ')</div>' +
+      fl.map(function(f) { return endpointFindingHtml(f); }).join('') + '</div>';
+    if (e.requests && e.requests.length) body += endpointRequestsHtml(e.requests);
+  }
+  return '<section class="rk-card rem-ep">' + head + body + '</section>';
+}
+// remIndexFor: the position of a technique's remediation card in state._rems, or -1. The row actions (View,
+// Ticket) take that index, the same as the technique view's cards do.
+function remIndexFor(techniqueId) {
+  return (state._rems || []).findIndex(function(r) { return r.techniqueId === techniqueId; });
+}
+// One finding on an endpoint: what it is, how it was missed, the mitigations as chips, and the same three
+// actions the technique cards offer (View, Ticket, Re-validate).
+function endpointFindingHtml(f) {
+  var sevName = f.severity ? String(f.severity).charAt(0).toUpperCase() + String(f.severity).slice(1).toLowerCase() : '';
+  var mits = f.mitigations || [];
+  var shown = mits.slice(0, 4);
+  var chips = mits.length
+    ? '<div class="rem-chips">' + shown.map(function(m) { return '<span class="rem-chip">' + x(m) + '</span>'; }).join('') +
+      (mits.length > shown.length ? '<span class="rem-chip rem-chip-more">+' + (mits.length - shown.length) + ' more</span>' : '') + '</div>'
+    : '<div class="muted rem-ep-mit">No ATT&amp;CK mitigation recorded for this technique.</div>';
+  var idx = remIndexFor(f.techniqueId);
+  var done = !!REM_TICKETED[f.techniqueId];
+  var canTicket = ROLE === 'admin' || ROLE === 'analyst';
+  var acts = '<div class="rem-fix-acts">' +
+    (idx >= 0 ? '<button class="btn btn-outline btn-sm"' + on('click', 'openRemediation', idx) + '>View</button>' : '') +
+    (canTicket && idx >= 0 ? '<button class="btn btn-outline btn-sm"' + on('click', 'remSingleTicket', idx) + (done ? ' disabled' : '') + '>' + (done ? '&#10003; Ticketed' : '&#128279; Ticket') + '</button>' : '') +
+    '<button class="btn btn-primary btn-sm"' + on('click', 'revalidateRemediation', f.techniqueId) + '>&#8635; Re-validate</button>' +
+  '</div>';
+  return '<div class="rem-ep-f">' +
+    '<div class="rem-ep-row"><span class="rem-tid">' + x(f.techniqueId) + '</span>' +
+      '<span class="rem-ep-tname">' + x(f.techniqueName || '') + '</span>' +
+      (sevName ? findingSevBadge(sevName, f.exposureState) : '') +
+    '</div>' +
+    chips + acts +
+  '</div>';
+}
+// Phase 2: remediation requests on this endpoint, newest first. Status is the mapped execution
+// status. Closure reads "verified" only when an independent verification run passed; a completed
+// execution alone is not shown as a closed finding. The API omits this list for roles without
+// remediation access.
+function endpointRequestsHtml(reqs) {
+  return '<div class="rem-ep-list"><div class="rem-ep-h">Remediation requests</div>' + reqs.map(function(r) {
+    var closure = r.closureVerified ? 'Finding closure: verified by an independent check' : 'Finding closure: not verified';
+    var evidence = r.verificationStatus
+      ? 'Verification: ' + r.verificationStatus + (r.verificationReason ? ' — ' + r.verificationReason : '')
+      : 'Verification: no independent run yet';
+    return '<div class="rem-ep-f">' +
+      '<div><b>' + x(r.checkId) + '</b> <span class="muted">· ' + x(r.status) + ' · execution ' + x(r.executionStatus) + '</span></div>' +
+      (r.error ? '<div class="rem-ep-err">' + x(r.error) + '</div>' : '') +
+      '<div class="muted rem-ep-mit">' + x(evidence) + ' · ' + x(closure) + '</div>' +
+      '<div class="muted rem-ep-mit">Requested ' + x(fmtDate(r.requestedAt)) + (r.requestedBy ? ' by ' + x(r.requestedBy) : '') + ' · request ' + x(r.requestId) + '</div>' +
+    '</div>';
+  }).join('') + '</div>';
+}
+// One prioritized-fix card per remediation, three to a row like the design demo.
 function renderRemList() {
+  if (REM_VIEW === 'endpoint') { renderEndpointList(); return; }
   var l = state._rems || [];
   var el = document.getElementById('rem-list');
-  if (!l.length) { el.innerHTML = '<div class="empty g1-s-be6df18e">No open remediations — nothing to fix right now.</div>'; return; }
-  el.innerHTML = l.map(function(r, i) {
-    var critCls = r.severity === 'Critical' ? ' crit' : '';
-    var ctrls = (r.controlClasses || []).map(x).join(', ') || '—';
-    return '<div class="rem-card">' +
-      '<div class="rem-ic' + critCls + '">' + REM_SVG.wrench + '</div>' +
-      '<div class="rem-main">' +
-        '<div class="rem-top">' + findingSevBadge(r.severity, '') + ' <span class="tech-id">' + x(r.techniqueId) + '</span></div>' +
-        '<div class="rem-title">' + x(r.techniqueName) + '</div>' +
-        '<div class="rem-meta">' +
-          '<span>' + REM_SVG.shield12 + 'Closes ' + r.findingCount + ' finding' + (r.findingCount === 1 ? '' : 's') + '</span>' +
-          '<span>' + REM_SVG.agents12 + r.agentCount + ' agent' + (r.agentCount === 1 ? '' : 's') + '</span>' +
-          '<span>' + REM_SVG.layers12 + ctrls + '</span>' +
-          '<span>' + REM_SVG.eye12 + 'Missed ' + r.missed + ' · Detected only ' + r.detectedOnly + '</span>' +
-        '</div>' +
-      '</div>' +
-      '<div class="rem-actions">' +
+  if (!l.length) { el.innerHTML = card('', empty('ok', 'No open remediations', 'Nothing to fix right now.')); return; }
+  var shown = RM.filterRems(l, REM_SEV, REM_Q);
+  var cnt = document.getElementById('rem-showing');
+  if (cnt) cnt.textContent = RM.showingText(shown.length, l.length);
+  if (!shown.length) { el.innerHTML = card('', empty('wrench', 'No remediations match', 'Try another severity or clear the search.')); return; }
+  var canTicket = ROLE === 'admin' || ROLE === 'analyst';
+  el.innerHTML = '<div class="rk-grid g3 rem-grid">' + shown.map(function(i) {
+    var r = l[i], v = RM.cardView(r);
+    var done = !!REM_TICKETED[v.techniqueId];
+    return '<div class="rk-card rem-fix rem-' + x(v.sevKey || 'none') + '">' +
+      '<div class="rem-fix-top">' + pill(v.sev, v.tone) + '<span class="rem-tid">' + x(v.techniqueId) + '</span></div>' +
+      '<b class="rem-name">' + x(v.name) + '</b>' +
+      '<div class="rem-closes">Closes <b>' + x(v.closes) + '</b> \u00b7 ' + x(v.agents) + '</div>' +
+      (v.controls ? '<div class="rem-ctrl">' + x(v.controls) + '</div>' : '') +
+      '<div class="rem-miss"><span class="rem-missed">Missed ' + v.missed + '</span><span class="muted">Detected only ' + v.detectedOnly + '</span></div>' +
+      '<div class="rem-fix-acts">' +
         '<button class="btn btn-outline btn-sm"' + on('click', 'openRemediation', i) + '>View</button>' +
-        (ROLE === 'admin' || ROLE === 'analyst' ? '<button class="btn btn-outline btn-sm"' + on('click', 'remSingleTicket', i) + '>&#128279; Ticket</button>' : '') +
-        '<button class="btn btn-primary btn-sm"' + on('click', 'revalidateRemediation', r.techniqueId) + '>&#8635; Re-validate</button>' +
+        (canTicket ? '<button class="btn btn-outline btn-sm"' + on('click', 'remSingleTicket', i) + (done ? ' disabled' : '') + '>' + (done ? '&#10003; Ticketed' : '&#128279; Ticket') + '</button>' : '') +
+        '<button class="btn btn-primary btn-sm"' + on('click', 'revalidateRemediation', v.techniqueId) + '>&#8635; Re-validate</button>' +
       '</div>' +
     '</div>';
-  }).join('');
+  }).join('') + '</div>';
 }
 export function openRemediation(i) {
   var r = (state._rems || [])[i];
@@ -340,34 +477,24 @@ export function openRemediation(i) {
   document.getElementById('results-export').innerHTML =
     (ROLE === 'admin' || ROLE === 'analyst' ? '<button class="btn btn-outline btn-sm"' + on('click', 'remSingleTicket', i) + '>&#128279; Create Ticket</button>' : '') +
     '<button class="btn btn-primary btn-sm"' + on('click', 'revalidateRemediation', r.techniqueId) + '>&#8635; Re-validate</button>';
-  var ctrls = (r.controlClasses || []).map(x).join(', ') || '—';
-  var stat = function(l, v) { return '<div class="rem-stat"><div class="lbl">' + l + '</div><div class="val">' + v + '</div></div>'; };
-  var statGrid = '<div class="rem-stat-grid">' +
-    '<div class="rem-stat"><div class="lbl">Severity</div><div class="val">' + findingSevBadge(r.severity, '') + '</div></div>' +
-    stat('Findings closed', r.findingCount) +
-    stat('Agents affected', r.agentCount) +
-    stat('Control class', ctrls) +
-    '</div>';
-  var steps = (r.mitigations || []).map(function(m, idx) {
+  var v = RM.drawerView(r);
+  var steps = v.steps.map(function(m, idx) {
     return '<div class="rem-step"><div class="rem-step-n">' + (idx + 1) + '</div>' +
       '<div class="rem-step-tx"><div class="nm">' + x(m.name) + '</div>' +
       (m.description ? '<div class="ds">' + x(m.description) + '</div>' : '') + '</div></div>';
-  }).join('') || '<div class="tiny muted">No ATT&CK mitigations listed for this technique.</div>';
-  var agents = (r.recommendedTargets || []).map(function(a) { return '<span class="tool-tag">' + x(a) + '</span>'; }).join(' ') || '<span class="tiny muted">—</span>';
-  var detection = r.detection
-    ? '<div class="rem-eyebrow">ATT&amp;CK Detection Guidance</div><div class="tiny g1-s-bf6d0f4b">' + x(r.detection) + '</div>'
+  }).join('') || '<div class="tiny muted">No ATT&amp;CK mitigations listed for this technique.</div>';
+  var agents = v.targets.map(function(a) { return '<span class="tool-tag">' + x(a) + '</span>'; }).join(' ') || '<span class="tiny muted">—</span>';
+  var detection = v.detection
+    ? '<div class="rem-eyebrow">ATT&amp;CK Detection Guidance</div><div class="tiny">' + x(v.detection) + '</div>'
     : '';
-  var checkSvg = '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" class="g1-s-0689b472"><path d="M3 8.5l3.2 3.2L13 5"/></svg>';
+  document.getElementById('results-title').textContent = v.name;
   document.getElementById('results-body').innerHTML =
-    '<div class="g1-display-flex g1-s-bf6d23db">' + findingSevBadge(r.severity, '') + ' <span class="tech-id">' + x(r.techniqueId) + '</span></div>' +
-    '<div class="g1-s-d5980386">' + x(r.techniqueName) + '</div>' +
-    '<div class="tiny muted g1-s-dd11a3a0">Closes ' + r.findingCount + ' finding' + (r.findingCount === 1 ? '' : 's') + ' on ' + r.agentCount + ' agent' + (r.agentCount === 1 ? '' : 's') + ' · Missed ' + r.missed + ' · Detected only ' + r.detectedOnly + '</div>' +
-    statGrid +
-    '<div class="rem-eyebrow">Implementation Steps — ATT&amp;CK Mitigations</div>' + steps +
+    '<div class="rem-dr-sub">' + pill(v.sev, v.tone) + ' <span class="rem-tid">' + x(v.subtitle) + '</span></div>' +
+    '<div class="tiny muted rem-dr-sum">' + x(v.summary) + (v.controls ? ' · ' + x(v.controls) : '') + '</div>' +
+    '<h4 class="rem-dr-h">Recommended mitigations</h4>' + steps +
     detection +
     '<div class="rem-eyebrow">Affected Agents</div><div>' + agents + '</div>' +
-    '<div class="rem-tip">' + checkSvg + '<span>After applying these mitigations, re-run the linked scenario to confirm the gap is closed and posture improves.</span></div>' +
-    '<div class="tiny muted g1-s-0e2f4ee5">Mitigation &amp; detection content © MITRE ATT&CK&reg;.</div>';
+    '<div class="rem-dr-note tiny muted">After applying these mitigations, re-run the linked scenario to confirm the gap is closed. Mitigation &amp; detection content © MITRE ATT&amp;CK&reg;.</div>';
   document.getElementById('results-overlay').classList.add('open');
 }
 export function revalidateRemediation(techniqueId) {
@@ -454,26 +581,7 @@ export function loadTicketingConfigs(cb) {
 
 // ── Dashboard ITSM widget ───────────────────────────────────────────────────
 export function loadDashboardITSM() {
-  apicall('/api/ticketing/summary').then(function(s) {
-    var sec = document.getElementById('dash-itsm-section');
-    if (!sec) return;
-    var open = s.openTickets || 0, resolved = s.resolvedTickets || 0, pend = s.pendingRevalidation || 0;
-    if (open + resolved + pend === 0 && !(s.byProvider && s.byProvider.length)) {
-      setDisplay(sec, 'none'); return;
-    }
-    setDisplay(sec, '');
-    var tile = function(lbl, val, col) {
-      return '<div class="kpi-card"><div class="kpi-label">' + lbl + '</div>' +
-        '<div class="kpi-value"' + cssVars(['g1-v-7d75dfc9', col]) + '>' + val + '</div></div>';
-    };
-    var html = tile('Open tickets', open, open ? 'var(--warning)' : 'var(--success)') +
-      tile('Resolved tickets', resolved, 'var(--success)') +
-      tile('Pending revalidation', pend, pend ? 'var(--danger)' : 'var(--muted)');
-    (s.byProvider || []).forEach(function(p) {
-      html += tile(x(p.provider), p.count, 'var(--accent)');
-    });
-    document.getElementById('dash-itsm-tiles').innerHTML = html;
-  }).catch(function() {});
+  apicall('/api/ticketing/summary').then(function(s) { setDashITSM(s); }).catch(function() { setDashITSM(null); });
 }
 
 // ── Findings ticket actions ─────────────────────────────────────────────────
@@ -535,7 +643,7 @@ function toggleFindingsBulkMode(enabled) {
 export function toggleAllFindingChecks(checked) {
   _findingsSelected = {};
   if (checked) {
-    var l = (state._findings || []).filter(function(f) { return FINDING_TAB === 'all' || f.status === FINDING_TAB; });
+    var l = currentFindings();
     l.forEach(function(f) { _findingsSelected[f.id] = true; });
   }
   renderFindingsRows();
@@ -580,7 +688,7 @@ export function remBulkTicket(filter) {
   var findingIds = [];
   targets.forEach(function(r) { (r.findingIds || []).forEach(function(id) { findingIds.push(id); }); });
   if (!findingIds.length) { showToast('Remediations have no finding IDs — re-validate first', 'err'); return; }
-  _pushFindingTickets(findingIds);
+  _pushFindingTickets(findingIds, function() { targets.forEach(function(r) { REM_TICKETED[r.techniqueId] = true; }); renderRemList(); });
 }
 
 export function remSingleTicket(i) {
@@ -588,10 +696,10 @@ export function remSingleTicket(i) {
   if (!r) return;
   var findingIds = r.findingIds || [];
   if (!findingIds.length) { showToast(r.techniqueId + ' has no finding IDs — re-validate first', 'err'); return; }
-  _pushFindingTickets(findingIds);
+  _pushFindingTickets(findingIds, function() { REM_TICKETED[r.techniqueId] = true; renderRemList(); });
 }
 
-function _pushFindingTickets(findingIds) {
+function _pushFindingTickets(findingIds, onOk) {
   loadTicketingConfigs(function(cfgs) {
     var enabled = (cfgs || []).filter(function(c) { return c.enabled; });
     if (!enabled.length) { showToast('No ITSM connectors configured — add one in Integrations', 'err'); return; }
@@ -606,6 +714,7 @@ function _pushFindingTickets(findingIds) {
       .then(function(results) {
         var ok = (results || []).filter(function(r) { return !r.error; }).length;
         showToast(ok + ' ticket' + (ok === 1 ? '' : 's') + ' created', ok ? 'ok' : 'err');
+        if (ok && onOk) onOk();
       }).catch(function(e) { showToast(e.message, 'err'); });
   });
 }

@@ -13,7 +13,7 @@ func TestEvaluateStep_T1560001Attempt_SameApplicabilitySplitAsT1567002(t *testin
 		StepName: "Archive Staging via Compress-Archive", CheckResult: "fail", Details: "FAIL: zip created unblocked",
 	}
 	deps := StepDependencies{
-		Prevention:     &controlval.FakeProvider{},
+		Prevention:     ProviderPrevention{Provider: &controlval.FakeProvider{}},
 		Recovery:       &FakeRecoveryObserver{},
 		Containment:    &FakeContainmentObserver{},
 		Detection:      &FakeDetectionLookup{},
@@ -186,9 +186,9 @@ func TestEvaluateStep_T1490Attempt_ProducesCompleteCapabilitySet(t *testing.T) {
 		CheckResult: "fail", Details: "FAIL: deleted 1 shadow copy, control did not intervene",
 	}
 	deps := StepDependencies{
-		Prevention: &controlval.FakeProvider{ProviderName: "microsoft_defender", Obs: map[string]controlval.Observation{
+		Prevention: ProviderPrevention{Provider: &controlval.FakeProvider{ProviderName: "microsoft_defender", Obs: map[string]controlval.Observation{
 			"aaa11111": {Outcome: controlval.OutcomeAllowed, EvidenceKind: controlval.EvidenceObserved, Confidence: controlval.ConfidenceHigh},
-		}},
+		}}},
 		Recovery:       &FakeRecoveryObserver{Results: map[string]SurvivalResult{recoveryKey(AttemptKey{RunID: "r1", TechniqueID: "T1490", Action: "aaa11111"}): SurvivalLost}},
 		Containment:    &FakeContainmentObserver{},
 		Detection:      &FakeDetectionLookup{},
@@ -228,7 +228,7 @@ func TestEvaluateStep_T1567002Attempt_UndecidedCapabilitiesAreApplicabilityUndec
 		CheckResult: "fail", Details: "FAIL: reachable",
 	}
 	deps := StepDependencies{
-		Prevention:     &controlval.FakeProvider{},
+		Prevention:     ProviderPrevention{Provider: &controlval.FakeProvider{}},
 		Recovery:       &FakeRecoveryObserver{},
 		Containment:    &FakeContainmentObserver{},
 		Detection:      &FakeDetectionLookup{},
@@ -260,7 +260,7 @@ func TestEvaluateStep_T1486Attempt_DataProtectionIsApplicabilityUndecided(t *tes
 		CheckResult: "fail", Details: "FAIL: files encrypted",
 	}
 	deps := StepDependencies{
-		Prevention: &controlval.FakeProvider{}, Recovery: &FakeRecoveryObserver{},
+		Prevention: ProviderPrevention{Provider: &controlval.FakeProvider{}}, Recovery: &FakeRecoveryObserver{},
 		Containment: &FakeContainmentObserver{}, Detection: &FakeDetectionLookup{}, DataProtection: &FakeDataProtectionLookup{},
 	}
 	results := EvaluateStep(in, deps)
@@ -304,7 +304,7 @@ func TestEvaluateStep_EvaluatorErrorIsDistinctFromNotInvoked(t *testing.T) {
 	}
 	key := recoveryKey(AttemptKey{RunID: "r1", TechniqueID: "T1486", Action: "ddd44444"})
 	deps := StepDependencies{
-		Prevention:     &controlval.FakeProvider{},
+		Prevention:     ProviderPrevention{Provider: &controlval.FakeProvider{}},
 		Recovery:       &FakeRecoveryObserver{}, // T1486: not_applicable, never invoked
 		Containment:    &FakeContainmentObserver{},
 		Detection:      &FakeDetectionLookup{Err: map[string]error{key: errors.New("detection profile service unreachable")}},

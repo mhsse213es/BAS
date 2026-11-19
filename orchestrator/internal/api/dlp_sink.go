@@ -7,6 +7,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
@@ -346,6 +348,58 @@ type dlpSinkRequest struct {
 	Channel string `json:"channel"`
 }
 
+// sinkMaxBody caps how much of a request body the sink reads. A step's record is a few hundred bytes; anything past the
+// cap is dropped rather than rejected, so an oversized body still yields its token and a receipt.
+const sinkMaxBody = 1 << 20
+
+// parseSinkRequest reads the token, payload and channel out of whatever a client sent. JSON is the original format and
+// is still read exactly as before, including when a client labels it text/plain or sends no Content-Type. Browsers and
+// forms also work: multipart/form-data (the uploaded file named "payload" is the payload) and urlencoded fields. Raw
+// bodies (text, CSV, XML, octet-stream) carry the token and channel in X-Sink-Token and X-Sink-Channel. A header token
+// wins over one in the body. Input that does not parse yields an empty token and never panics.
+func parseSinkRequest(w http.ResponseWriter, r *http.Request) dlpSinkRequest {
+	_ = w
+	var req dlpSinkRequest
+	r.Body = io.NopCloser(io.LimitReader(r.Body, sinkMaxBody))
+	hdrToken, hdrChannel := r.Header.Get("X-Sink-Token"), r.Header.Get("X-Sink-Channel")
+	ct, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	switch {
+	case ct == "multipart/form-data":
+		if err := r.ParseMultipartForm(sinkMaxBody); err == nil {
+			req.Token, req.Channel, req.Payload = r.PostFormValue("token"), r.PostFormValue("channel"), r.PostFormValue("payload")
+			if files := r.MultipartForm.File["payload"]; len(files) > 0 {
+				if f, err := files[0].Open(); err == nil {
+					b, _ := io.ReadAll(io.LimitReader(f, sinkMaxBody))
+					f.Close()
+					req.Payload = string(b)
+				}
+			}
+		}
+	case ct == "application/x-www-form-urlencoded":
+		if err := r.ParseForm(); err == nil {
+			req.Token, req.Channel, req.Payload = r.PostFormValue("token"), r.PostFormValue("channel"), r.PostFormValue("payload")
+		}
+	case ct == "" || ct == "application/json":
+		_ = json.NewDecoder(r.Body).Decode(&req)
+	default:
+		raw, _ := io.ReadAll(r.Body)
+		if hdrToken == "" {
+			// A legacy client that sends its JSON under another Content-Type.
+			_ = json.Unmarshal(raw, &req)
+		}
+		if req.Token == "" {
+			req.Payload = string(raw)
+		}
+	}
+	if hdrToken != "" {
+		req.Token = hdrToken
+	}
+	if hdrChannel != "" {
+		req.Channel = hdrChannel
+	}
+	return req
+}
+
 // DLPSink is POST /api/dlp/sink -- deliberately unauthenticated (see
 // routes.go's publicRoutes and the design spec's rationale: the point is
 // testing whether *content* gets intercepted in flight, not testing access
@@ -354,8 +408,7 @@ type dlpSinkRequest struct {
 // shouldn't be able to learn from the response. The raw payload is never
 // stored, only its hash and length.
 func (h *Handler) DLPSink(w http.ResponseWriter, r *http.Request) {
-	var req dlpSinkRequest
-	_ = json.NewDecoder(r.Body).Decode(&req)
+	req := parseSinkRequest(w, r)
 
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {

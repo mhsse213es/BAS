@@ -686,8 +686,8 @@ func TestParseYAML_EntraHybridIdentityAttack(t *testing.T) {
 	if len(sc.SupportedOS) != 1 || sc.SupportedOS[0] != "windows" {
 		t.Fatalf("supported_os = %v, want [windows]", sc.SupportedOS)
 	}
-	if len(sc.Steps) != 6 {
-		t.Fatalf("steps = %d, want 6", len(sc.Steps))
+	if len(sc.Steps) != 8 {
+		t.Fatalf("steps = %d, want 8", len(sc.Steps))
 	}
 	type wantStep struct {
 		technique   string
@@ -698,7 +698,9 @@ func TestParseYAML_EntraHybridIdentityAttack(t *testing.T) {
 	wantSteps := []wantStep{
 		{"T1082", "custom", -1, false},
 		{"T1528", "custom", -1, false},
-		{"T1539", "art", 3, true},
+		{"T1539", "art", 0, true},
+		{"T1539", "art", 1, true},
+		{"T1539", "art", 2, true},
 		{"T1555.003", "art", 0, true},
 		{"T1550.001", "custom", -1, false},
 		{"T1556.007", "custom", -1, false},
@@ -888,7 +890,7 @@ func TestParseYAML_RansomwareScenariosDetectionProfilesWired(t *testing.T) {
 		{"../../../scenarios/lockbit-kill-chain.yaml", "LockBit Stage 5 — Event Log Clearing Attempt (T1070.001)", "windows_log_manipulation"},
 
 		{"../../../scenarios/ransomware-drill.yaml", "File Enumeration (BFSI high-value filename markers)", "windows_file_discovery"},
-		{"../../../scenarios/ransomware-drill.yaml", "Defender Exclusion Invocation (cmdline probe  -  no state change)", "windows_defender_tampering"},
+		{"../../../scenarios/ransomware-drill.yaml", "Defender Exclusion Configuration Check (read-only, no state change)", "windows_defender_tampering"},
 		{"../../../scenarios/ransomware-drill.yaml", "Event Log Clear Probe (nonexistent log  -  process telemetry only)", "windows_log_manipulation"},
 		{"../../../scenarios/ransomware-drill.yaml", "VSS + Backup Catalog Enumeration", "windows_vss_inhibition"},
 		{"../../../scenarios/ransomware-drill.yaml", "Benign File Rename Probe (.bas_locked extension)", "windows_ransomware_encryption"},
@@ -962,7 +964,7 @@ func TestParseYAML_NewRansomwareFamiliesDetectionProfilesWired(t *testing.T) {
 		{"../../../scenarios/akira-kill-chain.yaml", "Akira Stage 1 — RDP / NLA Exposure Posture Check (T1021.001)", "windows_rdp_nla_posture"},
 		{"../../../scenarios/akira-kill-chain.yaml", "Akira Stage 2 — Network Share Discovery (T1135)", "windows_network_share_discovery"},
 		{"../../../scenarios/akira-kill-chain.yaml", "Akira Stage 3 — SAM & SYSTEM Hive Theft via reg save (T1003.002)", "windows_sam_theft"},
-		{"../../../scenarios/akira-kill-chain.yaml", "Akira Stage 4 — Defender Exclusion Invocation (cmdline probe  -  no state change) (T1562.001)", "windows_defender_tampering"},
+		{"../../../scenarios/akira-kill-chain.yaml", "Akira Stage 4 — Defender Tamper Protection and Exclusion State (T1562.001)", "windows_defender_tampering"},
 		{"../../../scenarios/akira-kill-chain.yaml", "Akira Stage 5 — SMB Admin Share Lateral Movement Probe (T1021.002)", "windows_smb_lateral_probe"},
 		{"../../../scenarios/akira-kill-chain.yaml", "Akira Stage 6 — Ransomware Payload Simulation (T1486)", "windows_ransomware_encryption"},
 		{"../../../scenarios/akira-kill-chain.yaml", "Akira Stage 7 — VSS Snapshot Enumeration (T1490)", "windows_vss_inhibition"},
@@ -1038,6 +1040,74 @@ func TestParseYAML_InsiderThreatDetectionProfilesWired(t *testing.T) {
 		{"../../../scenarios/insider-threat-kill-chain.yaml", "Insider Stage 1 — Sensitive-File Search Outside Normal Job Scope (T1083 / T1005)", "windows_file_discovery"},
 		{"../../../scenarios/insider-threat-kill-chain.yaml", "Insider Stage 2 — Personal Webmail Exfiltration Reachability (T1567)", "windows_webmail_egress"},
 		{"../../../scenarios/insider-threat-kill-chain.yaml", "Insider Stage 3 — Mass File Rename/Delete Sabotage (T1485)", "windows_data_destruction"},
+	}
+
+	parsed := map[string]*Scenario{}
+	for _, tc := range cases {
+		if _, ok := parsed[tc.file]; ok {
+			continue
+		}
+		data, err := os.ReadFile(tc.file)
+		if err != nil {
+			t.Fatalf("read %s: %v", tc.file, err)
+		}
+		sc, err := ParseYAML(data)
+		if err != nil {
+			t.Fatalf("ParseYAML %s: %v", tc.file, err)
+		}
+		parsed[tc.file] = sc
+	}
+
+	for _, tc := range cases {
+		sc := parsed[tc.file]
+		var step *Step
+		for i := range sc.Steps {
+			if sc.Steps[i].Name == tc.stepName {
+				step = &sc.Steps[i]
+				break
+			}
+		}
+		if step == nil {
+			t.Errorf("%s: step %q not found", tc.file, tc.stepName)
+			continue
+		}
+		if len(step.DetectionProfiles) != 1 || step.DetectionProfiles[0] != tc.wantProfile {
+			t.Errorf("%s / %q: DetectionProfiles = %v, want [%s]", tc.file, tc.stepName, step.DetectionProfiles, tc.wantProfile)
+		}
+	}
+}
+
+func TestParseYAML_APT29Phase7DetectionProfilesWired(t *testing.T) {
+	cases := []struct {
+		file        string
+		stepName    string
+		wantProfile string
+	}{
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 6 — Domain Privileged Group Enumeration (T1069.002)", "windows_apt29_discovery"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 7 — Domain Controller Discovery (T1018)", "windows_apt29_discovery"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 8 — Remote System Discovery (T1018)", "windows_apt29_discovery"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 9 — Security Product Discovery (T1518.001)", "windows_apt29_discovery"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 10 — Network Configuration Discovery (T1016)", "windows_apt29_discovery"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 11 — WMI-Based Process Execution Simulation (T1047)", "windows_apt29_defense_evasion"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 12 — Rundll32 Proxy Execution (T1218.011)", "windows_apt29_defense_evasion"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 13 — PowerShell Obfuscation Detection (T1027)", "windows_apt29_defense_evasion"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 14 — Windows Event Logging Impairment Attempt (T1685.001)", "windows_apt29_defense_evasion"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 15 — Startup Folder Persistence Write + Delete (T1547.001)", "windows_apt29_persistence"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 16 — WMI Event Subscription Persistence (T1546.003)", "windows_apt29_persistence"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 17 — Windows Service Persistence (T1543.003)", "windows_apt29_persistence"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 18 — COM Hijacking Detection Simulation (T1546.015)", "windows_apt29_persistence"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 19 — LSASS Access Attempt (T1003.001)", "windows_credential_access"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 20 — Windows Credential Manager Access Attempt (T1555.004)", "windows_credential_access"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 21 — Browser Credential Store Access Attempt (T1555.003)", "windows_credential_access"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 22 — Kerberos Service Account Enumeration (T1558.003)", "windows_credential_access"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 23 — DPAPI Credential Access Simulation (T1555)", "windows_credential_access"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 24 — SMB Administrative Share Access (T1021.002)", "windows_apt29_lateral_movement"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 25 — WinRM Remote Execution Simulation (T1021.006)", "windows_apt29_lateral_movement"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 26 — Remote Service Execution Simulation (T1569.002)", "windows_apt29_lateral_movement"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 27 — HTTPS C2 Beacon Simulation (T1071.001)", "windows_apt29_c2_exfil"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 28 — DNS Periodic Beacon Detection (T1071.004)", "windows_dns_c2"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 29 — Sensitive File Discovery and Collection (T1005)", "windows_apt29_c2_exfil"},
+		{"../../../scenarios/apt29-kill-chain-phase7.yaml", "APT29 Stage 30 — HTTPS Exfiltration Simulation (T1041)", "windows_apt29_c2_exfil"},
 	}
 
 	parsed := map[string]*Scenario{}

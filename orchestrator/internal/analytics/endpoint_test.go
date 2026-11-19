@@ -30,11 +30,12 @@ func TestEndpointPosture_TalliesConnectivityAndLifecycle(t *testing.T) {
 		if err != nil {
 			t.Fatalf("EndpointPosture: %v", err)
 		}
-		if got.TotalAgents != 5 {
-			t.Errorf("TotalAgents = %d, want 5", got.TotalAgents)
+		// a5 is retired: excluded from total/online/offline, counted only as retired.
+		if got.TotalAgents != 4 {
+			t.Errorf("TotalAgents = %d, want 4 (retired a5 excluded)", got.TotalAgents)
 		}
-		if got.OnlineAgents != 4 {
-			t.Errorf("OnlineAgents = %d, want 4 (a2 is stale)", got.OnlineAgents)
+		if got.OnlineAgents != 3 {
+			t.Errorf("OnlineAgents = %d, want 3 (a2 is stale; retired a5 excluded)", got.OnlineAgents)
 		}
 		if got.OfflineAgents != 1 {
 			t.Errorf("OfflineAgents = %d, want 1 (a2)", got.OfflineAgents)

@@ -67,3 +67,40 @@ func wsAgentAuthorized(req *http.Request, agentSecret string) (ok bool, statusCo
 	}
 	return true, 0, ""
 }
+
+// agentMatchesCertificate enforces that an agent request acts only for the agent its client certificate
+// was issued to (audit F-02): the shared X-Agent-Token proves nothing about WHICH agent is calling, so
+// whenever a verified certificate is present the AgentID the request claims must equal its identity.
+// It writes the 401 and returns false on a mismatch. A request with no certificate (the legacy
+// listener) is unchanged for now; that listener's retirement makes the certificate mandatory.
+func agentMatchesCertificate(w http.ResponseWriter, r *http.Request, claimedID string) bool {
+	if mtlsID := AuthenticatedAgentID(r); mtlsID != "" && claimedID != mtlsID {
+		jsonError(w, "agentId does not match authenticated certificate", http.StatusUnauthorized)
+		return false
+	}
+	return true
+}
+
+// runsBelongToCertificateAgent is agentMatchesCertificate for routes that carry run IDs instead of an
+// AgentID (audit F-02): with a verified certificate present, every named run that exists must belong to
+// that agent, otherwise 401. An unknown run is left to the handler's existing behaviour, and a request
+// without a certificate (legacy listener) is unchanged.
+func (h *Handler) runsBelongToCertificateAgent(w http.ResponseWriter, r *http.Request, runIDs ...string) bool {
+	mtlsID := AuthenticatedAgentID(r)
+	if mtlsID == "" || len(runIDs) == 0 {
+		return true
+	}
+	var foreign bool
+	err := h.db.QueryRow(r.Context(),
+		`SELECT EXISTS (SELECT 1 FROM scenario_runs WHERE id::text = ANY($1) AND agent_id <> $2)`,
+		runIDs, mtlsID).Scan(&foreign)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return false
+	}
+	if foreign {
+		jsonError(w, "run does not belong to the authenticated agent", http.StatusUnauthorized)
+		return false
+	}
+	return true
+}

@@ -100,6 +100,16 @@ func EnsureContentRegistrySchema(ctx context.Context, pool *pgxpool.Pool) error 
 		)`,
 		`CREATE INDEX IF NOT EXISTS content_version_events_vid ON content_version_events (content_version_id, at)`,
 
+		// Gap 3 (REQ-018 content-velocity spec, section 6): machine-readable
+		// exclusion reason on rejection. NOT VALID means existing rows are not
+		// checked, so legacy rejections stay as they are (counted as
+		// unclassified). New rows are checked on insert.
+		`ALTER TABLE content_version_events ADD COLUMN IF NOT EXISTS reason_code text`,
+		addConstraint("content_version_events", "cve_reason_code_check",
+			`CHECK (reason_code IS NULL OR reason_code IN ('relevance','insufficient_technical_detail','unsupported_platform','validation_environment_unavailable','third_party_dependency')) NOT VALID`),
+		addConstraint("content_version_events", "cve_rejected_needs_reason",
+			`CHECK (to_lifecycle <> 'REJECTED' OR reason_code IS NOT NULL) NOT VALID`),
+
 		`CREATE TABLE IF NOT EXISTS content_version_sources (
 			content_version_id        text        NOT NULL REFERENCES content_versions(id),
 			entity_type               text        NOT NULL CHECK (entity_type IN

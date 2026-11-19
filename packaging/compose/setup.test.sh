@@ -16,7 +16,7 @@ source "${SCRIPT_DIR}/setup.sh"
 
 echo "TEST: check_install_state reports PASS for a fresh install directory"
 INSTALL_DIR="$TESTDIR/fresh"
-RESUME=false
+RESUME_INSTALL=false
 REINSTALL=false
 mkdir -p "$INSTALL_DIR"
 result=$(check_install_state)
@@ -25,7 +25,7 @@ echo "PASS"
 
 echo "TEST: check_install_state reports FAIL (naming --resume) for an interrupted install without --resume"
 INSTALL_DIR="$TESTDIR/interrupted"
-RESUME=false
+RESUME_INSTALL=false
 REINSTALL=false
 mkdir -p "$INSTALL_DIR"
 echo "JWT_SECRET=abc" > "$INSTALL_DIR/.env"
@@ -36,7 +36,7 @@ echo "PASS"
 
 echo "TEST: check_install_state reports PASS for an interrupted install when --resume was passed"
 INSTALL_DIR="$TESTDIR/interrupted2"
-RESUME=true
+RESUME_INSTALL=true
 REINSTALL=false
 mkdir -p "$INSTALL_DIR"
 echo "JWT_SECRET=abc" > "$INSTALL_DIR/.env"
@@ -46,7 +46,7 @@ echo "PASS"
 
 echo "TEST: check_install_state reports FAIL (naming --reinstall) for a completed install without --reinstall"
 INSTALL_DIR="$TESTDIR/complete"
-RESUME=false
+RESUME_INSTALL=false
 REINSTALL=false
 mkdir -p "$INSTALL_DIR"
 echo "JWT_SECRET=abc" > "$INSTALL_DIR/.env"
@@ -58,7 +58,7 @@ echo "PASS"
 
 echo "TEST: check_install_state reports PASS for a completed install when --reinstall was passed"
 INSTALL_DIR="$TESTDIR/complete2"
-RESUME=false
+RESUME_INSTALL=false
 REINSTALL=true
 mkdir -p "$INSTALL_DIR"
 echo "JWT_SECRET=abc" > "$INSTALL_DIR/.env"

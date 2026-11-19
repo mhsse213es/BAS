@@ -1,0 +1,92 @@
+[
+  {
+    "id": "apt36-cc1",
+    "n": 1,
+    "name": "APT36 Credential Access 1 - Query-Only LSASS Handle (T1003.001 precondition)",
+    "technique_id": "T1003.001",
+    "timeout_sec": 60,
+    "blast_radius": "Opens lsass.exe with PROCESS_QUERY_LIMITED_INFORMATION only and closes the handle; no memory is read. Read-only.",
+    "telemetry": [
+      "Sysmon EID 10: ProcessAccess on lsass.exe"
+    ],
+    "detection": [
+      "EDR: a non-system process opening a handle to lsass.exe"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": false,
+    "risk": "medium",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt36-cc2",
+    "n": 2,
+    "name": "APT36 Credential Access 2 - Credential Manager Enumeration (T1555.004)",
+    "technique_id": "T1555.004",
+    "timeout_sec": 60,
+    "blast_radius": "Runs cmdkey /list and captures the stored target list; no stored secret is unlocked or read. Removed and verified.",
+    "telemetry": [
+      "Sysmon EID 1: cmdkey.exe"
+    ],
+    "detection": [
+      "EDR: cmdkey.exe /list run by a script host"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt36-cc3",
+    "n": 3,
+    "name": "APT36 Collection 1 - Browser Credential Store Copy (T1555.003)",
+    "technique_id": "T1555.003",
+    "timeout_sec": 60,
+    "blast_radius": "Builds a synthetic Chrome-style Login Data file and copies it the way stealers do to avoid file locks. The real browser profile is never touched; nothing is decrypted. Removed and verified.",
+    "telemetry": [
+      "Sysmon EID 11: copy of a file named Login Data"
+    ],
+    "detection": [
+      "EDR: Login Data copied by a non-browser process"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt36-cc4",
+    "n": 4,
+    "name": "APT36 Collection 2 - Clipboard Monitoring Probe (T1115)",
+    "technique_id": "T1115",
+    "timeout_sec": 60,
+    "blast_radius": "Writes synthetic text to the clipboard from a run-tagged child process and reads it back; no real user clipboard content is touched. Removed and verified.",
+    "telemetry": [
+      "Sysmon EID 1: a short-lived STA PowerShell child"
+    ],
+    "detection": [
+      "EDR: programmatic clipboard read shortly after a write"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt36-cc5",
+    "n": 5,
+    "name": "APT36 Collection 3 - Screenshot Capture Probe (T1113)",
+    "technique_id": "T1113",
+    "timeout_sec": 60,
+    "blast_radius": "Captures the screen to a run-tagged PNG in temp and verifies the file is non-empty; the image is never sent anywhere. Removed and verified.",
+    "telemetry": [
+      "Sysmon EID 11: .png created in a temp directory"
+    ],
+    "detection": [
+      "EDR: screen capture API used by a non-interactive script host"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  }
+]

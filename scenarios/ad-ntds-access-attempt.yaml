@@ -1,0 +1,85 @@
+id: ad-ntds-access-attempt
+product_line: ad
+name: NTDS.dit Access Attempt Probe
+description: >
+  Telemetry-safe emulation of an adversary trying to open the Active Directory database
+  (NTDS.dit) on a domain controller. The file is locked by the directory service while
+  it runs, so a normal open is expected to fail. The probe makes one read-only open
+  attempt, reads no bytes, copies nothing, and records only whether the open was
+  blocked. It never uses ntdsutil snapshots, VSS, or any copy of the database.
+
+  KILL CHAIN STAGES:
+    1. NTDS.dit Open Attempt (T1003.003)
+
+  SAFETY: No byte of NTDS.dit is read or copied. The single open is closed at once,
+  and only if it succeeds. Runs only on a domain controller. Telemetry mode.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - credential-access
+  - ntds
+  - domain-controller
+  - active-directory
+  - detection
+  - t1003
+  - mitre
+mitre_phases:
+  - credential-access
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: true
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — NTDS.dit Open Attempt (T1003.003)
+  # ---------------------------------------------------------------------------
+  - name: "NTDS 1 — Read-Only Open Attempt on NTDS.dit (T1003.003)"
+    technique_id: T1003.003
+    framework: custom
+    executor: powershell
+    requires_priv: domain_admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "One open attempt on C:\\Windows\\NTDS\\ntds.dit with shared read. If the open succeeds it is closed immediately without reading. No bytes are read or copied, and no file is written."
+    telemetry:
+      - "Security EID 4663 on ntds.dit, when a SACL is set on the file"
+      - "Sysmon EID 1: powershell.exe with a path under the NTDS folder"
+    detection:
+      - "EDR/DC monitor: non-SYSTEM process opened the NTDS database — credential-dumping precursor"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      if ((Get-CimInstance Win32_ComputerSystem).DomainRole -lt 4) {
+        Write-Output "SKIP: This host is not a domain controller. NTDS was not touched. [BAS-SIM-NTDS-S1]"
+        exit 0
+      }
+      $path = 'C:\Windows\NTDS\ntds.dit'
+      if (-not (Test-Path $path)) {
+        Write-Output "SKIP: ntds.dit not found at the expected path. [BAS-SIM-NTDS-S1]"
+        exit 0
+      }
+      $opened = $false; $reason = ''
+      try {
+        $fs = [System.IO.File]::Open($path, 'Open', 'Read', 'ReadWrite')
+        $opened = $true
+        $fs.Close()
+      } catch {
+        $reason = $_.Exception.Message
+      }
+      if ($opened) {
+        Write-Output "EXEC T1003.003: ntds.dit open attempt SUCCEEDED from a user-level process. Closed at once; no bytes read. [BAS-SIM-NTDS-S1]"
+        Write-Output "FAIL: A non-SYSTEM process opened the NTDS database. Credential-dumping precursor with no alert recorded."
+      } else {
+        Write-Output "EXEC T1003.003: ntds.dit open attempt was blocked by the OS or directory service lock. No bytes read. Reason: $reason [BAS-SIM-NTDS-S1]"
+        Write-Output "SKIP: The lock blocked the attempt, so the detection path was not exercised. Blocking is access control, not detection. Check 4663 and the DC monitor separately. [BAS-SIM-NTDS-S1]"
+      }
+    cleanup: ""

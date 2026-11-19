@@ -1,0 +1,29 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "BasDiscoveryAndProbeReadOnly",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetAccountAuthorizationDetails",
+        "iam:SimulatePrincipalPolicy",
+        "s3:ListAllMyBuckets",
+        "s3:ListBucket",
+        "s3:GetBucketPolicy",
+        "backup:ListBackupVaults",
+        "cloudtrail:LookupEvents"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "BasOrganizationsReadOnly",
+      "Effect": "Allow",
+      "Action": [
+        "organizations:ListParents",
+        "organizations:ListPoliciesForTarget",
+        "organizations:DescribePolicy"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

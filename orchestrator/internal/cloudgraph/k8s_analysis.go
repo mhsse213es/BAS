@@ -22,6 +22,9 @@ type K8sAnalysis struct {
 	AttackPaths      []K8sAttackPath              `json:"attackPaths"`
 	PodConfig        []K8sPodConfigFinding        `json:"podConfig"`
 	TokenExposure    []K8sTokenExposureFinding    `json:"tokenExposure"`
+	// NetworkPolicy holds the owner's boundary expectations checked against the configured policies. It is empty
+	// when no expectations file is configured.
+	NetworkPolicy []K8sBoundaryResult `json:"networkPolicyBoundaries"`
 }
 
 // BuildK8sAnalysis runs every analysis over one discovered inventory.
@@ -46,6 +49,11 @@ func BuildK8sAnalysis(inv *K8sInventory, rep *K8sDiscoveryReport) K8sAnalysis {
 // RunK8sAnalysis discovers the cluster read-only and builds the report. The token is supplied per call, so a caller
 // can rotate it without restarting.
 func RunK8sAnalysis(ctx context.Context, cfg K8sDiscoveryConfig) (K8sAnalysis, error) {
+	return RunK8sAnalysisWith(ctx, cfg, nil)
+}
+
+// RunK8sAnalysisWith is RunK8sAnalysis plus the owner's network-policy boundary expectations.
+func RunK8sAnalysisWith(ctx context.Context, cfg K8sDiscoveryConfig, boundaries []K8sBoundary) (K8sAnalysis, error) {
 	c, err := NewK8sDiscoveryClient(cfg)
 	if err != nil {
 		return K8sAnalysis{}, err
@@ -54,7 +62,16 @@ func RunK8sAnalysis(ctx context.Context, cfg K8sDiscoveryConfig) (K8sAnalysis, e
 	if err != nil {
 		return K8sAnalysis{}, err
 	}
-	return BuildK8sAnalysis(inv, rep), nil
+	res := BuildK8sAnalysis(inv, rep)
+	res.NetworkPolicy = []K8sBoundaryResult{}
+	if len(boundaries) > 0 {
+		br, err := EvaluateK8sBoundaries(inv, rep, boundaries)
+		if err != nil {
+			return K8sAnalysis{}, err
+		}
+		res.NetworkPolicy = br
+	}
+	return res, nil
 }
 
 // nonNil returns an empty slice rather than nil, so JSON shows [] instead of null.

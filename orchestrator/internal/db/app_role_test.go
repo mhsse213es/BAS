@@ -232,3 +232,27 @@ func TestEnsureAppRole_DefaultPrivilegesCoverFutureTables(t *testing.T) {
 		}
 	})
 }
+
+// Risk-input history is append-only for the runtime role: it may record a change, but never rewrite or erase one.
+// The current-value table stays writable, since the store updates it in place.
+func TestEnsureAppRole_RiskInputHistoryAppendOnly(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if err := db.EnsureAppRole(ctx, pool, testAppPassword); err != nil {
+			t.Fatalf("EnsureAppRole: %v", err)
+		}
+		app := appConnectedPool(t, pool)
+
+		if _, err := app.Exec(ctx,
+			`INSERT INTO risk_exposure_input_history (technique_id, action, previous, current, actor)
+			 VALUES ('T-APPROLE-RI', 'set', NULL, '{}'::jsonb, 'test')`); err != nil {
+			t.Fatalf("bas_app INSERT on risk_exposure_input_history should succeed: %v", err)
+		}
+		if _, err := app.Exec(ctx, `UPDATE risk_exposure_input_history SET actor = 'changed' WHERE technique_id = 'T-APPROLE-RI'`); err == nil {
+			t.Fatal("bas_app UPDATE on risk_exposure_input_history should be rejected, succeeded instead")
+		}
+		if _, err := app.Exec(ctx, `DELETE FROM risk_exposure_input_history WHERE technique_id = 'T-APPROLE-RI'`); err == nil {
+			t.Fatal("bas_app DELETE on risk_exposure_input_history should be rejected, succeeded instead")
+		}
+	})
+}

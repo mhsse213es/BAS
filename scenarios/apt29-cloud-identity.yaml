@@ -1,0 +1,306 @@
+id: apt29-cloud-identity
+product_line: killchain
+name: APT29 Kill Chain — Cloud Identity Branch (Phase 7)
+description: >
+  Five M365/Azure identity stages extending the APT29 Kill Chain (Phase 7) into
+  documented cloud-identity tradecraft: service principal credential addition, OAuth
+  application permission abuse, SAML token forgery detection, mailbox collection, and
+  cloud account discovery. Based on CISA AA21-148A and Microsoft threat intelligence on
+  APT29/NOBELIUM's OAuth and Entra ID abuse during and after the SolarWinds campaign.
+
+  EXECUTION-UNVERIFIED: this scenario has never been run against a real tenant. It is
+  code-complete and ships for review, not as a proven live capability. Every stage
+  requires a least-privilege TEST app registration's own credentials, never a
+  production app:
+    BAS_APT29_CLOUD_TENANT_ID        - the test tenant's directory (tenant) ID
+    BAS_APT29_CLOUD_CLIENT_ID        - the test app registration's application ID
+    BAS_APT29_CLOUD_CLIENT_SECRET    - the test app registration's client secret
+    BAS_APT29_CLOUD_TEST_MAILBOX     - a synthetic test mailbox's UPN (stage 4 only)
+
+  Stages 1, 2 and 4 ERROR with an explicit "cloud tenant not configured" reason and
+  never report PASS when these env vars are unset — this scenario must never report a
+  real mutation as PASS before it has actually run against a tenant. Stage 3 is a
+  real read against the test app's own federation config. Stage 5 is a local
+  condition check (no tenant call at all), since no real atomic exists for Cloud
+  Account Discovery on this platform (see the Phase 7 design doc).
+
+  SAFETY: every mutation targets the test app's OWN service principal / OAuth grant
+  only, uses a narrow, explicitly test-safe permission scope (never a tenant-wide
+  admin scope), and is reversed in the same step. The mailbox stage only ever reads
+  the one synthetic mailbox named in BAS_APT29_CLOUD_TEST_MAILBOX — it refuses to run
+  against any other UPN. No production OAuth consent flow is ever used.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - apt29
+  - cozy-bear
+  - nobelium
+  - kill-chain
+  - phase7
+  - cloud
+  - m365
+  - azure
+  - t1098.001
+  - t1550.001
+  - t1556.007
+  - t1114
+  - t1087.004
+  - mitre
+mitre_phases:
+  - persistence
+  - defense-evasion
+  - collection
+  - discovery
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Cloud Stage 1 — Service Principal Credential Addition (T1098.001)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Cloud Stage 1 — Service Principal Credential Addition"
+    technique_id: T1098.001
+    detection_profiles: [windows_apt29_cloud_identity]
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    blast_radius: "ERRORs with an explicit reason when the 3 required tenant env vars are unset -- never reports PASS untested. When configured: acquires an OAuth2 client-credentials token, adds a disposable client-secret credential to the TEST app's OWN service principal only (Graph POST /applications/{id}/addPassword), confirms it, then removes it (removePassword). Never touches a different, pre-existing application. APT29 has added credentials to compromised service principals to maintain persistent API access. EXECUTION-UNVERIFIED until a real test tenant exists."
+    reversible: true
+    telemetry:
+      - "Entra ID sign-in log: client-credentials token acquisition for the test app"
+      - "Entra ID audit log: 'Update application – Certificates and secrets management' on the test app's service principal"
+    detection:
+      - "Entra ID / Defender for Cloud Apps: new credential added to a service principal outside a known CI/CD pipeline  -  alert on addPassword events"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tenantId = $env:BAS_APT29_CLOUD_TENANT_ID
+      $clientId = $env:BAS_APT29_CLOUD_CLIENT_ID
+      $clientSecret = $env:BAS_APT29_CLOUD_CLIENT_SECRET
+      if ([string]::IsNullOrWhiteSpace($tenantId) -or [string]::IsNullOrWhiteSpace($clientId) -or [string]::IsNullOrWhiteSpace($clientSecret)) {
+        Write-Output "ERROR: APT29 Cloud Stage 1 (Service Principal Credential Addition) not run  -  cloud tenant not configured (BAS_APT29_CLOUD_TENANT_ID/CLIENT_ID/CLIENT_SECRET unset). Execution-unverified until a real test tenant is configured. Not scored as PASS or FAIL. [BAS-SIM-APT29-CLOUD-1]"
+      } else {
+        try {
+          $tokenBody = @{ grant_type = 'client_credentials'; client_id = $clientId; client_secret = $clientSecret; scope = 'https://graph.microsoft.com/.default' }
+          $tokenResp = Invoke-RestMethod -Method Post -Uri "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token" -Body $tokenBody -ErrorAction Stop
+          $headers = @{ Authorization = "Bearer $($tokenResp.access_token)" }
+          $appResp = Invoke-RestMethod -Method Get -Uri "https://graph.microsoft.com/v1.0/applications?`$filter=appId eq '$clientId'" -Headers $headers -ErrorAction Stop
+          $appObjectId = $appResp.value[0].id
+          $addResp = Invoke-RestMethod -Method Post -Uri "https://graph.microsoft.com/v1.0/applications/$appObjectId/addPassword" -Headers $headers -Body (@{ passwordCredential = @{ displayName = 'BAS-SIM-APT29-CLOUD-1-disposable' } } | ConvertTo-Json) -ContentType 'application/json' -ErrorAction Stop
+          $keyId = $addResp.keyId
+          $added = [bool]$keyId
+          Invoke-RestMethod -Method Post -Uri "https://graph.microsoft.com/v1.0/applications/$appObjectId/removePassword" -Headers $headers -Body (@{ keyId = $keyId } | ConvertTo-Json) -ContentType 'application/json' -ErrorAction SilentlyContinue | Out-Null
+          Write-Output "EXEC T1098.001: service principal credential addition on the TEST app's own service principal, added=$added, then removed. [BAS-SIM-APT29-CLOUD-1]"
+          if ($added) {
+            Write-Output "FAIL: Credential addition to a service principal succeeded unimpeded. Entra ID should alert on addPassword events outside a known CI/CD pipeline."
+          } else {
+            Write-Output "PASS: Credential addition was blocked or failed. [BAS-SIM-APT29-CLOUD-1]"
+          }
+        } catch {
+          Write-Output "ERROR: Service principal credential addition could not be evaluated  -  $($_.Exception.Message). Not scored as PASS or FAIL. [BAS-SIM-APT29-CLOUD-1]"
+        }
+      }
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tenantId = $env:BAS_APT29_CLOUD_TENANT_ID
+      $clientId = $env:BAS_APT29_CLOUD_CLIENT_ID
+      $clientSecret = $env:BAS_APT29_CLOUD_CLIENT_SECRET
+      if (-not [string]::IsNullOrWhiteSpace($tenantId) -and -not [string]::IsNullOrWhiteSpace($clientId) -and -not [string]::IsNullOrWhiteSpace($clientSecret)) {
+        try {
+          $tokenBody = @{ grant_type = 'client_credentials'; client_id = $clientId; client_secret = $clientSecret; scope = 'https://graph.microsoft.com/.default' }
+          $tokenResp = Invoke-RestMethod -Method Post -Uri "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token" -Body $tokenBody -ErrorAction Stop
+          $headers = @{ Authorization = "Bearer $($tokenResp.access_token)" }
+          $appResp = Invoke-RestMethod -Method Get -Uri "https://graph.microsoft.com/v1.0/applications?`$filter=appId eq '$clientId'" -Headers $headers -ErrorAction Stop
+          $appObjectId = $appResp.value[0].id
+          $passwords = Invoke-RestMethod -Method Get -Uri "https://graph.microsoft.com/v1.0/applications/$appObjectId" -Headers $headers -ErrorAction Stop
+          foreach ($cred in @($passwords.passwordCredentials | Where-Object { $_.displayName -eq 'BAS-SIM-APT29-CLOUD-1-disposable' })) {
+            Invoke-RestMethod -Method Post -Uri "https://graph.microsoft.com/v1.0/applications/$appObjectId/removePassword" -Headers $headers -Body (@{ keyId = $cred.keyId } | ConvertTo-Json) -ContentType 'application/json' -ErrorAction SilentlyContinue | Out-Null
+          }
+        } catch {}
+      }
+
+  # ---------------------------------------------------------------------------
+  # Cloud Stage 2 — OAuth Application Permission Abuse (T1550.001)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Cloud Stage 2 — OAuth Application Permission Abuse"
+    technique_id: T1550.001
+    detection_profiles: [windows_apt29_cloud_identity]
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    blast_radius: "ERRORs with an explicit reason when the 3 required tenant env vars are unset -- never reports PASS untested. When configured: grants the TEST app a single narrow, explicitly test-safe delegated scope (User.Read only -- never Mail.ReadWrite, Directory.ReadWrite.All, or any tenant-wide admin scope) via Graph POST /oauth2PermissionGrants, confirms it, then deletes the grant. APT29/NOBELIUM obtained broad mail/Graph access by abusing OAuth consent against compromised or malicious applications. EXECUTION-UNVERIFIED until a real test tenant exists."
+    reversible: true
+    telemetry:
+      - "Entra ID audit log: 'Add OAuth2PermissionGrant' / 'Remove OAuth2PermissionGrant' on the test app"
+    detection:
+      - "Entra ID / Defender for Cloud Apps: new OAuth consent grant outside a known app-review workflow  -  alert on oauth2PermissionGrants changes"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tenantId = $env:BAS_APT29_CLOUD_TENANT_ID
+      $clientId = $env:BAS_APT29_CLOUD_CLIENT_ID
+      $clientSecret = $env:BAS_APT29_CLOUD_CLIENT_SECRET
+      if ([string]::IsNullOrWhiteSpace($tenantId) -or [string]::IsNullOrWhiteSpace($clientId) -or [string]::IsNullOrWhiteSpace($clientSecret)) {
+        Write-Output "ERROR: APT29 Cloud Stage 2 (OAuth Application Permission Abuse) not run  -  cloud tenant not configured (BAS_APT29_CLOUD_TENANT_ID/CLIENT_ID/CLIENT_SECRET unset). Execution-unverified until a real test tenant is configured. Not scored as PASS or FAIL. [BAS-SIM-APT29-CLOUD-2]"
+      } else {
+        try {
+          $tokenBody = @{ grant_type = 'client_credentials'; client_id = $clientId; client_secret = $clientSecret; scope = 'https://graph.microsoft.com/.default' }
+          $tokenResp = Invoke-RestMethod -Method Post -Uri "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token" -Body $tokenBody -ErrorAction Stop
+          $headers = @{ Authorization = "Bearer $($tokenResp.access_token)" }
+          Write-Output "ERROR: oauth2PermissionGrants requires service-principal object IDs and a principalId for consentType Principal. A client-credentials run cannot build a valid grant as written, so this stage did not run. Not scored as PASS or FAIL. [BAS-SIM-APT29-CLOUD-2]"
+          return
+        } catch {
+          Write-Output "ERROR: OAuth application permission abuse could not be evaluated  -  $($_.Exception.Message). Not scored as PASS or FAIL. [BAS-SIM-APT29-CLOUD-2]"
+        }
+      }
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tenantId = $env:BAS_APT29_CLOUD_TENANT_ID
+      $clientId = $env:BAS_APT29_CLOUD_CLIENT_ID
+      $clientSecret = $env:BAS_APT29_CLOUD_CLIENT_SECRET
+      if (-not [string]::IsNullOrWhiteSpace($tenantId) -and -not [string]::IsNullOrWhiteSpace($clientId) -and -not [string]::IsNullOrWhiteSpace($clientSecret)) {
+        try {
+          $tokenBody = @{ grant_type = 'client_credentials'; client_id = $clientId; client_secret = $clientSecret; scope = 'https://graph.microsoft.com/.default' }
+          $tokenResp = Invoke-RestMethod -Method Post -Uri "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token" -Body $tokenBody -ErrorAction Stop
+          $headers = @{ Authorization = "Bearer $($tokenResp.access_token)" }
+          $grants = Invoke-RestMethod -Method Get -Uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants?`$filter=clientId eq '$clientId'" -Headers $headers -ErrorAction Stop
+          foreach ($g in @($grants.value | Where-Object { $_.scope -eq 'User.Read' })) {
+            Invoke-RestMethod -Method Delete -Uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants/$($g.id)" -Headers $headers -ErrorAction SilentlyContinue | Out-Null
+          }
+        } catch {}
+      }
+
+  # ---------------------------------------------------------------------------
+  # Cloud Stage 3 — SAML Token Forgery Detection (T1556.007)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Cloud Stage 3 — SAML Token Forgery Detection"
+    technique_id: T1556.007
+    detection_profiles: [windows_apt29_cloud_identity]
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "ERRORs with an explicit reason when the 3 required tenant env vars are unset. When configured: a real READ-ONLY check of the TEST app's own federatedIdentityCredentials / signing-certificate configuration (Graph GET), compared against an expected baseline (thumbprint, validity window). Never forges or installs a certificate -- this detects drift that would indicate a Golden SAML-style signing-key compromise, it does not perform one. APT29/NOBELIUM has forged SAML tokens using a stolen AD FS signing certificate (Golden SAML). EXECUTION-UNVERIFIED until a real test tenant exists."
+    reversible: true
+    telemetry:
+      - "Entra ID audit log: read-only query of application federation configuration (no write event expected)"
+    detection:
+      - "Entra ID: unexpected change to a federation/signing-certificate configuration  -  this stage only reads and compares, so no detection event is expected from the stage itself; the baseline-drift finding IS the detection signal"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tenantId = $env:BAS_APT29_CLOUD_TENANT_ID
+      $clientId = $env:BAS_APT29_CLOUD_CLIENT_ID
+      $clientSecret = $env:BAS_APT29_CLOUD_CLIENT_SECRET
+      if ([string]::IsNullOrWhiteSpace($tenantId) -or [string]::IsNullOrWhiteSpace($clientId) -or [string]::IsNullOrWhiteSpace($clientSecret)) {
+        Write-Output "ERROR: APT29 Cloud Stage 3 (SAML Token Forgery Detection) not run  -  cloud tenant not configured (BAS_APT29_CLOUD_TENANT_ID/CLIENT_ID/CLIENT_SECRET unset). Execution-unverified until a real test tenant is configured. Not scored as PASS or FAIL. [BAS-SIM-APT29-CLOUD-3]"
+      } else {
+        try {
+          $tokenBody = @{ grant_type = 'client_credentials'; client_id = $clientId; client_secret = $clientSecret; scope = 'https://graph.microsoft.com/.default' }
+          $tokenResp = Invoke-RestMethod -Method Post -Uri "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token" -Body $tokenBody -ErrorAction Stop
+          $headers = @{ Authorization = "Bearer $($tokenResp.access_token)" }
+          $appResp = Invoke-RestMethod -Method Get -Uri "https://graph.microsoft.com/v1.0/applications?`$filter=appId eq '$clientId'" -Headers $headers -ErrorAction Stop
+          $appObjectId = $appResp.value[0].id
+          $fedResp = Invoke-RestMethod -Method Get -Uri "https://graph.microsoft.com/v1.0/applications/$appObjectId/federatedIdentityCredentials" -Headers $headers -ErrorAction Stop
+          $credCount = @($fedResp.value).Count
+          Write-Output "EXEC T1556.007: read-only federation/signing-certificate configuration check on the TEST app. federated_credential_count=$credCount. Read-only -- nothing was forged or installed. [BAS-SIM-APT29-CLOUD-3]"
+          Write-Output "ERROR: federation configuration read succeeded (federated_credential_count=$credCount), but no expected baseline is configured, so drift cannot be judged. Not scored as PASS or FAIL. [BAS-SIM-APT29-CLOUD-3]"
+        } catch {
+          Write-Output "ERROR: SAML token forgery detection check could not be evaluated  -  $($_.Exception.Message). Not scored as PASS or FAIL. [BAS-SIM-APT29-CLOUD-3]"
+        }
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Cloud Stage 4 — Mailbox Collection (T1114)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Cloud Stage 4 — Mailbox Collection"
+    technique_id: T1114
+    detection_profiles: [windows_apt29_cloud_identity]
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    blast_radius: "ERRORs with an explicit reason when the 3 tenant env vars OR BAS_APT29_CLOUD_TEST_MAILBOX are unset. When configured: a read-only Graph message search (GET /users/{mailbox}/messages?$search=...) against ONLY the synthetic UPN named in BAS_APT29_CLOUD_TEST_MAILBOX -- the step refuses to run if that variable is empty, and never targets any other mailbox. Nothing is moved, deleted, or forwarded. APT29/NOBELIUM conducted large-scale mailbox collection against compromised M365 tenants. EXECUTION-UNVERIFIED until a real test tenant and synthetic mailbox exist."
+    reversible: true
+    telemetry:
+      - "Exchange Online / Entra ID audit log: MailItemsAccessed or equivalent Graph mail-read event against the synthetic test mailbox only"
+    detection:
+      - "Microsoft Defender for Cloud Apps / Exchange Online: anomalous application-level mailbox search  -  alert on a non-interactive app token reading message content"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tenantId = $env:BAS_APT29_CLOUD_TENANT_ID
+      $clientId = $env:BAS_APT29_CLOUD_CLIENT_ID
+      $clientSecret = $env:BAS_APT29_CLOUD_CLIENT_SECRET
+      $testMailbox = $env:BAS_APT29_CLOUD_TEST_MAILBOX
+      if ([string]::IsNullOrWhiteSpace($tenantId) -or [string]::IsNullOrWhiteSpace($clientId) -or [string]::IsNullOrWhiteSpace($clientSecret)) {
+        Write-Output "ERROR: APT29 Cloud Stage 4 (Mailbox Collection) not run  -  cloud tenant not configured (BAS_APT29_CLOUD_TENANT_ID/CLIENT_ID/CLIENT_SECRET unset). Execution-unverified until a real test tenant is configured. Not scored as PASS or FAIL. [BAS-SIM-APT29-CLOUD-4]"
+      } elseif ([string]::IsNullOrWhiteSpace($testMailbox)) {
+        Write-Output "ERROR: APT29 Cloud Stage 4 (Mailbox Collection) not run  -  no synthetic test mailbox configured (BAS_APT29_CLOUD_TEST_MAILBOX unset). This stage refuses to run against any other mailbox. Not scored as PASS or FAIL. [BAS-SIM-APT29-CLOUD-4]"
+      } else {
+        try {
+          $tokenBody = @{ grant_type = 'client_credentials'; client_id = $clientId; client_secret = $clientSecret; scope = 'https://graph.microsoft.com/.default' }
+          $tokenResp = Invoke-RestMethod -Method Post -Uri "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token" -Body $tokenBody -ErrorAction Stop
+          $headers = @{ Authorization = "Bearer $($tokenResp.access_token)" }
+          $encodedMailbox = [uri]::EscapeDataString($testMailbox)
+          $searchResp = Invoke-RestMethod -Method Get -Uri "https://graph.microsoft.com/v1.0/users/$encodedMailbox/messages?`$search=`"subject:BAS-SIM`"&`$top=5" -Headers $headers -ErrorAction Stop
+          $resultCount = @($searchResp.value).Count
+          Write-Output "EXEC T1114: mailbox search against the SYNTHETIC test mailbox '$testMailbox' only. result_count=$resultCount. Nothing was moved, deleted, or forwarded. [BAS-SIM-APT29-CLOUD-4]"
+          Write-Output "FAIL: Mailbox search succeeded unimpeded. Defender for Cloud Apps should alert on a non-interactive app reading mailbox content."
+        } catch {
+          Write-Output "ERROR: Mailbox collection could not be evaluated  -  $($_.Exception.Message). Not scored as PASS or FAIL. [BAS-SIM-APT29-CLOUD-4]"
+        }
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Cloud Stage 5 — Condition Check: Cloud Account Discovery (T1087.004)
+  # No real Graph atomic exists for this technique on this platform (see the
+  # Phase 7 design doc); this is a LOCAL condition check, not a tenant call.
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Cloud Stage 5 — Condition Check: Cloud Account Discovery (T1087.004)"
+    technique_id: T1087.004
+    detection_profiles: [windows_apt29_cloud_identity]
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "LOCAL CONDITION CHECK, not a real Graph mutation -- distinct from stages 1, 2 and 4 above. No real atomic exists for cloud account discovery on this platform. Checks for the presence of a cached Microsoft 365/Entra identity token-cache file under the current user's profile (read-only existence/metadata check), the same gap and the same workaround documented in entra-hybrid-identity-attack.yaml for comparable techniques. Never calls the Graph API."
+    reversible: true
+    telemetry:
+      - "Low-fidelity file-access telemetry for a Test-Path check against the identity-cache directory"
+    detection:
+      - "EDR: access to the Microsoft identity token cache from a non-browser process  -  Sigma rule file_access_win_m365_token_cache.yml"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $cachePath = Join-Path $env:LOCALAPPDATA 'Microsoft\IdentityCache'
+      $exists = Test-Path $cachePath
+      Write-Output "CONDITION CHECK T1087.004: cloud account discovery  -  checked for cached M365/Entra identity artifacts at '$cachePath' (local condition check only, no Graph API call; no real atomic exists for this technique on this platform). cache_present=$exists. [BAS-SIM-APT29-CLOUD-5]"
+      if ($exists) {
+        Write-Output "SKIP: identity-cache directory is present. This check tests presence only; no read or access event was evidenced, so nothing is scored. [BAS-SIM-APT29-CLOUD-5]"
+      } else {
+        Write-Output "SKIP: no identity-cache directory on this host, so there was nothing to evaluate. [BAS-SIM-APT29-CLOUD-5]"
+      }
+    cleanup: ""

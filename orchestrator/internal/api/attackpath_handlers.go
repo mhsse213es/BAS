@@ -51,6 +51,9 @@ func (h *Handler) SubmitAttackPathCollection(w http.ResponseWriter, r *http.Requ
 		jsonError(w, "agentId is required", http.StatusBadRequest)
 		return
 	}
+	if !agentMatchesCertificate(w, r, c.AgentID) {
+		return
+	}
 	if c.Source == "" {
 		c.Source = "agent"
 	}
@@ -610,6 +613,9 @@ func (h *Handler) SubmitAttackPathSharpHound(w http.ResponseWriter, r *http.Requ
 	agentID := r.URL.Query().Get("agentId")
 	if agentID == "" {
 		jsonError(w, "agentId query param is required", http.StatusBadRequest)
+		return
+	}
+	if !agentMatchesCertificate(w, r, agentID) {
 		return
 	}
 	hostname := r.URL.Query().Get("hostname")

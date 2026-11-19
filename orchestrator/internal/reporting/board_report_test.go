@@ -3,11 +3,13 @@ package reporting
 import (
 	"bytes"
 	"context"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/audspect/bas/internal/models"
+	"github.com/audspect/bas/internal/riskquant"
 )
 
 func sampleBoardReport() *FullReport {
@@ -114,5 +116,69 @@ func TestBoardRiskLabel(t *testing.T) {
 		if !strings.Contains(b.String(), ">"+want+"</div>") {
 			t.Errorf("classification %q: expected %q in hero", cls, want)
 		}
+	}
+}
+
+// The annual-loss card renders only when the customer has supplied exposure inputs.
+func TestRenderBoardOnePager_RiskQuantificationSection(t *testing.T) {
+	rep := &FullReport{}
+	var none bytes.Buffer
+	if err := RenderBoardOnePager(&none, rep, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(none.String(), "Estimated annual loss") {
+		t.Fatal("no risk inputs: the loss card must not render")
+	}
+
+	s, err := riskquant.Compute("USD", []riskquant.Exposure{
+		{ID: "T1003", Frequency: &riskquant.Range{Low: 1, Likely: 2, High: 4}, Magnitude: &riskquant.Range{Low: 10000, Likely: 50000, High: 200000}},
+		{ID: "T1566", Label: "Phishing"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep.RiskQuantification = &s
+	var buf bytes.Buffer
+	if err := RenderBoardOnePager(&buf, rep, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, want := range []string{"Estimated annual loss", "USD", "100000", "Not quantified: 1", s.Method} {
+		if !strings.Contains(out, want) {
+			t.Errorf("loss card missing %q", want)
+		}
+	}
+}
+
+// The attested digest covers the loss estimate and its inputs: the same inputs give the same digest, and a
+// changed input gives a different one.
+func TestBoardAttestationCoversRiskInputs(t *testing.T) {
+	digest := func(freqLikely float64) string {
+		rep := &FullReport{}
+		s, err := riskquant.Compute("USD", []riskquant.Exposure{{
+			ID:        "T1003",
+			Frequency: &riskquant.Range{Low: freqLikely, Likely: freqLikely, High: freqLikely},
+			Magnitude: &riskquant.Range{Low: 100, Likely: 100, High: 100},
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rep.RiskQuantification = &s
+		var buf bytes.Buffer
+		if err := RenderBoardOnePager(&buf, rep, nil, ""); err != nil {
+			t.Fatal(err)
+		}
+		m := regexp.MustCompile(`Digest \(SHA-256\): <span class="mono">([0-9a-f]{64})</span>`).FindStringSubmatch(buf.String())
+		if m == nil {
+			t.Fatal("digest not found in the rendered page")
+		}
+		return m[1]
+	}
+	a1, a2, b := digest(2), digest(2), digest(3)
+	if a1 != a2 {
+		t.Errorf("same inputs gave different digests: %s vs %s", a1, a2)
+	}
+	if a1 == b {
+		t.Error("a changed input must change the attested digest")
 	}
 }

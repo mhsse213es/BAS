@@ -35,6 +35,11 @@ description: >
   Exchange Online PowerShell admin session against a real tenant, which this
   platform's endpoint-only agent architecture does not have.
 
+  SAFETY: Stages 2, 3, 4 and 5 create real inbox rules that delete or forward
+  mail in the mailbox they run against. Run them only against a dedicated lab
+  mailbox. Stage 1 only reads rules. The production_safe and fidelity fields
+  are informational until the live gate enforces them.
+
   Prerequisite: Windows endpoint with Classic Microsoft Outlook installed
   and an existing configured Outlook profile. New Outlook is NOT supported
   -- these atomics rely on Outlook COM automation, which the new Outlook for
@@ -74,6 +79,12 @@ steps:
     executor: powershell
     requires_priv: user
     timeout_sec: 30
+    production_safe: true
+    fidelity: telemetry-safe
+    detection:
+      - "Expected, not verified: none beyond the powershell.exe process. Enumerating rules writes nothing to the mailbox."
+    telemetry:
+      - "Expected, not verified: PowerShell script-block logging (EID 4104) showing Outlook.Application COM use"
 
   # ── Stage 2 — Evidence Hiding: subject-keyword auto-delete rule ─────────
   - name: "Stage 2 - Evidence Hiding: Subject-Trigger Auto-Delete Rule (T1137.005)"
@@ -83,6 +94,14 @@ steps:
     executor: powershell
     requires_priv: user
     timeout_sec: 30
+    production_safe: false
+    fidelity: lab-only
+    detection:
+      - "Expected, not verified: inbox rule created with DeletePermanently for a subject keyword"
+      - "Expected, not verified: rule creation from a non-Outlook process context (powershell.exe COM automation)"
+    telemetry:
+      - "Expected, not verified: Exchange mailbox audit record New-InboxRule or UpdateInboxRules (if audit is enabled)"
+      - "Expected, not verified: PowerShell script-block logging (EID 4104) for the COM rule call"
 
   # ── Stage 3 — Targeted Communication Suppression: sender-address rule ──
   - name: "Stage 3 - Targeted Communication Suppression: Sender-Trigger Auto-Delete Rule (T1137.005)"
@@ -92,6 +111,14 @@ steps:
     executor: powershell
     requires_priv: user
     timeout_sec: 30
+    production_safe: false
+    fidelity: lab-only
+    detection:
+      - "Expected, not verified: inbox rule created with DeletePermanently for a sender address"
+      - "Expected, not verified: rule creation from a non-Outlook process context (powershell.exe COM automation)"
+    telemetry:
+      - "Expected, not verified: Exchange mailbox audit record New-InboxRule or UpdateInboxRules (if audit is enabled)"
+      - "Expected, not verified: PowerShell script-block logging (EID 4104) for the COM rule call"
 
   # ── Stage 4 — BEC / Mail Exfiltration: external auto-forward rule ──────
   - name: "Stage 4 - BEC / Mail Exfiltration: External Auto-Forward Rule (T1137.005)"
@@ -101,6 +128,14 @@ steps:
     executor: powershell
     requires_priv: user
     timeout_sec: 30
+    production_safe: false
+    fidelity: lab-only
+    detection:
+      - "Expected, not verified: mailbox rule forwarding mail to an external address (atomictest-exfil@redteam.local)"
+      - "Expected, not verified: rule creation from a non-Outlook process context (powershell.exe COM automation)"
+    telemetry:
+      - "Expected, not verified: Exchange mailbox audit record New-InboxRule with forward parameters (if audit is enabled)"
+      - "Expected, not verified: PowerShell script-block logging (EID 4104) for the COM rule call"
 
   # ── Stage 5 — Defense Evasion: hidden rule, zero-width-space name ──────
   - name: "Stage 5 - Defense Evasion: Hidden Rule with Obfuscated Blank Name (T1137.005)"
@@ -110,3 +145,11 @@ steps:
     executor: powershell
     requires_priv: user
     timeout_sec: 30
+    production_safe: false
+    fidelity: lab-only
+    detection:
+      - "Expected, not verified: inbox rule with an empty or zero-width-space name, hidden from the standard Outlook rules UI"
+      - "Expected, not verified: rule creation from a non-Outlook process context (powershell.exe COM automation)"
+    telemetry:
+      - "Expected, not verified: Exchange mailbox audit record New-InboxRule (if audit is enabled)"
+      - "Expected, not verified: PowerShell script-block logging (EID 4104) for the COM rule call"

@@ -1,0 +1,540 @@
+id: "cscrf-mii-backup-dr"
+product_line: common
+name: "CSCRF-MII Backup, Recovery and DR Configuration Checks (P1)"
+description: >
+  Internal control-validation checks for backup and recovery. Verdicts are internal control references
+  (CSCRF-BDR-*), not SEBI clause identifiers. The backup and RPO checks are read only. The restore drill and
+  RTO measurement use synthetic files in a per-run temp folder with BAS_CONFIRM_BACKUP_TEST=true; they test
+  the file-level restore path, not a full system restore. DR connectivity runs only when BAS_DR_TARGET is
+  set. Deferred: DR SOC monitoring and recovery after a simulated incident. A PASS does not show that the
+  business can recover within its real targets.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cscrf-mii
+  - backup
+  - recovery
+  - p1
+mitre_phases:
+  - impact
+
+steps:
+
+  # -------------------------------------------------------------------------
+  - id: bdr-01
+    name: "Backup Availability (CSCRF-BDR-01)"
+    technique_id: T1490
+    action_key: cscrf_bdr_backup_available
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only query of backup versions."
+    telemetry:
+      - "wbadmin query"
+    detection:
+      - "Backup presence review"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-BDR-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgBackupGate { return ($env:BAS_CONFIRM_BACKUP_TEST -eq 'true') }
+      function Get-CgLatestBackupTime {
+      $out = (& wbadmin.exe get versions 2>&1) -join "`n"
+      if ($out -match 'No backup was found') { return 'none' }
+      $m = [regex]::Matches($out, 'Backup time:\s*(.+)')
+      if ($m.Count -eq 0) { return $null }
+      $latest = $null
+      foreach ($x in $m) { $t = $null; if ([datetime]::TryParse($x.Groups[1].Value.Trim(), [ref]$t) -and ($latest -eq $null -or $t -gt $latest)) { $latest = $t } }
+      return $latest
+      }
+      function Get-CgDrTcp { param([string]$Ip, [int]$Port, [int]$TimeoutMs = 3000)
+      $c = New-Object System.Net.Sockets.TcpClient
+      try { $ar = $c.BeginConnect($Ip, $Port, $null, $null); if ($ar.AsyncWaitHandle.WaitOne($TimeoutMs) -and $c.Connected) { return 'open' }; return 'closed' } catch { return 'closed' } finally { $c.Close() }
+      }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      $t = Get-CgLatestBackupTime
+      if ($t -eq 'none') { Complete-CgStep @{ Outcome = 'fail'; Reason = 'no backup version exists on this host (wbadmin: No backup was found) [CSCRF-BDR-01]' } 'bdr-01' }
+      if ($t -eq $null) { Complete-CgStep @{ Outcome = 'error'; Reason = 'backup versions could not be parsed [CSCRF-BDR-01]' } 'bdr-01' }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = "backup version present, latest $t [CSCRF-BDR-01]" } 'bdr-01'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-BDR-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgBackupGate { return ($env:BAS_CONFIRM_BACKUP_TEST -eq 'true') }
+      function Get-CgLatestBackupTime {
+      $out = (& wbadmin.exe get versions 2>&1) -join "`n"
+      if ($out -match 'No backup was found') { return 'none' }
+      $m = [regex]::Matches($out, 'Backup time:\s*(.+)')
+      if ($m.Count -eq 0) { return $null }
+      $latest = $null
+      foreach ($x in $m) { $t = $null; if ([datetime]::TryParse($x.Groups[1].Value.Trim(), [ref]$t) -and ($latest -eq $null -or $t -gt $latest)) { $latest = $t } }
+      return $latest
+      }
+      function Get-CgDrTcp { param([string]$Ip, [int]$Port, [int]$TimeoutMs = 3000)
+      $c = New-Object System.Net.Sockets.TcpClient
+      try { $ar = $c.BeginConnect($Ip, $Port, $null, $null); if ($ar.AsyncWaitHandle.WaitOne($TimeoutMs) -and $c.Connected) { return 'open' }; return 'closed' } catch { return 'closed' } finally { $c.Close() }
+      }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: bdr-02
+    name: "Recovery Point Age (CSCRF-BDR-02)"
+    technique_id: T1490
+    action_key: cscrf_bdr_rpo_age
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only query of the latest backup time."
+    telemetry:
+      - "wbadmin query"
+    detection:
+      - "Recovery point age review"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-BDR-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgBackupGate { return ($env:BAS_CONFIRM_BACKUP_TEST -eq 'true') }
+      function Get-CgLatestBackupTime {
+      $out = (& wbadmin.exe get versions 2>&1) -join "`n"
+      if ($out -match 'No backup was found') { return 'none' }
+      $m = [regex]::Matches($out, 'Backup time:\s*(.+)')
+      if ($m.Count -eq 0) { return $null }
+      $latest = $null
+      foreach ($x in $m) { $t = $null; if ([datetime]::TryParse($x.Groups[1].Value.Trim(), [ref]$t) -and ($latest -eq $null -or $t -gt $latest)) { $latest = $t } }
+      return $latest
+      }
+      function Get-CgDrTcp { param([string]$Ip, [int]$Port, [int]$TimeoutMs = 3000)
+      $c = New-Object System.Net.Sockets.TcpClient
+      try { $ar = $c.BeginConnect($Ip, $Port, $null, $null); if ($ar.AsyncWaitHandle.WaitOne($TimeoutMs) -and $c.Connected) { return 'open' }; return 'closed' } catch { return 'closed' } finally { $c.Close() }
+      }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      $t = Get-CgLatestBackupTime
+      if ($t -eq 'none') { Complete-CgStep @{ Outcome = 'fail'; Reason = 'no recovery point exists; RPO is undefined (see CSCRF-BDR-01) [CSCRF-BDR-02]' } 'bdr-02' }
+      if ($t -eq $null) { Complete-CgStep @{ Outcome = 'error'; Reason = 'backup times could not be parsed [CSCRF-BDR-02]' } 'bdr-02' }
+      $age = [math]::Round(((Get-Date) - $t).TotalHours, 1)
+      if ($age -gt 24) { Complete-CgStep @{ Outcome = 'fail'; Reason = "latest recovery point is $age h old (baseline 24 h) [CSCRF-BDR-02]" } 'bdr-02' }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = "latest recovery point is $age h old [CSCRF-BDR-02]" } 'bdr-02'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-BDR-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgBackupGate { return ($env:BAS_CONFIRM_BACKUP_TEST -eq 'true') }
+      function Get-CgLatestBackupTime {
+      $out = (& wbadmin.exe get versions 2>&1) -join "`n"
+      if ($out -match 'No backup was found') { return 'none' }
+      $m = [regex]::Matches($out, 'Backup time:\s*(.+)')
+      if ($m.Count -eq 0) { return $null }
+      $latest = $null
+      foreach ($x in $m) { $t = $null; if ([datetime]::TryParse($x.Groups[1].Value.Trim(), [ref]$t) -and ($latest -eq $null -or $t -gt $latest)) { $latest = $t } }
+      return $latest
+      }
+      function Get-CgDrTcp { param([string]$Ip, [int]$Port, [int]$TimeoutMs = 3000)
+      $c = New-Object System.Net.Sockets.TcpClient
+      try { $ar = $c.BeginConnect($Ip, $Port, $null, $null); if ($ar.AsyncWaitHandle.WaitOne($TimeoutMs) -and $c.Connected) { return 'open' }; return 'closed' } catch { return 'closed' } finally { $c.Close() }
+      }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: bdr-03
+    name: "File-Level Restore Integrity with Synthetic Data (CSCRF-BDR-03)"
+    technique_id: T1490
+    action_key: cscrf_bdr_restore_integrity
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: low
+    reversible: true
+    blast_radius: "Writes one synthetic 1 MB file and a copy in a per-run temp folder, restores the copy, and deletes the folder in undo. Runs only with BAS_CONFIRM_BACKUP_TEST=true."
+    telemetry:
+      - "File creation in temp"
+    detection:
+      - "Restore integrity review"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-BDR-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgBackupGate { return ($env:BAS_CONFIRM_BACKUP_TEST -eq 'true') }
+      function Get-CgLatestBackupTime {
+      $out = (& wbadmin.exe get versions 2>&1) -join "`n"
+      if ($out -match 'No backup was found') { return 'none' }
+      $m = [regex]::Matches($out, 'Backup time:\s*(.+)')
+      if ($m.Count -eq 0) { return $null }
+      $latest = $null
+      foreach ($x in $m) { $t = $null; if ([datetime]::TryParse($x.Groups[1].Value.Trim(), [ref]$t) -and ($latest -eq $null -or $t -gt $latest)) { $latest = $t } }
+      return $latest
+      }
+      function Get-CgDrTcp { param([string]$Ip, [int]$Port, [int]$TimeoutMs = 3000)
+      $c = New-Object System.Net.Sockets.TcpClient
+      try { $ar = $c.BeginConnect($Ip, $Port, $null, $null); if ($ar.AsyncWaitHandle.WaitOne($TimeoutMs) -and $c.Connected) { return 'open' }; return 'closed' } catch { return 'closed' } finally { $c.Close() }
+      }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      if (-not (Test-CgBackupGate)) { Complete-CgStep @{ Outcome = 'skip'; Reason = 'BAS_CONFIRM_BACKUP_TEST not true; no file written [CSCRF-BDR-03]' } 'bdr-03' }
+      $dir = Join-Path $env:TEMP ('bas-bdr-' + $script:CgRun)
+      New-CgUndoRecord 'bdr-03' @{ scenario = 'bdr-03'; dir = $dir }
+      New-Item -ItemType Directory -Force -Path $dir | Out-Null
+      $orig = Join-Path $dir 'synthetic.bin'; $bak = Join-Path $dir 'backup.bin'
+      $bytes = New-Object byte[] 1048576; (New-Object System.Random).NextBytes($bytes)
+      [IO.File]::WriteAllBytes($orig, $bytes)
+      $h1 = (Get-FileHash -LiteralPath $orig -Algorithm SHA256).Hash
+      Copy-Item -LiteralPath $orig -Destination $bak
+      Remove-Item -LiteralPath $orig -Force
+      Copy-Item -LiteralPath $bak -Destination $orig
+      $h2 = (Get-FileHash -LiteralPath $orig -Algorithm SHA256).Hash
+      if ($h1 -eq $h2) { Complete-CgStep @{ Outcome = 'pass'; Reason = 'synthetic file restored from its copy with a matching SHA256 [CSCRF-BDR-03]' } 'bdr-03' }
+      Complete-CgStep @{ Outcome = 'fail'; Reason = 'restored file hash does not match the original [CSCRF-BDR-03]' } 'bdr-03'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-BDR-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgBackupGate { return ($env:BAS_CONFIRM_BACKUP_TEST -eq 'true') }
+      function Get-CgLatestBackupTime {
+      $out = (& wbadmin.exe get versions 2>&1) -join "`n"
+      if ($out -match 'No backup was found') { return 'none' }
+      $m = [regex]::Matches($out, 'Backup time:\s*(.+)')
+      if ($m.Count -eq 0) { return $null }
+      $latest = $null
+      foreach ($x in $m) { $t = $null; if ([datetime]::TryParse($x.Groups[1].Value.Trim(), [ref]$t) -and ($latest -eq $null -or $t -gt $latest)) { $latest = $t } }
+      return $latest
+      }
+      function Get-CgDrTcp { param([string]$Ip, [int]$Port, [int]$TimeoutMs = 3000)
+      $c = New-Object System.Net.Sockets.TcpClient
+      try { $ar = $c.BeginConnect($Ip, $Port, $null, $null); if ($ar.AsyncWaitHandle.WaitOne($TimeoutMs) -and $c.Connected) { return 'open' }; return 'closed' } catch { return 'closed' } finally { $c.Close() }
+      }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      $rec = Read-CgUndoRecord 'bdr-03'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'PASS: Cleanup complete (no record)'; exit 0 }
+      Remove-Item -LiteralPath $rec.dir -Recurse -Force -ErrorAction SilentlyContinue
+      if (Test-Path -LiteralPath $rec.dir) { Write-Output "FAIL: residue folder $($rec.dir) survived undo"; exit 0 }
+      Remove-CgUndoRecord 'bdr-03'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: bdr-04
+    name: "Restore Time Objective with Synthetic Data (CSCRF-BDR-04)"
+    technique_id: T1490
+    action_key: cscrf_bdr_rto_measure
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: low
+    reversible: true
+    blast_radius: "Times one restore of a synthetic 1 MB file in a per-run temp folder against a 15 minute budget. Runs only with BAS_CONFIRM_BACKUP_TEST=true."
+    telemetry:
+      - "File creation in temp"
+    detection:
+      - "Restore timing review"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-BDR-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgBackupGate { return ($env:BAS_CONFIRM_BACKUP_TEST -eq 'true') }
+      function Get-CgLatestBackupTime {
+      $out = (& wbadmin.exe get versions 2>&1) -join "`n"
+      if ($out -match 'No backup was found') { return 'none' }
+      $m = [regex]::Matches($out, 'Backup time:\s*(.+)')
+      if ($m.Count -eq 0) { return $null }
+      $latest = $null
+      foreach ($x in $m) { $t = $null; if ([datetime]::TryParse($x.Groups[1].Value.Trim(), [ref]$t) -and ($latest -eq $null -or $t -gt $latest)) { $latest = $t } }
+      return $latest
+      }
+      function Get-CgDrTcp { param([string]$Ip, [int]$Port, [int]$TimeoutMs = 3000)
+      $c = New-Object System.Net.Sockets.TcpClient
+      try { $ar = $c.BeginConnect($Ip, $Port, $null, $null); if ($ar.AsyncWaitHandle.WaitOne($TimeoutMs) -and $c.Connected) { return 'open' }; return 'closed' } catch { return 'closed' } finally { $c.Close() }
+      }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      if (-not (Test-CgBackupGate)) { Complete-CgStep @{ Outcome = 'skip'; Reason = 'BAS_CONFIRM_BACKUP_TEST not true; nothing restored [CSCRF-BDR-04]' } 'bdr-04' }
+      $dir = Join-Path $env:TEMP ('bas-bdr-rto-' + $script:CgRun)
+      New-CgUndoRecord 'bdr-04' @{ scenario = 'bdr-04'; dir = $dir }
+      New-Item -ItemType Directory -Force -Path $dir | Out-Null
+      $orig = Join-Path $dir 'synthetic.bin'; $bak = Join-Path $dir 'backup.bin'
+      $bytes = New-Object byte[] 1048576; (New-Object System.Random).NextBytes($bytes)
+      [IO.File]::WriteAllBytes($orig, $bytes); Copy-Item -LiteralPath $orig -Destination $bak; Remove-Item -LiteralPath $orig -Force
+      $sw = [Diagnostics.Stopwatch]::StartNew()
+      Copy-Item -LiteralPath $bak -Destination $orig
+      $sw.Stop()
+      $secs = [math]::Round($sw.Elapsed.TotalSeconds, 2)
+      if ($sw.Elapsed.TotalSeconds -le 900) { Complete-CgStep @{ Outcome = 'pass'; Reason = "file-level restore took $secs s (budget 900 s) [CSCRF-BDR-04]" } 'bdr-04' }
+      Complete-CgStep @{ Outcome = 'fail'; Reason = "file-level restore took $secs s, over the 900 s budget [CSCRF-BDR-04]" } 'bdr-04'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-BDR-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgBackupGate { return ($env:BAS_CONFIRM_BACKUP_TEST -eq 'true') }
+      function Get-CgLatestBackupTime {
+      $out = (& wbadmin.exe get versions 2>&1) -join "`n"
+      if ($out -match 'No backup was found') { return 'none' }
+      $m = [regex]::Matches($out, 'Backup time:\s*(.+)')
+      if ($m.Count -eq 0) { return $null }
+      $latest = $null
+      foreach ($x in $m) { $t = $null; if ([datetime]::TryParse($x.Groups[1].Value.Trim(), [ref]$t) -and ($latest -eq $null -or $t -gt $latest)) { $latest = $t } }
+      return $latest
+      }
+      function Get-CgDrTcp { param([string]$Ip, [int]$Port, [int]$TimeoutMs = 3000)
+      $c = New-Object System.Net.Sockets.TcpClient
+      try { $ar = $c.BeginConnect($Ip, $Port, $null, $null); if ($ar.AsyncWaitHandle.WaitOne($TimeoutMs) -and $c.Connected) { return 'open' }; return 'closed' } catch { return 'closed' } finally { $c.Close() }
+      }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      $rec = Read-CgUndoRecord 'bdr-04'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'PASS: Cleanup complete (no record)'; exit 0 }
+      Remove-Item -LiteralPath $rec.dir -Recurse -Force -ErrorAction SilentlyContinue
+      if (Test-Path -LiteralPath $rec.dir) { Write-Output "FAIL: residue folder $($rec.dir) survived undo"; exit 0 }
+      Remove-CgUndoRecord 'bdr-04'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: bdr-05
+    name: "DR Site Connectivity (CSCRF-BDR-05)"
+    technique_id: T1046
+    action_key: cscrf_bdr_dr_connectivity
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "One TCP connection attempt to BAS_DR_TARGET on BAS_DR_PORT (default 3389). Runs only when BAS_DR_TARGET is set."
+    telemetry:
+      - "Outbound TCP connection attempt"
+    detection:
+      - "DR link monitoring"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-BDR-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgBackupGate { return ($env:BAS_CONFIRM_BACKUP_TEST -eq 'true') }
+      function Get-CgLatestBackupTime {
+      $out = (& wbadmin.exe get versions 2>&1) -join "`n"
+      if ($out -match 'No backup was found') { return 'none' }
+      $m = [regex]::Matches($out, 'Backup time:\s*(.+)')
+      if ($m.Count -eq 0) { return $null }
+      $latest = $null
+      foreach ($x in $m) { $t = $null; if ([datetime]::TryParse($x.Groups[1].Value.Trim(), [ref]$t) -and ($latest -eq $null -or $t -gt $latest)) { $latest = $t } }
+      return $latest
+      }
+      function Get-CgDrTcp { param([string]$Ip, [int]$Port, [int]$TimeoutMs = 3000)
+      $c = New-Object System.Net.Sockets.TcpClient
+      try { $ar = $c.BeginConnect($Ip, $Port, $null, $null); if ($ar.AsyncWaitHandle.WaitOne($TimeoutMs) -and $c.Connected) { return 'open' }; return 'closed' } catch { return 'closed' } finally { $c.Close() }
+      }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      $target = $env:BAS_DR_TARGET
+      if (-not $target) { Complete-CgStep @{ Outcome = 'skip'; Reason = 'BAS_DR_TARGET not set; no DR site probed [CSCRF-BDR-05]' } 'bdr-05' }
+      $port = 3389; if ($env:BAS_DR_PORT) { [int]::TryParse($env:BAS_DR_PORT, [ref]$port) | Out-Null }
+      if ((Get-CgDrTcp $target $port) -eq 'open') { Complete-CgStep @{ Outcome = 'pass'; Reason = "DR target $target`:$port reachable [CSCRF-BDR-05]" } 'bdr-05' }
+      Complete-CgStep @{ Outcome = 'fail'; Reason = "DR target $target`:$port not reachable [CSCRF-BDR-05]" } 'bdr-05'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-BDR-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgBackupGate { return ($env:BAS_CONFIRM_BACKUP_TEST -eq 'true') }
+      function Get-CgLatestBackupTime {
+      $out = (& wbadmin.exe get versions 2>&1) -join "`n"
+      if ($out -match 'No backup was found') { return 'none' }
+      $m = [regex]::Matches($out, 'Backup time:\s*(.+)')
+      if ($m.Count -eq 0) { return $null }
+      $latest = $null
+      foreach ($x in $m) { $t = $null; if ([datetime]::TryParse($x.Groups[1].Value.Trim(), [ref]$t) -and ($latest -eq $null -or $t -gt $latest)) { $latest = $t } }
+      return $latest
+      }
+      function Get-CgDrTcp { param([string]$Ip, [int]$Port, [int]$TimeoutMs = 3000)
+      $c = New-Object System.Net.Sockets.TcpClient
+      try { $ar = $c.BeginConnect($Ip, $Port, $null, $null); if ($ar.AsyncWaitHandle.WaitOne($TimeoutMs) -and $c.Connected) { return 'open' }; return 'closed' } catch { return 'closed' } finally { $c.Close() }
+      }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0

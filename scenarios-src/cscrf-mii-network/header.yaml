@@ -1,0 +1,21 @@
+id: "cscrf-mii-network"
+product_line: common
+name: "CSCRF-MII Network and Infrastructure Control Validation (P0)"
+description: >
+  Internal control-validation checks for network and infrastructure controls. Verdicts are internal
+  control references (CSCRF-NET-*), not SEBI clause identifiers. Read-only checks run anywhere. Probes that
+  reach another host run only when an explicit lab variable names the target, and SKIP otherwise.
+  No firewall rule is changed by this pack. Passing a check does not establish CSCRF compliance.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cscrf-mii
+  - network
+  - p0
+mitre_phases:
+  - discovery
+  - defense-evasion
+
+steps:

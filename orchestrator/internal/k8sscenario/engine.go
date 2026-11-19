@@ -18,6 +18,7 @@ package k8sscenario
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 )
 
@@ -45,6 +46,7 @@ const (
 	// StateDiscardedNotRevoked: a credential was minted, verified and discarded locally. It stays valid until
 	// it expires because the TokenRequest API cannot revoke it. Never reported as CLEANED.
 	StateDiscardedNotRevoked State = "DISCARDED_NOT_REVOKED"
+	// StateCancelled is defined in lifecycle.go.
 )
 
 // Audit event types written by the engine.
@@ -52,6 +54,7 @@ const (
 	EventRequested = "k8s.scenario.requested"
 	EventRefused   = "k8s.scenario.refused"
 	EventOutcome   = "k8s.scenario.outcome"
+	EventSnapshot  = "k8s.scenario.snapshot"
 )
 
 // ObjectRef identifies a Kubernetes object.
@@ -85,6 +88,11 @@ type RunRequest struct {
 	Params     map[string]string
 	Live       bool
 	ApprovalID string
+	// ClusterID, AuthorizationID and CustomerRef are the execution context persisted with the run. They are recorded
+	// in every audit event, so the customer and cluster identifiers always appear in the trail.
+	ClusterID       string
+	AuthorizationID string
+	CustomerRef     string
 }
 
 // Result reports what happened. Withheld means the outcome could not be recorded, so it must not be shown.
@@ -163,11 +171,18 @@ type Config struct {
 	Approvals         ApprovalStore
 	ApproverPermitted func(operatorID string) bool
 	Now               func() time.Time
+	// ControlledGate is checked before a Controlled run starts and again immediately before its first write. It
+	// denies unless the global switch is on and the customer authorization still matches the run. Nil fails closed.
+	ControlledGate func(ctx context.Context, req RunRequest) error
+	// MaxRunDuration bounds a live run. Zero means DefaultMaxRun.
+	MaxRunDuration time.Duration
 }
 
 // Engine runs requests against a Config. It has no UI dependency.
 type Engine struct {
-	cfg Config
+	cfg    Config
+	mu     sync.Mutex
+	active map[string]activeRun
 }
 
 // NewEngine returns an engine for the configuration.
@@ -175,7 +190,7 @@ func NewEngine(cfg Config) *Engine {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
-	return &Engine{cfg: cfg}
+	return &Engine{cfg: cfg, active: map[string]activeRun{}}
 }
 
 // Run executes one request. It never writes unless every gate passes.
@@ -196,6 +211,16 @@ func (e *Engine) Run(ctx context.Context, req RunRequest) Result {
 	plan := action.plan(req.Namespace, req.Params)
 	if !req.Live {
 		return Result{State: StateDryRunPlanned, Plan: plan}
+	}
+
+	// A live run is stopped by Cancel, CancelControlled or the time limit. The gate for Controlled work is checked
+	// here, before the cluster is read, and again before the first write.
+	ctx, done := e.track(ctx, req)
+	defer done()
+	if ActionProfile(req.ActionID) == ProfileControlled {
+		if err := e.gate(ctx, req); err != nil {
+			return e.refuse(ctx, req, "controlled gate: "+err.Error())
+		}
 	}
 
 	labels, exists, err := e.cfg.Client.NamespaceLabels(ctx, req.Namespace)
@@ -226,11 +251,13 @@ func (e *Engine) Run(ctx context.Context, req RunRequest) Result {
 	return e.execute(ctx, req, action, plan)
 }
 
-// execute runs snapshot, apply, verify, then rollback and verify the restore.
+// execute runs snapshot, gate, apply, verify, then rollback and verify the restore. A stop (cancel, time limit or the
+// kill switch) ends further writes. Rollback runs on a context the stop cannot cancel, with its own bound. The run is
+// reported CANCELLED only when the restore is verified; a failed restore is CLEANUP_FAILED.
 func (e *Engine) execute(ctx context.Context, req RunRequest, a *Action, plan []string) Result {
 	snap, err := a.snapshot(ctx, e.cfg.Client, req)
 	if err != nil {
-		return e.finish(ctx, req, plan, StateFailed, false, "snapshot: "+err.Error(), "")
+		return e.finish(context.WithoutCancel(ctx), req, plan, StateFailed, false, "snapshot: "+err.Error(), "", "not attempted", "")
 	}
 	observed := func() string {
 		if a.observation == nil {
@@ -239,20 +266,58 @@ func (e *Engine) execute(ctx context.Context, req RunRequest, a *Action, plan []
 		return a.observation(snap)
 	}
 
-	applyErr := a.apply(ctx, e.cfg.Client, req, snap)
+	// A Controlled action records its pre-run state durably before the first write. If that record cannot be written,
+	// nothing is applied: a change without a recorded prior state could not be attributed or rolled back by hand.
+	if ActionProfile(req.ActionID) == ProfileControlled {
+		fields := runFields(req)
+		fields["approvalId"] = req.ApprovalID
+		if a.snapshotFields != nil {
+			for k, v := range a.snapshotFields(snap) {
+				fields[k] = v
+			}
+		}
+		if err := e.cfg.Audit.Write(ctx, Event{Type: EventSnapshot, RunID: req.RunID, Fields: fields}); err != nil {
+			return Result{State: StateRefused, Plan: plan, Error: "snapshot could not be recorded; nothing was applied"}
+		}
+	}
+
+	// The last check before the first write: a stop already requested, or the gate, which rechecks the switch and the
+	// authorization at this moment. If either fails, nothing is written.
+	var applyErr error
+	if cause := context.Cause(ctx); cause != nil {
+		applyErr = cause
+	} else if ActionProfile(req.ActionID) == ProfileControlled {
+		applyErr = e.gate(ctx, req)
+	}
+	if applyErr == nil {
+		applyErr = a.apply(ctx, e.cfg.Client, req, snap)
+	}
 	verified := false
 	if applyErr == nil {
 		verified = a.verify(ctx, e.cfg.Client, req, snap) == nil && !a.forceVerifyFail
 	}
 
-	// Rollback always runs once anything may have been applied, and its result is verified.
-	rollbackErr := a.rollback(ctx, e.cfg.Client, req, snap)
+	// Rollback runs once anything may have been applied. It uses a context the stop cannot cancel.
+	rbCtx, cancelRB := context.WithTimeout(context.WithoutCancel(ctx), rollbackBudget)
+	defer cancelRB()
+	rollbackErr := a.rollback(rbCtx, e.cfg.Client, req, snap)
 	if rollbackErr == nil {
-		rollbackErr = a.verifyRolledBack(ctx, e.cfg.Client, req, snap)
+		rollbackErr = a.verifyRolledBack(rbCtx, e.cfg.Client, req, snap)
+	}
+
+	// Outcome and alert writes use a context the stop cannot cancel, so the record is kept even when the run was stopped.
+	fctx := context.WithoutCancel(ctx)
+	stop := context.Cause(ctx)
+	stopText := ""
+	if stop != nil {
+		stopText = stop.Error()
 	}
 	if rollbackErr != nil {
 		msg := "rollback not verified: " + rollbackErr.Error()
-		return e.finish(ctx, req, plan, StateCleanupFailed, verified, msg, observed())
+		if stop != nil {
+			msg = "stopped: " + stop.Error() + "; " + msg
+		}
+		return e.finish(fctx, req, plan, StateCleanupFailed, verified, msg, observed(), "failed", stopText)
 	}
 
 	state := StateCleaned
@@ -263,6 +328,10 @@ func (e *Engine) execute(ctx context.Context, req RunRequest, a *Action, plan []
 	} else if !verified {
 		msg = "verification failed; the change was rolled back and verified"
 	}
+	if stop != nil {
+		state = StateCancelled
+		msg = "stopped: " + stop.Error() + "; rollback verified"
+	}
 	// An unrevocable effect (a minted credential) is never reported as cleaned up, even when rollback verified.
 	if a.unrevocable && applyErr == nil {
 		state = StateDiscardedNotRevoked
@@ -272,12 +341,17 @@ func (e *Engine) execute(ctx context.Context, req RunRequest, a *Action, plan []
 		if !verified {
 			msg = "verification failed; " + msg
 		}
+		if stop != nil {
+			msg = "stopped: " + stop.Error() + "; " + msg
+		}
 	}
-	return e.finish(ctx, req, plan, state, verified, msg, observed())
+	return e.finish(fctx, req, plan, state, verified, msg, observed(), "verified", stopText)
 }
 
 // finish records the outcome. A failed outcome write withholds the result. CLEANUP_FAILED always alerts.
-func (e *Engine) finish(ctx context.Context, req RunRequest, plan []string, state State, verified bool, msg, observation string) Result {
+// rollback is the verified restore result ("verified", "failed", "not attempted") and stop is why the run was stopped,
+// empty when it was not. Both are separate audit fields, so the trail can be queried without parsing the message.
+func (e *Engine) finish(ctx context.Context, req RunRequest, plan []string, state State, verified bool, msg, observation, rollback, stop string) Result {
 	res := Result{State: state, Plan: plan, Verified: verified, Error: msg, Observation: observation}
 	fields := runFields(req)
 	fields["state"] = string(state)
@@ -287,6 +361,10 @@ func (e *Engine) finish(ctx context.Context, req RunRequest, plan []string, stat
 	}
 	if observation != "" {
 		fields["observation"] = observation
+	}
+	fields["rollback"] = rollback
+	if stop != "" {
+		fields["stop"] = stop
 	}
 	if err := e.cfg.Audit.Write(ctx, Event{Type: EventOutcome, RunID: req.RunID, Fields: fields}); err != nil {
 		res.Withheld = true
@@ -330,8 +408,12 @@ func (e *Engine) checkApproval(req RunRequest) string {
 		return "approver lacks the approval permission"
 	case a.RunID != req.RunID:
 		return "approval is for a different run"
-	case a.Cluster != req.Cluster.Name:
+	case a.ClusterID == "" || a.ClusterID != req.ClusterID:
 		return "approval is for a different cluster"
+	case a.AuthorizationID != req.AuthorizationID:
+		return "approval is for a different customer authorization"
+	case a.CustomerRef != req.CustomerRef:
+		return "approval is for a different customer"
 	case a.Namespace != req.Namespace:
 		return "approval is for a different namespace"
 	case a.ActionID != req.ActionID:
@@ -348,12 +430,15 @@ func (e *Engine) checkApproval(req RunRequest) string {
 
 func runFields(req RunRequest) map[string]string {
 	return map[string]string{
-		"requester":  req.Requester,
-		"cluster":    req.Cluster.Name,
-		"namespace":  req.Namespace,
-		"action":     req.ActionID,
-		"approval":   req.ApprovalID,
-		"paramsHash": HashParams(req.Params),
+		"requester":       req.Requester,
+		"cluster":         req.Cluster.Name,
+		"clusterId":       req.ClusterID,
+		"authorizationId": req.AuthorizationID,
+		"customerRef":     req.CustomerRef,
+		"namespace":       req.Namespace,
+		"action":          req.ActionID,
+		"approval":        req.ApprovalID,
+		"paramsHash":      HashParams(req.Params),
 	}
 }
 

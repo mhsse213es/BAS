@@ -21,11 +21,11 @@ func (p *countingProber) Probe(context.Context, ProbeRequest) (ProbeOutcome, err
 	return p.outcome, nil
 }
 
-func probeAllow(t *testing.T) ProbeAllowList {
+func probeAllow(t *testing.T) AccountAllowList {
 	t.Helper()
-	list, err := ParseProbeAllowList("aws:" + probeAcct)
+	list, err := ParseAccountAllowList("aws:" + probeAcct)
 	if err != nil {
-		t.Fatalf("ParseProbeAllowList: %v", err)
+		t.Fatalf("ParseAccountAllowList: %v", err)
 	}
 	return list
 }
@@ -50,18 +50,18 @@ func requireRejected(t *testing.T, err error, mention string) {
 
 // An empty allow-list permits nothing. A malformed entry is a parse error, so a
 // typo cannot silently change scope.
-func TestParseProbeAllowList(t *testing.T) {
-	empty, err := ParseProbeAllowList("")
+func TestParseAccountAllowList(t *testing.T) {
+	empty, err := ParseAccountAllowList("")
 	if err != nil {
 		t.Fatalf("empty list: %v", err)
 	}
 	if empty.Permits("aws", probeAcct) {
 		t.Error("an empty allow-list permitted an account")
 	}
-	if _, err := ParseProbeAllowList("aws"); err == nil {
+	if _, err := ParseAccountAllowList("aws"); err == nil {
 		t.Error("an entry without an account must be an error")
 	}
-	list, err := ParseProbeAllowList(" aws:" + probeAcct + " , gcp:proj-1 ")
+	list, err := ParseAccountAllowList(" aws:" + probeAcct + " , gcp:proj-1 ")
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}

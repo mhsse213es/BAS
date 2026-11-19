@@ -15,7 +15,16 @@ type SystemSnapshot struct {
 	RunID   string
 	TakenAt time.Time
 	Lists   map[string][]string // category → items present at snapshot time
+	// Unavailable marks a list category whose query failed when the snapshot was taken. Its Lists entry is then
+	// unknown, not empty, so diffing against it would report every existing item as new.
+	Unavailable map[string]bool
 	Files   map[string][]byte   // path (or logical key) → content at snapshot time
+	// Guard is platform-specific restore state taken with the snapshot (Windows: the registry restore guard).
+	Guard any
+	// Health is the platform-specific "does Windows still open things the same way" reference taken with the snapshot.
+	Health any
+	// Procs is the platform-specific set of processes running when the snapshot was taken (Windows: for the stray-process sweep).
+	Procs any
 }
 
 func newSnapshot(runID string) *SystemSnapshot {
@@ -108,6 +117,9 @@ func diffSnapshots(before, after *SystemSnapshot) []string {
 		if !ok {
 			continue
 		}
+		if before.Unavailable[category] {
+			continue
+		}
 		beforeSet := toSet(before.Lists[category])
 		for _, item := range items {
 			if !beforeSet[item] {
@@ -138,4 +150,12 @@ func diffSnapshots(before, after *SystemSnapshot) []string {
 	}
 
 	return diff
+}
+
+// markUnavailable records that a list category could not be read for this snapshot.
+func (s *SystemSnapshot) markUnavailable(category string) {
+	if s.Unavailable == nil {
+		s.Unavailable = map[string]bool{}
+	}
+	s.Unavailable[category] = true
 }

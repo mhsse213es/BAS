@@ -8,7 +8,9 @@ const { initiativeStateLabel, openAdvDrawer, openFinding, renderRunReportExtra, 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 function assertInert(container, label) {
-  assert.equal(container.querySelector('img,svg,script,iframe'), null, `${label}: payload created an element`);
+  // The layout kit's own icons and charts are trusted inline SVG; only payload-created elements count.
+  const stray = [...container.querySelectorAll('img,svg,script,iframe')].filter((el) => !el.closest('.rk-kpi-ico,.rk-empty-ico,.chart-slot') && !(el.tagName.toLowerCase() === 'svg' && el.getAttribute('aria-hidden') === 'true'));
+  assert.equal(stray[0] || null, null, `${label}: payload created an element`);
   for (const el of container.querySelectorAll('*')) {
     for (const a of el.attributes) assert.ok(!/^on/i.test(a.name) || !/__xss/.test(a.value), `${label}: payload created ${a.name} on <${el.tagName}>`);
   }
@@ -157,7 +159,7 @@ test('agent-drawer: loadAgtLogs keeps payloads inside data-args', async () => {
 test('integrations: renderResponseConnectorList keeps payloads inside data-args', () => {
   for (const p of PAYLOADS) {
     renderResponseConnectorList([{ id: p, name: p, provider: 'crowdstrike', enabled: true }]);
-    const div = document.getElementById('response-connectors-list');
+    const div = document.getElementById('int-grid');
     assertInert(div, 'renderResponseConnectorList');
     assert.ok(div.querySelector('[data-args]'), 'fixture did not render');
     const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
@@ -259,7 +261,8 @@ test('reports: loadRuns keeps payloads inside data-args', async () => {
     globalThis.fetch = async () => ({ status: 200, json: async () => ([{ id: p, name: p, status: 'running', agentId: p, mode: p, maxPrivilege: p, startedAt: '2026-01-01T00:00:00Z' }]) });
     loadRuns();
     await tick(); await tick();
-    const div = document.getElementById('runs-body');
+    const div = document.getElementById('tab-runs').cloneNode(true);
+    div.querySelectorAll('.page-hero').forEach((h) => h.remove());
     assertInert(div, 'loadRuns');
     assert.ok(div.querySelector('[data-args]'), 'fixture did not render');
     const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');

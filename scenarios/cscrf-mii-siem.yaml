@@ -1,0 +1,329 @@
+id: "cscrf-mii-siem"
+product_line: common
+name: "CSCRF-MII SIEM Telemetry Pipeline Configuration Checks (P0)"
+description: >
+  Internal control-validation configuration checks for the telemetry pipeline on an endpoint: time source,
+  Windows Event Forwarding subscription manager, and Security log retention. Verdicts are internal control
+  references (CSCRF-SIEM-*), not SEBI clause identifiers. All checks are read only. Ingestion verification
+  (an event generated here arriving at the SIEM) is deferred until a collector endpoint is named. A PASS
+  here shows only that the endpoint is configured; it does not show the SOC received or acted on anything.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cscrf-mii
+  - siem
+  - telemetry
+  - p0
+mitre_phases:
+  - defense-evasion
+
+steps:
+
+  # -------------------------------------------------------------------------
+  - id: siem-01
+    name: "Time Source Configuration (T1070.006, internal ref CSCRF-SIEM-01)"
+    technique_id: T1070.006
+    action_key: cscrf_siem_time_sync
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only query of the Windows time service status."
+    telemetry:
+      - "w32tm status query"
+    detection:
+      - "Time source drift review"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-SIEM-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Test-CgSiemGate { return ($env:BAS_CONFIRM_SIEM_TEST -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      $out = (& w32tm.exe /query /status 2>&1) -join "`n"
+      if ($LASTEXITCODE -ne 0 -or $out -notmatch 'Source:') { Complete-CgStep @{ Outcome = 'error'; Reason = 'time service status could not be read [CSCRF-SIEM-01]' } 'siem-01' }
+      $src = [regex]::Match($out, 'Source:\s*(.+)').Groups[1].Value.Trim()
+      if ($src -match 'Local CMOS Clock|Free-running|VM IC') { Complete-CgStep @{ Outcome = 'fail'; Reason = "time source is '$src'; not a network time source; event timestamps may drift from the SIEM [CSCRF-SIEM-01]" } 'siem-01' }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = "time source '$src' [CSCRF-SIEM-01]" } 'siem-01'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-SIEM-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Test-CgSiemGate { return ($env:BAS_CONFIRM_SIEM_TEST -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: siem-02
+    name: "Windows Event Forwarding Subscription Manager (T1562.002, internal ref CSCRF-SIEM-02)"
+    technique_id: T1562.002
+    action_key: cscrf_siem_forwarding_config
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only registry query."
+    telemetry:
+      - "Registry read"
+    detection:
+      - "Event forwarding configuration review"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-SIEM-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Test-CgSiemGate { return ($env:BAS_CONFIRM_SIEM_TEST -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      $k = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\EventLog\EventForwarding\SubscriptionManager'
+      $v = (Get-ItemProperty -Path $k -ErrorAction SilentlyContinue)
+      $values = @()
+      if ($v) { $values = @($v.PSObject.Properties | Where-Object { $_.Name -like '1*' } | ForEach-Object { $_.Value }) }
+      if ($values.Count -gt 0) { Complete-CgStep @{ Outcome = 'pass'; Reason = "subscription manager configured ($($values.Count) entry/entries) [CSCRF-SIEM-02]" } 'siem-02' }
+      Complete-CgStep @{ Outcome = 'fail'; Reason = 'no Windows Event Forwarding subscription manager configured; events are not forwarded by policy [CSCRF-SIEM-02]' } 'siem-02'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-SIEM-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Test-CgSiemGate { return ($env:BAS_CONFIRM_SIEM_TEST -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: siem-04
+    name: "Security Log Retention Configuration (T1070.001, internal ref CSCRF-SIEM-04)"
+    technique_id: T1070.001
+    action_key: cscrf_siem_log_retention
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only query of the Security log size and retention mode."
+    telemetry:
+      - "Event log configuration query"
+    detection:
+      - "Log retention review"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-SIEM-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Test-CgSiemGate { return ($env:BAS_CONFIRM_SIEM_TEST -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      try { $log = Get-WinEvent -ListLog Security -ErrorAction Stop } catch { Complete-CgStep @{ Outcome = 'error'; Reason = 'Security log configuration could not be read [CSCRF-SIEM-04]' } 'siem-04' }
+      $gb = [math]::Round($log.MaximumSizeInBytes / 1GB, 2)
+      $problems = @()
+      if ($log.LogMode -eq 'Circular') { $problems += 'circular mode overwrites old events' }
+      if ($log.MaximumSizeInBytes -lt 1GB) { $problems += "size $gb GB below 1 GB baseline" }
+      if ($problems.Count -gt 0) { Complete-CgStep @{ Outcome = 'fail'; Reason = ('Security log: ' + ($problems -join '; ') + ' [CSCRF-SIEM-04]') } 'siem-04' }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = "Security log $gb GB, mode $($log.LogMode) [CSCRF-SIEM-04]" } 'siem-04'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-SIEM-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Test-CgSiemGate { return ($env:BAS_CONFIRM_SIEM_TEST -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: siem-03
+    name: "Tagged Event Ingestion to SIEM (T1562.002, internal ref CSCRF-SIEM-03)"
+    technique_id: T1562.002
+    action_key: cscrf_siem_ingestion
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: low
+    reversible: false
+    blast_radius: "Writes one tagged synthetic event (ID 4242, source BAS-SIEM) to the Application log and polls the SIEM query API. Requires BAS_CONFIRM_SIEM_TEST=true and BAS_SIEM_ENDPOINT."
+    telemetry:
+      - "Application log event 4242"
+    detection:
+      - "SIEM ingestion check"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-SIEM-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Test-CgSiemGate { return ($env:BAS_CONFIRM_SIEM_TEST -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      if (-not (Test-CgSiemGate)) { Complete-CgStep @{ Outcome = 'skip'; Reason = 'BAS_CONFIRM_SIEM_TEST not true; no event written [CSCRF-SIEM-03]' } 'siem-03' }
+      $ep = $env:BAS_SIEM_ENDPOINT
+      if (-not $ep) { Complete-CgStep @{ Outcome = 'skip'; Reason = 'BAS_SIEM_ENDPOINT not set; no collector named, ingestion not tested [CSCRF-SIEM-03]' } 'siem-03' }
+      $tag = 'BAS-SIEM-' + $script:CgRun + '-' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
+      New-CgUndoRecord 'siem-03' @{ scenario = 'siem-03'; tag = $tag }
+      & eventcreate.exe /L APPLICATION /T INFORMATION /SO BAS-SIEM /ID 4242 /D "$tag synthetic test event; no real data" 2>&1 | Out-Null
+      if ($LASTEXITCODE -ne 0) { Complete-CgStep @{ Outcome = 'error'; Reason = "eventcreate failed (exit $LASTEXITCODE) [CSCRF-SIEM-03]" } 'siem-03' }
+      $found = $false; $lastErr = $null
+      for ($i = 0; $i -lt 12 -and -not $found; $i++) {
+      Start-Sleep -Seconds 5
+      try {
+      $r = Invoke-WebRequest -Uri ($ep + '?q=' + $tag) -UseBasicParsing -TimeoutSec 10
+      if ($r.StatusCode -eq 200 -and $r.Content -match [regex]::Escape($tag)) { $found = $true }
+      } catch { $lastErr = $_.Exception.Message }
+      }
+      if ($found) { Complete-CgStep @{ Outcome = 'pass'; Reason = 'tagged event arrived at the SIEM query API. Alert handling by the SOC is not tested [CSCRF-SIEM-03]' } 'siem-03' }
+      if ($lastErr) { Complete-CgStep @{ Outcome = 'error'; Reason = "SIEM query API unreachable or failing: $lastErr [CSCRF-SIEM-03]" } 'siem-03' }
+      Complete-CgStep @{ Outcome = 'fail'; Reason = 'tagged event did not arrive at the SIEM within 60 s [CSCRF-SIEM-03]' } 'siem-03'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-SIEM-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Test-CgSiemGate { return ($env:BAS_CONFIRM_SIEM_TEST -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      $rec = Read-CgUndoRecord 'siem-03'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'PASS: Cleanup complete (no record)'; exit 0 }
+      Write-Output "PASS: Cleanup complete; event with tag $($rec.tag) remains in the Application log (event ID 4242, source BAS-SIEM) by design"
+      Remove-CgUndoRecord 'siem-03'
+      exit 0

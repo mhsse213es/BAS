@@ -100,6 +100,8 @@ Unlike an older `.env`-based flow, the admin account is **not** auto-generated �
 
 4. **Check agent logs:**
    - Windows: `C:\ProgramData\BASAgent\logs` (this data directory still uses the pre-rebrand name — only the *service* name changed) — or Event Viewer → Windows Logs → Application → Source: "Audspect Agent"
+   - The agent's own diagnostic log is `agent.log`: Windows `C:\Program Files\Audspect\agent.log` (the tray's **Open Logs Folder** opens it), Linux and macOS `/var/log/bas-agent/agent.log`. It rotates at 8 MB and keeps 5 older files (`agent.log.1` ... `.5`). A normal uninstall keeps it, so a failed install can still be diagnosed; set `BAS_UNINSTALL_PURGE_LOGS=1` for the uninstall to delete it as well.
+   - The structured daily logs (`op_log-DATE.log` and others) are in `C:\ProgramData\BASAgent\logs` on Windows and `/var/log/bas-agent/` on Linux and macOS.
    - Linux: `journalctl -u bas-agent -n 50`
 
 ---

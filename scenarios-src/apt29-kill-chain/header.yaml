@@ -1,0 +1,45 @@
+id: apt29-kill-chain
+product_line: killchain
+name: "APT29 Kill Chain - Cozy Bear Tradecraft (Phase 7)"
+description: >
+  Six-stage, telemetry-safe emulation of documented APT29 (Cozy Bear / NOBELIUM / Midnight Blizzard)
+  post-compromise tradecraft on Windows. Attribution basis: MITRE ATT&CK group G0016, CISA AA21-148A
+  and public SolarWinds DFIR reporting. Stages: (1) domain trust and local account discovery, (2a) an
+  encoded PowerShell fetch of a payload from a loopback server, (2b) layered encoded PowerShell
+  executed locally (download and execution are validated independently), (3) HKCU Run key
+  persistence, (4) scheduled task created, run and removed, (5) a periodic DNS beacon pattern.
+  Every stage runs the behavior for real with unique run-tagged artifacts and verifies its own cleanup.
+  A PASS means a Microsoft Defender or AppLocker block event named the stage; a stage that did not run and has
+  no such event is inconclusive, never a pass. Host telemetry visibility (Sysmon, PowerShell 4104,
+  Security) is reported separately. The DNS stage validates host DNS telemetry, not beaconing analytics
+  or SIEM ingestion. Vendor EDR other than Microsoft Defender is not queried.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - apt29
+  - cozy-bear
+  - nobelium
+  - kill-chain
+  - phase7
+  - t1482
+  - t1087
+  - t1059
+  - t1547
+  - t1053
+  - t1071
+  - mitre
+mitre_phases:
+  - discovery
+  - execution
+  - persistence
+  - command-and-control
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:

@@ -2,6 +2,7 @@ package validationlab
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -221,6 +222,15 @@ func TestResolveOrphaned_TimesOutStuckRunning(t *testing.T) {
 		if outcome != "ERROR" {
 			t.Fatalf("got outcome=%s, want ERROR (timed-out orphan)", outcome)
 		}
+
+		// Same deadlock as the synchronous path: the stuck 'running' run must be
+		// marked terminal here too, so the single lab slot releases immediately
+		// rather than at staleRunGuard (2h).
+		var runStatus string
+		pool.QueryRow(ctx, `SELECT status FROM scenario_runs WHERE id = $1`, runID).Scan(&runStatus)
+		if runStatus == "running" {
+			t.Fatalf("orphan-timeout left run in status='running'; it must be freed so the lab slot releases")
+		}
 	})
 }
 
@@ -305,9 +315,13 @@ func mustInsertAgent(t *testing.T, pool *pgxpool.Pool, agentID string) {
 
 // executedPassResults is a results snapshot with one step that actually
 // executed (CheckResult "pass") -- the shape a genuine validation run produces.
-func executedPassResults() []byte  { return []byte(`[{"id":"s1","result":"pass"}]`) }
-func allSkippedResults() []byte    { return []byte(`[{"id":"s1","result":"skipped"},{"id":"s2","result":"skipped"}]`) }
-func erroredResults() []byte       { return []byte(`[{"id":"s1","result":"pass"},{"id":"s2","result":"error"}]`) }
+func executedPassResults() []byte { return []byte(`[{"id":"s1","result":"pass"}]`) }
+func allSkippedResults() []byte {
+	return []byte(`[{"id":"s1","result":"skipped"},{"id":"s2","result":"skipped"}]`)
+}
+func erroredResults() []byte {
+	return []byte(`[{"id":"s1","result":"pass"},{"id":"s2","result":"error"}]`)
+}
 
 func mustInsertScenarioRun(t *testing.T, pool *pgxpool.Pool, agentID, status string) string {
 	t.Helper()
@@ -481,6 +495,15 @@ func TestRunOnce_TimeoutReturnsToDraft(t *testing.T) {
 		if outcome != "ERROR" {
 			t.Fatalf("got outcome=%s, want ERROR", outcome)
 		}
+
+		// The run the lab gave up waiting on must be marked terminal, or it holds
+		// the single lab slot ("agent busy") until staleRunGuard (2h) -- the
+		// 2026-11-03 staging deadlock. A freed slot is any status != 'running'.
+		var runStatus string
+		pool.QueryRow(ctx, `SELECT status FROM scenario_runs WHERE id = $1`, runID).Scan(&runStatus)
+		if runStatus == "running" {
+			t.Fatalf("timed-out run left in status='running'; it must be freed so the lab slot releases")
+		}
 	})
 }
 
@@ -527,5 +550,99 @@ func TestRunOnce_ConcurrentClaimOnlyOneWins(t *testing.T) {
 			t.Fatalf("runOnce errors: %v, %v", err1, err2)
 		}
 		assertLifecycle(t, reg, draft, contentregistry.LifecycleValidating)
+	})
+}
+
+// seedExecutionAttempts records n EXECUTION validation attempts for a version, each created `age` ago. Every
+// dispatch writes exactly one EXECUTION row, so rows are the attempt count -- even when the final outcome could
+// not be written back and the row is still the NO_DATA placeholder.
+func seedExecutionAttempts(t *testing.T, pool *pgxpool.Pool, versionID string, n int, age time.Duration) {
+	t.Helper()
+	for i := 0; i < n; i++ {
+		if _, err := pool.Exec(context.Background(),
+			`INSERT INTO content_validations (content_version_id, level, outcome, validator, validator_version, created_at)
+			 VALUES ($1, 'EXECUTION', 'FAIL', 'validationlab', '1', NOW() - $2::interval)`,
+			versionID, fmt.Sprintf("%d seconds", int(age.Seconds()))); err != nil {
+			t.Fatalf("seed attempt: %v", err)
+		}
+	}
+}
+
+// A version that keeps failing validation goes back to DRAFT, and used to be picked again on the very next tick,
+// forever. On a real lab agent that is a live scenario re-run every few minutes. After maxValidationAttempts
+// it must stay out of the queue until a person changes it.
+func TestRunOnce_StopsRetryingAfterMaxAttempts(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		reg := newTestRegistry(t, pool)
+		draft := mustCreateDraftVersion(t, reg, pool, contentregistry.ActorGenerator, "vl-cap", nonDestructiveArtifact("vl-cap"))
+		seedExecutionAttempts(t, pool, draft, maxValidationAttempts, 24*time.Hour)
+
+		o := NewOrchestrator(pool, reg, nil, "lab-agent-cap", 0)
+		if err := o.runOnce(context.Background()); err != nil {
+			t.Fatalf("runOnce: %v", err)
+		}
+		assertLifecycle(t, reg, draft, contentregistry.LifecycleDraft) // not claimed
+	})
+}
+
+func TestRunOnce_WaitsOutTheRetryBackoff(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		reg := newTestRegistry(t, pool)
+		draft := mustCreateDraftVersion(t, reg, pool, contentregistry.ActorGenerator, "vl-backoff", nonDestructiveArtifact("vl-backoff"))
+		seedExecutionAttempts(t, pool, draft, 1, 1*time.Minute) // one attempt a minute ago
+
+		o := NewOrchestrator(pool, reg, nil, "lab-agent-backoff", 0)
+		if err := o.runOnce(context.Background()); err != nil {
+			t.Fatalf("runOnce: %v", err)
+		}
+		assertLifecycle(t, reg, draft, contentregistry.LifecycleDraft) // too soon to retry
+	})
+}
+
+func TestRunOnce_RetriesOnceTheBackoffHasPassed(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		reg := newTestRegistry(t, pool)
+		draft := mustCreateDraftVersion(t, reg, pool, contentregistry.ActorGenerator, "vl-retry", nonDestructiveArtifact("vl-retry"))
+		seedExecutionAttempts(t, pool, draft, 1, 2*validationRetryBackoff) // one old attempt
+
+		o := NewOrchestrator(pool, reg, nil, "lab-agent-retry", 0)
+		if err := o.runOnce(context.Background()); err != nil {
+			t.Fatalf("runOnce: %v", err)
+		}
+		assertLifecycle(t, reg, draft, contentregistry.LifecycleValidating) // claimed again
+	})
+}
+
+type countingDispatcher struct{ calls int }
+
+func (c *countingDispatcher) DispatchFactoryValidation(ctx context.Context, sc *scenario.Scenario, agentID string) (string, string, error) {
+	c.calls++
+	return "", "", fmt.Errorf("boom")
+}
+
+// The 2026-11-02 staging incident: UPDATE on content_validations was denied, so no attempt was ever recorded and
+// the same scenario ran on the lab agent every poll. The limit must hold even when the database keeps no record
+// of the attempts, so the rows are wiped after every tick to simulate writes that never landed.
+func TestRunOnce_CapHoldsWhenOutcomeWritesAreLost(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		reg := newTestRegistry(t, pool)
+		ctx := context.Background()
+		draft := mustCreateDraftVersion(t, reg, pool, contentregistry.ActorGenerator, "vl-lost-writes", nonDestructiveArtifact("vl-lost-writes"))
+
+		d := &countingDispatcher{}
+		o := NewOrchestrator(pool, reg, d, "lab-agent-lost", 0)
+		o.retryBackoff = 0 // isolate the attempt cap from the backoff
+		for i := 0; i < maxValidationAttempts+4; i++ {
+			if err := o.runOnce(ctx); err != nil {
+				t.Fatalf("runOnce: %v", err)
+			}
+			if _, err := pool.Exec(ctx, `DELETE FROM content_validations WHERE content_version_id = $1`, draft); err != nil {
+				t.Fatalf("wipe validations: %v", err)
+			}
+		}
+		if d.calls != maxValidationAttempts {
+			t.Fatalf("dispatched %d times with no database record, want exactly %d", d.calls, maxValidationAttempts)
+		}
+		assertLifecycle(t, reg, draft, contentregistry.LifecycleDraft)
 	})
 }

@@ -1,109 +1,148 @@
 # API BAS coverage manifest
 
-This file is the honest coverage record for the API BAS suite. A sub-technique is
-**implemented** only when its scenario file exists, its lab flaw and fixed control are
-both in place, and its acceptance tests pass in both lab modes. Anything else is
-listed below as **not implemented**, with the dependency that blocks it. Nothing here
-is counted as covered.
+Refreshed 9 November 2026 from a measured run, not from earlier notes. The previous version of this file listed 28
+scenarios and five unsupported protocols; both statements were out of date. Updated the same day to add the UPI /
+open-banking pack (6 scenarios): the catalogue, lab-validated and family counts below reflect that addition; the detection
+counts were re-measured after wiring APIBAS-REL-007 to the new mandate-execution route (see the QA log entry
+"API BAS UPI / open-banking pack").
 
-## Implemented (28 scenarios)
+Reproduce the numbers with:
 
-| Scenario | Sub-technique | Evidence used |
+    cd orchestrator
+    go test ./internal/apibas/runner/ -run 'TestPhase28_MeasuredCoverage$' -count=1 -v -timeout 25m
+
+That test runs every catalogued scenario against the lab in both builds (vulnerable and fixed) and feeds the verdicts to
+`internal/apibas/coverage`. Re-run it and update this file whenever the catalogue changes.
+
+## 1. The four tiers
+
+A number is only worth quoting with its tier. Nothing here is live-validated.
+
+| Tier | Meaning | Count |
 |---|---|---|
-| API-BAS-AUTHZ-001 | Cross-tenant object read (BOLA) | state, response |
-| API-BAS-AUTHN-001 | Anonymous access | response |
-| API-BAS-AUTHN-002 | Revoked token accepted | response, revocation check |
-| API-BAS-AUTHZ-002 | Function-level authorization (BFLA) | state |
-| API-BAS-AUTHZ-003 | Mass assignment | state |
-| API-BAS-AUTHZ-010 | Retired-version authorization | response |
-| API-BAS-DISC-003 | Debug route exposure | response |
-| API-BAS-DATA-001 | Excessive data exposure via projection | response |
-| API-BAS-AUTHN-003 | Unsigned token accepted (alg none) | response |
-| API-BAS-DATA-004 | Unbounded list exposure | response |
-| API-BAS-GWAY-003 | Method override | response |
-| API-BAS-DISC-002 | Retired API version served | response |
-| API-BAS-INTEG-003 | SSRF via webhook test | response |
-| API-BAS-DATA-003 | Error-message disclosure | response |
-| API-BAS-AUTHN-008 | Caller-supplied identity header | response |
-| API-BAS-AUTHZ-007 | Bulk operation authorization | state |
-| API-BAS-AUTHZ-004 | Vertical escalation (three-step chain) | state |
-| API-BAS-AUTHZ-006 | Parent-child item authorization | response |
-| API-BAS-INTEG-005 | Internal route without service credential | response |
-| API-BAS-AUTHZ-012 | Export access by ID | response |
-| API-BAS-BIZ-002 | Negative business quantity | state |
-| API-BAS-INTEG-008 | Integration secret exposure | response |
-| API-BAS-DISC-005 | Permissive CORS | forbidden response headers |
-| API-BAS-ABUSE-001 | Missing rate limit on verification | counted attempts, detection |
-| API-BAS-DATA-006 | Publicly cacheable authenticated response | forbidden response headers |
-| API-BAS-ABUSE-003 | Excessive page size and item count | granted size, item count |
-| API-BAS-ABUSE-005 | Unbounded upload | accepted bytes |
-| API-BAS-ABUSE-002 | Expensive request without period limit | timing (frozen threshold), resource units |
+| Catalogued | Scenario file exists in `internal/apibas/catalog` | **151** |
+| Executable | Has a working adapter (REST, or one of the protocol adapters) | **151 / 151** |
+| Lab-validated | In both lab builds the vulnerable build FAILs as exploited and the fixed build PASSes with control enforced | **148 / 151** (98.0%) |
+| Workflow-verified | Reporting-obligation scenario that PASSed with control enforced in both builds, graded by the reporting adapter. Simulated receiver; not part of evaluated or validated | **1** (REPORT-001) |
+| Live-validated | Run against a real customer or staging API with real security telemetry | **0** |
 
-## Detection coverage (fixture-validated, not live-SIEM-validated)
+Lab-validated is evidence that the scenario and the grader work against a deliberately flawed lab. It is not evidence about any
+customer API.
 
-Only scenarios with a `detection:` block are graded on the detection axis. The Elastic
-Security fixture is deterministic and local. Its results are labelled fixture-validated.
+### Not lab-validated (2) and one workflow-verified
 
-| Scenario | Expected rule | Vulnerable | Fixed |
-|---|---|---|---|
-| API-BAS-ABUSE-001 | APIBAS-REL-001 (repeated authentication failures, high) | detected | detected |
-| API-BAS-AUTHZ-001 | APIBAS-REL-004 (access to an object owned by another identity, high) | detected | detected |
+| Scenario | State | Why |
+|---|---|---|
+| API-BAS-ABUSE-002 | provisional | Timing scenario. Verdicts are valid, but the 250 ms ceiling has no approved requirement owner or rationale (decision D2 in `api-bas-remaining-work.md`), so it is held out of validated. In the first measured run this scenario was classed plain `evaluated` rather than `provisional`; timing results can vary between runs, so treat its class as unstable until timing qualification (D3) is done. |
+| API-BAS-REPORT-002 | unevaluated | `deadline_not_defined_by_provision`: no CBUAE provision-derived deadline is recorded, so it cannot PASS on timeliness. |
+| API-BAS-REPORT-001 | **workflow-verified** | CERT-In six-hour obligation. PASS with control enforced in both builds, and its six fault cases (on time, exactly at the deadline, one second late, dispatch failed, receipt missing, misrouted) pass in both. It has no exploitability verdict and no vulnerable/fixed pair (the receiver is identical in both builds), and its PASS is simulated: a workflow check, never a genuine CERT-In receipt. So it has its own class and is counted in neither evaluated nor validated. |
 
-AUTHZ-001 was previously missed: a single cross-tenant request is invisible to a
-threshold rule on repeated failures. The lab now records the owner of each order a
-request touches, and APIBAS-REL-004 fires on any attempt by one identity against an
-object owned by another, whether it was allowed or denied. The owner reading their own
-order does not fire it.
+AUTHN-007 and GWAY-012 were first reported as not validated (error and evaluated). That was a measurement fault, not a scenario
+fault: both need TLS (a client certificate, an upstream certificate), and the measurement harness ran them on the plain-HTTP lab.
+`TestPhase28_MeasuredCoverage` now runs them on the TLS environment their own acceptance test uses; both validate (vulnerable
+FAIL/exploited, fixed PASS/enforced).
 
-## Explicitly not implemented
+## 2. Catalogue by family (API.txt section 1)
 
-None of the previously blocked sub-techniques remain unbuilt.
+| API.txt family | Scenario prefix | Scenarios |
+|---|---|---|
+| 01 Identity and authentication | AUTHN | 11 |
+| 02 Authorization and access control | AUTHZ | 34 (12 general, 6 NBFC, 4 manufacturing, 5 healthcare, 3 retail/telecom, 4 UPI/open banking) |
+| 03 Gateway, WAF, perimeter | GWAY | 13 (12 general, 1 UPI/open banking) |
+| 04 Input validation and injection | INJ | 12 |
+| 05 Business logic | BIZ | 13 (12 general, 1 retail) |
+| 06 Sensitive data exposure | DATA | 25 (13 general, 4 NBFC, 2 manufacturing, 3 healthcare, 2 telecom, 1 UPI/open banking) |
+| 07 Resource consumption and abuse | ABUSE | 10 |
+| 08 Integrations, webhooks, backend trust | INTEG | 16 (11 general, 1 manufacturing, 1 healthcare, 3 retail/partner/logistics) |
+| 09 Discovery, lifecycle, configuration | DISC | 10 |
+| 10 Detection and response | DET | 5 |
+| Reporting workflows (regulatory) | REPORT | 2 |
 
-## Built since the earlier blocked list
+Known sub-technique gaps inside the families (from the audit against API.txt):
 
-These were once listed as blocked. Each now has its adapter or lab service and passes its acceptance test
-in both builds.
+- Identity: issuer and audience validation, expired and malformed tokens, session binding and token substitution.
+- Gateway: real request smuggling (only duplicate-header parsing is covered), broader WAF evasion.
+- Injection: NoSQL, command injection, deserialization, XML and multipart parser inconsistencies.
+- Business logic: loyalty and reward abuse.
+- Abuse: distributed multi-identity low-rate abuse, decompression bombs, email consumption.
+- Integrations: DNS-resolution changes.
+- Discovery: OpenAPI import and the endpoint inventory step are not built. The lab serves a spec; nothing imports one.
+- Detection: DET-001, 003, 006 and 008 are not in the catalogue. False-positive measurement (DET-006) is only partly covered.
 
-| Sub-technique | Built by |
+## 3. Protocols (API.txt section 2)
+
+Every protocol has an executable adapter and at least one lab-validated scenario. Depth is thin outside REST.
+
+| Surface | Scenarios | Adapter limit |
+|---|---|---|
+| REST / JSON | most of the catalogue | none |
+| GraphQL | ABUSE-004, INJ-007 | no introspection, batching or alias scenarios |
+| gRPC | DISC-009 | JSON-transcoding form only; native HTTP/2 and protobuf descriptors are UNSUPPORTED |
+| SOAP / XML | INJ-005 (XXE) | no WS-Security scenarios |
+| WebSocket | AUTHN-011 | handshake only; frame and per-message behaviour UNSUPPORTED |
+| Async | ABUSE-010, INTEG-010 | broker is a lab service |
+| Webhooks | INTEG-002, 003, 010, 011 | covered |
+| OAuth / OIDC | AUTHN-004, 005, 009 | partial |
+| Internal and partner APIs | INTEG-005, 006, 009 | covered |
+| Mobile and device APIs | none | **no scenarios** |
+| API management planes | none | **no scenarios** |
+
+## 4. Industry packs (API.txt section 3)
+
+| Sector | State |
 |---|---|
-| API-BAS-ABUSE-004 GraphQL depth | GraphQL adapter and lab route (phase 28; depth oracle phase 33) |
-| API-BAS-ABUSE-008 Account creation automation | `POST /api/abuse/signup` (phase 26) |
-| API-BAS-ABUSE-009 Low-rate per-session throttling | `GET /api/abuse/quote` (phase 26) |
-| API-BAS-ABUSE-010 Queue growth and retry storms | Broker `POST /broker/topics/{topic}/publish` (phase 33) |
-| API-BAS-ABUSE-006 Expensive downstream validation | `POST /api/validate/order-lines` with an in-process downstream validator boundary (phase 37) |
-| API-BAS-ABUSE-007 Paid SMS consumption | `POST /api/auth/otp/send` with a simulated paid-send boundary (phase 37) |
+| BFSI | 84 scenarios tagged, most on the generic orders fixture; payment workflows are BIZ-003 to 009 |
+| NBFC | 10 scenarios (AUTHZ-101 to 106, DATA-101 to 104). DATA-102 detection is `not_evaluated`. |
+| Manufacturing | 7 scenarios (AUTHZ-201 to 204, DATA-201, 202, INTEG-201) on `manufacturing-two-plant`: cross-plant production-order read, operator releasing an order, supplier changing another supplier's purchase order, device commanding another device (simulated, lab only), BOM and CAD leakage, asset and telemetry listing, IT-side access to the OT management configuration. Detection: all seven graded by APIBAS-REL-004 (fixture-validated). No regulatory mapping: no applicable source in the registry. Not covered: ERP/MES inventory and bill-of-materials write paths, machine-command safety interlocks, OT protocol (Modbus, OPC UA) adapters. |
+| Healthcare (FHIR, patient records) | 9 scenarios (AUTHZ-301 to 305, DATA-301 to 303, INTEG-301) on `healthcare-two-patient`: cross-patient record read, clinician without a treating relationship, prescription change, patient altering their own result, delegate beyond consent scope, medical image download, FHIR Observation read, records export, device posting to another patient's result. Detection: eight graded by APIBAS-REL-004, AUTHZ-304 by REL-021 (result changed by a non-device identity) and AUTHZ-305 by REL-022 (clinical data to a delegate beyond consent); all fixture-validated. REL-004 cannot tell a treating clinician from one without a relationship (AUTHZ-302). Eight carry an unverified DPDP section 8(5) mapping. Not covered: HL7 v2 and DICOM adapters, real FHIR server, break-glass access, consent revocation, audit-log integrity. |
+| Retail, logistics, telecom | 9 scenarios on `commerce-telecom-two-tenant`: shipment tracking and redirect across shoppers (AUTHZ-401, 402), SIM swap on another subscriber's line (AUTHZ-403, simulated), usage listing and subscriber record exposure (DATA-401, 402), shopper setting their own order price (BIZ-401), partner reading another partner's API key (INTEG-401), partner escalating their own key scope (INTEG-402), shopper reporting delivery through the carrier callback (INTEG-403). Detection (fixture-validated): six graded by APIBAS-REL-004; BIZ-401 by REL-023 (order changed by a non-staff identity), INTEG-402 by REL-024 (partner key scope changed by a non-staff identity), INTEG-403 by REL-025 (delivery reported by a non-carrier). These three are attempt signals keyed on the route and the actor's role. No regulatory mapping. Refunds, coupons, stock reservation, partner quotes and webhook replay are covered by the general BIZ and INTEG scenarios. Not covered at all: number porting, billing disputes, real carrier or OSS/BSS integrations, SIM provisioning, inventory write paths. |
+| UPI / open banking | 6 scenarios on `upi-two-customer`: cross-customer UPI transaction read (AUTHZ-501), cross-customer VPA/linked-account read (AUTHZ-502), standing-instruction mandate executed by a caller who is not the assigned merchant (AUTHZ-503), cross-customer mandate read (AUTHZ-504), a revoked Account Aggregator consent still accepted for a financial-information fetch (DATA-501), VPA-validate rate limit bypassed by rotating X-Forwarded-For (GWAY-501). Detection (fixture-validated): AUTHZ-501, 502, 504 and DATA-501 graded by APIBAS-REL-004/REL-020; AUTHZ-503 by REL-007 (mandate execution classified as a financial approval, the same class as a loan decision); GWAY-501 by REL-005 (counted-request burst), the same rule GWAY-009 uses. No regulatory mapping: the registry has no sourced NPCI/UPI or RBI Account Aggregator document; `industry_mapping` notes the applicable RBI/NPCI framework in plain English only. Not covered: real UPI switch or NPCI integration, QR-code/intent-flow payment initiation, refund/chargeback flows, PSP-side settlement. |
 
-The downstream validator and paid SMS provider in phase 37 are in-process boundaries with their own per-run
-counters, not separate listeners. They test the product's request-to-downstream behaviour, not network-level
-behaviour between services.
+## 5. India and UAE (API.txt section 4)
 
-ABUSE-009's lab route resets per client-supplied session, so it tests a per-session limit. It does not test
-distributed multi-identity abuse, which needs several source identities and was not built.
+Ten scenarios carry a regulatory mapping: AUTHZ-001, DATA-011 and eight healthcare scenarios. Registry: `internal/apibas/regulatory/registry.yaml` (seven entries, two verified, both DPDP entries unverified).
 
-Pagination item count is resolved: ABUSE-003 checks it on `orders-paged` (151 owned orders, cap 100). The default fixture still has two orders and cannot test it.
+| Mapping | Scenario | Status |
+|---|---|---|
+| IN-RBI-ITGRC-19A | AUTHZ-001 | verified, reviewed |
+| UAE-PDPL-A15-2 | DATA-011 | verified, reviewed |
+| IN-DPDP-S12-3 | DATA-011 | **unverified**: the notification bringing it into force is not in the source set |
+| IN-DPDP-S8-5 | AUTHZ-301, 302, 303, 305, DATA-301, 302, 303, INTEG-301 | **unverified**: same commencement gap, and no named reviewer has confirmed the mapping. Reasonable security safeguards (section 8(5)) is one access-control safeguard per scenario, not a compliance finding |
 
-## Protocols reported UNSUPPORTED
+Healthcare AUTHZ-304 (a patient altering their own result) is not mapped: it is not a breach of another person's data. UAE healthcare data is not mapped to the PDPL because that law leaves health data to its own legislation, which is not in the source set. Manufacturing has no mapping: the registry holds no source document that applies (an OT or industrial security standard such as IEC 62443, or a sector regulation, would have to be obtained and reviewed first), and the DPDP Act does not fit production orders, bills of materials or device commands. The new UPI / open-banking pack (AUTHZ-501 to 504, DATA-501, GWAY-501) has scenario coverage but still no sourced regulatory mapping: no NPCI UPI procedural guideline or RBI Master Direction on Account Aggregators is in the source set, so its `industry_mapping` notes name the applicable framework in plain English, not as a reviewed clause. Not mapped or not started: a sourced NPCI/UPI or RBI Account Aggregator mapping, an NBFC mapping (needs a fresh applicability review), CERT-In direction mapping
+beyond REPORT-001 (unverified), CBUAE clauses 6.1.2.6 and 6.1.7.2 (no provision-derived deadline), DIFC and ADGM, UAE
+healthcare rules, UAE information-assurance requirements, data residency, PDPL Executive Regulation (not in the source set).
+There is no live reporting channel: a simulated REPORT PASS proves a workflow check only. A successful simulation never
+certifies compliance.
 
-A scenario that declares one of these protocols loads, and is reported
-`SKIPPED / UNSUPPORTED_PROTOCOL` at run time. It is never counted as covered.
+## 6. Detection (API.txt section 1.10)
 
-| Protocol | Adapter status |
-|---|---|
-| graphql | not built |
-| grpc | not built |
-| soap | not built |
-| websocket | not built |
-| async | not built |
+Detection is graded separately from exploitability. Every detection result is **fixture-validated**: the Elastic Security and
+Microsoft Sentinel fixtures are local and deterministic. No live SIEM, Splunk, QRadar, or gateway or API-security-product
+adapter exists.
 
-## Other gaps
+| Build | detected | not_detected | inconclusive | error |
+|---|---|---|---|---|
+| vulnerable | 93 | 22 | 1 | 0 |
+| fixed | 78 | 37 | 1 | 0 |
 
-- Detection: one fixture (Elastic Security). Sentinel, Splunk and QRadar adapters are
-  not built. The adapter interface is in place for them.
-- Timing: the threshold is frozen for the measured machine (i5-8250U, Windows 10, Go 1.26.8).
-  A timing scenario declares the baseline it was calibrated against. A run whose measured
-  baseline falls outside a declared tolerance band is recorded as ERROR with
-  `ENVIRONMENT_MISMATCH`. It is never graded as a timing pass or fail. Another machine
-  therefore fails closed until it is recalibrated. Calibration checks the baseline only.
-  It does not prove the attack-side ceiling holds on other hardware.
-- Orchestrator scheduling and persistence, and the production secret store: not built.
-- The Windows build (`build.ps1`) has not been run on these tranches.
+35 of 151 scenarios have no detection block and are `not_evaluated`, which is a distinct state from a miss. Per-scenario reasons
+are in `docs/api-bas-det001-tracker.md`. The counts above are raw; a not_detected on the fixed build means the control denied
+the request and the fixture raised no event, which is not automatically a gap. The per-scenario expectations decide that.
+
+## 7. Orchestrated execution (not scenario coverage)
+
+The orchestrator can run catalogued scenarios as jobs (child-process runner, registered targets with host and path scope,
+write-only credentials, approvals with expiry, revocation and single use). Production execution is disabled behind three
+guards. The staging end-to-end run has **not** been done: see `docs/api-bas-staging-e2e-runbook.md`.
+
+## 8. Known gaps (printed with every coverage report)
+
+- Native gRPC over HTTP/2 with protobuf descriptors: UNSUPPORTED. Only the JSON-transcoding form has an adapter.
+- WebSocket frame behaviour: UNSUPPORTED. Only the handshake has an adapter.
+- Certificate revocation (CRL/OCSP): not tested and not claimed. The lab has no revocation source.
+- Live SIEM validation: every detection result is fixture-validated, not live-validated.
+- Detection for the not_evaluated scenarios: reasons in `docs/api-bas-det001-tracker.md`.
+- The timing threshold is frozen for the measured machine (i5-8250U, Windows 10, Go 1.26.8). Another machine fails closed with
+  `ENVIRONMENT_MISMATCH` until recalibrated.
+- The Windows build script (`build.ps1`) has not been run on recent tranches.

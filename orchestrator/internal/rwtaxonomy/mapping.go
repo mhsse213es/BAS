@@ -73,6 +73,28 @@ var TechniqueDomain = map[string]Domain{
 	"T1556": DomainDefenseEvasion,
 	// Exfiltration to Cloud Storage
 	"T1567.002": DomainExfiltration,
+	// Akira Windows completeness stages and the backup, double-extortion and lateral-containment scenarios.
+	"T1021":     DomainLateralMovement,
+	"T1569.002": DomainLateralMovement,
+	"T1007":     DomainDataDiscoveryAndStaging,
+	"T1555":     DomainCredentialAccess,
+	"T1485":     DomainEncryptionAndDestruction,
+	"T1041":     DomainExfiltration,
+	"T1074.001": DomainDataDiscoveryAndStaging,
+	// Masquerading / file-type masquerade: Akira Stage 6b (mass rename). Renaming is not encryption,
+	// so it is deliberately NOT mapped to Encryption and Destruction.
+	"T1036.008": DomainDefenseEvasion,
+	"T1657":     DomainExfiltration,
+	"T1133":     DomainInitialAccess,
+	"T1482":     DomainDataDiscoveryAndStaging,
+	"T1082":     DomainDataDiscoveryAndStaging,
+	"T1059.001": DomainPreparationAndPersistence,
+	"T1558.003": DomainCredentialAccess,
+	"T1136.001": DomainPreparationAndPersistence,
+	"T1547.001": DomainPreparationAndPersistence,
+	"T1219":     DomainPreparationAndPersistence,
+	"T1018":     DomainDataDiscoveryAndStaging,
+	"T1529":     DomainEncryptionAndDestruction,
 }
 
 // DomainFor returns techniqueID's mapped domain and true, or ("", false)

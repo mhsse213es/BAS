@@ -371,9 +371,12 @@ func (s *Scenario) Validate() error {
 	if s.hasDBProbeSteps() || stepsUseDBFields(s.Steps) {
 		return fmt.Errorf("dbprobe steps are only allowed in signed built-in scenarios")
 	}
-	// Custom steps must each name a technique.
+	// Steps must name a technique, unless they declare why they have none.
 	for i, st := range s.Steps {
-		if strings.TrimSpace(st.TechniqueID) == "" {
+		if st.AttackGap != "" && st.AttackGap != AttackGapNoCleanTechnique {
+			return fmt.Errorf("step %d (%q) has unknown attack_gap %q", i+1, st.Name, st.AttackGap)
+		}
+		if strings.TrimSpace(st.TechniqueID) == "" && st.AttackGap != AttackGapNoCleanTechnique {
 			return fmt.Errorf("step %d (%q) is missing a technique_id", i+1, st.Name)
 		}
 	}

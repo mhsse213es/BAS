@@ -436,6 +436,24 @@ func (h *Hub) BroadcastTamperAlert(path, eventType, severity string) {
 	h.BroadcastBrowsers(msg)
 }
 
+// DisconnectAgent force-closes one agent's live WebSocket, if it has one, and reports whether it did.
+// Used when an agent is revoked: the TLS handshake is only checked at connect time.
+func (h *Hub) DisconnectAgent(agentID string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	c, ok := h.agents[agentID]
+	if !ok {
+		return false
+	}
+	if c.ws != nil {
+		c.ws.WriteMessage(websocket.CloseMessage, []byte{})
+		c.ws.Close()
+	}
+	delete(h.agents, agentID)
+	log.Printf("[ws] agent force-disconnected (revoked): %s", agentID)
+	return true
+}
+
 // CloseAllAgentConnections force-closes every currently-connected agent
 // WebSocket session and clears the agents map. Called once, by the
 // license monitor's onLock callback (see cmd/server/main.go), on the

@@ -9,7 +9,7 @@ test('each licensed product is a badge with a readable name, not a comma-separat
   const html = licenseProductChips(['apibas', 'av', 'common']);
   assert.match(html, />API BAS</);
   assert.match(html, />Antivirus</);
-  assert.match(html, />Common</);
+  assert.match(html, />Simulation Frameworks</);
   assert.equal((html.match(/<span/g) || []).length, 3);
   assert.doesNotMatch(html, /apibas|, /);
 });

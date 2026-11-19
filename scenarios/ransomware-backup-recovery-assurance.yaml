@@ -1,0 +1,590 @@
+# =============================================================================
+# Ransomware Backup and Recovery Assurance (Windows, vendor-neutral)
+# =============================================================================
+id: ransomware-backup-recovery-assurance
+version: "1.0.0"
+product_line: ransomware
+name: Ransomware Backup and Recovery Assurance
+description: >
+  Seven-step, vendor-neutral assessment of whether a Windows host can recover
+  from ransomware: backup and recovery mechanism discovery (B1), backup
+  credential and access exposure (B2), deletion and modification resistance
+  (B3), immutability evidence from a gated canary (B4), restoration
+  verification from the newest VSS recovery point (B5), critical service
+  recovery coverage (B6) and RPO/RTO measurement (B7). Read-only by default.
+  The only write is one tiny canary file per operator-listed repository path,
+  behind BAS_CONFIRM_BACKUP_CANARY_WRITE=true (exact). Repository paths come
+  from BAS_BACKUP_REPO_PATHS (semicolon separated); no vendor API is called and
+  no immutability verdict is ever guessed from a product name. Restore and
+  recovery-point checks cover VSS only; vendor repositories are reported as
+  not exercised. The full-restore time in B7 is labelled an ESTIMATE.
+  The internal backupassurance engine is simulated-only and is deliberately NOT
+  wired to these results.
+
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+severity: high
+estimated_duration_sec: 180
+abort_conditions:
+  - "Free disk in %TEMP% < 128 MB"
+  - "PowerShell major version < 5"
+tags:
+  - ransomware
+  - backup
+  - recovery
+  - rpo
+  - rto
+  - immutability
+  - t1007
+  - t1485
+  - t1555
+  - mitre
+  - bas
+mitre_phases:
+  - discovery
+  - credential-access
+  - impact
+attck_tactics:
+  - TA0007  # Discovery
+  - TA0006  # Credential Access
+  - TA0040  # Impact
+references:
+  - "MITRE ATT&CK T1007, T1485, T1555 (assurance steps validate defences against these techniques; they do not perform the attacks)"
+  - "CISA #StopRansomware Guide: offline, encrypted, immutable backups; test restoration"
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+  require_run_id: false
+  require_temp_disk_mb: 128
+  min_powershell_major: 5
+
+variables:
+  run_id: "{{env.BAS_RUN_ID | default(random_hex8)}}"
+  sim_tag: "[BAS-SIM-BRA]"
+
+steps:
+  # ---------------------------------------------------------------------------
+  - id: bra-b1-backup-discovery
+    name: "Backup Assurance B1 - Backup Service and Recovery Mechanism Discovery (T1007)"
+    technique_id: T1007
+    detection_profiles:
+      - windows_backup_tampering
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Read-only. Enumerates services, processes, registry keys, VSS writers/shadow storage and wbadmin versions. Nothing is read from or written to any backup repository."
+    preconditions: ["Windows host."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; anything created is removed and removal verified where applicable."]
+    abort_on: []
+    telemetry:
+      - "Sysmon EID 1: PowerShell, vssadmin.exe, wbadmin.exe, net.exe, cmdkey.exe"
+    detection:
+      - "EDR: enumeration of backup services and shadow copies followed by deletion or modification attempts"
+    expected_telemetry_count: 1
+    false_positive_notes: "Backup administrators and monitoring agents perform the same enumeration; correlate with process and account."
+    mitigations:
+      - "Immutable or offline backup copies with retention locks."
+      - "Dedicated, least-privilege backup service accounts; no Backup Operators sprawl."
+      - "Regularly tested restores against RPO and RTO targets."
+    references: ["CISA #StopRansomware Guide"]
+    evidence: ["Emit backup_products, shadow_copies, wbadmin_versions."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $bk = [ordered]@{
+        'Veeam'='Veeam*'; 'Commvault'='GxCVD,GxClMgrS*,GxFWD,CvMountd'; 'Veritas/BackupExec/NetBackup'='BackupExec*,pvlsvr,beremote,NetBackup*,bpcd';
+        'Acronis'='Acronis*,AcrSch2Svc'; 'Rubrik'='Rubrik*'; 'Cohesity'='Cohesity*'; 'Azure MARS'='obengine';
+        'Microsoft DPM'='DPM*,MSDPM'; 'Datto'='Datto*'; 'Arcserve'='CASAD2DWebSvc,ARCserve*,Arcserve*'; 'Windows Server Backup'='wbengine'
+      }
+      $svcAll = @(Get-WmiObject Win32_Service -ErrorAction SilentlyContinue)
+      $found = @()
+      foreach ($k in $bk.Keys) {
+        foreach ($pat in ($bk[$k] -split ',')) {
+          foreach ($s in @($svcAll | Where-Object { $_.Name -like $pat -or $_.DisplayName -like $pat })) {
+            $found += [pscustomobject]@{ Product=$k; Service=$s.Name; State=$s.State; Logon=$s.StartName; Path=$s.PathName }
+          }
+        }
+      }
+      $found = @($found | Sort-Object Service -Unique)
+      $procPats = 'veeam*','Gx*','bengine','pvlsvr','Acronis*','Rubrik*','Cohesity*','obengine','DPM*','Datto*','wbengine'
+      $procs = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $n = $_.ProcessName; @($procPats | Where-Object { $n -like $_ }).Count -gt 0 } | Select-Object -ExpandProperty ProcessName -Unique)
+      $regKeys = 'HKLM:\SOFTWARE\Veeam','HKLM:\SOFTWARE\CommVault Systems','HKLM:\SOFTWARE\Veritas','HKLM:\SOFTWARE\Acronis','HKLM:\SOFTWARE\Rubrik','HKLM:\SOFTWARE\Cohesity','HKLM:\SOFTWARE\Microsoft\Windows Azure Backup','HKLM:\SOFTWARE\Datto','HKLM:\SOFTWARE\Arcserve'
+      $regHits = @($regKeys | Where-Object { Test-Path $_ })
+      $products = @($found | Where-Object { $_.Product -ne 'Windows Server Backup' } | Select-Object -ExpandProperty Product -Unique)
+      $wbadmin = [bool](Get-Command wbadmin.exe -ErrorAction SilentlyContinue)
+      $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      $vssWriters = 'unknown (not elevated)'; $shadowStorage = 'unknown (not elevated)'; $shadowCopies = 'unknown (not elevated)'
+      if ($isAdmin) {
+        $w = (& vssadmin.exe list writers 2>&1 | Out-String); $vssWriters = ([regex]::Matches($w, 'Writer name:')).Count
+        $ss = (& vssadmin.exe list shadowstorage 2>&1 | Out-String); $shadowStorage = ([regex]::Matches($ss, 'Shadow Copy Storage association')).Count
+        $shadowCopies = @(Get-WmiObject Win32_ShadowCopy -ErrorAction SilentlyContinue).Count
+      }
+      $wbVersions = 'unknown (not elevated)'
+      if ($isAdmin -and $wbadmin) { $wv = (& wbadmin.exe get versions 2>&1 | Out-String); $wbVersions = ([regex]::Matches($wv, 'Version identifier')).Count }
+      $names = ($found | ForEach-Object { "$($_.Product):$($_.Service)($($_.State))" }) -join ';'
+      Write-Output "EVIDENCE T1007: backup_products=[$(($products -join ','))] services=[$names] processes=[$(($procs -join ','))] registry_keys=$($regHits.Count) wbadmin_present=$wbadmin vss_writers=$vssWriters shadow_storage_associations=$shadowStorage shadow_copies=$shadowCopies wbadmin_versions=$wbVersions elevated=$isAdmin. The Windows Server Backup service exists on every Windows install, so it counts only when wbadmin lists a backup version. Discovery only; nothing was read from or written to a backup repository. [BAS-SIM-BRA-B1]"
+      $haveMech = ($products.Count -gt 0) -or ($regHits.Count -gt 0) -or ($shadowCopies -is [int] -and $shadowCopies -gt 0) -or ($wbVersions -is [int] -and $wbVersions -gt 0)
+      if ($haveMech) {
+        Write-Output "PASS: a backup or recovery mechanism was discovered on this host (products=$($products.Count), shadow_copies=$shadowCopies, wbadmin_versions=$wbVersions). Discovery proves presence, not that recovery works: see B5 and B7. [BAS-SIM-BRA-B1]"
+      } elseif (-not $isAdmin) {
+        Write-Output "SKIP: no backup product found and recovery-point inventory needs administrator rights; absence cannot be concluded unelevated. [BAS-SIM-BRA-B1]"
+      } else {
+        Write-Output "FAIL: no backup product, Windows Server Backup version or shadow copy was found on this host - there is nothing to recover from if ransomware encrypts it. [BAS-SIM-BRA-B1]"
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_bra_nothing_*') -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  - id: bra-b2-backup-credential-exposure
+    name: "Backup Assurance B2 - Backup Credential and Access Exposure (T1555)"
+    technique_id: T1555
+    detection_profiles:
+      - windows_backup_tampering
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Read-only. Reads Backup Operators membership, backup service logon accounts, backup-named stored credential TARGET NAMES (no secrets) and ACLs of operator-supplied repository paths (BAS_BACKUP_REPO_PATHS, semicolon separated)."
+    preconditions: ["Windows host."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; anything created is removed and removal verified where applicable."]
+    abort_on: []
+    telemetry:
+      - "Sysmon EID 1: PowerShell, vssadmin.exe, wbadmin.exe, net.exe, cmdkey.exe"
+    detection:
+      - "EDR: enumeration of backup services and shadow copies followed by deletion or modification attempts"
+    expected_telemetry_count: 1
+    false_positive_notes: "Backup administrators and monitoring agents perform the same enumeration; correlate with process and account."
+    mitigations:
+      - "Immutable or offline backup copies with retention locks."
+      - "Dedicated, least-privilege backup service accounts; no Backup Operators sprawl."
+      - "Regularly tested restores against RPO and RTO targets."
+    references: ["CISA #StopRansomware Guide"]
+    evidence: ["Emit counts of risky accounts and broad write ACEs."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $bk = [ordered]@{
+        'Veeam'='Veeam*'; 'Commvault'='GxCVD,GxClMgrS*,GxFWD,CvMountd'; 'Veritas/BackupExec/NetBackup'='BackupExec*,pvlsvr,beremote,NetBackup*,bpcd';
+        'Acronis'='Acronis*,AcrSch2Svc'; 'Rubrik'='Rubrik*'; 'Cohesity'='Cohesity*'; 'Azure MARS'='obengine';
+        'Microsoft DPM'='DPM*,MSDPM'; 'Datto'='Datto*'; 'Arcserve'='CASAD2DWebSvc,ARCserve*,Arcserve*'; 'Windows Server Backup'='wbengine'
+      }
+      $svcAll = @(Get-WmiObject Win32_Service -ErrorAction SilentlyContinue)
+      $found = @()
+      foreach ($k in $bk.Keys) {
+        foreach ($pat in ($bk[$k] -split ',')) {
+          foreach ($s in @($svcAll | Where-Object { $_.Name -like $pat -or $_.DisplayName -like $pat })) {
+            $found += [pscustomobject]@{ Product=$k; Service=$s.Name; State=$s.State; Logon=$s.StartName; Path=$s.PathName }
+          }
+        }
+      }
+      $found = @($found | Sort-Object Service -Unique)
+      $repos = @(); if ($env:BAS_BACKUP_REPO_PATHS) { $repos = @($env:BAS_BACKUP_REPO_PATHS -split ';' | Where-Object { $_ -and (Test-Path $_) }) }
+      $bo = @(); try { $bo = @(Get-LocalGroupMember -Group 'Backup Operators' -ErrorAction Stop | ForEach-Object { $_.Name }) } catch { $bo = @((& net.exe localgroup 'Backup Operators' 2>&1) | Where-Object { $_ -and $_ -notmatch '^(Alias name|Comment|Members|The command|-+)' } | ForEach-Object { $_.Trim() }) }
+      $admins = @((& net.exe localgroup Administrators 2>&1) | ForEach-Object { $_.Trim() })
+      $riskSvc = @()
+      foreach ($s in $found) {
+        $acct = [string]$s.Logon
+        if (-not $acct -or $acct -match '^(LocalSystem|NT AUTHORITY\\|NT SERVICE\\)') { continue }
+        $short = ($acct -split '\\')[-1]
+        if (@($admins | Where-Object { $_ -ieq $acct -or $_ -ieq $short -or ($_ -split '\\')[-1] -ieq $short }).Count -gt 0) { $riskSvc += "$($s.Service) runs as $acct (local Administrators member)" }
+      }
+      $cred = @(); $cm = (& cmdkey.exe /list 2>&1 | Out-String); foreach ($m in [regex]::Matches($cm, 'Target:\s*(\S+)')) { if ($m.Groups[1].Value -match '(?i)backup|veeam|commvault|acronis|rubrik|cohesity|datto|arcserve|netbackup') { $cred += $m.Groups[1].Value } }
+      $broad = 'Everyone','BUILTIN\Users','NT AUTHORITY\Authenticated Users','Domain Users'
+      $aclRisk = @()
+      foreach ($r in $repos) {
+        $acl = Get-Acl -Path $r -ErrorAction SilentlyContinue
+        foreach ($ace in @($acl.Access)) {
+          $id = [string]$ace.IdentityReference
+          if ($ace.AccessControlType -eq 'Allow' -and (@($broad | Where-Object { $id -like "*$_" }).Count -gt 0) -and ($ace.FileSystemRights.ToString() -match 'Write|Modify|FullControl|Delete|CreateFiles')) { $aclRisk += "$r : $id has $($ace.FileSystemRights)" }
+        }
+      }
+      $boExtra = @($bo | Where-Object { $_ -and $_ -notmatch '^(The command completed|There are no)' })
+      Write-Output "EVIDENCE T1555: backup_operators_members=$($boExtra.Count) [$(($boExtra -join ','))] backup_services_found=$($found.Count) risky_service_accounts=$($riskSvc.Count) backup_named_stored_credential_targets=$($cred.Count) [$(($cred -join ','))] repository_paths_checked=$($repos.Count) broad_write_aces=$($aclRisk.Count). Credential names only; no secret was read. Domain-group nesting of service accounts is not resolved. [BAS-SIM-BRA-B2]"
+      foreach ($x in $riskSvc + $aclRisk) { Write-Output "FINDING: $x [BAS-SIM-BRA-B2]" }
+      if ($found.Count -eq 0 -and $repos.Count -eq 0) {
+        Write-Output "SKIP: nothing to assess (no backup service found and BAS_BACKUP_REPO_PATHS not set or not reachable). [BAS-SIM-BRA-B2]"
+      } elseif ($riskSvc.Count -gt 0 -or $aclRisk.Count -gt 0 -or $boExtra.Count -gt 0) {
+        Write-Output "FAIL: backup access is over-exposed - Backup Operators members=$($boExtra.Count), admin-level backup service accounts=$($riskSvc.Count), broadly writable repository ACEs=$($aclRisk.Count). An attacker with these identities can delete or encrypt backups. [BAS-SIM-BRA-B2]"
+      } else {
+        Write-Output "PASS: no extra Backup Operators members, no admin-level backup service accounts and no broadly writable repository ACEs were found in the scope checked. [BAS-SIM-BRA-B2]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  - id: bra-b3-deletion-resistance
+    name: "Backup Assurance B3 - Backup Deletion and Modification Resistance (T1485)"
+    technique_id: T1485
+    detection_profiles:
+      - windows_backup_tampering
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: false
+    blast_radius: "Default: read-only ACL evaluation of the current identity on BAS_BACKUP_REPO_PATHS. With BAS_CONFIRM_BACKUP_CANARY_WRITE=true (exact): creates, appends to and deletes ONE uniquely named tiny canary file per repository path. On a retention-locked repository the canary can remain until the lock expires."
+    preconditions: ["Windows host."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; anything created is removed and removal verified where applicable."]
+    abort_on: []
+    telemetry:
+      - "Sysmon EID 1: PowerShell, vssadmin.exe, wbadmin.exe, net.exe, cmdkey.exe"
+    detection:
+      - "EDR: enumeration of backup services and shadow copies followed by deletion or modification attempts"
+    expected_telemetry_count: 1
+    false_positive_notes: "Backup administrators and monitoring agents perform the same enumeration; correlate with process and account."
+    mitigations:
+      - "Immutable or offline backup copies with retention locks."
+      - "Dedicated, least-privilege backup service accounts; no Backup Operators sprawl."
+      - "Regularly tested restores against RPO and RTO targets."
+    references: ["CISA #StopRansomware Guide"]
+    evidence: ["Emit per-path create/modify/delete outcome and cleanup state."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { 'norun' }
+      $repos = @(); if ($env:BAS_BACKUP_REPO_PATHS) { $repos = @($env:BAS_BACKUP_REPO_PATHS -split ';' | Where-Object { $_ -and (Test-Path $_) }) }
+      if ($repos.Count -eq 0) { Write-Output "SKIP: prerequisite missing (BAS_BACKUP_REPO_PATHS not set or no listed path is reachable) - no repository to assess. [BAS-SIM-BRA-B3]"; return }
+      $ident = [Security.Principal.WindowsIdentity]::GetCurrent()
+      $sids = @($ident.User.Value) + @($ident.Groups | ForEach-Object { $_.Value })
+      $aclCan = @()
+      foreach ($r in $repos) {
+        $acl = Get-Acl -Path $r -ErrorAction SilentlyContinue
+        $allow = $false; $deny = $false
+        foreach ($ace in @($acl.Access)) {
+          $sid = $null; try { $sid = $ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } catch { }
+          if (-not $sid -or $sids -notcontains $sid) { continue }
+          if ($ace.FileSystemRights.ToString() -match 'Write|Modify|FullControl|Delete') { if ($ace.AccessControlType -eq 'Allow') { $allow = $true } else { $deny = $true } }
+        }
+        $aclCan += [pscustomobject]@{ Path=$r; AclAllowsWrite=($allow -and -not $deny) }
+      }
+      $gate = ($env:BAS_CONFIRM_BACKUP_CANARY_WRITE -ceq 'true')
+      $canary = @()
+      if ($gate) {
+        foreach ($r in $repos) {
+          $f = Join-Path $r "bas_canary_$runId.tmp"
+          $o = [ordered]@{ path=$r; file=$f; create='denied'; modify='not_tested'; delete='not_tested'; cleanup='n/a' }
+          try { [System.IO.File]::WriteAllText($f, "[BAS-SIM-BRA] canary $runId") } catch { }
+          if (Test-Path $f) {
+            $o.create = 'ok'
+            $before = (Get-Item $f).Length
+            try { [System.IO.File]::AppendAllText($f, "x") } catch { }
+            $o.modify = if ((Get-Item $f).Length -gt $before) { 'ok' } else { 'denied' }
+            Remove-Item $f -Force -ErrorAction SilentlyContinue
+            $o.delete = if (Test-Path $f) { 'denied' } else { 'ok' }
+            $o.cleanup = if (Test-Path $f) { 'canary_remains_until_retention_expires' } else { 'verified' }
+          }
+          $canary += [pscustomobject]$o
+        }
+        $sf = Join-Path $env:TEMP "bas_bra_state_$runId.json"
+        ($canary | ConvertTo-Json -Compress) | Set-Content -Path $sf -Encoding UTF8
+      }
+      foreach ($a in $aclCan) { Write-Output "EVIDENCE T1485: repo=$($a.Path) acl_allows_current_identity_write=$($a.AclAllowsWrite) (approximation from ACEs; share permissions and product-level locks not evaluated). [BAS-SIM-BRA-B3]" }
+      foreach ($c in $canary) { Write-Output "EVIDENCE T1485: canary repo=$($c.path) create=$($c.create) modify=$($c.modify) delete=$($c.delete) cleanup=$($c.cleanup). [BAS-SIM-BRA-B3]" }
+      foreach ($c in $canary) { if ($c.cleanup -eq 'canary_remains_until_retention_expires') { Write-Output "WARNING: canary file $($c.file) could not be deleted and may remain until the repository retention lock expires. [BAS-SIM-BRA-B3]" } }
+      if ($gate) {
+        $bad = @($canary | Where-Object { $_.modify -eq 'ok' -or $_.delete -eq 'ok' })
+        $held = @($canary | Where-Object { $_.create -eq 'ok' -and $_.modify -eq 'denied' -and $_.delete -eq 'denied' })
+        if ($bad.Count -gt 0) { Write-Output "FAIL: the current identity could modify or delete a file in $($bad.Count) backup repository path(s) - ransomware running as this identity could do the same to backups. [BAS-SIM-BRA-B3]" }
+        elseif ($held.Count -gt 0) { Write-Output "PASS: canary modify and delete were denied on $($held.Count) repository path(s). [BAS-SIM-BRA-B3]" }
+        else { Write-Output "SKIP: canary files could not be created in any repository path, so modify/delete resistance was not exercised. [BAS-SIM-BRA-B3]" }
+      } else {
+        $w = @($aclCan | Where-Object { $_.AclAllowsWrite })
+        if ($w.Count -gt 0) { Write-Output "FAIL: ACLs grant the current identity write/delete rights on $($w.Count) backup repository path(s) (ACL approximation; the canary write test was not run because BAS_CONFIRM_BACKUP_CANARY_WRITE is not 'true'). [BAS-SIM-BRA-B3]" }
+        else { Write-Output "PASS: ACLs do not grant the current identity write/delete rights on the listed repository paths (ACL approximation only; BAS_CONFIRM_BACKUP_CANARY_WRITE not 'true', so nothing was written). [BAS-SIM-BRA-B3]" }
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  - id: bra-b4-immutability-validation
+    name: "Backup Assurance B4 - Backup Immutability Validation (T1485)"
+    technique_id: T1485
+    detection_profiles:
+      - windows_backup_tampering
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Read-only. Judges immutability only from the B3 canary result (state file in %TEMP%); never from product names. SKIPs without the gate or without a B3 result."
+    preconditions: ["Windows host."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; anything created is removed and removal verified where applicable."]
+    abort_on: []
+    telemetry:
+      - "Sysmon EID 1: PowerShell, vssadmin.exe, wbadmin.exe, net.exe, cmdkey.exe"
+    detection:
+      - "EDR: enumeration of backup services and shadow copies followed by deletion or modification attempts"
+    expected_telemetry_count: 1
+    false_positive_notes: "Backup administrators and monitoring agents perform the same enumeration; correlate with process and account."
+    mitigations:
+      - "Immutable or offline backup copies with retention locks."
+      - "Dedicated, least-privilege backup service accounts; no Backup Operators sprawl."
+      - "Regularly tested restores against RPO and RTO targets."
+    references: ["CISA #StopRansomware Guide"]
+    evidence: ["Emit immutable_by_canary and mutable_by_canary counts."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { 'norun' }
+      if ($env:BAS_CONFIRM_BACKUP_CANARY_WRITE -cne 'true') { Write-Output "SKIP: gate not confirmed (BAS_CONFIRM_BACKUP_CANARY_WRITE is not exactly 'true') - immutability is judged only from the canary test and is never guessed from product names. [BAS-SIM-BRA-B4]"; return }
+      $sf = Join-Path $env:TEMP "bas_bra_state_$runId.json"
+      if (-not (Test-Path $sf)) { Write-Output "SKIP: prerequisite missing (no canary result from step B3 for this run) - run B3 with the gate first. [BAS-SIM-BRA-B4]"; return }
+      $c = @(Get-Content $sf -Raw | ConvertFrom-Json)
+      $tested = @($c | Where-Object { $_.create -eq 'ok' })
+      $immutable = @($tested | Where-Object { $_.modify -eq 'denied' -and $_.delete -eq 'denied' })
+      $mutable = @($tested | Where-Object { $_.modify -eq 'ok' -or $_.delete -eq 'ok' })
+      Write-Output "EVIDENCE T1485: repositories_with_canary=$($tested.Count) immutable_by_canary=$($immutable.Count) mutable_by_canary=$($mutable.Count). Derived only from B3 canary results as this identity; a lock that applies to other identities or to existing backup files is not proven. [BAS-SIM-BRA-B4]"
+      if ($tested.Count -eq 0) { Write-Output "SKIP: B3 created no canary file, so there is no immutability evidence either way. [BAS-SIM-BRA-B4]" }
+      elseif ($mutable.Count -gt 0) { Write-Output "FAIL: $($mutable.Count) repository path(s) allowed the canary to be modified or deleted - no immutability evidence for these paths. [BAS-SIM-BRA-B4]" }
+      else { Write-Output "PASS: modify and delete of the canary were denied on all $($immutable.Count) tested repository path(s) - evidence of immutability or retention locking for this identity. [BAS-SIM-BRA-B4]" }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  - id: bra-b5-restoration-verification
+    name: "Backup Assurance B5 - Restoration Verification (T1485)"
+    technique_id: T1485
+    detection_profiles:
+      - windows_recovery_inhibition
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Restores 3 small reference files from the newest VSS recovery point of C: into a BAS-owned scratch folder, verifies hashes and removes the folder. A missing recovery point is a FAIL. Vendor repositories are not restored."
+    preconditions: ["Windows host."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; anything created is removed and removal verified where applicable."]
+    abort_on: []
+    telemetry:
+      - "Sysmon EID 1: PowerShell, vssadmin.exe, wbadmin.exe, net.exe, cmdkey.exe"
+    detection:
+      - "EDR: enumeration of backup services and shadow copies followed by deletion or modification attempts"
+    expected_telemetry_count: 1
+    false_positive_notes: "Backup administrators and monitoring agents perform the same enumeration; correlate with process and account."
+    mitigations:
+      - "Immutable or offline backup copies with retention locks."
+      - "Dedicated, least-privilege backup service accounts; no Backup Operators sprawl."
+      - "Regularly tested restores against RPO and RTO targets."
+    references: ["CISA #StopRansomware Guide"]
+    evidence: ["Emit files_restored, hash_verified, restore_seconds, cleanup_verified."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      $vol = Get-WmiObject Win32_Volume -Filter "DriveLetter='C:'" -ErrorAction SilentlyContinue
+      $cShadows = @()
+      if ($vol.DeviceID) { $cShadows = @(Get-WmiObject Win32_ShadowCopy -ErrorAction SilentlyContinue | Where-Object { $_.VolumeName -eq $vol.DeviceID } | Sort-Object InstallDate -Descending) }
+      $newest = $cShadows | Select-Object -First 1
+      $newestTime = $null; if ($newest) { $newestTime = [Management.ManagementDateTimeConverter]::ToDateTime($newest.InstallDate) }
+      if (-not $isAdmin) { Write-Output "SKIP: prerequisite missing (administrator rights required to read shadow copies) - restore not exercised. [BAS-SIM-BRA-B5]"; return }
+      if (-not $newest) { Write-Output "FAIL: no recovery point exists for C: - nothing can be restored. A missing recovery point is a failed recovery capability, not a skipped test. vendor_restore=not_exercised. [BAS-SIM-BRA-B5]"; return }
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $dir = Join-Path $env:TEMP "bas_bra_restore_$runId"
+      if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
+      New-Item -ItemType Directory -Path $dir -Force | Out-Null
+      $refs = @('Windows\System32\drivers\etc\hosts','Windows\System32\drivers\etc\services','Windows\win.ini')
+      $root = $newest.DeviceObject + '\'
+      $ok = 0; $tested = 0; $sw = [Diagnostics.Stopwatch]::StartNew()
+      foreach ($rel in $refs) {
+        $src = $root + $rel
+        $dst = Join-Path $dir (Split-Path $rel -Leaf)
+        try { [System.IO.File]::Copy($src, $dst, $true) } catch { }
+        if (-not (Test-Path $dst)) { continue }
+        $tested++
+        $h1 = (Get-FileHash $dst -Algorithm SHA256).Hash
+        $tmp = Join-Path $dir 'verify.tmp'
+        try { [System.IO.File]::Copy($src, $tmp, $true) } catch { }
+        $h2 = (Get-FileHash $tmp -Algorithm SHA256).Hash
+        Remove-Item $tmp -Force
+        if ($h1 -and $h1 -eq $h2) { $ok++ }
+      }
+      $sw.Stop()
+      Remove-Item $dir -Recurse -Force
+      $clean = -not (Test-Path $dir)
+      $age = [Math]::Round(((Get-Date) - $newestTime).TotalHours, 1)
+      Write-Output "EVIDENCE T1485: recovery_point=$($newest.ID) created=$($newestTime.ToString('s')) age_hours=$age files_attempted=$($refs.Count) files_restored=$tested hash_verified=$ok restore_seconds=$([Math]::Round($sw.Elapsed.TotalSeconds,2)) cleanup_verified=$clean scratch=$dir. Restores from the newest VSS recovery point only; hash_verified compares two independent reads of the recovery-point copy, not the live file (live files may have changed). vendor_restore=not_exercised. [BAS-SIM-BRA-B5]"
+      if ($tested -eq 0) { Write-Output "FAIL: a recovery point exists but no reference file could be restored from it. [BAS-SIM-BRA-B5]" }
+      elseif ($ok -lt $tested) { Write-Output "FAIL: $($tested - $ok) restored file(s) did not verify. [BAS-SIM-BRA-B5]" }
+      else { Write-Output "PASS: $ok of $($refs.Count) reference files were restored from the newest recovery point into a scratch folder and verified; scratch removed (cleanup_verified=$clean). [BAS-SIM-BRA-B5]" }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_bra_restore_*') -Recurse -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  - id: bra-b6-critical-service-impact
+    name: "Backup Assurance B6 - Critical Service Availability Impact (T1007)"
+    technique_id: T1007
+    detection_profiles:
+      - windows_recovery_inhibition
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Read-only. Maps running critical and non-Windows auto-start services to volumes by service binary path and reports volumes with no VSS recovery point. Skips (coverage unknown) when a third-party backup product is present."
+    preconditions: ["Windows host."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; anything created is removed and removal verified where applicable."]
+    abort_on: []
+    telemetry:
+      - "Sysmon EID 1: PowerShell, vssadmin.exe, wbadmin.exe, net.exe, cmdkey.exe"
+    detection:
+      - "EDR: enumeration of backup services and shadow copies followed by deletion or modification attempts"
+    expected_telemetry_count: 1
+    false_positive_notes: "Backup administrators and monitoring agents perform the same enumeration; correlate with process and account."
+    mitigations:
+      - "Immutable or offline backup copies with retention locks."
+      - "Dedicated, least-privilege backup service accounts; no Backup Operators sprawl."
+      - "Regularly tested restores against RPO and RTO targets."
+    references: ["CISA #StopRansomware Guide"]
+    evidence: ["Emit per-volume recovery point counts."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $bk = [ordered]@{
+        'Veeam'='Veeam*'; 'Commvault'='GxCVD,GxClMgrS*,GxFWD,CvMountd'; 'Veritas/BackupExec/NetBackup'='BackupExec*,pvlsvr,beremote,NetBackup*,bpcd';
+        'Acronis'='Acronis*,AcrSch2Svc'; 'Rubrik'='Rubrik*'; 'Cohesity'='Cohesity*'; 'Azure MARS'='obengine';
+        'Microsoft DPM'='DPM*,MSDPM'; 'Datto'='Datto*'; 'Arcserve'='CASAD2DWebSvc,ARCserve*,Arcserve*'; 'Windows Server Backup'='wbengine'
+      }
+      $svcAll = @(Get-WmiObject Win32_Service -ErrorAction SilentlyContinue)
+      $found = @()
+      foreach ($k in $bk.Keys) {
+        foreach ($pat in ($bk[$k] -split ',')) {
+          foreach ($s in @($svcAll | Where-Object { $_.Name -like $pat -or $_.DisplayName -like $pat })) {
+            $found += [pscustomobject]@{ Product=$k; Service=$s.Name; State=$s.State; Logon=$s.StartName; Path=$s.PathName }
+          }
+        }
+      }
+      $found = @($found | Sort-Object Service -Unique)
+      $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      $vol = Get-WmiObject Win32_Volume -Filter "DriveLetter='C:'" -ErrorAction SilentlyContinue
+      $cShadows = @()
+      if ($vol.DeviceID) { $cShadows = @(Get-WmiObject Win32_ShadowCopy -ErrorAction SilentlyContinue | Where-Object { $_.VolumeName -eq $vol.DeviceID } | Sort-Object InstallDate -Descending) }
+      $newest = $cShadows | Select-Object -First 1
+      $newestTime = $null; if ($newest) { $newestTime = [Management.ManagementDateTimeConverter]::ToDateTime($newest.InstallDate) }
+      if (-not $isAdmin) { Write-Output "SKIP: prerequisite missing (administrator rights required to read shadow copies). [BAS-SIM-BRA-B6]"; return }
+      $critNames = 'NTDS','MSSQLSERVER','MSSQL$*','vmms','W3SVC','MSExchangeIS','DFSR','NtFrs','DNS','Netlogon'
+      $run = @($svcAll | Where-Object { $_.State -eq 'Running' })
+      $crit = @($run | Where-Object { $n = $_.Name; @($critNames | Where-Object { $n -like $_ }).Count -gt 0 })
+      $nonWin = @($run | Where-Object { $_.StartMode -eq 'Auto' -and $_.PathName -and $_.PathName -notmatch '(?i)\\windows\\' -and $_.PathName -notmatch '(?i)^"?%systemroot%' })
+      $cand = @($crit + $nonWin | Sort-Object Name -Unique)
+      $vendor = @($found | Where-Object { $_.Product -ne 'Windows Server Backup' }).Count -gt 0
+      $allShadow = @(Get-WmiObject Win32_ShadowCopy -ErrorAction SilentlyContinue)
+      $vols = @(Get-WmiObject Win32_Volume -ErrorAction SilentlyContinue | Where-Object { $_.DriveLetter })
+      $byVol = @{}
+      foreach ($s in $cand) {
+        $p = ([string]$s.PathName).Trim('"'); if ($p -match '^"?([A-Za-z]):') { $dl = ($Matches[1].ToUpper() + ':') } else { continue }
+        $v = $vols | Where-Object { $_.DriveLetter -eq $dl } | Select-Object -First 1
+        $cnt = if ($v) { @($allShadow | Where-Object { $_.VolumeName -eq $v.DeviceID }).Count } else { -1 }
+        if (-not $byVol.ContainsKey($dl)) { $byVol[$dl] = [pscustomobject]@{ Volume=$dl; Recovery=$cnt; Services=@() } }
+        $byVol[$dl].Services += $s.Name
+      }
+      $uncovered = @($byVol.Values | Where-Object { $_.Recovery -eq 0 })
+      $summ = ($byVol.Values | ForEach-Object { "$($_.Volume) recovery_points=$($_.Recovery) services=$($_.Services.Count)" }) -join '; '
+      Write-Output "EVIDENCE T1007: critical_services_running=$($crit.Count) services_assessed=$($cand.Count) volumes=[$summ] vendor_backup_detected=$vendor volume_basis=service_binary_path (service data locations are not resolved). Only VSS recovery points are counted. [BAS-SIM-BRA-B6]"
+      foreach ($u in $uncovered) { Write-Output "FINDING: volume $($u.Volume) has no VSS recovery point and hosts: $(($u.Services | Select-Object -First 12) -join ', ') [BAS-SIM-BRA-B6]" }
+      if ($byVol.Count -eq 0) { Write-Output "SKIP: no running service binary was found on a lettered volume to assess. [BAS-SIM-BRA-B6]" }
+      elseif ($uncovered.Count -gt 0 -and $vendor) { Write-Output "SKIP: $($uncovered.Count) volume(s) have no VSS recovery point, but a third-party backup product is present and its recovery points are not inventoried here (coverage unknown, not assumed). [BAS-SIM-BRA-B6]" }
+      elseif ($uncovered.Count -gt 0) { Write-Output "FAIL: $($uncovered.Count) volume(s) hosting running services have no recovery point - an outage or encryption of these services cannot be recovered from this host's own snapshots. [BAS-SIM-BRA-B6]" }
+      else { Write-Output "PASS: every assessed volume hosting running services has at least one VSS recovery point. [BAS-SIM-BRA-B6]" }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  - id: bra-b7-rpo-rto-measurement
+    name: "Backup Assurance B7 - RPO and RTO Measurement (T1007)"
+    technique_id: T1007
+    detection_profiles:
+      - windows_recovery_inhibition
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Reads the newest C: recovery point age (RPO) and samples up to 64 MB of sequential read from it into a BAS-owned scratch folder to estimate throughput. The full-restore time is an ESTIMATE. Targets: BAS_RPO_TARGET_HOURS (default 24), BAS_RTO_TARGET_MINUTES (default 240)."
+    preconditions: ["Windows host."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; anything created is removed and removal verified where applicable."]
+    abort_on: []
+    telemetry:
+      - "Sysmon EID 1: PowerShell, vssadmin.exe, wbadmin.exe, net.exe, cmdkey.exe"
+    detection:
+      - "EDR: enumeration of backup services and shadow copies followed by deletion or modification attempts"
+    expected_telemetry_count: 1
+    false_positive_notes: "Backup administrators and monitoring agents perform the same enumeration; correlate with process and account."
+    mitigations:
+      - "Immutable or offline backup copies with retention locks."
+      - "Dedicated, least-privilege backup service accounts; no Backup Operators sprawl."
+      - "Regularly tested restores against RPO and RTO targets."
+    references: ["CISA #StopRansomware Guide"]
+    evidence: ["Emit rpo_hours, throughput_mb_per_s, full_restore_minutes_ESTIMATE."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      $vol = Get-WmiObject Win32_Volume -Filter "DriveLetter='C:'" -ErrorAction SilentlyContinue
+      $cShadows = @()
+      if ($vol.DeviceID) { $cShadows = @(Get-WmiObject Win32_ShadowCopy -ErrorAction SilentlyContinue | Where-Object { $_.VolumeName -eq $vol.DeviceID } | Sort-Object InstallDate -Descending) }
+      $newest = $cShadows | Select-Object -First 1
+      $newestTime = $null; if ($newest) { $newestTime = [Management.ManagementDateTimeConverter]::ToDateTime($newest.InstallDate) }
+      if (-not $isAdmin) { Write-Output "SKIP: prerequisite missing (administrator rights required to read shadow copies). [BAS-SIM-BRA-B7]"; return }
+      $rpoT = 24.0; $rtoT = 240.0; $notes = @()
+      if ($env:BAS_RPO_TARGET_HOURS) { $t = 0.0; if ([double]::TryParse($env:BAS_RPO_TARGET_HOURS, [ref]$t) -and $t -gt 0) { $rpoT = $t } else { $notes += 'invalid BAS_RPO_TARGET_HOURS ignored (default 24)' } }
+      if ($env:BAS_RTO_TARGET_MINUTES) { $t = 0.0; if ([double]::TryParse($env:BAS_RTO_TARGET_MINUTES, [ref]$t) -and $t -gt 0) { $rtoT = $t } else { $notes += 'invalid BAS_RTO_TARGET_MINUTES ignored (default 240)' } }
+      if (-not $newest) { Write-Output "FAIL: no recovery point exists for C: - RPO is unbounded and RTO cannot be measured. targets rpo_hours=$rpoT rto_minutes=$rtoT. [BAS-SIM-BRA-B7]"; return }
+      $rpo = [Math]::Round(((Get-Date) - $newestTime).TotalHours, 2)
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $dir = Join-Path $env:TEMP "bas_bra_rto_$runId"
+      if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
+      New-Item -ItemType Directory -Path $dir -Force | Out-Null
+      $sysRoot = $newest.DeviceObject + '\Windows\System32\'
+      $files = @(); try { $files = @((New-Object System.IO.DirectoryInfo($sysRoot)).GetFiles('*.dll') | Where-Object { $_.Length -gt 1MB -and $_.Length -lt 30MB } | Select-Object -First 40) } catch { }
+      $bytes = 0L; $sw = [Diagnostics.Stopwatch]::StartNew()
+      foreach ($f in $files) { if ($bytes -ge 64MB) { break }; try { [System.IO.File]::Copy($f.FullName, (Join-Path $dir $f.Name), $true); $bytes += $f.Length } catch { } }
+      $sw.Stop()
+      Remove-Item $dir -Recurse -Force
+      $clean = -not (Test-Path $dir)
+      $mbps = $null; $estMin = $null
+      $cDrive = Get-PSDrive -Name C -ErrorAction SilentlyContinue
+      if ($bytes -gt 0 -and $sw.Elapsed.TotalSeconds -gt 0) {
+        $mbps = [Math]::Round(($bytes / 1MB) / $sw.Elapsed.TotalSeconds, 1)
+        if ($cDrive) { $estMin = [Math]::Round((($cDrive.Used / 1MB) / $mbps) / 60, 0) }
+      }
+      Write-Output "EVIDENCE T1007: rpo_hours=$rpo target_rpo_hours=$rpoT sampled_mb=$([Math]::Round($bytes/1MB,1)) throughput_mb_per_s=$mbps full_restore_minutes_ESTIMATE=$estMin target_rto_minutes=$rtoT cleanup_verified=$clean $(($notes -join '; ')). The full-restore time is an ESTIMATE extrapolated from a sampled sequential copy out of a local snapshot, not a measured full restore, and ignores product overhead and network. [BAS-SIM-BRA-B7]"
+      if ($rpo -gt $rpoT) { Write-Output "FAIL: newest recovery point is $rpo hours old, beyond the $rpoT hour RPO target - data written since then would be lost. [BAS-SIM-BRA-B7]" }
+      elseif ($null -eq $estMin) { Write-Output "SKIP: RPO is within target ($rpo h) but throughput could not be sampled, so RTO was not evaluated. [BAS-SIM-BRA-B7]" }
+      elseif ($estMin -gt $rtoT) { Write-Output "FAIL: estimated full-restore time $estMin min (ESTIMATE) exceeds the $rtoT minute RTO target. [BAS-SIM-BRA-B7]" }
+      else { Write-Output "PASS: RPO $rpo h is within $rpoT h and the estimated restore time $estMin min (ESTIMATE) is within $rtoT min. [BAS-SIM-BRA-B7]" }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_bra_rto_*') -Recurse -Force -ErrorAction SilentlyContinue
+      Remove-Item (Join-Path $env:TEMP 'bas_bra_state_*.json') -Force -ErrorAction SilentlyContinue

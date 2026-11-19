@@ -20,7 +20,7 @@ run_case() {
   printf 'DATA_DIR=%s\nDNS_SINK_BIND_IP=10.0.0.1\nDB_PASSWORD=db-pw-test-only\nADMIN_EMAIL=admin@example.com\nADMIN_PASSWORD=admin-pw-test-only-1\nLIC_PATH=/dev/null\n%s\n' \
     "$tmp" "$1" > "$tmp/setup.conf"
   (
-    err() { echo "ERR: $*"; }; log() { :; }; warn() { :; }
+    err() { echo "ERR: $*"; }; log() { :; }; warn() { :; }; info() { :; }
     DEFAULT_DATA_DIR="$tmp"; DEFAULT_PORT=9443; DEFAULT_ENROLL_PORT=9444
     DEFAULT_LEGACY_PORT=9000; DEFAULT_DASHBOARD_PORT=9543
     BAS_VERSION=test; COMPOSE_PROJECT=audspect
@@ -29,6 +29,14 @@ run_case() {
     eval "$(extract _write_env)"
     eval "$(extract validate_phish_scope)"
     eval "$(extract validate_emailgw_config)"
+    eval "$(extract validate_k8s_scenario_config)"
+    eval "$(extract validate_k8s_discovery_config)"
+    # Staging and secret-file helpers have side effects (chown, docker paths) outside what
+    # these cases check, so they are stubbed. _write_env calls them, so they must exist.
+    _stage_k8s_scenario() { :; }; _stage_k8s_discovery() { :; }; _write_aleef_secrets() { :; }
+    ALEEF_SECRET_LINES=()
+    MODE="${RUN_MODE:-}"
+    if [[ -n "${PRE_ENV:-}" ]]; then echo "$PRE_ENV" > "$tmp/.env"; fi
     load_config "$tmp/setup.conf" && validate_phish_scope && validate_emailgw_config && _write_env && cat "$tmp/.env"
   ) 2>&1
   echo "rc=$?"
@@ -82,6 +90,10 @@ grep -q '^VALIDATION_LAB_AGENT_ID=$' <<<"$out" && pass "VALIDATION_LAB_AGENT_ID 
 
 out="$(run_case 'VALIDATION_LAB_POLL_MINUTES=10')"
 grep -q '^VALIDATION_LAB_POLL_MINUTES=10$' <<<"$out" && pass "VALIDATION_LAB_POLL_MINUTES reaches .env" || fail "poll set: $out"
+out="$(run_case 'SPRAY_LAB_AGENT_ID=agent-spray-9')"
+grep -q '^SPRAY_LAB_AGENT_ID=agent-spray-9$' <<<"$out" && pass "SPRAY_LAB_AGENT_ID reaches .env" || fail "SPRAY_LAB_AGENT_ID set: $out"
+out="$(run_case '')"
+grep -q '^SPRAY_LAB_AGENT_ID=$' <<<"$out" && pass "SPRAY_LAB_AGENT_ID blank -> empty (exemption off)" || fail "SPRAY_LAB_AGENT_ID default: $out"
 
 # Installation-wide phishing target allowlists (see orchestrator phishscope).
 # Empty means unconfigured. A malformed value refuses the install.
@@ -148,6 +160,69 @@ grep -q 'rc=0' <<<"$out" && pass "EmailGW valid injection hostname accepted" || 
 
 out="$(run_case '')"
 grep -q 'AUDSPECT_EMAILGW_DEFENDER_CLIENT_SECRET: ${AUDSPECT_EMAILGW_DEFENDER_CLIENT_SECRET:-}' "${here}/../docker-compose.yml" && pass "compose passes the EmailGW secret through from .env" || fail "compose does not pass the EmailGW secret"
+
+# ── RECOVERY_PASSPHRASE (forgotten-password recovery) ───────────────────────────
+out="$(RUN_MODE=install run_case '')"
+if grep -q 'ERR: .*RECOVERY_PASSPHRASE is required' <<<"$out" && ! grep -q '^rc=0$' <<<"$out"; then pass "fresh install without a recovery passphrase is refused"; else fail "install without passphrase accepted: $out"; fi
+
+out="$(RUN_MODE=install run_case 'RECOVERY_PASSPHRASE=Ab3dEf6hIj9LmN')"
+grep -q '^BAS_RECOVERY_PASSPHRASE=Ab3dEf6hIj9LmN$' <<<"$out" && grep -q 'rc=0' <<<"$out" && pass "valid recovery passphrase reaches .env" || fail "valid passphrase: $out"
+
+for bad in 'Ab3dEf6hIj9Lm' 'Ab3dEf6hIj9LmNp' 'Ab3dEf6hIj9Lm-' 'Ab3dEf6hIj 9LmN'; do
+  out="$(RUN_MODE=install run_case "RECOVERY_PASSPHRASE=${bad}")"
+  if grep -q 'ERR: RECOVERY_PASSPHRASE must be exactly 14' <<<"$out" && ! grep -q '^rc=0$' <<<"$out"; then pass "malformed passphrase refused: '${bad}'"; else fail "malformed passphrase accepted '${bad}': $out"; fi
+done
+
+out="$(RUN_MODE=upgrade PRE_ENV='BAS_RECOVERY_PASSPHRASE=Qq1wWe2rRt3tYy' run_case '')"
+grep -q '^BAS_RECOVERY_PASSPHRASE=Qq1wWe2rRt3tYy$' <<<"$out" && pass "upgrade with a blank value keeps the installed passphrase" || fail "upgrade did not keep it: $out"
+
+out="$(RUN_MODE=upgrade run_case '')"
+grep -q 'rc=0' <<<"$out" && pass "upgrade of an install that never had one still proceeds" || fail "upgrade without passphrase blocked: $out"
+
+out="$(RUN_MODE=upgrade PRE_ENV='BAS_RECOVERY_PASSPHRASE=Qq1wWe2rRt3tYy' run_case 'RECOVERY_PASSPHRASE=Zz9yXx8wVv7UuT')"
+grep -q '^BAS_RECOVERY_PASSPHRASE=Zz9yXx8wVv7UuT$' <<<"$out" && pass "a new value in setup.conf replaces the installed one" || fail "rotation: $out"
+
+grep -q 'BAS_RECOVERY_PASSPHRASE: ${BAS_RECOVERY_PASSPHRASE:-}' "${here}/../docker-compose.yml" && pass "compose passes the recovery passphrase through" || fail "compose does not pass the recovery passphrase"
+
+# Aleef secret references: setup.conf ALEEF_SECRET_* -> load_config -> _write_env -> aleef-secrets.env.
+# Prints "rc=<n>", "mode=<octal>" and the file ("none" if absent), or the error. chown is stubbed (needs root).
+run_aleef() {
+  local tmp; tmp="$(mktemp -d)"
+  printf 'DATA_DIR=%s\nDNS_SINK_BIND_IP=10.0.0.1\nDB_PASSWORD=db-pw-test-only\nADMIN_EMAIL=admin@example.com\nADMIN_PASSWORD=admin-pw-test-only-1\nLIC_PATH=/dev/null\n%b\n' \
+    "$tmp" "$1" > "$tmp/setup.conf"
+  (
+    err() { echo "ERR: $*"; }; log() { :; }; warn() { :; }; chown() { :; }
+    DEFAULT_DATA_DIR="$tmp"; DEFAULT_PORT=9443; DEFAULT_ENROLL_PORT=9444
+    DEFAULT_LEGACY_PORT=9000; DEFAULT_DASHBOARD_PORT=9543
+    BAS_VERSION=test; COMPOSE_PROJECT=audspect
+    eval "$(grep -E '^[A-Z_][A-Z0-9_]*=""$' "$install_sh")"
+    eval "$(grep -E '^ALEEF_SECRET_LINES=\(\)' "$install_sh" | sed 's/#.*//')"
+    info() { :; }
+    for f in load_config validate_phish_scope validate_emailgw_config validate_k8s_scenario_config validate_k8s_discovery_config _write_aleef_secrets _write_env; do eval "$(extract "$f")"; done
+    MODE="${RUN_MODE:-}"
+    load_config "$tmp/setup.conf" && validate_phish_scope && validate_emailgw_config && validate_k8s_scenario_config && validate_k8s_discovery_config && _write_aleef_secrets && { echo "mode=$(stat -c %a "$tmp/aleef-secrets.env")"; cat "$tmp/aleef-secrets.env"; if [[ -n "${TWICE:-}" ]]; then _write_aleef_secrets; echo "again:"; cat "$tmp/aleef-secrets.env"; fi; }
+  ) 2>&1
+  echo "rc=$?"
+  rm -rf "$tmp"
+}
+
+out="$(run_aleef '')"
+grep -Eq '^mode=(600|644)$' <<<"$out" && grep -q 'rc=0' <<<"$out" && ! grep -q 'ALEEF' <<<"$out" && pass "aleef: no secrets -> empty 0600 file" || fail "aleef empty: $out"
+
+out="$(TWICE=1 run_aleef 'ALEEF_SECRET_LAB_ALICE=tok-alice\n# c\nALEEF_SECRET_LAB_BOB=tok=bob   # inline note')"
+grep -q '^ALEEF_SECRET_LAB_ALICE=tok-alice$' <<<"$out" && grep -q '^ALEEF_SECRET_LAB_BOB=tok=bob$' <<<"$out" && pass "aleef: two refs written (0600 on Linux; NTFS cannot show it)" || fail "aleef write: $out"
+[[ "$(grep -c '^ALEEF_SECRET_LAB_ALICE=' <<<"$out")" == 2 ]] && pass "aleef: rewrite is idempotent (no duplicates)" || fail "aleef idempotent: $out"
+
+for bad in 'ALEEF_SECRET_X="has\\"quote"' "ALEEF_SECRET_X=has'quote" 'ALEEF_SECRET_X=back\\slash' 'ALEEF_SECRET_lower=abc' 'ALEEF_SECRET_=abc'; do
+  out="$(run_aleef "$bad")"
+  if grep -q 'ERR: ' <<<"$out" && ! grep -q 'rc=0' <<<"$out" && ! grep -Eq 'quote"|has.quote|back.?slash$|=abc' <<<"$out"; then
+    pass "aleef: refused without printing the value ($bad)"
+  else
+    fail "aleef bad value not refused cleanly ($bad): $out"
+  fi
+done
+
+grep -q 'ALEEF_SECRETS_FILE: /etc/bas/aleef-secrets.env' "${here}/../docker-compose.yml" && grep -q 'aleef-secrets.env:/etc/bas/aleef-secrets.env:ro' "${here}/../docker-compose.yml" && pass "compose mounts the aleef secrets file read-only" || fail "compose aleef mount missing"
 
 echo
 [[ $fails -eq 0 ]] && echo "ALL PASS" || { echo "${fails} FAILED"; exit 1; }

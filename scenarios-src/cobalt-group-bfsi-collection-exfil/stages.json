@@ -1,0 +1,141 @@
+[
+  {
+    "id": "coll-01",
+    "n": 1,
+    "name": "Collection/Exfil - Local Data Collection from Test Directories (T1005)",
+    "technique_id": "T1005",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "medium",
+    "blast_radius": "Searches a designated test directory for files matching a synthetic bas_sim_* pattern; counts matches only. Never reads contents of any file it did not create itself.",
+    "telemetry": [
+      "File search / enumeration patterns",
+      "Process execution: Get-ChildItem recursive search"
+    ],
+    "detection": [
+      "EDR: bulk file enumeration patterns",
+      "SIEM: anomalous file-access volume"
+    ],
+    "cleanup": "",
+    "action_key": "collection_local_data",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "coll-02",
+    "n": 2,
+    "name": "Collection/Exfil - Network Share Collection (T1039)",
+    "technique_id": "T1039",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "medium",
+    "blast_radius": "Read-only listing of a share on a designated lab target ($env:BAS_TEST_HOST); SKIP when unset. Never downloads or modifies share contents.",
+    "telemetry": [
+      "SMB share enumeration (port 445)"
+    ],
+    "detection": [
+      "SIEM: network-share enumeration patterns",
+      "EDR: suspicious share access"
+    ],
+    "cleanup": "",
+    "action_key": "collection_network_share",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "coll-03",
+    "n": 3,
+    "name": "Collection/Exfil - Email Collection Simulation (T1114.001)",
+    "technique_id": "T1114.001",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Checks only for local mail-client presence (process or profile-registry-key existence). Never opens a mailbox or reads real email content.",
+    "telemetry": [
+      "Process / registry presence check for mail clients"
+    ],
+    "detection": [
+      "EDR: reconnaissance of mail-client presence"
+    ],
+    "cleanup": "",
+    "action_key": "collection_email_presence",
+    "no_default_cleanup": false,
+    "reversible": true
+  },
+  {
+    "id": "coll-04",
+    "n": 4,
+    "name": "Collection/Exfil - Archive Collected Data (T1560.001)",
+    "technique_id": "T1560.001",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "medium",
+    "blast_radius": "Creates one synthetic test file, archives it with Compress-Archive, verifies the archive, then deletes both file and archive in the same step (self-cleaning).",
+    "telemetry": [
+      "Process execution: Compress-Archive",
+      "File creation: .zip archive"
+    ],
+    "detection": [
+      "EDR: archive-creation prior to exfiltration pattern",
+      "File integrity: unexpected archive creation"
+    ],
+    "cleanup": "",
+    "action_key": "collection_archive_data",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "coll-05",
+    "n": 5,
+    "name": "Collection/Exfil - Exfiltration Over C2 Channel Simulation (T1041)",
+    "technique_id": "T1041",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "medium",
+    "blast_radius": "Posts one small synthetic payload to the lab bfsisim exfil-sink endpoint only. SKIP when the simulator is unreachable; never reaches a real C2 channel or external host.",
+    "telemetry": [
+      "HTTP POST to lab-local exfil sink"
+    ],
+    "detection": [
+      "Network: outbound POST pattern",
+      "DLP: data egress inspection"
+    ],
+    "cleanup": "",
+    "action_key": "exfil_over_c2_simulation",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "coll-06",
+    "n": 6,
+    "name": "Collection/Exfil - DNS Exfiltration Simulation (T1048.003)",
+    "technique_id": "T1048.003",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Resolves one synthetic subdomain under the RFC 6761 .invalid TLD, which never resolves. Successful resolution (should never happen) is FAIL; resolution failure is PASS.",
+    "telemetry": [
+      "DNS query for a synthetic bas-sim-*.invalid subdomain"
+    ],
+    "detection": [
+      "DNS logging: anomalous subdomain query patterns",
+      "SIEM: DNS tunneling / exfiltration detection"
+    ],
+    "cleanup": "",
+    "action_key": "exfil_dns_simulation",
+    "no_default_cleanup": false,
+    "reversible": true
+  }
+]

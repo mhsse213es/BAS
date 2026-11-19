@@ -202,9 +202,14 @@ steps:
     requires_priv: user
     timeout_sec: 10
     command: |
-      $entries = (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -ErrorAction SilentlyContinue).PSObject.Properties | Where-Object { $_.Name -notlike "PS*" }
-      $count = ($entries | Measure-Object).Count
-      Write-Output "PASS: HKLM Run key has $count entr(ies) - review any unknown entries for persistence artefacts"
+      $entries = @((Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -ErrorAction SilentlyContinue).PSObject.Properties | Where-Object { $_.Name -notlike "PS*" })
+      $count = $entries.Count
+      $userWritable = @($entries | Where-Object { [string]$_.Value -match '\\AppData\\|\\Temp\\|\\Downloads\\|\\Users\\Public\\' })
+      if ($userWritable.Count -gt 0) {
+        Write-Output "FAIL: HKLM Run key has $($userWritable.Count) of $count entr(ies) pointing into a user-writable location (AppData, Temp, Downloads, Public). Review for persistence artefacts."
+      } else {
+        Write-Output "PASS: HKLM Run key has $count entr(ies), none pointing into a user-writable location."
+      }
 
   - name: "Startup Folder Contents"
     technique_id: T1547.001
@@ -215,7 +220,7 @@ steps:
     command: |
       $count = (Get-ChildItem "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup" -File -ErrorAction SilentlyContinue | Measure-Object).Count
       if ($count -eq 0) { Write-Output "PASS: Startup folder empty - no startup persistence items" }
-      else { Write-Output "PASS: Startup folder has $count item(s) - verify all are legitimate" }
+      else { Write-Output "FAIL: Startup folder has $count item(s) - review each; unexpected items are a persistence artefact" }
 
   - name: "Services Running from Non-System Paths"
     technique_id: T1543.003
@@ -226,7 +231,7 @@ steps:
     command: |
       $count = (Get-WmiObject Win32_Service -ErrorAction SilentlyContinue | Where-Object { $_.PathName -notlike "*system32*" -and $_.PathName -notlike "*SysWOW64*" -and $_.State -eq "Running" } | Measure-Object).Count
       if ($count -eq 0) { Write-Output "PASS: All running services use standard system paths" }
-      else { Write-Output "PASS: $count service(s) running from non-system paths - verify all are legitimate" }
+      else { Write-Output "FAIL: $count service(s) running from non-system paths - review each for legitimacy" }
 
   # ---- Privilege Escalation ----
   - name: "UAC Enabled"

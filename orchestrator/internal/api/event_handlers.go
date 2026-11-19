@@ -24,6 +24,15 @@ func (h *Handler) SubmitRunEvents(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "invalid events payload — expected a JSON array of events", http.StatusBadRequest)
 		return
 	}
+	ids := make([]string, 0, len(batch))
+	for _, e := range batch {
+		if e.RunID != "" {
+			ids = append(ids, e.RunID)
+		}
+	}
+	if !h.runsBelongToCertificateAgent(w, r, ids...) {
+		return // the whole batch is refused before anything is stored
+	}
 	ctx := r.Context()
 	for _, e := range batch {
 		if e.RunID == "" || e.Type == "" {

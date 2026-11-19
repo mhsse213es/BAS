@@ -98,7 +98,7 @@ func GenerateFromFamilies(techniqueID, baseType string, families []PayloadFamily
 		for _, t := range Generate(techniqueID, baseType, f.Name, f.Payload, exec, includeAdvanced) {
 			if !seen[t.VariantHash] {
 				seen[t.VariantHash] = true
-				out = append(out, t)
+				out = append(out, WithCleanup(t, f.Cleanup, f.CleanupStatus))
 			}
 		}
 	}

@@ -285,9 +285,9 @@ func TestEngineWithAPIClient_PodRunCleansUpOverHTTP(t *testing.T) {
 	}
 
 	store := newMemApprovals()
-	req := RunRequest{RunID: "run-http", Requester: "operator-1", Cluster: ClusterRef{Name: "kind-bas-lab", Server: srv.URL},
+	req := RunRequest{ClusterID: testClusterID, RunID: "run-http", Requester: "operator-1", Cluster: ClusterRef{Name: "kind-bas-lab", Server: srv.URL},
 		Namespace: "bas-sandbox", ActionID: "pod-create-unprivileged", Params: map[string]string{"name": "bas-sbx-http"}, Live: true}
-	_ = store.Put(Approval{ID: "appr-http", ApproverID: "operator-2", RequesterID: "operator-1", RunID: "run-http", Cluster: "kind-bas-lab",
+	_ = store.Put(Approval{ClusterID: testClusterID, ID: "appr-http", ApproverID: "operator-2", RequesterID: "operator-1", RunID: "run-http", Cluster: "kind-bas-lab",
 		Namespace: "bas-sandbox", ActionID: req.ActionID, ParamsHash: HashParams(req.Params), ExpiresAt: time.Now().Add(time.Hour)})
 	req.ApprovalID = "appr-http"
 

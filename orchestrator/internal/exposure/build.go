@@ -269,6 +269,7 @@ func (ag *AssetGraph) Summaries() []AssetSummary {
 		out = append(out, AssetSummary{
 			Asset:                  p.Asset,
 			ExposureScore:          p.Scores.ExposureScore,
+			ExposureMeasurable:     p.Scores.ExposureMeasurable,
 			AttackPathScore:        p.Scores.AttackPathScore,
 			DetectionCoverageScore: p.Scores.DetectionCoverageScore,
 			WorstCVESeverity:       worst,

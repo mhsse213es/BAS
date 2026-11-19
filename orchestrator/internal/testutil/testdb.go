@@ -123,6 +123,16 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("testutil: EnsureAgentUninstallSchema: %w", err)
 	}
+	if err := db.EnsureContentImportSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureContentImportSchema: %w", err)
+	}
+	if err := db.EnsureRecoverySchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureRecoverySchema: %w", err)
+	}
 	if err := db.EnsureContentRegistrySchema(ctx, pool); err != nil {
 		pool.Close()
 		_ = container.Terminate(context.Background())
@@ -153,6 +163,16 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("testutil: EnsureTCVSchema: %w", err)
 	}
+	if err := db.EnsureTCFPipelineEventsSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureTCFPipelineEventsSchema: %w", err)
+	}
+	if err := db.EnsureAdvisorySchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureAdvisorySchema: %w", err)
+	}
 	if err := db.EnsureCloudRunSchema(ctx, pool); err != nil {
 		pool.Close()
 		_ = container.Terminate(context.Background())
@@ -162,6 +182,17 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		pool.Close()
 		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("testutil: EnsureAPIBASRunSchema: %w", err)
+	}
+	if err := db.EnsureAPIBASJobSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureAPIBASJobSchema: %w", err)
+	}
+	// Mirrors cmd/server: the credential reference columns must exist for the connector read paths.
+	if err := db.EnsureSecretStoreSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureSecretStoreSchema: %w", err)
 	}
 	if err := db.EnsureEmailGWRunSchema(ctx, pool); err != nil {
 		pool.Close()
@@ -335,7 +366,9 @@ func (d *TestDB) RunWithPool(t *testing.T, fn func(pool *pgxpool.Pool)) {
 
 func truncateAll(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	ctx := context.Background()
+	// Bounded: a pool with every connection held must fail the test, not hang the whole binary.
+	ctx, cancel := context.WithTimeout(context.Background(), truncateWaitLimit)
+	defer cancel()
 	rows, err := pool.Query(ctx, `SELECT tablename FROM pg_tables WHERE schemaname = 'public'`)
 	if err != nil {
 		t.Fatalf("testutil: list tables: %v", err)

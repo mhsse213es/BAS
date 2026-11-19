@@ -1,0 +1,53 @@
+id: "API-BAS-INTEG-401"
+name: "PART-001: partner reads another partner's API key secret"
+category: INTEG
+claim: cross_identity
+attack_objective: "Partner 1 reads partner 2's API key record and receives its secret."
+threat_model:
+  attacker: "authenticated partner 1"
+  identity: partner-1
+  access_level: "partner, valid token, owns PKEY-1-001 only"
+  objective: "Partner 1 reads partner 2's API key record and receives its secret."
+preconditions:
+  fixture: commerce-telecom-two-tenant
+  identities: [partner-1, partner-2]
+  object: PKEY-2-001
+steps:
+  - id: "baseline-owner"
+    role: baseline
+    identity: partner-2
+    auth: valid
+    method: GET
+    path: "/api/retail/partner-keys/PKEY-2-001"
+    hypothesis: "Partner 2, the owner, reads their own key record. If this fails, the scenario is not testable."
+  - id: "attack-integ-401"
+    role: attack
+    identity: partner-1
+    auth: valid
+    method: GET
+    path: "/api/retail/partner-keys/PKEY-2-001"
+    hypothesis: "Partner 1's read of PKEY-2-001 is refused, and no key secret comes back."
+denied_statuses: [403, 404]
+forbidden_values: ["BAS-SIM-KEY-2"]
+expected_control: "A partner cannot read another partner's API key. The read is refused and no secret is returned."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The response to partner 1's read of PKEY-2-001 carries no key secret of partner 2.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The read names PKEY-2-001, owned by partner 2, from partner 1. Graded against the access event by APIBAS-REL-004. Fixture-validated, not live-SIEM-validated."
+side_effect_class: READ_ONLY
+evidence:
+  - sanitized_request
+  - sanitized_response
+industry_mapping:
+  - "Partner onboarding and API-key misuse: cross-partner key exposure"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-INTEG-401 against the fixed build must PASS"
+  - "API-BAS-INTEG-401 against the vulnerable build must FAIL (exploited)"

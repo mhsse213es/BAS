@@ -24,25 +24,33 @@ func filterByAsOf(results []models.SimulationResult, asOf time.Time) []models.Si
 	return out
 }
 
-// complianceInput builds one CompliancePercent per loaded framework plus
-// the real failed-control findings (with their existing remediation text),
-// mirroring complianceRows (handlers.go:3734) but returning
+// complianceInput builds the resistance rate of every framework tested enough to say anything about, plus the real
+// failed-control findings (with their existing remediation text), mirroring complianceRows but returning
 // endpointrisk.ComplianceInput instead of report rows.
+//
+// A framework whose control coverage is below compliance.MinConclusiveCoveragePercent is not scored: a 100% rate over
+// a few tested controls is not evidence about the framework, and it must not lift an endpoint's health score. Such
+// frameworks are listed in InsufficientCoverage. A failed control is still a finding at any coverage.
 func (h *Handler) complianceInput(ctx context.Context, agentID string, asOf time.Time, allResults []models.SimulationResult) endpointrisk.ComplianceInput {
 	if h.complianceMapper == nil {
 		return endpointrisk.ComplianceInput{}
 	}
 	results := filterByAsOf(allResults, asOf)
 	pct := map[string]float64{}
+	var insufficient []string
 	var findings []endpointrisk.Finding
 	for _, fw := range h.complianceMapper.Frameworks() {
 		cr, err := h.complianceMapper.GenerateReport(results, fw.ID, agentID, "", "")
 		if err != nil {
 			continue
 		}
-		pct[fw.Name] = cr.Summary.CompliancePercent
+		if cr.Summary.SufficientCoverage {
+			pct[fw.Name] = cr.Summary.CompliancePercent
+		} else {
+			insufficient = append(insufficient, fw.Name)
+		}
 		for _, ctrl := range cr.Controls {
-			if ctrl.Status != "fail" {
+			if ctrl.Status != "failed" {
 				continue
 			}
 			for _, ev := range ctrl.Evidence {
@@ -59,7 +67,7 @@ func (h *Handler) complianceInput(ctx context.Context, agentID string, asOf time
 			}
 		}
 	}
-	return endpointrisk.ComplianceInput{PercentByFramework: pct, FailedFindings: findings, Collected: len(pct) > 0}
+	return endpointrisk.ComplianceInput{PercentByFramework: pct, InsufficientCoverage: insufficient, FailedFindings: findings, Collected: len(pct) > 0}
 }
 
 // basReadinessInput aggregates pass rate, technique count, and last-run
@@ -267,8 +275,10 @@ func parseInstalledSoftware(raw string) []endpointrisk.InstalledApp {
 		if line == "" {
 			continue
 		}
-		parts := strings.SplitN(line, "|", 2)
-		if len(parts) != 2 {
+		// Name|Version is the original format. The Linux collector also emits
+		// |Architecture|Status. Only name and version are used here.
+		parts := strings.SplitN(line, "|", 4)
+		if len(parts) < 2 {
 			continue
 		}
 		name := strings.TrimSpace(parts[0])

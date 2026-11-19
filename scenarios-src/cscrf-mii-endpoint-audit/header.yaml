@@ -1,0 +1,25 @@
+id: "cscrf-mii-endpoint-audit"
+product_line: common
+name: "CSCRF-MII Endpoint Hardening and Audit Integrity Validation (P0)"
+description: >
+  Internal control-validation checks for endpoint hardening and audit integrity. Verdicts are internal
+  control references (CSCRF-EA-*), not SEBI clause identifiers. Eight checks are read only. Two steps
+  change state (an unauthorised-execution marker and an audit-policy change) and run only with
+  BAS_CONFIRM_ENDPOINT_CHANGE=true, with undo that restores the original state. Deferred to a lab VM:
+  real-time protection impairment, dedicated log clear, and Sysmon service stop. Passing a check does not
+  establish CSCRF compliance.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cscrf-mii
+  - endpoint
+  - audit-integrity
+  - p0
+mitre_phases:
+  - defense-evasion
+  - discovery
+  - execution
+
+steps:

@@ -221,7 +221,7 @@ Reports are generated on demand or on schedule. Each generation is logged to the
 
 **Report filename conventions (when downloaded):**
 
-Downloaded report files are named `Audspect_<ReportType>_<scope>_<YYYY-MM-DD_HH-MM-SS>.<ext>` (UTC timestamp), for example `Audspect_Audit_Pack_<scope>_<timestamp>.zip` for an audit pack. The scope is truncated to 80 characters, and any character other than a letter, digit, `-` or `_` is replaced with `_`.
+Downloaded report files are named `Audspect_<ReportType>_<scope>_<YYYY-MM-DD>.<ext>` (UTC date), for example `Audspect_Audit_Pack_<scope>_<date>.zip` for an audit pack. The scope is truncated to 80 characters, and any character other than a letter, digit, `-` or `_` is replaced with `_`.
 
 ---
 

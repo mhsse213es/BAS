@@ -34,9 +34,13 @@ ground_truth:
   adapters: ["state", "response"]
   check: >
     The response to the expanded loan read carries no PAN or Aadhaar reference of the borrower.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-020
+  min_severity: high
 detection_assertion:
-  status: not_evaluated
-  reason: "Detection gap. The loan read returns the borrower's own KYC identity evidence through a projection. No current rule grades it: REL-008 covers foreign-owned projections only, and the access event does not record which fields a response returned. Not claimed as detected."
+  status: fixture_validated
+  reason: "The expanded loan read emits the KYC identity fields, and REL-020 grades them against the disclosure policy: kyc_identity is allowed only on the KYC resource. The owner still receives it through the loan (ownership does not change the policy). Fixture-validated, not live-SIEM-validated."
 side_effect_class: READ_ONLY
 evidence:
   - sanitized_request

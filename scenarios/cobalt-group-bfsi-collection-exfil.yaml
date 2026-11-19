@@ -1,0 +1,964 @@
+id: "cobalt-group-bfsi-collection-exfil"
+product_line: killchain
+name: "Cobalt Group BFSI - Collection and Exfiltration (P1)"
+description: >
+  Enterprise collection-and-exfiltration detection validation extending the Cobalt Group BFSI campaign.
+  Six scenarios covering local data collection, network share collection, email-client presence checks,
+  archive creation, simulated exfiltration-over-C2, and DNS exfiltration probing. All synthetic
+  [BAS-SIM] data only; exfiltration destinations use RFC 6761 .invalid hostnames and never leave the
+  lab. Each write scenario includes verified cleanup and undo-record rollback.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cobalt-group
+  - bfsi
+  - collection
+  - exfiltration
+  - p1
+  - t1005
+  - t1039
+  - t1114.001
+  - t1560.001
+  - t1041
+  - t1048.003
+mitre_phases:
+  - collection
+  - exfiltration
+
+steps:
+
+  # -------------------------------------------------------------------------
+  - id: coll-01
+    name: "Collection/Exfil - Local Data Collection from Test Directories (T1005)"
+    technique_id: T1005
+    action_key: collection_local_data
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: false
+    blast_radius: "Searches a designated test directory for files matching a synthetic bas_sim_* pattern; counts matches only. Never reads contents of any file it did not create itself."
+    telemetry:
+      - "File search / enumeration patterns"
+      - "Process execution: Get-ChildItem recursive search"
+    detection:
+      - "EDR: bulk file enumeration patterns"
+      - "SIEM: anomalous file-access volume"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_sim_coll_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-COLL-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Invoke-DnsExfilProbe { param([string]$Subdomain)
+      $res = @{ Resolved = $false }
+      try { Resolve-DnsName -Name $Subdomain -ErrorAction Stop | Out-Null; $res.Resolved = $true } catch {}
+      return $res
+      }
+      function Get-BfsiSimulatorHost { $h = $env:BFSI_SIMULATOR_HOST; if ($h) { return $h }; return 'localhost' }
+      function Get-BfsiSimulatorPort { $p = $env:BFSI_SIMULATOR_PORT; if ($p) { return [int]$p }; return 9999 }
+      function Test-BfsiSimulatorConnectivity {
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { $tcp = New-Object Net.Sockets.TcpClient; $tcp.Connect($simHost, $port); $tcp.Close(); return $true } catch { return $false }
+      }
+      function Invoke-LedgerExfilPost { param([string]$Id, [double]$Amount, [string]$Account)
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      $res = @{ Code = 0; Error = '' }
+      try {
+      $body = @{ id = $Id; amount = $Amount; account = $Account } | ConvertTo-Json -Compress
+      $uri = "http://${simHost}:${port}/api/ledger/transactions"
+      $r = Invoke-WebRequest -Method POST -Uri $uri -Body $body -ContentType 'application/json' -TimeoutSec 5 -ErrorAction Stop
+      $res.Code = [int]$r.StatusCode
+      } catch {
+      try { $res.Code = [int]$_.Exception.Response.StatusCode } catch {}
+      $res.Error = $_.Exception.Message
+      }
+      return $res
+      }
+      function Remove-LedgerTransaction { param([string]$Id)
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { Invoke-WebRequest -Method DELETE -Uri ("http://${simHost}:${port}/api/ledger/transactions/" + $Id) -TimeoutSec 5 -ErrorAction Stop | Out-Null } catch {}
+      }
+      $testDir = Join-Path $env:TEMP ('bas_sim_coll01_' + $script:CgRun)
+      $undo_data = @{ scenario = 'coll-01'; testDir = $testDir }
+      try { New-CgUndoRecord 'coll-01' $undo_data } catch { Complete-CgStep @{ Outcome = 'error'; Reason = 'Undo record creation failed' } 'coll-01' }
+      New-Item -ItemType Directory -Force -Path $testDir | Out-Null
+      1..3 | ForEach-Object { Set-Content -LiteralPath (Join-Path $testDir "bas_sim_file_$_.txt") -Value 'BAS-SIM synthetic test data' }
+      $found = @(Get-ChildItem -Path $testDir -Filter 'bas_sim_*' -File -ErrorAction SilentlyContinue)
+      Remove-Item -LiteralPath $testDir -Recurse -Force -ErrorAction SilentlyContinue
+      if ($found.Count -eq 3) {
+      $res = @{ Outcome = 'fail'; Reason = "Local data collection enumerated $($found.Count) synthetic test files successfully" }
+      } else {
+      $res = @{ Outcome = 'error'; Reason = "Local data collection found $($found.Count) files, expected 3" }
+      }
+      Complete-CgStep $res 'COLL-01'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_sim_coll_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-COLL-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Invoke-DnsExfilProbe { param([string]$Subdomain)
+      $res = @{ Resolved = $false }
+      try { Resolve-DnsName -Name $Subdomain -ErrorAction Stop | Out-Null; $res.Resolved = $true } catch {}
+      return $res
+      }
+      function Get-BfsiSimulatorHost { $h = $env:BFSI_SIMULATOR_HOST; if ($h) { return $h }; return 'localhost' }
+      function Get-BfsiSimulatorPort { $p = $env:BFSI_SIMULATOR_PORT; if ($p) { return [int]$p }; return 9999 }
+      function Test-BfsiSimulatorConnectivity {
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { $tcp = New-Object Net.Sockets.TcpClient; $tcp.Connect($simHost, $port); $tcp.Close(); return $true } catch { return $false }
+      }
+      function Invoke-LedgerExfilPost { param([string]$Id, [double]$Amount, [string]$Account)
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      $res = @{ Code = 0; Error = '' }
+      try {
+      $body = @{ id = $Id; amount = $Amount; account = $Account } | ConvertTo-Json -Compress
+      $uri = "http://${simHost}:${port}/api/ledger/transactions"
+      $r = Invoke-WebRequest -Method POST -Uri $uri -Body $body -ContentType 'application/json' -TimeoutSec 5 -ErrorAction Stop
+      $res.Code = [int]$r.StatusCode
+      } catch {
+      try { $res.Code = [int]$_.Exception.Response.StatusCode } catch {}
+      $res.Error = $_.Exception.Message
+      }
+      return $res
+      }
+      function Remove-LedgerTransaction { param([string]$Id)
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { Invoke-WebRequest -Method DELETE -Uri ("http://${simHost}:${port}/api/ledger/transactions/" + $Id) -TimeoutSec 5 -ErrorAction Stop | Out-Null } catch {}
+      }
+      $rec = Read-CgUndoRecord 'coll-01'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'SKIP: Undo record not found or unreadable'; exit 0 }
+      if ($rec.testDir -and (Test-Path -LiteralPath $rec.testDir)) {
+      Remove-Item -LiteralPath $rec.testDir -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Remove-CgUndoRecord 'coll-01'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: coll-02
+    name: "Collection/Exfil - Network Share Collection (T1039)"
+    technique_id: T1039
+    action_key: collection_network_share
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: false
+    blast_radius: "Read-only listing of a share on a designated lab target ($env:BAS_TEST_HOST); SKIP when unset. Never downloads or modifies share contents."
+    telemetry:
+      - "SMB share enumeration (port 445)"
+    detection:
+      - "SIEM: network-share enumeration patterns"
+      - "EDR: suspicious share access"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_sim_coll_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-COLL-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Invoke-DnsExfilProbe { param([string]$Subdomain)
+      $res = @{ Resolved = $false }
+      try { Resolve-DnsName -Name $Subdomain -ErrorAction Stop | Out-Null; $res.Resolved = $true } catch {}
+      return $res
+      }
+      function Get-BfsiSimulatorHost { $h = $env:BFSI_SIMULATOR_HOST; if ($h) { return $h }; return 'localhost' }
+      function Get-BfsiSimulatorPort { $p = $env:BFSI_SIMULATOR_PORT; if ($p) { return [int]$p }; return 9999 }
+      function Test-BfsiSimulatorConnectivity {
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { $tcp = New-Object Net.Sockets.TcpClient; $tcp.Connect($simHost, $port); $tcp.Close(); return $true } catch { return $false }
+      }
+      function Invoke-LedgerExfilPost { param([string]$Id, [double]$Amount, [string]$Account)
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      $res = @{ Code = 0; Error = '' }
+      try {
+      $body = @{ id = $Id; amount = $Amount; account = $Account } | ConvertTo-Json -Compress
+      $uri = "http://${simHost}:${port}/api/ledger/transactions"
+      $r = Invoke-WebRequest -Method POST -Uri $uri -Body $body -ContentType 'application/json' -TimeoutSec 5 -ErrorAction Stop
+      $res.Code = [int]$r.StatusCode
+      } catch {
+      try { $res.Code = [int]$_.Exception.Response.StatusCode } catch {}
+      $res.Error = $_.Exception.Message
+      }
+      return $res
+      }
+      function Remove-LedgerTransaction { param([string]$Id)
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { Invoke-WebRequest -Method DELETE -Uri ("http://${simHost}:${port}/api/ledger/transactions/" + $Id) -TimeoutSec 5 -ErrorAction Stop | Out-Null } catch {}
+      }
+      $target = $env:BAS_TEST_HOST
+      $undo_data = @{ scenario = 'coll-02'; target = $target }
+      try { New-CgUndoRecord 'coll-02' $undo_data } catch { Complete-CgStep @{ Outcome = 'error'; Reason = 'Undo record creation failed' } 'coll-02' }
+      if (-not $target) {
+      $res = @{ Outcome = 'skip'; Reason = 'BAS_TEST_HOST not set' }
+      } else {
+      try {
+      $items = Get-ChildItem -Path ("\\" + $target + "\C$") -Force -ErrorAction Stop | Select-Object -First 5
+      $res = @{ Outcome = 'fail'; Reason = 'Network share listing succeeded, enumerating files on the test target' }
+      } catch {
+      $res = @{ Outcome = 'pass'; Reason = 'Network share listing was blocked' }
+      }
+      }
+      Complete-CgStep $res 'COLL-02'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_sim_coll_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-COLL-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Invoke-DnsExfilProbe { param([string]$Subdomain)
+      $res = @{ Resolved = $false }
+      try { Resolve-DnsName -Name $Subdomain -ErrorAction Stop | Out-Null; $res.Resolved = $true } catch {}
+      return $res
+      }
+      function Get-BfsiSimulatorHost { $h = $env:BFSI_SIMULATOR_HOST; if ($h) { return $h }; return 'localhost' }
+      function Get-BfsiSimulatorPort { $p = $env:BFSI_SIMULATOR_PORT; if ($p) { return [int]$p }; return 9999 }
+      function Test-BfsiSimulatorConnectivity {
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { $tcp = New-Object Net.Sockets.TcpClient; $tcp.Connect($simHost, $port); $tcp.Close(); return $true } catch { return $false }
+      }
+      function Invoke-LedgerExfilPost { param([string]$Id, [double]$Amount, [string]$Account)
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      $res = @{ Code = 0; Error = '' }
+      try {
+      $body = @{ id = $Id; amount = $Amount; account = $Account } | ConvertTo-Json -Compress
+      $uri = "http://${simHost}:${port}/api/ledger/transactions"
+      $r = Invoke-WebRequest -Method POST -Uri $uri -Body $body -ContentType 'application/json' -TimeoutSec 5 -ErrorAction Stop
+      $res.Code = [int]$r.StatusCode
+      } catch {
+      try { $res.Code = [int]$_.Exception.Response.StatusCode } catch {}
+      $res.Error = $_.Exception.Message
+      }
+      return $res
+      }
+      function Remove-LedgerTransaction { param([string]$Id)
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { Invoke-WebRequest -Method DELETE -Uri ("http://${simHost}:${port}/api/ledger/transactions/" + $Id) -TimeoutSec 5 -ErrorAction Stop | Out-Null } catch {}
+      }
+      $rec = Read-CgUndoRecord 'coll-02'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'SKIP: Undo record not found'; exit 0 }
+      Remove-CgUndoRecord 'coll-02'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: coll-03
+    name: "Collection/Exfil - Email Collection Simulation (T1114.001)"
+    technique_id: T1114.001
+    action_key: collection_email_presence
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Checks only for local mail-client presence (process or profile-registry-key existence). Never opens a mailbox or reads real email content."
+    telemetry:
+      - "Process / registry presence check for mail clients"
+    detection:
+      - "EDR: reconnaissance of mail-client presence"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_sim_coll_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-COLL-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Invoke-DnsExfilProbe { param([string]$Subdomain)
+      $res = @{ Resolved = $false }
+      try { Resolve-DnsName -Name $Subdomain -ErrorAction Stop | Out-Null; $res.Resolved = $true } catch {}
+      return $res
+      }
+      function Get-BfsiSimulatorHost { $h = $env:BFSI_SIMULATOR_HOST; if ($h) { return $h }; return 'localhost' }
+      function Get-BfsiSimulatorPort { $p = $env:BFSI_SIMULATOR_PORT; if ($p) { return [int]$p }; return 9999 }
+      function Test-BfsiSimulatorConnectivity {
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { $tcp = New-Object Net.Sockets.TcpClient; $tcp.Connect($simHost, $port); $tcp.Close(); return $true } catch { return $false }
+      }
+      function Invoke-LedgerExfilPost { param([string]$Id, [double]$Amount, [string]$Account)
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      $res = @{ Code = 0; Error = '' }
+      try {
+      $body = @{ id = $Id; amount = $Amount; account = $Account } | ConvertTo-Json -Compress
+      $uri = "http://${simHost}:${port}/api/ledger/transactions"
+      $r = Invoke-WebRequest -Method POST -Uri $uri -Body $body -ContentType 'application/json' -TimeoutSec 5 -ErrorAction Stop
+      $res.Code = [int]$r.StatusCode
+      } catch {
+      try { $res.Code = [int]$_.Exception.Response.StatusCode } catch {}
+      $res.Error = $_.Exception.Message
+      }
+      return $res
+      }
+      function Remove-LedgerTransaction { param([string]$Id)
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { Invoke-WebRequest -Method DELETE -Uri ("http://${simHost}:${port}/api/ledger/transactions/" + $Id) -TimeoutSec 5 -ErrorAction Stop | Out-Null } catch {}
+      }
+      $outlookProcess = Get-Process -Name 'OUTLOOK' -ErrorAction SilentlyContinue
+      $profileKey = Test-Path 'HKCU:\Software\Microsoft\Office\Outlook' -ErrorAction SilentlyContinue
+      if ($outlookProcess -or $profileKey) {
+      $res = @{ Outcome = 'fail'; Reason = 'Mail-client presence detected (process or profile key); email collection target exists' }
+      } else {
+      $res = @{ Outcome = 'pass'; Reason = 'No local mail-client presence detected' }
+      }
+      Complete-CgStep $res 'COLL-03'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_sim_coll_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-COLL-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Invoke-DnsExfilProbe { param([string]$Subdomain)
+      $res = @{ Resolved = $false }
+      try { Resolve-DnsName -Name $Subdomain -ErrorAction Stop | Out-Null; $res.Resolved = $true } catch {}
+      return $res
+      }
+      function Get-BfsiSimulatorHost { $h = $env:BFSI_SIMULATOR_HOST; if ($h) { return $h }; return 'localhost' }
+      function Get-BfsiSimulatorPort { $p = $env:BFSI_SIMULATOR_PORT; if ($p) { return [int]$p }; return 9999 }
+      function Test-BfsiSimulatorConnectivity {
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { $tcp = New-Object Net.Sockets.TcpClient; $tcp.Connect($simHost, $port); $tcp.Close(); return $true } catch { return $false }
+      }
+      function Invoke-LedgerExfilPost { param([string]$Id, [double]$Amount, [string]$Account)
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      $res = @{ Code = 0; Error = '' }
+      try {
+      $body = @{ id = $Id; amount = $Amount; account = $Account } | ConvertTo-Json -Compress
+      $uri = "http://${simHost}:${port}/api/ledger/transactions"
+      $r = Invoke-WebRequest -Method POST -Uri $uri -Body $body -ContentType 'application/json' -TimeoutSec 5 -ErrorAction Stop
+      $res.Code = [int]$r.StatusCode
+      } catch {
+      try { $res.Code = [int]$_.Exception.Response.StatusCode } catch {}
+      $res.Error = $_.Exception.Message
+      }
+      return $res
+      }
+      function Remove-LedgerTransaction { param([string]$Id)
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { Invoke-WebRequest -Method DELETE -Uri ("http://${simHost}:${port}/api/ledger/transactions/" + $Id) -TimeoutSec 5 -ErrorAction Stop | Out-Null } catch {}
+      }
+      Write-Output 'PASS: Discovery cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: coll-04
+    name: "Collection/Exfil - Archive Collected Data (T1560.001)"
+    technique_id: T1560.001
+    action_key: collection_archive_data
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: false
+    blast_radius: "Creates one synthetic test file, archives it with Compress-Archive, verifies the archive, then deletes both file and archive in the same step (self-cleaning)."
+    telemetry:
+      - "Process execution: Compress-Archive"
+      - "File creation: .zip archive"
+    detection:
+      - "EDR: archive-creation prior to exfiltration pattern"
+      - "File integrity: unexpected archive creation"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_sim_coll_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-COLL-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Invoke-DnsExfilProbe { param([string]$Subdomain)
+      $res = @{ Resolved = $false }
+      try { Resolve-DnsName -Name $Subdomain -ErrorAction Stop | Out-Null; $res.Resolved = $true } catch {}
+      return $res
+      }
+      function Get-BfsiSimulatorHost { $h = $env:BFSI_SIMULATOR_HOST; if ($h) { return $h }; return 'localhost' }
+      function Get-BfsiSimulatorPort { $p = $env:BFSI_SIMULATOR_PORT; if ($p) { return [int]$p }; return 9999 }
+      function Test-BfsiSimulatorConnectivity {
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { $tcp = New-Object Net.Sockets.TcpClient; $tcp.Connect($simHost, $port); $tcp.Close(); return $true } catch { return $false }
+      }
+      function Invoke-LedgerExfilPost { param([string]$Id, [double]$Amount, [string]$Account)
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      $res = @{ Code = 0; Error = '' }
+      try {
+      $body = @{ id = $Id; amount = $Amount; account = $Account } | ConvertTo-Json -Compress
+      $uri = "http://${simHost}:${port}/api/ledger/transactions"
+      $r = Invoke-WebRequest -Method POST -Uri $uri -Body $body -ContentType 'application/json' -TimeoutSec 5 -ErrorAction Stop
+      $res.Code = [int]$r.StatusCode
+      } catch {
+      try { $res.Code = [int]$_.Exception.Response.StatusCode } catch {}
+      $res.Error = $_.Exception.Message
+      }
+      return $res
+      }
+      function Remove-LedgerTransaction { param([string]$Id)
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { Invoke-WebRequest -Method DELETE -Uri ("http://${simHost}:${port}/api/ledger/transactions/" + $Id) -TimeoutSec 5 -ErrorAction Stop | Out-Null } catch {}
+      }
+      $testFile = Join-Path $env:TEMP ('bas_sim_coll04_' + $script:CgRun + '.txt')
+      $archive = Join-Path $env:TEMP ('bas_sim_coll04_' + $script:CgRun + '.zip')
+      $undo_data = @{ scenario = 'coll-04'; testFile = $testFile; archive = $archive }
+      try { New-CgUndoRecord 'coll-04' $undo_data } catch { Complete-CgStep @{ Outcome = 'error'; Reason = 'Undo record creation failed' } 'coll-04' }
+      Set-Content -LiteralPath $testFile -Value 'BAS-SIM synthetic collection test data'
+      try {
+      Compress-Archive -Path $testFile -DestinationPath $archive -Force -ErrorAction Stop
+      $archived = Test-Path -LiteralPath $archive
+      } catch { $archived = $false }
+      Remove-Item -LiteralPath $testFile -Force -ErrorAction SilentlyContinue
+      Remove-Item -LiteralPath $archive -Force -ErrorAction SilentlyContinue
+      if ($archived) {
+      $res = @{ Outcome = 'fail'; Reason = 'Archive creation of collected data succeeded' }
+      } else {
+      $res = @{ Outcome = 'error'; Reason = 'Archive creation did not produce the expected file' }
+      }
+      Complete-CgStep $res 'COLL-04'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_sim_coll_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-COLL-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Invoke-DnsExfilProbe { param([string]$Subdomain)
+      $res = @{ Resolved = $false }
+      try { Resolve-DnsName -Name $Subdomain -ErrorAction Stop | Out-Null; $res.Resolved = $true } catch {}
+      return $res
+      }
+      function Get-BfsiSimulatorHost { $h = $env:BFSI_SIMULATOR_HOST; if ($h) { return $h }; return 'localhost' }
+      function Get-BfsiSimulatorPort { $p = $env:BFSI_SIMULATOR_PORT; if ($p) { return [int]$p }; return 9999 }
+      function Test-BfsiSimulatorConnectivity {
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { $tcp = New-Object Net.Sockets.TcpClient; $tcp.Connect($simHost, $port); $tcp.Close(); return $true } catch { return $false }
+      }
+      function Invoke-LedgerExfilPost { param([string]$Id, [double]$Amount, [string]$Account)
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      $res = @{ Code = 0; Error = '' }
+      try {
+      $body = @{ id = $Id; amount = $Amount; account = $Account } | ConvertTo-Json -Compress
+      $uri = "http://${simHost}:${port}/api/ledger/transactions"
+      $r = Invoke-WebRequest -Method POST -Uri $uri -Body $body -ContentType 'application/json' -TimeoutSec 5 -ErrorAction Stop
+      $res.Code = [int]$r.StatusCode
+      } catch {
+      try { $res.Code = [int]$_.Exception.Response.StatusCode } catch {}
+      $res.Error = $_.Exception.Message
+      }
+      return $res
+      }
+      function Remove-LedgerTransaction { param([string]$Id)
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { Invoke-WebRequest -Method DELETE -Uri ("http://${simHost}:${port}/api/ledger/transactions/" + $Id) -TimeoutSec 5 -ErrorAction Stop | Out-Null } catch {}
+      }
+      $rec = Read-CgUndoRecord 'coll-04'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'SKIP: Undo record not found'; exit 0 }
+      if ($rec.testFile -and (Test-Path -LiteralPath $rec.testFile)) { Remove-Item -LiteralPath $rec.testFile -Force -ErrorAction SilentlyContinue }
+      if ($rec.archive -and (Test-Path -LiteralPath $rec.archive)) { Remove-Item -LiteralPath $rec.archive -Force -ErrorAction SilentlyContinue }
+      Remove-CgUndoRecord 'coll-04'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: coll-05
+    name: "Collection/Exfil - Exfiltration Over C2 Channel Simulation (T1041)"
+    technique_id: T1041
+    action_key: exfil_over_c2_simulation
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: false
+    blast_radius: "Posts one small synthetic payload to the lab bfsisim exfil-sink endpoint only. SKIP when the simulator is unreachable; never reaches a real C2 channel or external host."
+    telemetry:
+      - "HTTP POST to lab-local exfil sink"
+    detection:
+      - "Network: outbound POST pattern"
+      - "DLP: data egress inspection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_sim_coll_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-COLL-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Invoke-DnsExfilProbe { param([string]$Subdomain)
+      $res = @{ Resolved = $false }
+      try { Resolve-DnsName -Name $Subdomain -ErrorAction Stop | Out-Null; $res.Resolved = $true } catch {}
+      return $res
+      }
+      function Get-BfsiSimulatorHost { $h = $env:BFSI_SIMULATOR_HOST; if ($h) { return $h }; return 'localhost' }
+      function Get-BfsiSimulatorPort { $p = $env:BFSI_SIMULATOR_PORT; if ($p) { return [int]$p }; return 9999 }
+      function Test-BfsiSimulatorConnectivity {
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { $tcp = New-Object Net.Sockets.TcpClient; $tcp.Connect($simHost, $port); $tcp.Close(); return $true } catch { return $false }
+      }
+      function Invoke-LedgerExfilPost { param([string]$Id, [double]$Amount, [string]$Account)
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      $res = @{ Code = 0; Error = '' }
+      try {
+      $body = @{ id = $Id; amount = $Amount; account = $Account } | ConvertTo-Json -Compress
+      $uri = "http://${simHost}:${port}/api/ledger/transactions"
+      $r = Invoke-WebRequest -Method POST -Uri $uri -Body $body -ContentType 'application/json' -TimeoutSec 5 -ErrorAction Stop
+      $res.Code = [int]$r.StatusCode
+      } catch {
+      try { $res.Code = [int]$_.Exception.Response.StatusCode } catch {}
+      $res.Error = $_.Exception.Message
+      }
+      return $res
+      }
+      function Remove-LedgerTransaction { param([string]$Id)
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { Invoke-WebRequest -Method DELETE -Uri ("http://${simHost}:${port}/api/ledger/transactions/" + $Id) -TimeoutSec 5 -ErrorAction Stop | Out-Null } catch {}
+      }
+      if (-not (Test-BfsiSimulatorConnectivity)) {
+      Complete-CgStep @{ Outcome = 'skip'; Reason = 'BFSI simulator not reachable - prerequisite not met' } 'COLL-05'
+      }
+      $txId = 'bas-sim-exfil-' + $script:CgRun
+      $undo_data = @{ scenario = 'coll-05'; txId = $txId }
+      try { New-CgUndoRecord 'coll-05' $undo_data } catch { Complete-CgStep @{ Outcome = 'error'; Reason = 'Undo record creation failed' } 'coll-05' }
+      $post = Invoke-LedgerExfilPost -Id $txId -Amount 1.0 -Account 'bas-sim-exfil-test'
+      if ($post.Code -eq 201) {
+      $res = @{ Outcome = 'fail'; Reason = 'Synthetic payload exfiltration to the simulated sink succeeded' }
+      } elseif ($post.Code -eq 403 -or $post.Code -eq 401) {
+      $res = @{ Outcome = 'pass'; Reason = 'Exfiltration attempt was blocked by the simulated control' }
+      } else {
+      $res = @{ Outcome = 'error'; Reason = "Exfiltration attempt returned unclassifiable HTTP $($post.Code)" }
+      }
+      Complete-CgStep $res 'COLL-05'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_sim_coll_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-COLL-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Invoke-DnsExfilProbe { param([string]$Subdomain)
+      $res = @{ Resolved = $false }
+      try { Resolve-DnsName -Name $Subdomain -ErrorAction Stop | Out-Null; $res.Resolved = $true } catch {}
+      return $res
+      }
+      function Get-BfsiSimulatorHost { $h = $env:BFSI_SIMULATOR_HOST; if ($h) { return $h }; return 'localhost' }
+      function Get-BfsiSimulatorPort { $p = $env:BFSI_SIMULATOR_PORT; if ($p) { return [int]$p }; return 9999 }
+      function Test-BfsiSimulatorConnectivity {
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { $tcp = New-Object Net.Sockets.TcpClient; $tcp.Connect($simHost, $port); $tcp.Close(); return $true } catch { return $false }
+      }
+      function Invoke-LedgerExfilPost { param([string]$Id, [double]$Amount, [string]$Account)
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      $res = @{ Code = 0; Error = '' }
+      try {
+      $body = @{ id = $Id; amount = $Amount; account = $Account } | ConvertTo-Json -Compress
+      $uri = "http://${simHost}:${port}/api/ledger/transactions"
+      $r = Invoke-WebRequest -Method POST -Uri $uri -Body $body -ContentType 'application/json' -TimeoutSec 5 -ErrorAction Stop
+      $res.Code = [int]$r.StatusCode
+      } catch {
+      try { $res.Code = [int]$_.Exception.Response.StatusCode } catch {}
+      $res.Error = $_.Exception.Message
+      }
+      return $res
+      }
+      function Remove-LedgerTransaction { param([string]$Id)
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { Invoke-WebRequest -Method DELETE -Uri ("http://${simHost}:${port}/api/ledger/transactions/" + $Id) -TimeoutSec 5 -ErrorAction Stop | Out-Null } catch {}
+      }
+      $rec = Read-CgUndoRecord 'coll-05'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'SKIP: Undo record not found'; exit 0 }
+      if ($rec.txId) { Remove-LedgerTransaction -Id $rec.txId }
+      Remove-CgUndoRecord 'coll-05'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: coll-06
+    name: "Collection/Exfil - DNS Exfiltration Simulation (T1048.003)"
+    technique_id: T1048.003
+    action_key: exfil_dns_simulation
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Resolves one synthetic subdomain under the RFC 6761 .invalid TLD, which never resolves. Successful resolution (should never happen) is FAIL; resolution failure is PASS."
+    telemetry:
+      - "DNS query for a synthetic bas-sim-*.invalid subdomain"
+    detection:
+      - "DNS logging: anomalous subdomain query patterns"
+      - "SIEM: DNS tunneling / exfiltration detection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_sim_coll_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-COLL-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Invoke-DnsExfilProbe { param([string]$Subdomain)
+      $res = @{ Resolved = $false }
+      try { Resolve-DnsName -Name $Subdomain -ErrorAction Stop | Out-Null; $res.Resolved = $true } catch {}
+      return $res
+      }
+      function Get-BfsiSimulatorHost { $h = $env:BFSI_SIMULATOR_HOST; if ($h) { return $h }; return 'localhost' }
+      function Get-BfsiSimulatorPort { $p = $env:BFSI_SIMULATOR_PORT; if ($p) { return [int]$p }; return 9999 }
+      function Test-BfsiSimulatorConnectivity {
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { $tcp = New-Object Net.Sockets.TcpClient; $tcp.Connect($simHost, $port); $tcp.Close(); return $true } catch { return $false }
+      }
+      function Invoke-LedgerExfilPost { param([string]$Id, [double]$Amount, [string]$Account)
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      $res = @{ Code = 0; Error = '' }
+      try {
+      $body = @{ id = $Id; amount = $Amount; account = $Account } | ConvertTo-Json -Compress
+      $uri = "http://${simHost}:${port}/api/ledger/transactions"
+      $r = Invoke-WebRequest -Method POST -Uri $uri -Body $body -ContentType 'application/json' -TimeoutSec 5 -ErrorAction Stop
+      $res.Code = [int]$r.StatusCode
+      } catch {
+      try { $res.Code = [int]$_.Exception.Response.StatusCode } catch {}
+      $res.Error = $_.Exception.Message
+      }
+      return $res
+      }
+      function Remove-LedgerTransaction { param([string]$Id)
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { Invoke-WebRequest -Method DELETE -Uri ("http://${simHost}:${port}/api/ledger/transactions/" + $Id) -TimeoutSec 5 -ErrorAction Stop | Out-Null } catch {}
+      }
+      $subdomain = 'bas-sim-' + $script:CgRun + '.invalid'
+      $probe = Invoke-DnsExfilProbe -Subdomain $subdomain
+      if ($probe.Resolved) {
+      $res = @{ Outcome = 'fail'; Reason = "DNS exfiltration subdomain $subdomain unexpectedly resolved" }
+      } else {
+      $res = @{ Outcome = 'pass'; Reason = "DNS exfiltration subdomain $subdomain did not resolve, as expected for a .invalid TLD" }
+      }
+      Complete-CgStep $res 'COLL-06'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_sim_coll_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-COLL-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Invoke-DnsExfilProbe { param([string]$Subdomain)
+      $res = @{ Resolved = $false }
+      try { Resolve-DnsName -Name $Subdomain -ErrorAction Stop | Out-Null; $res.Resolved = $true } catch {}
+      return $res
+      }
+      function Get-BfsiSimulatorHost { $h = $env:BFSI_SIMULATOR_HOST; if ($h) { return $h }; return 'localhost' }
+      function Get-BfsiSimulatorPort { $p = $env:BFSI_SIMULATOR_PORT; if ($p) { return [int]$p }; return 9999 }
+      function Test-BfsiSimulatorConnectivity {
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { $tcp = New-Object Net.Sockets.TcpClient; $tcp.Connect($simHost, $port); $tcp.Close(); return $true } catch { return $false }
+      }
+      function Invoke-LedgerExfilPost { param([string]$Id, [double]$Amount, [string]$Account)
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      $res = @{ Code = 0; Error = '' }
+      try {
+      $body = @{ id = $Id; amount = $Amount; account = $Account } | ConvertTo-Json -Compress
+      $uri = "http://${simHost}:${port}/api/ledger/transactions"
+      $r = Invoke-WebRequest -Method POST -Uri $uri -Body $body -ContentType 'application/json' -TimeoutSec 5 -ErrorAction Stop
+      $res.Code = [int]$r.StatusCode
+      } catch {
+      try { $res.Code = [int]$_.Exception.Response.StatusCode } catch {}
+      $res.Error = $_.Exception.Message
+      }
+      return $res
+      }
+      function Remove-LedgerTransaction { param([string]$Id)
+      $simHost = Get-BfsiSimulatorHost
+      $port = Get-BfsiSimulatorPort
+      try { Invoke-WebRequest -Method DELETE -Uri ("http://${simHost}:${port}/api/ledger/transactions/" + $Id) -TimeoutSec 5 -ErrorAction Stop | Out-Null } catch {}
+      }
+      Write-Output 'PASS: Discovery cleanup complete'
+      exit 0

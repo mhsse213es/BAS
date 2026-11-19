@@ -1,0 +1,7245 @@
+{
+  "provenance": {
+    "kev": {
+      "catalogVersion": "2026.11.09",
+      "dateReleased": "2026-11-09T19:54:37.4945Z",
+      "entries": 1773,
+      "sha256": "4372c54ba169d113742974d9e0c68b3523d8e4374c9b2bdcf28712b68565d5cf"
+    },
+    "nvd_years": {
+      "2002": {
+        "lastModifiedDate": "2026-10-21T03:05:32-04:00",
+        "size": "27128206",
+        "sha256_of_gz": "56fb093a105e73bd7b8d03c454a5ba611d4474b5ddc0ed2c9b21c1b7d370fc0a"
+      },
+      "2003": {
+        "lastModifiedDate": "2026-10-21T03:05:30-04:00",
+        "size": "7908123",
+        "sha256_of_gz": "d23483e89b1406872b1406546d060905fdc2fe483e05c5288160a493704925c1"
+      },
+      "2004": {
+        "lastModifiedDate": "2026-10-21T03:05:28-04:00",
+        "size": "16381306",
+        "sha256_of_gz": "4138b42d5e581c0c8d1bb1eadd3da24fba586d63854d3e21f5916ffbb611ba30"
+      },
+      "2005": {
+        "lastModifiedDate": "2026-10-21T03:05:25-04:00",
+        "size": "25790311",
+        "sha256_of_gz": "380190361c509d26704ce988756bf64281abf055920e11a98158d31b18516331"
+      },
+      "2006": {
+        "lastModifiedDate": "2026-11-05T03:03:50-05:00",
+        "size": "41239436",
+        "sha256_of_gz": "f2c2eba3599283ed0a927161ee8f5b15ae395636b7fb5632e66e32ca8106f09c"
+      },
+      "2007": {
+        "lastModifiedDate": "2026-11-07T03:03:41-05:00",
+        "size": "39413386",
+        "sha256_of_gz": "7eea8dc7f0a12ec0570f671fbdeb3acb727bee489abcd8522c4120c415da072e"
+      },
+      "2008": {
+        "lastModifiedDate": "2026-10-21T03:05:11-04:00",
+        "size": "45541236",
+        "sha256_of_gz": "ae226cd881378a652f929d48de546b1e369623faf874dee9b71ec05b54f2333e"
+      },
+      "2009": {
+        "lastModifiedDate": "2026-11-05T03:03:45-05:00",
+        "size": "43665073",
+        "sha256_of_gz": "14fa2f01392bc72ba38ea191523957f953a13a5894b0169bad56093a0579e2db"
+      },
+      "2010": {
+        "lastModifiedDate": "2026-10-31T03:03:30-04:00",
+        "size": "47120430",
+        "sha256_of_gz": "d1c40098cc77ad2743be219154145d2f04806bcfa0627aa49f4dc24bba32182e"
+      },
+      "2011": {
+        "lastModifiedDate": "2026-11-05T03:03:40-05:00",
+        "size": "46652590",
+        "sha256_of_gz": "36882daf54d07fbceb3b2379c51672166e9bf794f6d98304a71b0aea00c2ecd6"
+      },
+      "2012": {
+        "lastModifiedDate": "2026-11-05T03:03:35-05:00",
+        "size": "54466541",
+        "sha256_of_gz": "1a953835bbfa9ff1c0f14861db5be03415725572b6a9d891f7e77548e6eead6d"
+      },
+      "2013": {
+        "lastModifiedDate": "2026-11-06T03:03:45-05:00",
+        "size": "59700006",
+        "sha256_of_gz": "203ae3680e5c8e4f4b5ac63b0106705cc062493b90e509b5577852de5f908f24"
+      },
+      "2014": {
+        "lastModifiedDate": "2026-11-06T03:03:39-05:00",
+        "size": "55315176",
+        "sha256_of_gz": "0ac663f2d98cea9e213b0ad5b2e2dca0cc6db62adc93d976e3fcad02e6ab22b3"
+      },
+      "2015": {
+        "lastModifiedDate": "2026-11-05T03:03:25-05:00",
+        "size": "55298666",
+        "sha256_of_gz": "a4bdffc32e7fb380935182256519bd829ac7644c9317b940a9d53318ed0c1348"
+      },
+      "2016": {
+        "lastModifiedDate": "2026-10-30T03:03:38-04:00",
+        "size": "70296807",
+        "sha256_of_gz": "a2d2aef7ca030198a14e9d1f7a145f563118270855cdf281db4ebd9e6226da16"
+      },
+      "2017": {
+        "lastModifiedDate": "2026-11-06T03:03:30-05:00",
+        "size": "101841555",
+        "sha256_of_gz": "329a61d7f7201f60f5b8f2beeca971a87d6967c51e59d6579eca4d4109acfde7"
+      },
+      "2018": {
+        "lastModifiedDate": "2026-11-03T03:04:07-05:00",
+        "size": "108752804",
+        "sha256_of_gz": "be2ad2a915d9e0770a98bb2c58cfc43a3abf17e40626d3320752a0175b6db1d8"
+      },
+      "2019": {
+        "lastModifiedDate": "2026-11-07T03:03:31-05:00",
+        "size": "126126714",
+        "sha256_of_gz": "5bc4a539622b3353488500f2be43f622954c3f75aa8e96207d8422f79b19c48f"
+      },
+      "2020": {
+        "lastModifiedDate": "2026-11-08T03:03:02-05:00",
+        "size": "165722622",
+        "sha256_of_gz": "5e076b33afd48f584a33d1b215eb3a5e5875e7c862071a517ed085b3ad752108"
+      },
+      "2021": {
+        "lastModifiedDate": "2026-11-08T03:02:37-05:00",
+        "size": "197924819",
+        "sha256_of_gz": "22c6bfc9333f5c2070be89d8d25252fe426298570cfa466b707c0796e8c95db1"
+      },
+      "2022": {
+        "lastModifiedDate": "2026-11-07T03:02:54-05:00",
+        "size": "217183593",
+        "sha256_of_gz": "a98142c526cd67af7f45a10389f04b23660d1489b542082f50f4189fd2972eb6"
+      },
+      "2023": {
+        "lastModifiedDate": "2026-11-09T03:02:12-05:00",
+        "size": "248493988",
+        "sha256_of_gz": "b1197ef0e8b7cfd7d95dd91bf9f9370d4e3fb2b53c342280ebb031c8f2358319"
+      },
+      "2024": {
+        "lastModifiedDate": "2026-11-09T03:01:44-05:00",
+        "size": "293745058",
+        "sha256_of_gz": "f90c413ea33cbc567c247a0fbb517c95341fa19bdd362705bd34d00bb58667e7"
+      },
+      "2025": {
+        "lastModifiedDate": "2026-11-09T03:01:13-05:00",
+        "size": "295852585",
+        "sha256_of_gz": "931a01ff0d51f83b0331e352bd3e2fef151aa8d8b48f6d09ef6374b4e84a5676"
+      },
+      "2026": {
+        "lastModifiedDate": "2026-11-09T03:00:23-05:00",
+        "size": "527484894",
+        "sha256_of_gz": "8757ed9713bc7b7c6991f44f5ad2a2a2223d725265d68f422952381b61a97dde"
+      }
+    },
+    "ubuntu_oval": {
+      "focal": {
+        "file": "com.ubuntu.focal.cve.oval.xml.bz2",
+        "file_sha256": "847ebec1cec6c01a8a2dd2d98a33ae13aad752283a3a00a8ae9eb5e58efbc934",
+        "oval_generator_timestamp": "2026-11-10T01:08:36",
+        "oval_product_version": "2"
+      },
+      "jammy": {
+        "file": "com.ubuntu.jammy.cve.oval.xml.bz2",
+        "file_sha256": "fee56b7eb4cc9f7969ccdca635fb462fc43241f164bf4a8a8325b493bac5e439",
+        "oval_generator_timestamp": "2026-11-09T11:11:16",
+        "oval_product_version": "2"
+      },
+      "noble": {
+        "file": "com.ubuntu.noble.cve.oval.xml.bz2",
+        "file_sha256": "2003d9545152c802ad3e6a5c0cfd920e64ffaab0b19dadbb81d6029c11515822",
+        "oval_generator_timestamp": "2026-11-09T10:39:09",
+        "oval_product_version": "2"
+      }
+    },
+    "critical_threshold": 9.0,
+    "cvss_preference": "3.1 Primary, then 3.0 Primary; v2 never used for Critical",
+    "analysis_run_utc": "2026-11-10T07:22:34.031043Z"
+  },
+  "summary": {
+    "critical_kev_total": 500,
+    "kev_without_v3_score_excluded": 456,
+    "overall": {
+      "any_ubuntu_oval_match": 22,
+      "fixed_version_identified": 20,
+      "no_usable_fix_mapping": 2,
+      "no_ubuntu_oval_match": 478,
+      "any_ubuntu_oval_match_pct": 4.4,
+      "fixed_version_identified_pct": 4.0,
+      "no_usable_fix_mapping_pct": 0.4,
+      "no_ubuntu_oval_match_pct": 95.6
+    },
+    "per_release": {
+      "focal": {
+        "fixed_version_identified": 18,
+        "no_usable_fix_mapping": 1,
+        "no_ubuntu_oval_match": 481
+      },
+      "jammy": {
+        "fixed_version_identified": 10,
+        "no_usable_fix_mapping": 4,
+        "no_ubuntu_oval_match": 486
+      },
+      "noble": {
+        "fixed_version_identified": 7,
+        "no_usable_fix_mapping": 5,
+        "no_ubuntu_oval_match": 488
+      }
+    }
+  },
+  "rows": [
+    {
+      "cve": "CVE-2026-123218",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "psirt@us.ibm.com"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-48356",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.3,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-111497",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "FIXED_VERSION_IDENTIFIED",
+        "jammy": "FIXED_VERSION_IDENTIFIED",
+        "noble": "FIXED_VERSION_IDENTIFIED"
+      },
+      "overall": "FIXED_VERSION_IDENTIFIED"
+    },
+    {
+      "cve": "CVE-2026-109618",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "FIXED_VERSION_IDENTIFIED",
+        "jammy": "FIXED_VERSION_IDENTIFIED",
+        "noble": "FIXED_VERSION_IDENTIFIED"
+      },
+      "overall": "FIXED_VERSION_IDENTIFIED"
+    },
+    {
+      "cve": "CVE-2026-110447",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-102764",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-3199",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-102489",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-88771",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-39682",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_USABLE_FIX_MAPPING",
+        "noble": "NO_USABLE_FIX_MAPPING"
+      },
+      "overall": "NO_USABLE_FIX_MAPPING"
+    },
+    {
+      "cve": "CVE-2026-86060",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-19490",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-25249",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-86218",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-9586",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-82078",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.1,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-81578",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-49105",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-23758",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-8452",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-8037",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-16232",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-56164",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-56291",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-48939",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-48908",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-56290",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-12569",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-48907",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-0257",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.1,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-48027",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-48172",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-42208",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-0300",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-7399",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-57726",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.9,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-39987",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-3055",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-33017",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-32432",
+      "cvss": {
+        "version": "3.1",
+        "score": 10.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-54068",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-26399",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2017-7921",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-22681",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-20127",
+      "cvss": {
+        "version": "3.1",
+        "score": 10.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-22175",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-22769",
+      "cvss": {
+        "version": "3.1",
+        "score": 10.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-7796",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-1731",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-40536",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-24423",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-19006",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-23760",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-37079",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2026-20045",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-37164",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-14733",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-59374",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-14611",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-58360",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-37055",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-66644",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-9242",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-21042",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-24893",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2016-7836",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2017-1000353",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2015-7755",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-21043",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-10035",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-10585",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-57819",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-7775",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-54948",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-2776",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-54309",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-25257",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2016-10033",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2014-3931",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-6543",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-0769",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-54085",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-42009",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.3,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "FIXED_VERSION_IDENTIFIED"
+      },
+      "overall": "FIXED_VERSION_IDENTIFIED"
+    },
+    {
+      "cve": "CVE-2021-32030",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-56145",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-4632",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-12987",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-32756",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-11120",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-3248",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-34028",
+      "cvss": {
+        "version": "3.1",
+        "score": 10.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-58136",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-38475",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.1,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "FIXED_VERSION_IDENTIFIED",
+        "jammy": "FIXED_VERSION_IDENTIFIED",
+        "noble": "FIXED_VERSION_IDENTIFIED"
+      },
+      "overall": "FIXED_VERSION_IDENTIFIED"
+    },
+    {
+      "cve": "CVE-2025-31324",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-42599",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-30406",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-31161",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-22457",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-24813",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "FIXED_VERSION_IDENTIFIED",
+        "jammy": "FIXED_VERSION_IDENTIFIED",
+        "noble": "FIXED_VERSION_IDENTIFIED"
+      },
+      "overall": "FIXED_VERSION_IDENTIFIED"
+    },
+    {
+      "cve": "CVE-2024-20439",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-9874",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-1316",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-24201",
+      "cvss": {
+        "version": "3.1",
+        "score": 10.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "FIXED_VERSION_IDENTIFIED",
+        "noble": "FIXED_VERSION_IDENTIFIED"
+      },
+      "overall": "FIXED_VERSION_IDENTIFIED"
+    },
+    {
+      "cve": "CVE-2024-4885",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-43939",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-34192",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-49035",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2017-3066",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-24989",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-0108",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.1,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-53704",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-15069",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-29574",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-19410",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-24085",
+      "cvss": {
+        "version": "3.1",
+        "score": 10.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-23006",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-50603",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-55591",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-48365",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.9,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2025-0282",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-2883",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-41713",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.1,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-12356",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-23227",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-14933",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-55956",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-50623",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-51378",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-11667",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-11680",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-28461",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-38813",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-38812",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-0012",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-1212",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-9465",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.1,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-16278",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-51567",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-5910",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-8956",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.1,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-47575",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-9537",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-40711",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-28987",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.1,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-9680",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "FIXED_VERSION_IDENTIFIED",
+        "jammy": "FIXED_VERSION_IDENTIFIED",
+        "noble": "NO_USABLE_FIX_MAPPING"
+      },
+      "overall": "FIXED_VERSION_IDENTIFIED"
+    },
+    {
+      "cve": "CVE-2024-23113",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-45519",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-0344",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-15415",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-25280",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-7593",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-8963",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.1,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-14644",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-27348",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2014-0497",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-6670",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-40766",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-38856",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-7971",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.6,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-33045",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-33044",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-23897",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-32113",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-45249",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-5217",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-4879",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-36401",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-23692",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-24816",
+      "cvss": {
+        "version": "3.1",
+        "score": 10.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-4358",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-4577",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-5274",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.6,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-4947",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.6,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-43208",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-4671",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.6,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-7028",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-4040",
+      "cvss": {
+        "version": "3.1",
+        "score": 10.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-3400",
+      "cvss": {
+        "version": "3.1",
+        "score": 10.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-3273",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-3272",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-7256",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-44529",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-48788",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-27198",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-36380",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-1709",
+      "cvss": {
+        "version": "3.1",
+        "score": 10.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-21762",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-22527",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-34048",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-35082",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2024-21887",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.1,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2016-20017",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-27524",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-6448",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-41265",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.9,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-6345",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.6,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-1671",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-2551",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-47246",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-22518",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-46604",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "FIXED_VERSION_IDENTIFIED",
+        "jammy": "FIXED_VERSION_IDENTIFIED",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "FIXED_VERSION_IDENTIFIED"
+    },
+    {
+      "cve": "CVE-2023-46747",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-20198",
+      "cvss": {
+        "version": "3.1",
+        "score": 10.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-22515",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-42793",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-14667",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2014-8361",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-3129",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-20269",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.1,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-33246",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-38035",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-24489",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2017-18368",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-35078",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-3519",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-29303",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-31199",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-17621",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-20887",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-12641",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "FIXED_VERSION_IDENTIFIED",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "FIXED_VERSION_IDENTIFIED"
+    },
+    {
+      "cve": "CVE-2021-44026",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "FIXED_VERSION_IDENTIFIED",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "FIXED_VERSION_IDENTIFIED"
+    },
+    {
+      "cve": "CVE-2023-27997",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-33010",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-34362",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-2868",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-25717",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2016-3427",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2016-8735",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-45046",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "FIXED_VERSION_IDENTIFIED",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "FIXED_VERSION_IDENTIFIED"
+    },
+    {
+      "cve": "CVE-2023-27350",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-2136",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.6,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-29492",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-27877",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2017-7494",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-42948",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2023-23397",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-35914",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-47986",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-46169",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "FIXED_VERSION_IDENTIFIED",
+        "jammy": "FIXED_VERSION_IDENTIFIED",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "FIXED_VERSION_IDENTIFIED"
+    },
+    {
+      "cve": "CVE-2017-11357",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-47966",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-44877",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-42475",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-27518",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-26501",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-4135",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.6,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-19323",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-41352",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-40684",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-3236",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-35405",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-3075",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.6,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-27593",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.1,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-26258",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-7445",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-6530",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-2628",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-26352",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-24706",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-24112",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-22963",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-22536",
+      "cvss": {
+        "version": "3.1",
+        "score": 10.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2017-15944",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-37042",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-26138",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-29499",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2016-2386",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-7195",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-7194",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-7193",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-7192",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2017-6862",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2011-2462",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-26134",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2014-0546",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2012-1710",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2010-0840",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-19949",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2017-8543",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2017-18362",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-11708",
+      "cvss": {
+        "version": "3.1",
+        "score": 10.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-30525",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-22947",
+      "cvss": {
+        "version": "3.1",
+        "score": 10.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-29464",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-1003029",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.9,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-3568",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-3929",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-16057",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-7841",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2014-0780",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2010-5330",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2007-3010",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-22954",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-7602",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-20753",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2015-5123",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2015-5122",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2015-3113",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2015-0313",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2015-0311",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-27852",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-2509",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2017-11317",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-22965",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "FIXED_VERSION_IDENTIFIED",
+        "jammy": "FIXED_VERSION_IDENTIFIED",
+        "noble": "FIXED_VERSION_IDENTIFIED"
+      },
+      "overall": "FIXED_VERSION_IDENTIFIED"
+    },
+    {
+      "cve": "CVE-2021-45382",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-26871",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-1040",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-28799",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-10562",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-10561",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-0543",
+      "cvss": {
+        "version": "3.1",
+        "score": 10.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "FIXED_VERSION_IDENTIFIED",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "FIXED_VERSION_IDENTIFIED"
+    },
+    {
+      "cve": "CVE-2021-20028",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2013-2729",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-26318",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-26143",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-42237",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-22941",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-9054",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-7247",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-25223",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-2506",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-2021",
+      "cvss": {
+        "version": "3.1",
+        "score": 10.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-1631",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-16920",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-15107",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-12989",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-11043",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-10068",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-1003030",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.9,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-14839",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-1273",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-11138",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-0147",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-0125",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2017-6316",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2017-3881",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2016-4171",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2016-1555",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2016-10174",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2015-4068",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.1,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2015-1427",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2015-1187",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2014-6287",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2013-4810",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2013-2251",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2010-4344",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2010-2861",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2009-1151",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2005-2773",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-5135",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-26486",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.6,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "FIXED_VERSION_IDENTIFIED",
+        "jammy": "FIXED_VERSION_IDENTIFIED",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "FIXED_VERSION_IDENTIFIED"
+    },
+    {
+      "cve": "CVE-2019-11581",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2017-6077",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2013-0625",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-20700",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-20699",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-1938",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-16928",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-0151",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2017-12240",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2016-4117",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2016-1019",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2015-5119",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2015-3043",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2015-2590",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2013-3346",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2013-0632",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2012-4681",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2011-3544",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2011-1889",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-23131",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2017-9841",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-0796",
+      "cvss": {
+        "version": "3.1",
+        "score": 10.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-1000861",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2017-9791",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2016-3088",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2022-22587",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-20038",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-5722",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2017-5689",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2014-6271",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2014-7169",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2012-0391",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-32648",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.1,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-40870",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-22991",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-13927",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-36260",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-2725",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-9670",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-10149",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2015-7450",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2017-1000486",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-7609",
+      "cvss": {
+        "version": "3.1",
+        "score": 10.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-44515",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-35394",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-7238",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2017-12149",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-17463",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-10758",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.9,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-44228",
+      "cvss": {
+        "version": "3.1",
+        "score": 10.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "FIXED_VERSION_IDENTIFIED",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "FIXED_VERSION_IDENTIFIED"
+    },
+    {
+      "cve": "CVE-2018-14847",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.1,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-37415",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-40438",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "FIXED_VERSION_IDENTIFIED",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "FIXED_VERSION_IDENTIFIED"
+    },
+    {
+      "cve": "CVE-2021-44077",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-27104",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-27101",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-27103",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-4939",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-15961",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-42013",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-41773",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2016-4437",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-17530",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2017-5638",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-1870",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "FIXED_VERSION_IDENTIFIED",
+        "jammy": "NO_USABLE_FIX_MAPPING",
+        "noble": "NO_USABLE_FIX_MAPPING"
+      },
+      "overall": "FIXED_VERSION_IDENTIFIED"
+    },
+    {
+      "cve": "CVE-2021-1871",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "FIXED_VERSION_IDENTIFIED",
+        "jammy": "NO_USABLE_FIX_MAPPING",
+        "noble": "NO_USABLE_FIX_MAPPING"
+      },
+      "overall": "FIXED_VERSION_IDENTIFIED"
+    },
+    {
+      "cve": "CVE-2021-20090",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-26084",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-11580",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-3396",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-42258",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-1497",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-1498",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-0171",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-3161",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-19781",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-11634",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-29557",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-25506",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-8515",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-7600",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-22205",
+      "cvss": {
+        "version": "3.1",
+        "score": 10.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-6789",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-8657",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-5902",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-22986",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-35464",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-12812",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-13379",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-16010",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.6,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-15999",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.6,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "FIXED_VERSION_IDENTIFIED",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "FIXED_VERSION_IDENTIFIED"
+    },
+    {
+      "cve": "CVE-2020-16017",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.6,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-30633",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.6,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-37973",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.6,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-4427",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-4428",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.1,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-4716",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-15505",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-30116",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-7961",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-22502",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2017-7269",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-0708",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-1040",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-1350",
+      "cvss": {
+        "version": "3.1",
+        "score": 10.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-0604",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-0646",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-26919",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-2555",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2012-3152",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.1,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2015-4852",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_USABLE_FIX_MAPPING",
+        "jammy": "NO_USABLE_FIX_MAPPING",
+        "noble": "NO_USABLE_FIX_MAPPING"
+      },
+      "overall": "NO_USABLE_FIX_MAPPING"
+    },
+    {
+      "cve": "CVE-2020-8644",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-18935",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-22893",
+      "cvss": {
+        "version": "3.1",
+        "score": 10.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-11510",
+      "cvss": {
+        "version": "3.1",
+        "score": 10.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-35395",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-11651",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-16846",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2010-5326",
+      "cvss": {
+        "version": "3.1",
+        "score": 10.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-6287",
+      "cvss": {
+        "version": "3.1",
+        "score": 10.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-6207",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-16256",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-10148",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-35211",
+      "cvss": {
+        "version": "3.1",
+        "score": 10.0,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-20021",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-20016",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-12271",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-10181",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2017-9248",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-31755",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-10987",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-14558",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2018-20062",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-8599",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-5847",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-16759",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-17496",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2019-5544",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-3992",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-22005",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-3952",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-21972",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-21985",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-4006",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.1,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-25213",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-27561",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2021-40539",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-10189",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    },
+    {
+      "cve": "CVE-2020-29583",
+      "cvss": {
+        "version": "3.1",
+        "score": 9.8,
+        "source": "nvd@nist.gov"
+      },
+      "per_release": {
+        "focal": "NO_UBUNTU_OVAL_MATCH",
+        "jammy": "NO_UBUNTU_OVAL_MATCH",
+        "noble": "NO_UBUNTU_OVAL_MATCH"
+      },
+      "overall": "NO_UBUNTU_OVAL_MATCH"
+    }
+  ],
+  "critical_without_any_ubuntu_match_sample": [
+    "CVE-2026-123218",
+    "CVE-2026-48356",
+    "CVE-2026-110447",
+    "CVE-2026-102764",
+    "CVE-2021-3199",
+    "CVE-2026-102489",
+    "CVE-2026-88771",
+    "CVE-2026-86060",
+    "CVE-2026-19490",
+    "CVE-2025-25249",
+    "CVE-2026-86218",
+    "CVE-2026-9586",
+    "CVE-2026-82078",
+    "CVE-2026-81578",
+    "CVE-2023-49105",
+    "CVE-2021-23758",
+    "CVE-2026-8452",
+    "CVE-2026-8037",
+    "CVE-2026-16232",
+    "CVE-2026-56164",
+    "CVE-2026-56291",
+    "CVE-2026-48939",
+    "CVE-2026-48908",
+    "CVE-2026-56290",
+    "CVE-2026-12569",
+    "CVE-2026-48907",
+    "CVE-2026-0257",
+    "CVE-2026-48027",
+    "CVE-2026-48172",
+    "CVE-2026-42208",
+    "CVE-2026-0300",
+    "CVE-2024-7399",
+    "CVE-2024-57726",
+    "CVE-2026-39987",
+    "CVE-2026-3055",
+    "CVE-2026-33017",
+    "CVE-2025-32432",
+    "CVE-2025-54068",
+    "CVE-2025-26399",
+    "CVE-2017-7921",
+    "CVE-2021-22681",
+    "CVE-2026-20127",
+    "CVE-2021-22175",
+    "CVE-2026-22769",
+    "CVE-2020-7796",
+    "CVE-2026-1731",
+    "CVE-2025-40536",
+    "CVE-2026-24423",
+    "CVE-2019-19006",
+    "CVE-2026-23760"
+  ]
+}

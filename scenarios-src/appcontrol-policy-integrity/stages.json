@@ -1,0 +1,115 @@
+[
+  {
+    "id": "appctl-d01-service",
+    "n": 1,
+    "name": "Application control Policy Integrity: application control service tamper resistance (T1562.001)",
+    "technique_id": "T1562.001",
+    "timeout_sec": 90,
+    "blast_radius": "Read-only by default: parses the AppIDSvc service security descriptor for unprivileged stop rights. With BAS_CONFIRM_APPCONTROL_SERVICE_STOP=true (exact, administrator only) it also stops AppIDSvc once, restarts it and verifies the prior state is restored; enforcement is briefly suspended while it is stopped, so use it on lab hosts only.",
+    "telemetry": [
+      "Service Control Manager events 7036/7040 for AppIDSvc",
+      "Security event 4688 for sc.exe/net.exe stop AppIDSvc"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ],
+    "risk": "medium"
+  },
+  {
+    "id": "appctl-d02-policy-write",
+    "n": 2,
+    "name": "Application control Policy Integrity: local AppLocker policy modification (T1562.001)",
+    "technique_id": "T1562.001",
+    "timeout_sec": 120,
+    "blast_radius": "Read-only by default: reads the permissions of the local AppLocker policy registry key for unprivileged write rights. With BAS_CONFIRM_APPCONTROL_POLICY_TAMPER=true (exact, administrator only) it also re-applies the host's own effective policy unchanged, and records that the identity could do so as evidence only; the verdict stays based on who is permitted to write the policy store.",
+    "telemetry": [
+      "Registry events (Sysmon EID 12/13) under SrpV2",
+      "AppLocker policy change events in the AppLocker log"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ],
+    "risk": "medium"
+  },
+  {
+    "id": "appctl-d03-downgrade",
+    "n": 3,
+    "name": "Application control Policy Integrity: audit-mode or missing-collection downgrade (T1562.001)",
+    "technique_id": "T1562.001",
+    "timeout_sec": 60,
+    "blast_radius": "Read-only: reports the enforcement mode of each AppLocker collection and the WDAC user-mode policy, and flags audit mode or collections with no rules. Changes nothing.",
+    "telemetry": [
+      "AppLocker and Code Integrity policy state"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ],
+    "production_safe": true,
+    "risk": "low"
+  },
+  {
+    "id": "appctl-d04-wdac-policy-dir",
+    "n": 4,
+    "name": "Application control Policy Integrity: WDAC active policy directory trust boundary (T1562.001)",
+    "technique_id": "T1562.001",
+    "timeout_sec": 90,
+    "blast_radius": "Read-only by default: reads the permissions of the WDAC active policy directory for unprivileged write rights. With BAS_CONFIRM_APPCONTROL_POLICY_TAMPER=true (exact) it also creates and removes one non-policy canary file there. No policy file is ever written, and whether a base policy accepts supplemental policies is not tested.",
+    "telemetry": [
+      "File events (Sysmon EID 11) in CodeIntegrity\\CiPolicies\\Active",
+      "Code Integrity events 3023/3024 if a policy file were rejected"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ],
+    "risk": "medium"
+  },
+  {
+    "id": "appctl-d05-managed-installer",
+    "n": 5,
+    "name": "Application control Policy Integrity: Managed Installer rules that trust user-writable paths (T1553)",
+    "technique_id": "T1553",
+    "timeout_sec": 60,
+    "blast_radius": "Read-only: reads the effective AppLocker Managed Installer rule collection and flags rules whose path is in a user-writable location. Not applicable where no Managed Installer rules exist. Changes nothing.",
+    "telemetry": [
+      "AppLocker policy XML (ManagedInstaller collection)"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ],
+    "production_safe": true,
+    "risk": "low"
+  },
+  {
+    "id": "appctl-d06-after-reboot",
+    "n": 6,
+    "name": "Application control Policy Integrity: evidence that enforcement survives a reboot (T1562.001)",
+    "technique_id": "T1562.001",
+    "timeout_sec": 90,
+    "blast_radius": "Read-only: checks that enforcing policy is stored persistently (AppLocker registry policy, AppIDSvc start mode, WDAC policy files) and that Code Integrity loaded it after the last boot (event 3099). No reboot is performed.",
+    "telemetry": [
+      "Code Integrity event 3099 (policy activation) since last boot",
+      "Service configuration for AppIDSvc"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ],
+    "production_safe": true,
+    "risk": "low"
+  },
+  {
+    "id": "appctl-d07-drift",
+    "n": 7,
+    "name": "Application control Policy Integrity: policy drift against an approved baseline (T1562.001)",
+    "technique_id": "T1562.001",
+    "timeout_sec": 90,
+    "blast_radius": "Read-only: hashes the effective AppLocker policy and the active WDAC policy files and compares the result with an operator-supplied baseline (BAS_APPCTL_BASELINE_SHA256). Without a baseline the step is inconclusive and prints the current value to record. Nothing is stored.",
+    "telemetry": [
+      "Effective policy hash"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ],
+    "production_safe": true,
+    "risk": "low"
+  }
+]

@@ -1,5 +1,5 @@
 id: windows-discovery-validation
-product_line: common
+product_line: av
 name: Windows Discovery Validation - Slow Enumeration Techniques
 description: >
   Dedicated validation scenario for discovery techniques that legitimately
@@ -14,10 +14,18 @@ description: >
   - 10K+ user domains for T1087.002
   - Large subnets for T1018
 
-  Expected verdicts:
-    PASS  = EDR/SIEM detected the discovery activity
-    FAIL  = enumeration completed without generating an alert
-    SKIP  = atomic requires a tool not installed or domain access unavailable
+  How this scenario is graded: these are detection-only probes. Each step really
+  runs its read-only enumeration, but a discovery command has no control that
+  could block it, so the steps never produce a PASS or FAIL and the run has no
+  prevention score ("not assessed" for prevention is expected, not an error).
+  What is judged is detection:
+    Detected      = an alert or host detection event was seen for the step
+                    (SIEM correlation, Defender events, or a reviewed
+                    verification marked Detected)
+    Detection gap = the step ran and a reviewed verification found no alert
+    Unknown       = nobody has verified it yet; connect a SIEM or open the run's
+                    verification queue and record Detected / Not detected
+  A step with no alert and no reviewed verdict is not called a miss.
 
   Note: These techniques are particularly important in real environments where
   scale is the difference between detection and evasion. A 10-second recursive
@@ -53,6 +61,18 @@ steps:
     risk: low
     reversible: true
     blast_radius: "Read-only recursive directory enumeration starting from common user paths (Desktop, Documents, Downloads, AppData). No files are read or modified. Generates extensive directory listing telemetry."
+    detection_profiles:
+      - windows_file_discovery
+    expected_detection:
+      - id: wdv-file-discovery-siem
+        provider: microsoft_sentinel
+        type: siem
+        confidence: recommended
+        finding:
+          severity: Medium
+          title: "Bulk file enumeration from a user process raised no SIEM alert"
+          remediation: >-
+            Alert on high-volume recursive directory enumeration from a non-admin process (Sysmon EID 1 with Get-ChildItem -Recurse, plus file-access volume).
     telemetry:
       - "Sysmon EID 1: powershell.exe spawning with Get-ChildItem -Recurse"
       - "EDR/SIEM: high-volume directory enumeration activity"
@@ -74,6 +94,7 @@ steps:
         $foundCount += @(Get-ChildItem -Path $path -Recurse -ErrorAction SilentlyContinue -File).Count
       }
       Write-Output "BAS-SIM: File discovery completed - enumerated $foundCount files"
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
 
   - name: "Windows Domain Account Discovery (T1087.002) - LDAP Query"
     technique_id: T1087.002
@@ -87,6 +108,18 @@ steps:
     risk: low
     reversible: true
     blast_radius: "Read-only LDAP query to domain controller for all user accounts. No modifications. Generates LDAP query telemetry and directory access logs."
+    detection_profiles:
+      - windows_ad_discovery
+    expected_detection:
+      - id: wdv-ad-discovery-siem
+        provider: microsoft_sentinel
+        type: siem
+        confidence: recommended
+        finding:
+          severity: Medium
+          title: "Bulk LDAP user enumeration raised no SIEM alert"
+          remediation: >-
+            Alert on LDAP queries that return a large number of user objects from a workstation (directory service audit, Sysmon EID 3 to port 389/636).
     telemetry:
       - "Sysmon EID 3: LDAP port 389/636 connection to domain controller"
       - "Security EID 5156: network connection to LDAP service"
@@ -109,6 +142,7 @@ steps:
       } catch {
         Write-Output "BAS-SIM: Domain account discovery skipped - not in domain or insufficient permissions"
       }
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
 
   - name: "Windows Remote System Discovery (T1018) - Network Sweep"
     technique_id: T1018
@@ -122,6 +156,18 @@ steps:
     risk: low
     reversible: true
     blast_radius: "Network ping sweep of local subnet to identify active systems. No connections beyond ICMP. Generates network telemetry and ICMP traffic."
+    detection_profiles:
+      - windows_remote_system_discovery
+    expected_detection:
+      - id: wdv-remote-discovery-siem
+        provider: microsoft_sentinel
+        type: siem
+        confidence: recommended
+        finding:
+          severity: Medium
+          title: "Subnet ping sweep raised no SIEM alert"
+          remediation: >-
+            Alert on ICMP echo requests from one host to many subnet addresses in a short window (network flow or Sysmon EID 3).
     telemetry:
       - "Sysmon EID 3: ICMP echo requests to subnet hosts"
       - "Security EID 5156: ICMP protocol activity"
@@ -150,3 +196,4 @@ steps:
       } catch {
         Write-Output "BAS-SIM: Network discovery skipped - unable to determine local subnet"
       }
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."

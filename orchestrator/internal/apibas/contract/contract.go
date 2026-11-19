@@ -10,9 +10,10 @@ package contract
 import (
 	"time"
 
-	"github.com/audspect/bas/internal/apibas/reporting"
+	"encoding/json"
 	"fmt"
 	protocolpkg "github.com/audspect/bas/internal/apibas/protocol"
+	"github.com/audspect/bas/internal/apibas/reporting"
 	"regexp"
 	"slices"
 	"strings"
@@ -26,6 +27,8 @@ var categories = map[string]bool{
 	"AUTHN": true, "AUTHZ": true, "GWAY": true, "INJ": true, "BIZ": true,
 	"DATA": true, "ABUSE": true, "INTEG": true, "DISC": true, "DET": true,
 	"REPORT": true,
+	// ALEEF marks scenarios generated or registered by the ALEEF engine.
+	"ALEEF": true,
 }
 
 // Side-effect classes from blueprint section 6. Phase 2 supports READ_ONLY and
@@ -68,6 +71,27 @@ var authModes = map[string]bool{"valid": true, "none": true, "revoked": true, "a
 
 var idPattern = regexp.MustCompile(`^API-BAS-([A-Z]+)-(\d{3})$`)
 
+// ALEEF ids: generated tests carry a content hash, registered ones a serial.
+var (
+	aleefGenPattern = regexp.MustCompile(`^ALEEF-GEN-[A-Z0-9-]+-[0-9a-f]{8}(-OC|-NC)?$`)
+	aleefRegPattern = regexp.MustCompile(`^ALEEF-REG-\d{4}(-OC|-NC)?$`)
+)
+
+// idCategory returns the category segment an id implies. ALEEF ids always
+// imply category ALEEF.
+func idCategory(id string) (string, error) {
+	if m := idPattern.FindStringSubmatch(id); m != nil {
+		return m[1], nil
+	}
+	if aleefGenPattern.MatchString(id) || aleefRegPattern.MatchString(id) {
+		return "ALEEF", nil
+	}
+	if strings.HasPrefix(id, "ALEEF-") {
+		return "", fmt.Errorf("contract: id %q must match ALEEF-GEN-<PROPERTY>-<8 hex> or ALEEF-REG-<NNNN>[-OC|-NC]", id)
+	}
+	return "", fmt.Errorf("contract: id %q must match API-BAS-<CAT>-<NNN>", id)
+}
+
 // Scenario is one API BAS scenario: a campaign of ordered steps with an
 // explicit hypothesis, expected control and ground truth.
 type Scenario struct {
@@ -85,6 +109,11 @@ type Scenario struct {
 	// gives false positives.
 	ForbiddenValues []string `yaml:"forbidden_values"`
 	CleanIsEnforced bool     `yaml:"clean_is_enforcement"`
+	// RequireBaselineEvidence makes the owner's baseline response prove the scenario is testable: it must contain at least one of
+	// ForbiddenValues, which are values the owner legitimately receives. It is for APIs that answer a failed request with HTTP 200 and
+	// an error body (GraphQL), where a 200 baseline alone does not show the data was ever returned. Without the evidence the result is
+	// SKIPPED, not a pass.
+	RequireBaselineEvidence bool `yaml:"require_baseline_evidence"`
 	// BaselineStatus is the status a legitimate baseline returns: 200 by default, or 101 for a
 	// WebSocket handshake. Only a websocket scenario may declare 101.
 	BaselineStatus int `yaml:"baseline_status"`
@@ -128,19 +157,19 @@ type Scenario struct {
 	// stated expected result in the test table. The primary Detection sets the outcome.
 	AdditionalDetections []DetectionPolicy `yaml:"additional_detections"`
 	// Calibration declares the conditions the timing threshold was measured under.
-	Calibration       *CalibrationPolicy `yaml:"calibration"`
-	ExpectedControl   string             `yaml:"expected_control"`
-	GroundTruth       GroundTruth        `yaml:"ground_truth"`
-	DetectionAssert   DetectionAssertion `yaml:"detection_assertion"`
+	Calibration     *CalibrationPolicy `yaml:"calibration"`
+	ExpectedControl string             `yaml:"expected_control"`
+	GroundTruth     GroundTruth        `yaml:"ground_truth"`
+	DetectionAssert DetectionAssertion `yaml:"detection_assertion"`
 	// DetectionCovers names the blueprint DET IDs whose detection assertion this scenario's detection block grades.
 	// Each DET ID is covered by at most one scenario, so coverage is never counted twice (DET-003 on BIZ-012).
-	DetectionCovers []string `yaml:"detection_covers"`
-	Evidence          []string           `yaml:"evidence"`
-	SideEffectClass   string             `yaml:"side_effect_class"`
-	Cleanup           []string           `yaml:"cleanup"`
-	IndustryMapping   []string           `yaml:"industry_mapping"`
-	RegulatoryMapping []string           `yaml:"regulatory_mapping"`
-	NegativeTests     []string           `yaml:"negative_tests"`
+	DetectionCovers   []string `yaml:"detection_covers"`
+	Evidence          []string `yaml:"evidence"`
+	SideEffectClass   string   `yaml:"side_effect_class"`
+	Cleanup           []string `yaml:"cleanup"`
+	IndustryMapping   []string `yaml:"industry_mapping"`
+	RegulatoryMapping []string `yaml:"regulatory_mapping"`
+	NegativeTests     []string `yaml:"negative_tests"`
 	// Reporting declares the regulatory reporting obligations a REPORT scenario grades (package reporting).
 	Reporting *reporting.Policy `yaml:"reporting"`
 }
@@ -200,6 +229,10 @@ type Step struct {
 	ClientCert string `yaml:"client_cert"`
 	ForgeAs    string `yaml:"forge_as"`
 	Hypothesis string `yaml:"hypothesis"`
+	// GraphQLQuery marks a POST whose body is one GraphQL query document and nothing else, so the request only reads. The claim is
+	// checked, not trusted: the body must be a JSON object whose only key is "query", the document must start with the query keyword,
+	// and it may not contain the words mutation or subscription. Only then is the step not counted as mutating.
+	GraphQLQuery bool `yaml:"graphql_query"`
 }
 
 // GroundTruth declares which independent adapters must verify the outcome.
@@ -235,15 +268,15 @@ func Parse(data []byte) (Scenario, error) {
 // Validate enforces the contract. It is strict on purpose: an incomplete
 // scenario must fail to load rather than run with a weaker claim.
 func (s Scenario) Validate() error {
-	m := idPattern.FindStringSubmatch(s.ID)
-	if m == nil {
-		return fmt.Errorf("contract: id %q must match API-BAS-<CAT>-<NNN>", s.ID)
+	idCat, err := idCategory(s.ID)
+	if err != nil {
+		return err
 	}
-	if !categories[m[1]] {
-		return fmt.Errorf("contract: %s: unknown category %q", s.ID, m[1])
+	if !categories[idCat] {
+		return fmt.Errorf("contract: %s: unknown category %q", s.ID, idCat)
 	}
-	if s.Category != m[1] {
-		return fmt.Errorf("contract: %s: category %q does not match id segment %q", s.ID, s.Category, m[1])
+	if s.Category != idCat {
+		return fmt.Errorf("contract: %s: category %q does not match id segment %q", s.ID, s.Category, idCat)
 	}
 	if !claims[s.Claim] {
 		return fmt.Errorf("contract: %s: unknown claim %q", s.ID, s.Claim)
@@ -267,6 +300,9 @@ func (s Scenario) Validate() error {
 		if len(v) < 4 {
 			return fmt.Errorf("contract: %s: forbidden value %q is too short to be distinctive", s.ID, v)
 		}
+	}
+	if s.RequireBaselineEvidence && len(s.ForbiddenValues) == 0 {
+		return fmt.Errorf("contract: %s: require_baseline_evidence needs forbidden_values to look for", s.ID)
 	}
 	if len(s.DeniedStatuses) == 0 && !s.CleanIsEnforced {
 		return fmt.Errorf("contract: %s: denied_statuses must list the enforcement codes, or set clean_is_enforcement", s.ID)
@@ -538,9 +574,16 @@ const maxRepeat = 50
 func (s Scenario) validateSideEffects() error {
 	mutates := false
 	for _, st := range s.Steps {
-		if st.Method != "GET" {
-			mutates = true
+		if st.Method == "GET" {
+			continue
 		}
+		if st.GraphQLQuery {
+			if err := checkGraphQLQueryStep(s.ID, st); err != nil {
+				return err
+			}
+			continue
+		}
+		mutates = true
 	}
 	switch s.SideEffectClass {
 	case "READ_ONLY":
@@ -554,6 +597,32 @@ func (s Scenario) validateSideEffects() error {
 		if len(s.Cleanup) == 0 {
 			return fmt.Errorf("contract: %s: STATE_CHANGE_SANDBOX requires a cleanup entry", s.ID)
 		}
+	}
+	return nil
+}
+
+// checkGraphQLQueryStep verifies a step that claims to be a read-only GraphQL query.
+func checkGraphQLQueryStep(scenarioID string, st Step) error {
+	fail := func(why string) error {
+		return fmt.Errorf("contract: %s: step %s is marked graphql_query but %s", scenarioID, st.ID, why)
+	}
+	if st.Method != "POST" {
+		return fail("is not a POST")
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(st.Body), &body); err != nil {
+		return fail("its body is not a JSON object")
+	}
+	q, ok := body["query"].(string)
+	if !ok || len(body) != 1 {
+		return fail(`its body is not an object whose only key is "query"`)
+	}
+	doc := strings.TrimSpace(q)
+	if !strings.HasPrefix(doc, "query") || (len(doc) > 5 && doc[5] != ' ' && doc[5] != '{' && doc[5] != '(') {
+		return fail("its document does not start with the query keyword")
+	}
+	if strings.Contains(doc, "mutation") || strings.Contains(doc, "subscription") {
+		return fail("its document mentions mutation or subscription")
 	}
 	return nil
 }

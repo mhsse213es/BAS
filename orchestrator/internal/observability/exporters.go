@@ -38,46 +38,53 @@ func NewPrometheusRemoteWriteExporter(endpoint string) (trace.SpanExporter, erro
 	return newNoOpExporter(), nil
 }
 
-// NewTempoExporter creates a span exporter for Grafana Tempo via OTLP HTTP.
-// Endpoint should be the Tempo OTLP HTTP receiver (e.g., http://localhost:4318).
-func NewTempoExporter(endpoint string) (trace.SpanExporter, error) {
+// otlpHTTPEndpoint checks an endpoint for the OTLP HTTP exporter. It must be a full http or https URL with a
+// host. Port 4317 is the OTLP gRPC port, and this exporter speaks OTLP over HTTP, so 4317 is refused here rather
+// than failing later at export time.
+func otlpHTTPEndpoint(kind, endpoint string) (string, error) {
 	if endpoint == "" {
-		return nil, fmt.Errorf("tempo endpoint cannot be empty")
+		return "", fmt.Errorf("%s endpoint cannot be empty", kind)
 	}
-
-	// Validate URL
-	if _, err := url.Parse(endpoint); err != nil {
-		return nil, fmt.Errorf("invalid tempo endpoint URL: %w", err)
-	}
-
-	// Create OTLP HTTP trace exporter
-	exporter, err := otlptracehttp.New(context.Background(), otlptracehttp.WithEndpoint(endpoint))
+	u, err := url.Parse(endpoint)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create tempo exporter: %w", err)
+		return "", fmt.Errorf("invalid %s endpoint URL: %w", kind, err)
 	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return "", fmt.Errorf("%s endpoint must start with http:// or https:// (OTLP over HTTP), got %q", kind, endpoint)
+	}
+	if u.Host == "" {
+		return "", fmt.Errorf("%s endpoint has no host", kind)
+	}
+	if u.Port() == "4317" {
+		return "", fmt.Errorf("%s endpoint uses port 4317, the OTLP gRPC port; use the OTLP HTTP port 4318", kind)
+	}
+	return endpoint, nil
+}
 
+// newOTLPHTTPExporter builds an OTLP HTTP span exporter. WithEndpointURL reads the scheme, so an http:// endpoint
+// is sent without TLS and an https:// endpoint with it.
+func newOTLPHTTPExporter(kind, endpoint string) (trace.SpanExporter, error) {
+	ep, err := otlpHTTPEndpoint(kind, endpoint)
+	if err != nil {
+		return nil, err
+	}
+	exporter, err := otlptracehttp.New(context.Background(), otlptracehttp.WithEndpointURL(ep))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create %s exporter: %w", kind, err)
+	}
 	return exporter, nil
 }
 
-// NewJaegerExporter creates a span exporter for Jaeger via OTLP HTTP.
-// Endpoint should be the Jaeger OTLP HTTP receiver (e.g., http://localhost:4317).
+// NewTempoExporter creates a span exporter for a self-hosted Grafana Tempo over OTLP HTTP.
+// Endpoint is the Tempo OTLP HTTP receiver, for example http://tempo.internal:4318.
+func NewTempoExporter(endpoint string) (trace.SpanExporter, error) {
+	return newOTLPHTTPExporter("tempo", endpoint)
+}
+
+// NewJaegerExporter creates a span exporter for Jaeger over OTLP HTTP. Jaeger receives OTLP HTTP on port 4318.
+// Endpoint is for example http://jaeger.internal:4318. Port 4317 is refused, because it is the gRPC port.
 func NewJaegerExporter(endpoint string) (trace.SpanExporter, error) {
-	if endpoint == "" {
-		return nil, fmt.Errorf("jaeger endpoint cannot be empty")
-	}
-
-	// Validate URL
-	if _, err := url.Parse(endpoint); err != nil {
-		return nil, fmt.Errorf("invalid jaeger endpoint URL: %w", err)
-	}
-
-	// Create OTLP HTTP trace exporter (Jaeger also supports OTLP)
-	exporter, err := otlptracehttp.New(context.Background(), otlptracehttp.WithEndpoint(endpoint))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create jaeger exporter: %w", err)
-	}
-
-	return exporter, nil
+	return newOTLPHTTPExporter("jaeger", endpoint)
 }
 
 // noOpExporter is a placeholder span exporter that does nothing.

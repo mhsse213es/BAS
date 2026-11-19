@@ -107,6 +107,9 @@ func svcUninstall() error {
 	if err := notifyServerUnenroll(serverURL, secret, agentID); err != nil {
 		fmt.Printf("[~] Could not notify server of uninstall: %v\n", err)
 	}
+
+	// Last: remove the data and the program itself (an installer replacing the agent keeps them).
+	platformPurgeLocalData()
 	return nil
 }
 

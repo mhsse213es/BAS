@@ -1,0 +1,56 @@
+id: "API-BAS-AUTHZ-203"
+name: "MFG-003: supplier changes another supplier's purchase order"
+category: AUTHZ
+claim: cross_identity
+attack_objective: "Supplier 1 changes the amount of supplier 2's purchase order."
+threat_model:
+  attacker: "authenticated supplier 1"
+  identity: supplier-1
+  access_level: "supplier, valid token, owns PUR-S1-001 only"
+  objective: "Supplier 1 changes the amount of supplier 2's purchase order."
+preconditions:
+  fixture: manufacturing-two-plant
+  identities: [supplier-1, supplier-2]
+  object: PUR-S2-001
+steps:
+  - id: "baseline-owner"
+    role: baseline
+    identity: supplier-2
+    auth: valid
+    method: GET
+    path: "/api/mfg/purchase-orders/PUR-S2-001"
+    hypothesis: "Supplier 2, the owner, reads their own purchase order. If this fails, the scenario is not testable."
+  - id: "attack-authz-203"
+    role: attack
+    identity: supplier-1
+    auth: valid
+    method: PATCH
+    path: "/api/mfg/purchase-orders/PUR-S2-001"
+    body: '{"amount":"1"}'
+    hypothesis: "Supplier 1's change to PUR-S2-001 is refused, and the amount of that purchase order is not changed."
+denied_statuses: [404]
+expected_control: "A supplier cannot change another supplier's purchase order. The change is refused and the amount is unchanged."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The state shows PUR-S2-001's amount unchanged after supplier 1's change.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The change names PUR-S2-001, owned by supplier 2, from supplier 1. Graded against the access event by APIBAS-REL-004. Fixture-validated, not live-SIEM-validated."
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+industry_mapping:
+  - "Manufacturing: supplier and purchase-order manipulation"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-AUTHZ-203 against the fixed build must PASS"
+  - "API-BAS-AUTHZ-203 against the vulnerable build must FAIL (exploited)"

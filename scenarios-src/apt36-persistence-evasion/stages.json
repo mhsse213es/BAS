@@ -1,0 +1,97 @@
+[
+  {
+    "id": "apt36-pe1",
+    "n": 1,
+    "name": "APT36 Persistence 1 - WMI Permanent Event Subscription (T1546.003)",
+    "technique_id": "T1546.003",
+    "timeout_sec": 90,
+    "blast_radius": "Gated by BAS_CONFIRM_APT36_WMI_SUBSCRIPTION=true (exact) and administrator only. Creates a run-tagged filter, consumer and binding whose filter never fires, reads them back, then removes all three and verifies none remain.",
+    "telemetry": [
+      "Sysmon EID 19, 20 and 21",
+      "WMI-Activity EID 5861"
+    ],
+    "detection": [
+      "EDR: new permanent WMI subscription with a command-line consumer"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue\n$ns = 'root\\subscription'\nGet-CimInstance -Namespace $ns -ClassName __FilterToConsumerBinding -ErrorAction SilentlyContinue | Where-Object { $_.Filter.Name -like 'bas_a36_*' } | Remove-CimInstance -ErrorAction SilentlyContinue\nGet-CimInstance -Namespace $ns -ClassName CommandLineEventConsumer -ErrorAction SilentlyContinue | Where-Object { $_.Name -like 'bas_a36_*' } | Remove-CimInstance -ErrorAction SilentlyContinue\nGet-CimInstance -Namespace $ns -ClassName __EventFilter -ErrorAction SilentlyContinue | Where-Object { $_.Name -like 'bas_a36_*' } | Remove-CimInstance -ErrorAction SilentlyContinue",
+    "production_safe": false,
+    "risk": "medium",
+    "fidelity": "telemetry-safe",
+    "requires_priv": "admin"
+  },
+  {
+    "id": "apt36-pe2",
+    "n": 2,
+    "name": "APT36 Persistence 2 - Startup Folder Script (T1547.001)",
+    "technique_id": "T1547.001",
+    "timeout_sec": 60,
+    "blast_radius": "Writes a run-tagged .cmd into the per-user Startup folder, then removes it and verifies removal. Never run at logon.",
+    "telemetry": [
+      "Sysmon EID 11: file created in the Startup folder"
+    ],
+    "detection": [
+      "EDR: new script in the Startup folder"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue\nGet-ChildItem -Path (Join-Path $env:APPDATA 'Microsoft\\Windows\\Start Menu\\Programs\\Startup') -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt36-pe3",
+    "n": 3,
+    "name": "APT36 Persistence 3 - Service Create/Start/Stop/Delete (T1543.003)",
+    "technique_id": "T1543.003",
+    "timeout_sec": 90,
+    "blast_radius": "Gated by BAS_CONFIRM_APT36_SERVICE_CREATE=true (exact) and administrator only. Creates a run-tagged service, starts and stops it, then deletes it and verifies removal with Get-Service. Only its own test service is touched.",
+    "telemetry": [
+      "Security EID 4697",
+      "Sysmon EID 1"
+    ],
+    "detection": [
+      "EDR: new service created and started by a script host"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue\nGet-Service -Name 'bas_a36_*' -ErrorAction SilentlyContinue | ForEach-Object { try { Stop-Service -Name $_.Name -Force -ErrorAction SilentlyContinue } catch {}; & (Join-Path $env:SystemRoot 'System32\\sc.exe') delete $_.Name | Out-Null }",
+    "production_safe": false,
+    "risk": "medium",
+    "fidelity": "telemetry-safe",
+    "requires_priv": "admin"
+  },
+  {
+    "id": "apt36-pe4",
+    "n": 4,
+    "name": "APT36 Evasion 1 - Per-User COM CLSID Override (T1546.015)",
+    "technique_id": "T1546.015",
+    "timeout_sec": 60,
+    "blast_radius": "Writes a run-tagged CLSID under HKCU Software Classes with an InprocServer32 override, reads it back, then removes the whole key and verifies removal. No existing CLSID is touched.",
+    "telemetry": [
+      "Sysmon EID 13 and 14: registry value set and key deleted"
+    ],
+    "detection": [
+      "EDR: new per-user CLSID with an InprocServer32 override"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue\nGet-ChildItem 'HKCU:\\SOFTWARE\\Classes\\CLSID' -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -match '^\\{[0-9a-fA-F-]+\\}$' } | ForEach-Object { try { if ((Get-ItemProperty (Join-Path $_.PSPath 'InprocServer32') -Name '(default)' -ErrorAction SilentlyContinue).'(default)' -like '*bas_a36_*') { Remove-Item $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue } } catch {} }",
+    "production_safe": true,
+    "risk": "low",
+    "fidelity": "telemetry-safe"
+  },
+  {
+    "id": "apt36-pe5",
+    "n": 5,
+    "name": "APT36 Evasion 2 - Defender Exclusion Add/Verify/Remove (T1562.001)",
+    "technique_id": "T1562.001",
+    "timeout_sec": 60,
+    "blast_radius": "Gated by BAS_CONFIRM_APT36_DEFENDER_EXCLUSION=true (exact) and administrator only, because it changes live AV configuration. Adds an exclusion for a run-tagged temp path, verifies the exclusion took effect from live Get-MpPreference state (not the command exit code), then removes it and re-verifies. Refuses to run if the path is somehow already excluded.",
+    "telemetry": [
+      "Sysmon EID 13: Defender exclusion registry value changed"
+    ],
+    "detection": [
+      "SIEM: new Defender path exclusion added outside a change window"
+    ],
+    "cleanup": "Get-ChildItem -Path $env:TEMP -Filter 'bas_a36_*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+    "production_safe": false,
+    "risk": "medium",
+    "fidelity": "telemetry-safe",
+    "requires_priv": "admin"
+  }
+]

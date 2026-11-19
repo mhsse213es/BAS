@@ -1,0 +1,1143 @@
+# =============================================================================
+# Akira ESXi and Virtual Infrastructure Ransomware Assessment (network and API, from a Windows agent)
+# =============================================================================
+id: akira-esxi-assessment
+version: "1.0.0"
+product_line: ransomware
+name: Akira ESXi and Virtual Infrastructure Ransomware Assessment
+description: >
+  Eight-step, hypervisor-side assessment of the Akira ESXi variant path (CISA AA24-109A:
+  management access, VM discovery, datastore access, VM shutdown, snapshot deletion and
+  datastore encryption), run from a Windows agent against lab ESXi hosts listed in
+  BAS_ESXI_HOSTS (host or host:port, comma or semicolon separated). No agent runs on ESXi:
+  evidence is API facts (services, lockdown mode, inventory counts, privileges), not endpoint
+  telemetry. E1 checks unauthenticated management exposure; E2 logs in with an operator
+  read-only account from BAS_ESXI_CRED_FILE; E3 and E4 count VMs and datastores; E5 to E7
+  assess power-off, snapshot-removal and datastore-write rights through privilege queries
+  without performing the attacks; E8 correlates the chain, checks the AD ESX Admins path
+  (CVE-2024-37085) and cleans up. The only writes are two gated canaries (a snapshot on
+  BAS_ESXI_LAB_VM and a tiny file on BAS_ESXI_LAB_DATASTORE) behind
+  BAS_CONFIRM_ESXI_LAB_WRITE=true (exact lowercase). VM power-off, deletion of existing
+  snapshots and VM disk encryption are never performed. Premise: the agent is outside the
+  ESXi management network, so reachability or a successful login is exposure. The protocol
+  code was verified only against a local stub of hand-written vSphere replies, not a real
+  ESXi host.
+
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+severity: critical
+estimated_duration_sec: 240
+abort_conditions:
+  - "PowerShell major version < 5"
+tags:
+  - akira
+  - ransomware
+  - esxi
+  - vmware
+  - hypervisor
+  - t1133
+  - t1078
+  - t1485
+  - mitre
+  - bas
+mitre_phases:
+  - initial-access
+  - discovery
+  - impact
+attck_tactics:
+  - TA0001  # Initial Access
+  - TA0007  # Discovery
+  - TA0040  # Impact
+references:
+  - "CISA AA24-109A - #StopRansomware: Akira Ransomware (Akira v2 targets VMware ESXi)"
+  - "MITRE ATT&CK T1133, T1078, T1018, T1083, T1529, T1485"
+  - "VMware: CVE-2024-37085 (AD ESX Admins group), CVE-2021-21974 (SLP)"
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+  require_run_id: false
+  require_temp_disk_mb: 32
+  min_powershell_major: 5
+
+variables:
+  run_id: "{{env.BAS_RUN_ID | default(random_hex8)}}"
+  sim_tag: "[BAS-SIM-ESX]"
+
+steps:
+  # ---------------------------------------------------------------------------
+  - id: esx-e1-management-exposure
+    name: "ESXi E1 - Management Plane Exposure (T1133)"
+    technique_id: T1133
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Unauthenticated. TCP connects to ports 22, the HTTPS port (443 or the host:port given), 902, 427 and 5989 on each host in BAS_ESXI_HOSTS, reads the SSH banner and the /sdk ServiceContent (product, version, build). No login."
+    preconditions: ["Windows agent that can reach the lab ESXi hosts.", "BAS_ESXI_HOSTS lists hosts the operator owns.", "Steps E1-E8 run in order within one run."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; any canary created on a host is removed and removal verified; E8 removes the work directory."]
+    abort_on: []
+    telemetry:
+      - "ESXi hostd.log and vpxa/auth logs: login events and API calls from the agent address"
+    detection:
+      - "SIEM/ESXi syslog: logins from a non-management network, SSH enablement, snapshot and datastore file operations outside change windows"
+    expected_telemetry_count: 1
+    false_positive_notes: "vCenter, backup and monitoring systems use the same APIs; correlate with source address and account."
+    mitigations:
+      - "Lockdown mode, management network isolation and disabled SSH/ESXi Shell/SLP."
+      - "Least-privilege read-only service roles; no AD ESX Admins group exposure; patched builds."
+      - "Immutable backups and snapshot-removal alerting."
+    references: ["CISA AA24-109A"]
+    evidence: ["Emit ports reachable and product/build per host."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { 'norun' }
+      $work = Join-Path $env:TEMP "bas_esx_$runId"
+      $ledger = Join-Path $work 'ledger.jsonl'
+      try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch { }
+      [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+      $hosts = @(); $badHosts = 0
+      foreach ($h in @($env:BAS_ESXI_HOSTS -split '[;,]' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) { if ($h -match '^[A-Za-z0-9._-]{1,253}(:\d{1,5})?$') { $hosts += $h } else { $badHosts++ } }
+      function Split-HostPort($h, $def) { if ($h -match '^(.+):(\d+)$') { return @($Matches[1], [int]$Matches[2]) } else { return @($h, $def) } }
+      function Add-Ledger($step, $target, $result, $facts) {
+        if (-not (Test-Path $work)) { New-Item -ItemType Directory -Path $work -Force | Out-Null }
+        $o = [ordered]@{ step=$step; target=$target; ts=(Get-Date).ToUniversalTime().ToString('o'); result=$result; facts=$facts }
+        Add-Content -Path $ledger -Value ($o | ConvertTo-Json -Compress -Depth 4) -Encoding UTF8
+      }
+      function Read-Ledger { if (Test-Path $ledger) { @(Get-Content $ledger | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json }) } else { @() } }
+      function Get-EsxCred { $f = $env:BAS_ESXI_CRED_FILE; if (-not $f -or -not (Test-Path $f)) { return $null }; try { $j = Get-Content $f -Raw | ConvertFrom-Json; if ($j.user -and $j.password) { return $j } } catch { }; return $null }
+      function Test-TcpPort($h, $p) { try { $c = New-Object Net.Sockets.TcpClient; $a = $c.BeginConnect($h, $p, $null, $null); $ok = $a.AsyncWaitHandle.WaitOne(3000) -and $c.Connected; $c.Close(); return [bool]$ok } catch { return $false } }
+      function Invoke-Vim($h, $inner, $cookie) {
+        $body = '<?xml version="1.0" encoding="UTF-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><soapenv:Body>' + $inner + '</soapenv:Body></soapenv:Envelope>'
+        $res = [pscustomobject]@{ Ok = $false; Xml = $null; Cookie = $null; Fault = $null; Status = 0 }
+        try {
+          $req = [Net.HttpWebRequest]::Create("https://$h/sdk"); $req.Method = 'POST'; $req.ContentType = 'text/xml; charset=UTF-8'; $req.Timeout = 15000
+          $req.Headers.Add('SOAPAction', '"urn:vim25/6.7"'); if ($cookie) { $req.Headers.Add('Cookie', $cookie) }
+          $bytes = [Text.Encoding]::UTF8.GetBytes($body); $req.ContentLength = $bytes.Length
+          $s = $req.GetRequestStream(); $s.Write($bytes, 0, $bytes.Length); $s.Close()
+          $resp = $req.GetResponse(); $res.Status = [int]$resp.StatusCode; $res.Cookie = $resp.Headers['Set-Cookie']
+          $txt = (New-Object IO.StreamReader($resp.GetResponseStream())).ReadToEnd(); $resp.Close()
+          $res.Xml = [xml]$txt; $res.Ok = $true
+        } catch [Net.WebException] {
+          try { $r = $_.Exception.Response; if ($r) { $res.Status = [int]$r.StatusCode; $t = (New-Object IO.StreamReader($r.GetResponseStream())).ReadToEnd(); $x = [xml]$t; $res.Xml = $x; $res.Fault = ($x.SelectNodes("//*[local-name()='faultstring']") | Select-Object -First 1).InnerText } } catch { }
+        } catch { }
+        return $res
+      }
+      function Xt($xml, $name) { if (-not $xml) { return $null }; $n = $xml.SelectNodes("//*[local-name()='$name']") | Select-Object -First 1; if ($n) { return $n.InnerText } else { return $null } }
+      function Get-EsxContent($h) {
+        $r = Invoke-Vim $h '<RetrieveServiceContent xmlns="urn:vim25"><_this type="ServiceInstance">ServiceInstance</_this></RetrieveServiceContent>' $null
+        if (-not $r.Ok) { return $null }
+        [pscustomobject]@{ FullName=(Xt $r.Xml 'fullName'); Version=(Xt $r.Xml 'version'); Build=(Xt $r.Xml 'build'); ApiType=(Xt $r.Xml 'apiType'); Root=(Xt $r.Xml 'rootFolder'); Pc=(Xt $r.Xml 'propertyCollector'); Sm=(Xt $r.Xml 'sessionManager'); Am=(Xt $r.Xml 'authorizationManager'); Vm=(Xt $r.Xml 'viewManager') }
+      }
+      function Connect-Esx($h, $cred) {
+        $c = Get-EsxContent $h; if (-not $c -or -not $c.Sm) { return $null }
+        $u = [Security.SecurityElement]::Escape([string]$cred.user); $p = [Security.SecurityElement]::Escape([string]$cred.password)
+        $r = Invoke-Vim $h ('<Login xmlns="urn:vim25"><_this type="SessionManager">' + $c.Sm + '</_this><userName>' + $u + '</userName><password>' + $p + '</password></Login>') $null
+        if (-not $r.Ok -or -not $r.Cookie) { return [pscustomobject]@{ Ok = $false; Fault = $r.Fault } }
+        [pscustomobject]@{ Ok = $true; Cookie = ($r.Cookie -split ';')[0]; SessionId = (Xt $r.Xml 'key'); Content = $c; Host = $h }
+      }
+      function Get-EsxProps($s, $type, $paths) {
+        $c = $s.Content
+        $v = Invoke-Vim $s.Host ('<CreateContainerView xmlns="urn:vim25"><_this type="ViewManager">' + $c.Vm + '</_this><container type="Folder">' + $c.Root + '</container><type>' + $type + '</type><recursive>true</recursive></CreateContainerView>') $s.Cookie
+        $view = Xt $v.Xml 'returnval'; if (-not $view) { return $null }
+        $ps = ($paths | ForEach-Object { '<pathSet>' + $_ + '</pathSet>' }) -join ''
+        $r = Invoke-Vim $s.Host ('<RetrieveProperties xmlns="urn:vim25"><_this type="PropertyCollector">' + $c.Pc + '</_this><specSet><propSet><type>' + $type + '</type>' + $ps + '</propSet><objectSet><obj type="ContainerView">' + $view + '</obj><skip>true</skip><selectSet xsi:type="TraversalSpec"><name>view</name><type>ContainerView</type><path>view</path><skip>false</skip></selectSet></objectSet></specSet></RetrieveProperties>') $s.Cookie
+        if (-not $r.Ok) { return $null }
+        $out = @()
+        foreach ($rv in @($r.Xml.SelectNodes("//*[local-name()='returnval']"))) {
+          $obj = $rv.SelectSingleNode("*[local-name()='obj']"); if (-not $obj) { continue }
+          $props = @{}; foreach ($p in @($rv.SelectNodes("*[local-name()='propSet']"))) { $nm = $p.SelectSingleNode("*[local-name()='name']").InnerText; $val = $p.SelectSingleNode("*[local-name()='val']"); $props[$nm] = if ($val) { $val.InnerText } else { $null } }
+          $out += [pscustomobject]@{ Id = $obj.InnerText; Props = $props; Node = $rv }
+        }
+        return ,$out
+      }
+      function Get-EsxPriv($s, $type, $ids, $priv) {
+        if (@($ids).Count -eq 0) { return 0 }
+        $ents = ($ids | ForEach-Object { '<entity type="' + $type + '">' + $_ + '</entity>' }) -join ''
+        $r = Invoke-Vim $s.Host ('<HasPrivilegeOnEntities xmlns="urn:vim25"><_this type="AuthorizationManager">' + $s.Content.Am + '</_this>' + $ents + '<sessionId>' + $s.SessionId + '</sessionId><privId>' + $priv + '</privId></HasPrivilegeOnEntities>') $s.Cookie
+        if (-not $r.Ok) { return $null }
+        $g = 0; foreach ($n in @($r.Xml.SelectNodes("//*[local-name()='privAvailability']"))) { $isg = $n.SelectSingleNode("*[local-name()='isGranted']"); if ($isg -and $isg.InnerText -eq 'true') { $g++ } }
+        return $g
+      }
+      if ($hosts.Count -eq 0) { Write-Output "SKIP: prerequisite missing (BAS_ESXI_HOSTS not set or no valid host; invalid entries: $badHosts). Lab ESXi hosts only. [BAS-SIM-ESX-E1]"; return }
+      if (Test-Path $work) { Remove-Item $work -Recurse -Force }
+      New-Item -ItemType Directory -Path $work -Force | Out-Null
+      $ports = [ordered]@{ ssh=22; https=443; vmk=902; slp=427; cim=5989 }
+      $exposed = 0; $findings = @(); $lines = @()
+      foreach ($h in $hosts) {
+        $hp = Split-HostPort $h 443; $name = $hp[0]
+        $open = [ordered]@{}; foreach ($k in $ports.Keys) { $port = $ports[$k]; if ($k -eq 'https') { $port = $hp[1] }; $open[$k] = (Test-TcpPort $name $port) }
+        $ban = $null
+        if ($open.ssh) { try { $c = New-Object Net.Sockets.TcpClient($name, 22); $c.ReceiveTimeout = 3000; $st = $c.GetStream(); $buf = New-Object byte[] 128; $n = $st.Read($buf, 0, 128); $ban = ([Text.Encoding]::ASCII.GetString($buf, 0, $n)).Trim(); $c.Close() } catch { } }
+        $ct = if ($open.https) { Get-EsxContent $h } else { $null }
+        $any = ($open.ssh -or $open.https -or $open.vmk -or $open.slp -or $open.cim)
+        if ($any) { $exposed++ }
+        if ($open.ssh) { $findings += "$h SSH (22) reachable from this network" }
+        if ($open.slp) { $findings += "$h SLP (427) reachable - disable the SLP service (ESXiArgs/CVE-2021-21974 vector)" }
+        Add-Ledger 'E1' $h $(if ($any) { 'reachable' } else { 'blocked' }) @{ ports=$open; ssh_banner=$ban; version=$ct.Version; build=$ct.Build; api_type=$ct.ApiType }
+        $lines += "$h ports=[$((($open.Keys | Where-Object { $open[$_] }) -join ','))] ssh_banner=[$ban] product=[$($ct.FullName)] version=$($ct.Version) build=$($ct.Build) api=$($ct.ApiType)"
+      }
+      Write-Output "EVIDENCE T1133: hosts=$($hosts.Count) invalid_ignored=$badHosts hosts_with_management_ports_reachable=$exposed. Premise: this agent is NOT on the ESXi management network, so reachability is exposure. Version and build are reported as read, with no vulnerability lookup. [BAS-SIM-ESX-E1]"
+      foreach ($l in $lines) { Write-Output "EVIDENCE T1133: $l [BAS-SIM-ESX-E1]" }
+      foreach ($x in $findings) { Write-Output "FINDING: $x [BAS-SIM-ESX-E1]" }
+      if ($exposed -gt 0) { Write-Output "FAIL: $exposed of $($hosts.Count) ESXi host(s) expose management services (SSH/HTTPS/902/SLP/CIM) to this network - the hypervisor management plane is reachable from an endpoint segment. [BAS-SIM-ESX-E1]" }
+      else { Write-Output "PASS: none of the $($hosts.Count) ESXi host(s) answered on any management port from this network. [BAS-SIM-ESX-E1]" }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  - id: esx-e2-administrative-access
+    name: "ESXi E2 - Administrative Access Validation (T1078)"
+    technique_id: T1078
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 180
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Logs in with the operator-supplied account in BAS_ESXI_CRED_FILE (JSON user and password; never printed) and reads lockdown mode, the SSH and ESXi Shell services and AD join state. Read-only API calls."
+    preconditions: ["Windows agent that can reach the lab ESXi hosts.", "BAS_ESXI_HOSTS lists hosts the operator owns.", "Steps E1-E8 run in order within one run."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; any canary created on a host is removed and removal verified; E8 removes the work directory."]
+    abort_on: []
+    telemetry:
+      - "ESXi hostd.log and vpxa/auth logs: login events and API calls from the agent address"
+    detection:
+      - "SIEM/ESXi syslog: logins from a non-management network, SSH enablement, snapshot and datastore file operations outside change windows"
+    expected_telemetry_count: 1
+    false_positive_notes: "vCenter, backup and monitoring systems use the same APIs; correlate with source address and account."
+    mitigations:
+      - "Lockdown mode, management network isolation and disabled SSH/ESXi Shell/SLP."
+      - "Least-privilege read-only service roles; no AD ESX Admins group exposure; patched builds."
+      - "Immutable backups and snapshot-removal alerting."
+    references: ["CISA AA24-109A"]
+    evidence: ["Emit login result, lockdown, ssh_running, esxi_shell_running, ad_domain."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { 'norun' }
+      $work = Join-Path $env:TEMP "bas_esx_$runId"
+      $ledger = Join-Path $work 'ledger.jsonl'
+      try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch { }
+      [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+      $hosts = @(); $badHosts = 0
+      foreach ($h in @($env:BAS_ESXI_HOSTS -split '[;,]' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) { if ($h -match '^[A-Za-z0-9._-]{1,253}(:\d{1,5})?$') { $hosts += $h } else { $badHosts++ } }
+      function Split-HostPort($h, $def) { if ($h -match '^(.+):(\d+)$') { return @($Matches[1], [int]$Matches[2]) } else { return @($h, $def) } }
+      function Add-Ledger($step, $target, $result, $facts) {
+        if (-not (Test-Path $work)) { New-Item -ItemType Directory -Path $work -Force | Out-Null }
+        $o = [ordered]@{ step=$step; target=$target; ts=(Get-Date).ToUniversalTime().ToString('o'); result=$result; facts=$facts }
+        Add-Content -Path $ledger -Value ($o | ConvertTo-Json -Compress -Depth 4) -Encoding UTF8
+      }
+      function Read-Ledger { if (Test-Path $ledger) { @(Get-Content $ledger | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json }) } else { @() } }
+      function Get-EsxCred { $f = $env:BAS_ESXI_CRED_FILE; if (-not $f -or -not (Test-Path $f)) { return $null }; try { $j = Get-Content $f -Raw | ConvertFrom-Json; if ($j.user -and $j.password) { return $j } } catch { }; return $null }
+      function Test-TcpPort($h, $p) { try { $c = New-Object Net.Sockets.TcpClient; $a = $c.BeginConnect($h, $p, $null, $null); $ok = $a.AsyncWaitHandle.WaitOne(3000) -and $c.Connected; $c.Close(); return [bool]$ok } catch { return $false } }
+      function Invoke-Vim($h, $inner, $cookie) {
+        $body = '<?xml version="1.0" encoding="UTF-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><soapenv:Body>' + $inner + '</soapenv:Body></soapenv:Envelope>'
+        $res = [pscustomobject]@{ Ok = $false; Xml = $null; Cookie = $null; Fault = $null; Status = 0 }
+        try {
+          $req = [Net.HttpWebRequest]::Create("https://$h/sdk"); $req.Method = 'POST'; $req.ContentType = 'text/xml; charset=UTF-8'; $req.Timeout = 15000
+          $req.Headers.Add('SOAPAction', '"urn:vim25/6.7"'); if ($cookie) { $req.Headers.Add('Cookie', $cookie) }
+          $bytes = [Text.Encoding]::UTF8.GetBytes($body); $req.ContentLength = $bytes.Length
+          $s = $req.GetRequestStream(); $s.Write($bytes, 0, $bytes.Length); $s.Close()
+          $resp = $req.GetResponse(); $res.Status = [int]$resp.StatusCode; $res.Cookie = $resp.Headers['Set-Cookie']
+          $txt = (New-Object IO.StreamReader($resp.GetResponseStream())).ReadToEnd(); $resp.Close()
+          $res.Xml = [xml]$txt; $res.Ok = $true
+        } catch [Net.WebException] {
+          try { $r = $_.Exception.Response; if ($r) { $res.Status = [int]$r.StatusCode; $t = (New-Object IO.StreamReader($r.GetResponseStream())).ReadToEnd(); $x = [xml]$t; $res.Xml = $x; $res.Fault = ($x.SelectNodes("//*[local-name()='faultstring']") | Select-Object -First 1).InnerText } } catch { }
+        } catch { }
+        return $res
+      }
+      function Xt($xml, $name) { if (-not $xml) { return $null }; $n = $xml.SelectNodes("//*[local-name()='$name']") | Select-Object -First 1; if ($n) { return $n.InnerText } else { return $null } }
+      function Get-EsxContent($h) {
+        $r = Invoke-Vim $h '<RetrieveServiceContent xmlns="urn:vim25"><_this type="ServiceInstance">ServiceInstance</_this></RetrieveServiceContent>' $null
+        if (-not $r.Ok) { return $null }
+        [pscustomobject]@{ FullName=(Xt $r.Xml 'fullName'); Version=(Xt $r.Xml 'version'); Build=(Xt $r.Xml 'build'); ApiType=(Xt $r.Xml 'apiType'); Root=(Xt $r.Xml 'rootFolder'); Pc=(Xt $r.Xml 'propertyCollector'); Sm=(Xt $r.Xml 'sessionManager'); Am=(Xt $r.Xml 'authorizationManager'); Vm=(Xt $r.Xml 'viewManager') }
+      }
+      function Connect-Esx($h, $cred) {
+        $c = Get-EsxContent $h; if (-not $c -or -not $c.Sm) { return $null }
+        $u = [Security.SecurityElement]::Escape([string]$cred.user); $p = [Security.SecurityElement]::Escape([string]$cred.password)
+        $r = Invoke-Vim $h ('<Login xmlns="urn:vim25"><_this type="SessionManager">' + $c.Sm + '</_this><userName>' + $u + '</userName><password>' + $p + '</password></Login>') $null
+        if (-not $r.Ok -or -not $r.Cookie) { return [pscustomobject]@{ Ok = $false; Fault = $r.Fault } }
+        [pscustomobject]@{ Ok = $true; Cookie = ($r.Cookie -split ';')[0]; SessionId = (Xt $r.Xml 'key'); Content = $c; Host = $h }
+      }
+      function Get-EsxProps($s, $type, $paths) {
+        $c = $s.Content
+        $v = Invoke-Vim $s.Host ('<CreateContainerView xmlns="urn:vim25"><_this type="ViewManager">' + $c.Vm + '</_this><container type="Folder">' + $c.Root + '</container><type>' + $type + '</type><recursive>true</recursive></CreateContainerView>') $s.Cookie
+        $view = Xt $v.Xml 'returnval'; if (-not $view) { return $null }
+        $ps = ($paths | ForEach-Object { '<pathSet>' + $_ + '</pathSet>' }) -join ''
+        $r = Invoke-Vim $s.Host ('<RetrieveProperties xmlns="urn:vim25"><_this type="PropertyCollector">' + $c.Pc + '</_this><specSet><propSet><type>' + $type + '</type>' + $ps + '</propSet><objectSet><obj type="ContainerView">' + $view + '</obj><skip>true</skip><selectSet xsi:type="TraversalSpec"><name>view</name><type>ContainerView</type><path>view</path><skip>false</skip></selectSet></objectSet></specSet></RetrieveProperties>') $s.Cookie
+        if (-not $r.Ok) { return $null }
+        $out = @()
+        foreach ($rv in @($r.Xml.SelectNodes("//*[local-name()='returnval']"))) {
+          $obj = $rv.SelectSingleNode("*[local-name()='obj']"); if (-not $obj) { continue }
+          $props = @{}; foreach ($p in @($rv.SelectNodes("*[local-name()='propSet']"))) { $nm = $p.SelectSingleNode("*[local-name()='name']").InnerText; $val = $p.SelectSingleNode("*[local-name()='val']"); $props[$nm] = if ($val) { $val.InnerText } else { $null } }
+          $out += [pscustomobject]@{ Id = $obj.InnerText; Props = $props; Node = $rv }
+        }
+        return ,$out
+      }
+      function Get-EsxPriv($s, $type, $ids, $priv) {
+        if (@($ids).Count -eq 0) { return 0 }
+        $ents = ($ids | ForEach-Object { '<entity type="' + $type + '">' + $_ + '</entity>' }) -join ''
+        $r = Invoke-Vim $s.Host ('<HasPrivilegeOnEntities xmlns="urn:vim25"><_this type="AuthorizationManager">' + $s.Content.Am + '</_this>' + $ents + '<sessionId>' + $s.SessionId + '</sessionId><privId>' + $priv + '</privId></HasPrivilegeOnEntities>') $s.Cookie
+        if (-not $r.Ok) { return $null }
+        $g = 0; foreach ($n in @($r.Xml.SelectNodes("//*[local-name()='privAvailability']"))) { $isg = $n.SelectSingleNode("*[local-name()='isGranted']"); if ($isg -and $isg.InnerText -eq 'true') { $g++ } }
+        return $g
+      }
+      if ($hosts.Count -eq 0) { Write-Output "SKIP: prerequisite missing (BAS_ESXI_HOSTS not set). [BAS-SIM-ESX-E2]"; return }
+      $cred = Get-EsxCred
+      if (-not $cred) { Write-Output "SKIP: prerequisite missing (BAS_ESXI_CRED_FILE not set, unreadable, or lacks user and password); no authentication was attempted. [BAS-SIM-ESX-E2]"; return }
+      $ok = 0; $lines = @(); $hard = @()
+      foreach ($h in $hosts) {
+        $s = Connect-Esx $h $cred
+        if (-not $s -or -not $s.Ok) { Add-Ledger 'E2' $h 'blocked' @{ login=$false }; $lines += "$h login=denied_or_unreachable"; continue }
+        $ok++
+        $hs = Get-EsxProps $s 'HostSystem' @('config.lockdownMode','config.service.service','config.authenticationManagerInfo.authConfig')
+        $lock = $null; $ssh = $null; $shell = $null; $ad = $null
+        if ($hs -and @($hs).Count -gt 0) {
+          $n = $hs[0].Node
+          $lock = ($n.SelectNodes("*[local-name()='propSet'][*[local-name()='name']='config.lockdownMode']/*[local-name()='val']") | Select-Object -First 1).InnerText
+          foreach ($sv in @($n.SelectNodes(".//*[local-name()='HostService']"))) { $k = $sv.SelectSingleNode("*[local-name()='key']").InnerText; $run = $sv.SelectSingleNode("*[local-name()='running']").InnerText; if ($k -eq 'TSM-SSH') { $ssh = $run }; if ($k -eq 'TSM') { $shell = $run } }
+          $jd = $n.SelectNodes(".//*[local-name()='joinedDomain']") | Select-Object -First 1; if ($jd) { $ad = $jd.InnerText }
+        }
+        if ($lock -and $lock -ne 'lockdownDisabled') { } elseif ($lock) { $hard += "$h lockdown mode is disabled" }
+        if ($ssh -eq 'true') { $hard += "$h SSH service is running" }
+        if ($shell -eq 'true') { $hard += "$h ESXi Shell is running" }
+        Add-Ledger 'E2' $h 'executed' @{ login=$true; lockdown=$lock; ssh_running=$ssh; shell_running=$shell; ad_domain=$ad }
+        $lines += "$h login=ok lockdown=$lock ssh_running=$ssh esxi_shell_running=$shell ad_domain=[$ad]"
+      }
+      Write-Output "EVIDENCE T1078: hosts=$($hosts.Count) logins_succeeded=$ok. The credential file was read but no secret is printed. Premise: this agent is outside the management network, so a successful login is exposure. [BAS-SIM-ESX-E2]"
+      foreach ($l in $lines) { Write-Output "EVIDENCE T1078: $l [BAS-SIM-ESX-E2]" }
+      foreach ($x in $hard) { Write-Output "FINDING: $x [BAS-SIM-ESX-E2]" }
+      if ($ok -gt 0) { Write-Output "FAIL: the supplied read-only account authenticated to $ok of $($hosts.Count) ESXi host(s) from this network ($($hard.Count) hardening finding(s)) - management access is not restricted to the management network or vCenter. [BAS-SIM-ESX-E2]" }
+      else { Write-Output "PASS: the supplied account could not authenticate to any of the $($hosts.Count) ESXi host(s) from this network. [BAS-SIM-ESX-E2]" }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  - id: esx-e3-vm-discovery
+    name: "ESXi E3 - Virtual Machine Discovery (T1018)"
+    technique_id: T1018
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 180
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Read-only inventory through a ContainerView: VM count and powered-on count only; names are not recorded."
+    preconditions: ["Windows agent that can reach the lab ESXi hosts.", "BAS_ESXI_HOSTS lists hosts the operator owns.", "Steps E1-E8 run in order within one run."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; any canary created on a host is removed and removal verified; E8 removes the work directory."]
+    abort_on: []
+    telemetry:
+      - "ESXi hostd.log and vpxa/auth logs: login events and API calls from the agent address"
+    detection:
+      - "SIEM/ESXi syslog: logins from a non-management network, SSH enablement, snapshot and datastore file operations outside change windows"
+    expected_telemetry_count: 1
+    false_positive_notes: "vCenter, backup and monitoring systems use the same APIs; correlate with source address and account."
+    mitigations:
+      - "Lockdown mode, management network isolation and disabled SSH/ESXi Shell/SLP."
+      - "Least-privilege read-only service roles; no AD ESX Admins group exposure; patched builds."
+      - "Immutable backups and snapshot-removal alerting."
+    references: ["CISA AA24-109A"]
+    evidence: ["Emit vms and powered_on per host."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { 'norun' }
+      $work = Join-Path $env:TEMP "bas_esx_$runId"
+      $ledger = Join-Path $work 'ledger.jsonl'
+      try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch { }
+      [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+      $hosts = @(); $badHosts = 0
+      foreach ($h in @($env:BAS_ESXI_HOSTS -split '[;,]' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) { if ($h -match '^[A-Za-z0-9._-]{1,253}(:\d{1,5})?$') { $hosts += $h } else { $badHosts++ } }
+      function Split-HostPort($h, $def) { if ($h -match '^(.+):(\d+)$') { return @($Matches[1], [int]$Matches[2]) } else { return @($h, $def) } }
+      function Add-Ledger($step, $target, $result, $facts) {
+        if (-not (Test-Path $work)) { New-Item -ItemType Directory -Path $work -Force | Out-Null }
+        $o = [ordered]@{ step=$step; target=$target; ts=(Get-Date).ToUniversalTime().ToString('o'); result=$result; facts=$facts }
+        Add-Content -Path $ledger -Value ($o | ConvertTo-Json -Compress -Depth 4) -Encoding UTF8
+      }
+      function Read-Ledger { if (Test-Path $ledger) { @(Get-Content $ledger | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json }) } else { @() } }
+      function Get-EsxCred { $f = $env:BAS_ESXI_CRED_FILE; if (-not $f -or -not (Test-Path $f)) { return $null }; try { $j = Get-Content $f -Raw | ConvertFrom-Json; if ($j.user -and $j.password) { return $j } } catch { }; return $null }
+      function Test-TcpPort($h, $p) { try { $c = New-Object Net.Sockets.TcpClient; $a = $c.BeginConnect($h, $p, $null, $null); $ok = $a.AsyncWaitHandle.WaitOne(3000) -and $c.Connected; $c.Close(); return [bool]$ok } catch { return $false } }
+      function Invoke-Vim($h, $inner, $cookie) {
+        $body = '<?xml version="1.0" encoding="UTF-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><soapenv:Body>' + $inner + '</soapenv:Body></soapenv:Envelope>'
+        $res = [pscustomobject]@{ Ok = $false; Xml = $null; Cookie = $null; Fault = $null; Status = 0 }
+        try {
+          $req = [Net.HttpWebRequest]::Create("https://$h/sdk"); $req.Method = 'POST'; $req.ContentType = 'text/xml; charset=UTF-8'; $req.Timeout = 15000
+          $req.Headers.Add('SOAPAction', '"urn:vim25/6.7"'); if ($cookie) { $req.Headers.Add('Cookie', $cookie) }
+          $bytes = [Text.Encoding]::UTF8.GetBytes($body); $req.ContentLength = $bytes.Length
+          $s = $req.GetRequestStream(); $s.Write($bytes, 0, $bytes.Length); $s.Close()
+          $resp = $req.GetResponse(); $res.Status = [int]$resp.StatusCode; $res.Cookie = $resp.Headers['Set-Cookie']
+          $txt = (New-Object IO.StreamReader($resp.GetResponseStream())).ReadToEnd(); $resp.Close()
+          $res.Xml = [xml]$txt; $res.Ok = $true
+        } catch [Net.WebException] {
+          try { $r = $_.Exception.Response; if ($r) { $res.Status = [int]$r.StatusCode; $t = (New-Object IO.StreamReader($r.GetResponseStream())).ReadToEnd(); $x = [xml]$t; $res.Xml = $x; $res.Fault = ($x.SelectNodes("//*[local-name()='faultstring']") | Select-Object -First 1).InnerText } } catch { }
+        } catch { }
+        return $res
+      }
+      function Xt($xml, $name) { if (-not $xml) { return $null }; $n = $xml.SelectNodes("//*[local-name()='$name']") | Select-Object -First 1; if ($n) { return $n.InnerText } else { return $null } }
+      function Get-EsxContent($h) {
+        $r = Invoke-Vim $h '<RetrieveServiceContent xmlns="urn:vim25"><_this type="ServiceInstance">ServiceInstance</_this></RetrieveServiceContent>' $null
+        if (-not $r.Ok) { return $null }
+        [pscustomobject]@{ FullName=(Xt $r.Xml 'fullName'); Version=(Xt $r.Xml 'version'); Build=(Xt $r.Xml 'build'); ApiType=(Xt $r.Xml 'apiType'); Root=(Xt $r.Xml 'rootFolder'); Pc=(Xt $r.Xml 'propertyCollector'); Sm=(Xt $r.Xml 'sessionManager'); Am=(Xt $r.Xml 'authorizationManager'); Vm=(Xt $r.Xml 'viewManager') }
+      }
+      function Connect-Esx($h, $cred) {
+        $c = Get-EsxContent $h; if (-not $c -or -not $c.Sm) { return $null }
+        $u = [Security.SecurityElement]::Escape([string]$cred.user); $p = [Security.SecurityElement]::Escape([string]$cred.password)
+        $r = Invoke-Vim $h ('<Login xmlns="urn:vim25"><_this type="SessionManager">' + $c.Sm + '</_this><userName>' + $u + '</userName><password>' + $p + '</password></Login>') $null
+        if (-not $r.Ok -or -not $r.Cookie) { return [pscustomobject]@{ Ok = $false; Fault = $r.Fault } }
+        [pscustomobject]@{ Ok = $true; Cookie = ($r.Cookie -split ';')[0]; SessionId = (Xt $r.Xml 'key'); Content = $c; Host = $h }
+      }
+      function Get-EsxProps($s, $type, $paths) {
+        $c = $s.Content
+        $v = Invoke-Vim $s.Host ('<CreateContainerView xmlns="urn:vim25"><_this type="ViewManager">' + $c.Vm + '</_this><container type="Folder">' + $c.Root + '</container><type>' + $type + '</type><recursive>true</recursive></CreateContainerView>') $s.Cookie
+        $view = Xt $v.Xml 'returnval'; if (-not $view) { return $null }
+        $ps = ($paths | ForEach-Object { '<pathSet>' + $_ + '</pathSet>' }) -join ''
+        $r = Invoke-Vim $s.Host ('<RetrieveProperties xmlns="urn:vim25"><_this type="PropertyCollector">' + $c.Pc + '</_this><specSet><propSet><type>' + $type + '</type>' + $ps + '</propSet><objectSet><obj type="ContainerView">' + $view + '</obj><skip>true</skip><selectSet xsi:type="TraversalSpec"><name>view</name><type>ContainerView</type><path>view</path><skip>false</skip></selectSet></objectSet></specSet></RetrieveProperties>') $s.Cookie
+        if (-not $r.Ok) { return $null }
+        $out = @()
+        foreach ($rv in @($r.Xml.SelectNodes("//*[local-name()='returnval']"))) {
+          $obj = $rv.SelectSingleNode("*[local-name()='obj']"); if (-not $obj) { continue }
+          $props = @{}; foreach ($p in @($rv.SelectNodes("*[local-name()='propSet']"))) { $nm = $p.SelectSingleNode("*[local-name()='name']").InnerText; $val = $p.SelectSingleNode("*[local-name()='val']"); $props[$nm] = if ($val) { $val.InnerText } else { $null } }
+          $out += [pscustomobject]@{ Id = $obj.InnerText; Props = $props; Node = $rv }
+        }
+        return ,$out
+      }
+      function Get-EsxPriv($s, $type, $ids, $priv) {
+        if (@($ids).Count -eq 0) { return 0 }
+        $ents = ($ids | ForEach-Object { '<entity type="' + $type + '">' + $_ + '</entity>' }) -join ''
+        $r = Invoke-Vim $s.Host ('<HasPrivilegeOnEntities xmlns="urn:vim25"><_this type="AuthorizationManager">' + $s.Content.Am + '</_this>' + $ents + '<sessionId>' + $s.SessionId + '</sessionId><privId>' + $priv + '</privId></HasPrivilegeOnEntities>') $s.Cookie
+        if (-not $r.Ok) { return $null }
+        $g = 0; foreach ($n in @($r.Xml.SelectNodes("//*[local-name()='privAvailability']"))) { $isg = $n.SelectSingleNode("*[local-name()='isGranted']"); if ($isg -and $isg.InnerText -eq 'true') { $g++ } }
+        return $g
+      }
+      function Open-Sessions {
+        $script:esxSessions = @(); $script:esxSkipMsg = $null
+        if ($hosts.Count -eq 0) { $script:esxSkipMsg = 'prerequisite missing (BAS_ESXI_HOSTS not set).'; return $false }
+        $cred = Get-EsxCred
+        if (-not $cred) { $script:esxSkipMsg = 'prerequisite missing (BAS_ESXI_CRED_FILE not set, unreadable, or lacks user and password); no authentication was attempted.'; return $false }
+        foreach ($h in $hosts) { $s = Connect-Esx $h $cred; if ($s -and $s.Ok) { $script:esxSessions += $s } }
+        if ($script:esxSessions.Count -eq 0) { $script:esxSkipMsg = 'prerequisite missing (no host accepted the supplied account from this network, so there is nothing to assess; see E2).'; return $false }
+        return $true
+      }
+      if (-not (Open-Sessions)) { Write-Output "SKIP: $esxSkipMsg [BAS-SIM-ESX-E3]"; return }
+      $tot = 0; $on = 0; $lines = @()
+      foreach ($s in $esxSessions) {
+        $vms = Get-EsxProps $s 'VirtualMachine' @('name','runtime.powerState')
+        if ($null -eq $vms) { $lines += "$($s.Host) vm_query=failed"; continue }
+        $n = @($vms).Count; $p = @($vms | Where-Object { $_.Props['runtime.powerState'] -eq 'poweredOn' }).Count
+        $tot += $n; $on += $p; $lines += "$($s.Host) vms=$n powered_on=$p"
+        Add-Ledger 'E3' $s.Host $(if ($n -gt 0) { 'executed' } else { 'empty' }) @{ vms=$n; powered_on=$p }
+      }
+      Write-Output "EVIDENCE T1018: hosts_queried=$($esxSessions.Count) vms_enumerated=$tot powered_on=$on. Counts only; VM names are not recorded. [BAS-SIM-ESX-E3]"
+      foreach ($l in $lines) { Write-Output "EVIDENCE T1018: $l [BAS-SIM-ESX-E3]" }
+      if ($tot -gt 0) { Write-Output "FAIL: the account enumerated $tot VM(s) ($on powered on) from this network - an attacker with these rights can map every workload to encrypt. [BAS-SIM-ESX-E3]" }
+      else { Write-Output "PASS: no VM could be enumerated with the supplied account (empty inventory or denied). [BAS-SIM-ESX-E3]" }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  - id: esx-e4-datastore-exposure
+    name: "ESXi E4 - Datastore Exposure (T1083)"
+    technique_id: T1083
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 180
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Read-only: datastore count, accessible count and type counts; names are not recorded."
+    preconditions: ["Windows agent that can reach the lab ESXi hosts.", "BAS_ESXI_HOSTS lists hosts the operator owns.", "Steps E1-E8 run in order within one run."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; any canary created on a host is removed and removal verified; E8 removes the work directory."]
+    abort_on: []
+    telemetry:
+      - "ESXi hostd.log and vpxa/auth logs: login events and API calls from the agent address"
+    detection:
+      - "SIEM/ESXi syslog: logins from a non-management network, SSH enablement, snapshot and datastore file operations outside change windows"
+    expected_telemetry_count: 1
+    false_positive_notes: "vCenter, backup and monitoring systems use the same APIs; correlate with source address and account."
+    mitigations:
+      - "Lockdown mode, management network isolation and disabled SSH/ESXi Shell/SLP."
+      - "Least-privilege read-only service roles; no AD ESX Admins group exposure; patched builds."
+      - "Immutable backups and snapshot-removal alerting."
+    references: ["CISA AA24-109A"]
+    evidence: ["Emit datastores, accessible and types."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { 'norun' }
+      $work = Join-Path $env:TEMP "bas_esx_$runId"
+      $ledger = Join-Path $work 'ledger.jsonl'
+      try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch { }
+      [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+      $hosts = @(); $badHosts = 0
+      foreach ($h in @($env:BAS_ESXI_HOSTS -split '[;,]' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) { if ($h -match '^[A-Za-z0-9._-]{1,253}(:\d{1,5})?$') { $hosts += $h } else { $badHosts++ } }
+      function Split-HostPort($h, $def) { if ($h -match '^(.+):(\d+)$') { return @($Matches[1], [int]$Matches[2]) } else { return @($h, $def) } }
+      function Add-Ledger($step, $target, $result, $facts) {
+        if (-not (Test-Path $work)) { New-Item -ItemType Directory -Path $work -Force | Out-Null }
+        $o = [ordered]@{ step=$step; target=$target; ts=(Get-Date).ToUniversalTime().ToString('o'); result=$result; facts=$facts }
+        Add-Content -Path $ledger -Value ($o | ConvertTo-Json -Compress -Depth 4) -Encoding UTF8
+      }
+      function Read-Ledger { if (Test-Path $ledger) { @(Get-Content $ledger | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json }) } else { @() } }
+      function Get-EsxCred { $f = $env:BAS_ESXI_CRED_FILE; if (-not $f -or -not (Test-Path $f)) { return $null }; try { $j = Get-Content $f -Raw | ConvertFrom-Json; if ($j.user -and $j.password) { return $j } } catch { }; return $null }
+      function Test-TcpPort($h, $p) { try { $c = New-Object Net.Sockets.TcpClient; $a = $c.BeginConnect($h, $p, $null, $null); $ok = $a.AsyncWaitHandle.WaitOne(3000) -and $c.Connected; $c.Close(); return [bool]$ok } catch { return $false } }
+      function Invoke-Vim($h, $inner, $cookie) {
+        $body = '<?xml version="1.0" encoding="UTF-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><soapenv:Body>' + $inner + '</soapenv:Body></soapenv:Envelope>'
+        $res = [pscustomobject]@{ Ok = $false; Xml = $null; Cookie = $null; Fault = $null; Status = 0 }
+        try {
+          $req = [Net.HttpWebRequest]::Create("https://$h/sdk"); $req.Method = 'POST'; $req.ContentType = 'text/xml; charset=UTF-8'; $req.Timeout = 15000
+          $req.Headers.Add('SOAPAction', '"urn:vim25/6.7"'); if ($cookie) { $req.Headers.Add('Cookie', $cookie) }
+          $bytes = [Text.Encoding]::UTF8.GetBytes($body); $req.ContentLength = $bytes.Length
+          $s = $req.GetRequestStream(); $s.Write($bytes, 0, $bytes.Length); $s.Close()
+          $resp = $req.GetResponse(); $res.Status = [int]$resp.StatusCode; $res.Cookie = $resp.Headers['Set-Cookie']
+          $txt = (New-Object IO.StreamReader($resp.GetResponseStream())).ReadToEnd(); $resp.Close()
+          $res.Xml = [xml]$txt; $res.Ok = $true
+        } catch [Net.WebException] {
+          try { $r = $_.Exception.Response; if ($r) { $res.Status = [int]$r.StatusCode; $t = (New-Object IO.StreamReader($r.GetResponseStream())).ReadToEnd(); $x = [xml]$t; $res.Xml = $x; $res.Fault = ($x.SelectNodes("//*[local-name()='faultstring']") | Select-Object -First 1).InnerText } } catch { }
+        } catch { }
+        return $res
+      }
+      function Xt($xml, $name) { if (-not $xml) { return $null }; $n = $xml.SelectNodes("//*[local-name()='$name']") | Select-Object -First 1; if ($n) { return $n.InnerText } else { return $null } }
+      function Get-EsxContent($h) {
+        $r = Invoke-Vim $h '<RetrieveServiceContent xmlns="urn:vim25"><_this type="ServiceInstance">ServiceInstance</_this></RetrieveServiceContent>' $null
+        if (-not $r.Ok) { return $null }
+        [pscustomobject]@{ FullName=(Xt $r.Xml 'fullName'); Version=(Xt $r.Xml 'version'); Build=(Xt $r.Xml 'build'); ApiType=(Xt $r.Xml 'apiType'); Root=(Xt $r.Xml 'rootFolder'); Pc=(Xt $r.Xml 'propertyCollector'); Sm=(Xt $r.Xml 'sessionManager'); Am=(Xt $r.Xml 'authorizationManager'); Vm=(Xt $r.Xml 'viewManager') }
+      }
+      function Connect-Esx($h, $cred) {
+        $c = Get-EsxContent $h; if (-not $c -or -not $c.Sm) { return $null }
+        $u = [Security.SecurityElement]::Escape([string]$cred.user); $p = [Security.SecurityElement]::Escape([string]$cred.password)
+        $r = Invoke-Vim $h ('<Login xmlns="urn:vim25"><_this type="SessionManager">' + $c.Sm + '</_this><userName>' + $u + '</userName><password>' + $p + '</password></Login>') $null
+        if (-not $r.Ok -or -not $r.Cookie) { return [pscustomobject]@{ Ok = $false; Fault = $r.Fault } }
+        [pscustomobject]@{ Ok = $true; Cookie = ($r.Cookie -split ';')[0]; SessionId = (Xt $r.Xml 'key'); Content = $c; Host = $h }
+      }
+      function Get-EsxProps($s, $type, $paths) {
+        $c = $s.Content
+        $v = Invoke-Vim $s.Host ('<CreateContainerView xmlns="urn:vim25"><_this type="ViewManager">' + $c.Vm + '</_this><container type="Folder">' + $c.Root + '</container><type>' + $type + '</type><recursive>true</recursive></CreateContainerView>') $s.Cookie
+        $view = Xt $v.Xml 'returnval'; if (-not $view) { return $null }
+        $ps = ($paths | ForEach-Object { '<pathSet>' + $_ + '</pathSet>' }) -join ''
+        $r = Invoke-Vim $s.Host ('<RetrieveProperties xmlns="urn:vim25"><_this type="PropertyCollector">' + $c.Pc + '</_this><specSet><propSet><type>' + $type + '</type>' + $ps + '</propSet><objectSet><obj type="ContainerView">' + $view + '</obj><skip>true</skip><selectSet xsi:type="TraversalSpec"><name>view</name><type>ContainerView</type><path>view</path><skip>false</skip></selectSet></objectSet></specSet></RetrieveProperties>') $s.Cookie
+        if (-not $r.Ok) { return $null }
+        $out = @()
+        foreach ($rv in @($r.Xml.SelectNodes("//*[local-name()='returnval']"))) {
+          $obj = $rv.SelectSingleNode("*[local-name()='obj']"); if (-not $obj) { continue }
+          $props = @{}; foreach ($p in @($rv.SelectNodes("*[local-name()='propSet']"))) { $nm = $p.SelectSingleNode("*[local-name()='name']").InnerText; $val = $p.SelectSingleNode("*[local-name()='val']"); $props[$nm] = if ($val) { $val.InnerText } else { $null } }
+          $out += [pscustomobject]@{ Id = $obj.InnerText; Props = $props; Node = $rv }
+        }
+        return ,$out
+      }
+      function Get-EsxPriv($s, $type, $ids, $priv) {
+        if (@($ids).Count -eq 0) { return 0 }
+        $ents = ($ids | ForEach-Object { '<entity type="' + $type + '">' + $_ + '</entity>' }) -join ''
+        $r = Invoke-Vim $s.Host ('<HasPrivilegeOnEntities xmlns="urn:vim25"><_this type="AuthorizationManager">' + $s.Content.Am + '</_this>' + $ents + '<sessionId>' + $s.SessionId + '</sessionId><privId>' + $priv + '</privId></HasPrivilegeOnEntities>') $s.Cookie
+        if (-not $r.Ok) { return $null }
+        $g = 0; foreach ($n in @($r.Xml.SelectNodes("//*[local-name()='privAvailability']"))) { $isg = $n.SelectSingleNode("*[local-name()='isGranted']"); if ($isg -and $isg.InnerText -eq 'true') { $g++ } }
+        return $g
+      }
+      function Open-Sessions {
+        $script:esxSessions = @(); $script:esxSkipMsg = $null
+        if ($hosts.Count -eq 0) { $script:esxSkipMsg = 'prerequisite missing (BAS_ESXI_HOSTS not set).'; return $false }
+        $cred = Get-EsxCred
+        if (-not $cred) { $script:esxSkipMsg = 'prerequisite missing (BAS_ESXI_CRED_FILE not set, unreadable, or lacks user and password); no authentication was attempted.'; return $false }
+        foreach ($h in $hosts) { $s = Connect-Esx $h $cred; if ($s -and $s.Ok) { $script:esxSessions += $s } }
+        if ($script:esxSessions.Count -eq 0) { $script:esxSkipMsg = 'prerequisite missing (no host accepted the supplied account from this network, so there is nothing to assess; see E2).'; return $false }
+        return $true
+      }
+      if (-not (Open-Sessions)) { Write-Output "SKIP: $esxSkipMsg [BAS-SIM-ESX-E4]"; return }
+      $tot = 0; $acc = 0; $types = @{}; $lines = @()
+      foreach ($s in $esxSessions) {
+        $ds = Get-EsxProps $s 'Datastore' @('summary.type','summary.accessible','summary.capacity','summary.freeSpace')
+        if ($null -eq $ds) { $lines += "$($s.Host) datastore_query=failed"; continue }
+        $n = @($ds).Count; $a = @($ds | Where-Object { $_.Props['summary.accessible'] -eq 'true' }).Count
+        foreach ($d in $ds) { $t = [string]$d.Props['summary.type']; $types[$t] = 1 + [int]$types[$t] }
+        $tot += $n; $acc += $a; $lines += "$($s.Host) datastores=$n accessible=$a"
+        Add-Ledger 'E4' $s.Host $(if ($n -gt 0) { 'executed' } else { 'empty' }) @{ datastores=$n; accessible=$a }
+      }
+      $tp = (($types.Keys | Sort-Object | ForEach-Object { "$_=$($types[$_])" }) -join ' ')
+      Write-Output "EVIDENCE T1083: datastores=$tot accessible=$acc types=[$tp]. Datastore names are not recorded. [BAS-SIM-ESX-E4]"
+      foreach ($l in $lines) { Write-Output "EVIDENCE T1083: $l [BAS-SIM-ESX-E4]" }
+      if ($acc -gt 0) { Write-Output "FAIL: $acc datastore(s) holding VM disks are visible and accessible to the account - the storage an attacker would encrypt is exposed. [BAS-SIM-ESX-E4]" }
+      else { Write-Output "PASS: no accessible datastore was visible to the supplied account. [BAS-SIM-ESX-E4]" }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  - id: esx-e5-poweroff-exposure
+    name: "ESXi E5 - VM Power-Off Privilege Exposure (T1529)"
+    technique_id: T1529
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 180
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Privilege query only (AuthorizationManager.HasPrivilegeOnEntities for VirtualMachine.Interact.PowerOff). No VM is powered off."
+    preconditions: ["Windows agent that can reach the lab ESXi hosts.", "BAS_ESXI_HOSTS lists hosts the operator owns.", "Steps E1-E8 run in order within one run."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; any canary created on a host is removed and removal verified; E8 removes the work directory."]
+    abort_on: []
+    telemetry:
+      - "ESXi hostd.log and vpxa/auth logs: login events and API calls from the agent address"
+    detection:
+      - "SIEM/ESXi syslog: logins from a non-management network, SSH enablement, snapshot and datastore file operations outside change windows"
+    expected_telemetry_count: 1
+    false_positive_notes: "vCenter, backup and monitoring systems use the same APIs; correlate with source address and account."
+    mitigations:
+      - "Lockdown mode, management network isolation and disabled SSH/ESXi Shell/SLP."
+      - "Least-privilege read-only service roles; no AD ESX Admins group exposure; patched builds."
+      - "Immutable backups and snapshot-removal alerting."
+    references: ["CISA AA24-109A"]
+    evidence: ["Emit vms_account_may_power_off."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { 'norun' }
+      $work = Join-Path $env:TEMP "bas_esx_$runId"
+      $ledger = Join-Path $work 'ledger.jsonl'
+      try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch { }
+      [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+      $hosts = @(); $badHosts = 0
+      foreach ($h in @($env:BAS_ESXI_HOSTS -split '[;,]' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) { if ($h -match '^[A-Za-z0-9._-]{1,253}(:\d{1,5})?$') { $hosts += $h } else { $badHosts++ } }
+      function Split-HostPort($h, $def) { if ($h -match '^(.+):(\d+)$') { return @($Matches[1], [int]$Matches[2]) } else { return @($h, $def) } }
+      function Add-Ledger($step, $target, $result, $facts) {
+        if (-not (Test-Path $work)) { New-Item -ItemType Directory -Path $work -Force | Out-Null }
+        $o = [ordered]@{ step=$step; target=$target; ts=(Get-Date).ToUniversalTime().ToString('o'); result=$result; facts=$facts }
+        Add-Content -Path $ledger -Value ($o | ConvertTo-Json -Compress -Depth 4) -Encoding UTF8
+      }
+      function Read-Ledger { if (Test-Path $ledger) { @(Get-Content $ledger | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json }) } else { @() } }
+      function Get-EsxCred { $f = $env:BAS_ESXI_CRED_FILE; if (-not $f -or -not (Test-Path $f)) { return $null }; try { $j = Get-Content $f -Raw | ConvertFrom-Json; if ($j.user -and $j.password) { return $j } } catch { }; return $null }
+      function Test-TcpPort($h, $p) { try { $c = New-Object Net.Sockets.TcpClient; $a = $c.BeginConnect($h, $p, $null, $null); $ok = $a.AsyncWaitHandle.WaitOne(3000) -and $c.Connected; $c.Close(); return [bool]$ok } catch { return $false } }
+      function Invoke-Vim($h, $inner, $cookie) {
+        $body = '<?xml version="1.0" encoding="UTF-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><soapenv:Body>' + $inner + '</soapenv:Body></soapenv:Envelope>'
+        $res = [pscustomobject]@{ Ok = $false; Xml = $null; Cookie = $null; Fault = $null; Status = 0 }
+        try {
+          $req = [Net.HttpWebRequest]::Create("https://$h/sdk"); $req.Method = 'POST'; $req.ContentType = 'text/xml; charset=UTF-8'; $req.Timeout = 15000
+          $req.Headers.Add('SOAPAction', '"urn:vim25/6.7"'); if ($cookie) { $req.Headers.Add('Cookie', $cookie) }
+          $bytes = [Text.Encoding]::UTF8.GetBytes($body); $req.ContentLength = $bytes.Length
+          $s = $req.GetRequestStream(); $s.Write($bytes, 0, $bytes.Length); $s.Close()
+          $resp = $req.GetResponse(); $res.Status = [int]$resp.StatusCode; $res.Cookie = $resp.Headers['Set-Cookie']
+          $txt = (New-Object IO.StreamReader($resp.GetResponseStream())).ReadToEnd(); $resp.Close()
+          $res.Xml = [xml]$txt; $res.Ok = $true
+        } catch [Net.WebException] {
+          try { $r = $_.Exception.Response; if ($r) { $res.Status = [int]$r.StatusCode; $t = (New-Object IO.StreamReader($r.GetResponseStream())).ReadToEnd(); $x = [xml]$t; $res.Xml = $x; $res.Fault = ($x.SelectNodes("//*[local-name()='faultstring']") | Select-Object -First 1).InnerText } } catch { }
+        } catch { }
+        return $res
+      }
+      function Xt($xml, $name) { if (-not $xml) { return $null }; $n = $xml.SelectNodes("//*[local-name()='$name']") | Select-Object -First 1; if ($n) { return $n.InnerText } else { return $null } }
+      function Get-EsxContent($h) {
+        $r = Invoke-Vim $h '<RetrieveServiceContent xmlns="urn:vim25"><_this type="ServiceInstance">ServiceInstance</_this></RetrieveServiceContent>' $null
+        if (-not $r.Ok) { return $null }
+        [pscustomobject]@{ FullName=(Xt $r.Xml 'fullName'); Version=(Xt $r.Xml 'version'); Build=(Xt $r.Xml 'build'); ApiType=(Xt $r.Xml 'apiType'); Root=(Xt $r.Xml 'rootFolder'); Pc=(Xt $r.Xml 'propertyCollector'); Sm=(Xt $r.Xml 'sessionManager'); Am=(Xt $r.Xml 'authorizationManager'); Vm=(Xt $r.Xml 'viewManager') }
+      }
+      function Connect-Esx($h, $cred) {
+        $c = Get-EsxContent $h; if (-not $c -or -not $c.Sm) { return $null }
+        $u = [Security.SecurityElement]::Escape([string]$cred.user); $p = [Security.SecurityElement]::Escape([string]$cred.password)
+        $r = Invoke-Vim $h ('<Login xmlns="urn:vim25"><_this type="SessionManager">' + $c.Sm + '</_this><userName>' + $u + '</userName><password>' + $p + '</password></Login>') $null
+        if (-not $r.Ok -or -not $r.Cookie) { return [pscustomobject]@{ Ok = $false; Fault = $r.Fault } }
+        [pscustomobject]@{ Ok = $true; Cookie = ($r.Cookie -split ';')[0]; SessionId = (Xt $r.Xml 'key'); Content = $c; Host = $h }
+      }
+      function Get-EsxProps($s, $type, $paths) {
+        $c = $s.Content
+        $v = Invoke-Vim $s.Host ('<CreateContainerView xmlns="urn:vim25"><_this type="ViewManager">' + $c.Vm + '</_this><container type="Folder">' + $c.Root + '</container><type>' + $type + '</type><recursive>true</recursive></CreateContainerView>') $s.Cookie
+        $view = Xt $v.Xml 'returnval'; if (-not $view) { return $null }
+        $ps = ($paths | ForEach-Object { '<pathSet>' + $_ + '</pathSet>' }) -join ''
+        $r = Invoke-Vim $s.Host ('<RetrieveProperties xmlns="urn:vim25"><_this type="PropertyCollector">' + $c.Pc + '</_this><specSet><propSet><type>' + $type + '</type>' + $ps + '</propSet><objectSet><obj type="ContainerView">' + $view + '</obj><skip>true</skip><selectSet xsi:type="TraversalSpec"><name>view</name><type>ContainerView</type><path>view</path><skip>false</skip></selectSet></objectSet></specSet></RetrieveProperties>') $s.Cookie
+        if (-not $r.Ok) { return $null }
+        $out = @()
+        foreach ($rv in @($r.Xml.SelectNodes("//*[local-name()='returnval']"))) {
+          $obj = $rv.SelectSingleNode("*[local-name()='obj']"); if (-not $obj) { continue }
+          $props = @{}; foreach ($p in @($rv.SelectNodes("*[local-name()='propSet']"))) { $nm = $p.SelectSingleNode("*[local-name()='name']").InnerText; $val = $p.SelectSingleNode("*[local-name()='val']"); $props[$nm] = if ($val) { $val.InnerText } else { $null } }
+          $out += [pscustomobject]@{ Id = $obj.InnerText; Props = $props; Node = $rv }
+        }
+        return ,$out
+      }
+      function Get-EsxPriv($s, $type, $ids, $priv) {
+        if (@($ids).Count -eq 0) { return 0 }
+        $ents = ($ids | ForEach-Object { '<entity type="' + $type + '">' + $_ + '</entity>' }) -join ''
+        $r = Invoke-Vim $s.Host ('<HasPrivilegeOnEntities xmlns="urn:vim25"><_this type="AuthorizationManager">' + $s.Content.Am + '</_this>' + $ents + '<sessionId>' + $s.SessionId + '</sessionId><privId>' + $priv + '</privId></HasPrivilegeOnEntities>') $s.Cookie
+        if (-not $r.Ok) { return $null }
+        $g = 0; foreach ($n in @($r.Xml.SelectNodes("//*[local-name()='privAvailability']"))) { $isg = $n.SelectSingleNode("*[local-name()='isGranted']"); if ($isg -and $isg.InnerText -eq 'true') { $g++ } }
+        return $g
+      }
+      function Open-Sessions {
+        $script:esxSessions = @(); $script:esxSkipMsg = $null
+        if ($hosts.Count -eq 0) { $script:esxSkipMsg = 'prerequisite missing (BAS_ESXI_HOSTS not set).'; return $false }
+        $cred = Get-EsxCred
+        if (-not $cred) { $script:esxSkipMsg = 'prerequisite missing (BAS_ESXI_CRED_FILE not set, unreadable, or lacks user and password); no authentication was attempted.'; return $false }
+        foreach ($h in $hosts) { $s = Connect-Esx $h $cred; if ($s -and $s.Ok) { $script:esxSessions += $s } }
+        if ($script:esxSessions.Count -eq 0) { $script:esxSkipMsg = 'prerequisite missing (no host accepted the supplied account from this network, so there is nothing to assess; see E2).'; return $false }
+        return $true
+      }
+      if (-not (Open-Sessions)) { Write-Output "SKIP: $esxSkipMsg [BAS-SIM-ESX-E5]"; return }
+      $vmTot = 0; $can = 0; $err = 0
+      foreach ($s in $esxSessions) {
+        $vms = Get-EsxProps $s 'VirtualMachine' @('name'); if ($null -eq $vms) { $err++; continue }
+        $ids = @($vms | ForEach-Object { $_.Id }); $vmTot += $ids.Count
+        for ($i = 0; $i -lt $ids.Count; $i += 100) {
+          $chunk = $ids[$i..([Math]::Min($i + 99, $ids.Count - 1))]
+          $g = Get-EsxPriv $s 'VirtualMachine' $chunk 'VirtualMachine.Interact.PowerOff'
+          if ($null -eq $g) { $err++ } else { $can += $g }
+        }
+        Add-Ledger 'E5' $s.Host $(if ($can -gt 0) { 'privileged' } else { 'not_privileged' }) @{ vms=$ids.Count; can_power_off=$can }
+      }
+      Write-Output "EVIDENCE T1529: vms_checked=$vmTot vms_account_may_power_off=$can query_errors=$err. Privilege check only (AuthorizationManager.HasPrivilegeOnEntities); no VM was powered off. [BAS-SIM-ESX-E5]"
+      if ($err -gt 0 -and $vmTot -eq 0) { Write-Output "SKIP: the VM or privilege query failed on every host, so power-off exposure could not be determined. [BAS-SIM-ESX-E5]" }
+      elseif ($can -gt 0) { Write-Output "FAIL: the account holds the VirtualMachine.Interact.PowerOff privilege on $can of $vmTot VM(s) - ransomware operators power VMs off to release disk locks before encrypting. [BAS-SIM-ESX-E5]" }
+      else { Write-Output "PASS: the account holds no power-off privilege on any of the $vmTot VM(s). [BAS-SIM-ESX-E5]" }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  - id: esx-e6-snapshot-exposure
+    name: "ESXi E6 - Snapshot and Recovery Point Exposure (T1485)"
+    technique_id: T1485
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 300
+    fidelity: lab-only
+    production_safe: false
+    risk: medium
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Privilege query for VirtualMachine.State.RemoveSnapshot and a count of VMs with no snapshot. With BAS_CONFIRM_ESXI_LAB_WRITE=true (exact) and BAS_ESXI_LAB_VM it creates and removes ONE canary snapshot named bas_canary_<run> on that lab VM and verifies removal; existing snapshots are never touched."
+    preconditions: ["Windows agent that can reach the lab ESXi hosts.", "BAS_ESXI_HOSTS lists hosts the operator owns.", "Steps E1-E8 run in order within one run."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; any canary created on a host is removed and removal verified; E8 removes the work directory."]
+    abort_on: []
+    telemetry:
+      - "ESXi hostd.log and vpxa/auth logs: login events and API calls from the agent address"
+    detection:
+      - "SIEM/ESXi syslog: logins from a non-management network, SSH enablement, snapshot and datastore file operations outside change windows"
+    expected_telemetry_count: 1
+    false_positive_notes: "vCenter, backup and monitoring systems use the same APIs; correlate with source address and account."
+    mitigations:
+      - "Lockdown mode, management network isolation and disabled SSH/ESXi Shell/SLP."
+      - "Least-privilege read-only service roles; no AD ESX Admins group exposure; patched builds."
+      - "Immutable backups and snapshot-removal alerting."
+    references: ["CISA AA24-109A"]
+    evidence: ["Emit privilege counts, canary and canary_cleanup."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { 'norun' }
+      $work = Join-Path $env:TEMP "bas_esx_$runId"
+      $ledger = Join-Path $work 'ledger.jsonl'
+      try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch { }
+      [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+      $hosts = @(); $badHosts = 0
+      foreach ($h in @($env:BAS_ESXI_HOSTS -split '[;,]' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) { if ($h -match '^[A-Za-z0-9._-]{1,253}(:\d{1,5})?$') { $hosts += $h } else { $badHosts++ } }
+      function Split-HostPort($h, $def) { if ($h -match '^(.+):(\d+)$') { return @($Matches[1], [int]$Matches[2]) } else { return @($h, $def) } }
+      function Add-Ledger($step, $target, $result, $facts) {
+        if (-not (Test-Path $work)) { New-Item -ItemType Directory -Path $work -Force | Out-Null }
+        $o = [ordered]@{ step=$step; target=$target; ts=(Get-Date).ToUniversalTime().ToString('o'); result=$result; facts=$facts }
+        Add-Content -Path $ledger -Value ($o | ConvertTo-Json -Compress -Depth 4) -Encoding UTF8
+      }
+      function Read-Ledger { if (Test-Path $ledger) { @(Get-Content $ledger | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json }) } else { @() } }
+      function Get-EsxCred { $f = $env:BAS_ESXI_CRED_FILE; if (-not $f -or -not (Test-Path $f)) { return $null }; try { $j = Get-Content $f -Raw | ConvertFrom-Json; if ($j.user -and $j.password) { return $j } } catch { }; return $null }
+      function Test-TcpPort($h, $p) { try { $c = New-Object Net.Sockets.TcpClient; $a = $c.BeginConnect($h, $p, $null, $null); $ok = $a.AsyncWaitHandle.WaitOne(3000) -and $c.Connected; $c.Close(); return [bool]$ok } catch { return $false } }
+      function Invoke-Vim($h, $inner, $cookie) {
+        $body = '<?xml version="1.0" encoding="UTF-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><soapenv:Body>' + $inner + '</soapenv:Body></soapenv:Envelope>'
+        $res = [pscustomobject]@{ Ok = $false; Xml = $null; Cookie = $null; Fault = $null; Status = 0 }
+        try {
+          $req = [Net.HttpWebRequest]::Create("https://$h/sdk"); $req.Method = 'POST'; $req.ContentType = 'text/xml; charset=UTF-8'; $req.Timeout = 15000
+          $req.Headers.Add('SOAPAction', '"urn:vim25/6.7"'); if ($cookie) { $req.Headers.Add('Cookie', $cookie) }
+          $bytes = [Text.Encoding]::UTF8.GetBytes($body); $req.ContentLength = $bytes.Length
+          $s = $req.GetRequestStream(); $s.Write($bytes, 0, $bytes.Length); $s.Close()
+          $resp = $req.GetResponse(); $res.Status = [int]$resp.StatusCode; $res.Cookie = $resp.Headers['Set-Cookie']
+          $txt = (New-Object IO.StreamReader($resp.GetResponseStream())).ReadToEnd(); $resp.Close()
+          $res.Xml = [xml]$txt; $res.Ok = $true
+        } catch [Net.WebException] {
+          try { $r = $_.Exception.Response; if ($r) { $res.Status = [int]$r.StatusCode; $t = (New-Object IO.StreamReader($r.GetResponseStream())).ReadToEnd(); $x = [xml]$t; $res.Xml = $x; $res.Fault = ($x.SelectNodes("//*[local-name()='faultstring']") | Select-Object -First 1).InnerText } } catch { }
+        } catch { }
+        return $res
+      }
+      function Xt($xml, $name) { if (-not $xml) { return $null }; $n = $xml.SelectNodes("//*[local-name()='$name']") | Select-Object -First 1; if ($n) { return $n.InnerText } else { return $null } }
+      function Get-EsxContent($h) {
+        $r = Invoke-Vim $h '<RetrieveServiceContent xmlns="urn:vim25"><_this type="ServiceInstance">ServiceInstance</_this></RetrieveServiceContent>' $null
+        if (-not $r.Ok) { return $null }
+        [pscustomobject]@{ FullName=(Xt $r.Xml 'fullName'); Version=(Xt $r.Xml 'version'); Build=(Xt $r.Xml 'build'); ApiType=(Xt $r.Xml 'apiType'); Root=(Xt $r.Xml 'rootFolder'); Pc=(Xt $r.Xml 'propertyCollector'); Sm=(Xt $r.Xml 'sessionManager'); Am=(Xt $r.Xml 'authorizationManager'); Vm=(Xt $r.Xml 'viewManager') }
+      }
+      function Connect-Esx($h, $cred) {
+        $c = Get-EsxContent $h; if (-not $c -or -not $c.Sm) { return $null }
+        $u = [Security.SecurityElement]::Escape([string]$cred.user); $p = [Security.SecurityElement]::Escape([string]$cred.password)
+        $r = Invoke-Vim $h ('<Login xmlns="urn:vim25"><_this type="SessionManager">' + $c.Sm + '</_this><userName>' + $u + '</userName><password>' + $p + '</password></Login>') $null
+        if (-not $r.Ok -or -not $r.Cookie) { return [pscustomobject]@{ Ok = $false; Fault = $r.Fault } }
+        [pscustomobject]@{ Ok = $true; Cookie = ($r.Cookie -split ';')[0]; SessionId = (Xt $r.Xml 'key'); Content = $c; Host = $h }
+      }
+      function Get-EsxProps($s, $type, $paths) {
+        $c = $s.Content
+        $v = Invoke-Vim $s.Host ('<CreateContainerView xmlns="urn:vim25"><_this type="ViewManager">' + $c.Vm + '</_this><container type="Folder">' + $c.Root + '</container><type>' + $type + '</type><recursive>true</recursive></CreateContainerView>') $s.Cookie
+        $view = Xt $v.Xml 'returnval'; if (-not $view) { return $null }
+        $ps = ($paths | ForEach-Object { '<pathSet>' + $_ + '</pathSet>' }) -join ''
+        $r = Invoke-Vim $s.Host ('<RetrieveProperties xmlns="urn:vim25"><_this type="PropertyCollector">' + $c.Pc + '</_this><specSet><propSet><type>' + $type + '</type>' + $ps + '</propSet><objectSet><obj type="ContainerView">' + $view + '</obj><skip>true</skip><selectSet xsi:type="TraversalSpec"><name>view</name><type>ContainerView</type><path>view</path><skip>false</skip></selectSet></objectSet></specSet></RetrieveProperties>') $s.Cookie
+        if (-not $r.Ok) { return $null }
+        $out = @()
+        foreach ($rv in @($r.Xml.SelectNodes("//*[local-name()='returnval']"))) {
+          $obj = $rv.SelectSingleNode("*[local-name()='obj']"); if (-not $obj) { continue }
+          $props = @{}; foreach ($p in @($rv.SelectNodes("*[local-name()='propSet']"))) { $nm = $p.SelectSingleNode("*[local-name()='name']").InnerText; $val = $p.SelectSingleNode("*[local-name()='val']"); $props[$nm] = if ($val) { $val.InnerText } else { $null } }
+          $out += [pscustomobject]@{ Id = $obj.InnerText; Props = $props; Node = $rv }
+        }
+        return ,$out
+      }
+      function Get-EsxPriv($s, $type, $ids, $priv) {
+        if (@($ids).Count -eq 0) { return 0 }
+        $ents = ($ids | ForEach-Object { '<entity type="' + $type + '">' + $_ + '</entity>' }) -join ''
+        $r = Invoke-Vim $s.Host ('<HasPrivilegeOnEntities xmlns="urn:vim25"><_this type="AuthorizationManager">' + $s.Content.Am + '</_this>' + $ents + '<sessionId>' + $s.SessionId + '</sessionId><privId>' + $priv + '</privId></HasPrivilegeOnEntities>') $s.Cookie
+        if (-not $r.Ok) { return $null }
+        $g = 0; foreach ($n in @($r.Xml.SelectNodes("//*[local-name()='privAvailability']"))) { $isg = $n.SelectSingleNode("*[local-name()='isGranted']"); if ($isg -and $isg.InnerText -eq 'true') { $g++ } }
+        return $g
+      }
+      function Open-Sessions {
+        $script:esxSessions = @(); $script:esxSkipMsg = $null
+        if ($hosts.Count -eq 0) { $script:esxSkipMsg = 'prerequisite missing (BAS_ESXI_HOSTS not set).'; return $false }
+        $cred = Get-EsxCred
+        if (-not $cred) { $script:esxSkipMsg = 'prerequisite missing (BAS_ESXI_CRED_FILE not set, unreadable, or lacks user and password); no authentication was attempted.'; return $false }
+        foreach ($h in $hosts) { $s = Connect-Esx $h $cred; if ($s -and $s.Ok) { $script:esxSessions += $s } }
+        if ($script:esxSessions.Count -eq 0) { $script:esxSkipMsg = 'prerequisite missing (no host accepted the supplied account from this network, so there is nothing to assess; see E2).'; return $false }
+        return $true
+      }
+      if (-not (Open-Sessions)) { Write-Output "SKIP: $esxSkipMsg [BAS-SIM-ESX-E6]"; return }
+      function Wait-EsxTask($s, $taskId) {
+        for ($i = 0; $i -lt 30; $i++) {
+          $r = Invoke-Vim $s.Host ('<RetrieveProperties xmlns="urn:vim25"><_this type="PropertyCollector">' + $s.Content.Pc + '</_this><specSet><propSet><type>Task</type><pathSet>info.state</pathSet><pathSet>info.result</pathSet></propSet><objectSet><obj type="Task">' + $taskId + '</obj></objectSet></specSet></RetrieveProperties>') $s.Cookie
+          $st = $null; $res = $null
+          foreach ($p in @($r.Xml.SelectNodes("//*[local-name()='propSet']"))) { $nm = $p.SelectSingleNode("*[local-name()='name']").InnerText; $v = $p.SelectSingleNode("*[local-name()='val']"); if ($nm -eq 'info.state') { $st = $v.InnerText }; if ($nm -eq 'info.result') { $res = $v.InnerText } }
+          if ($st -in 'success','error') { return [pscustomobject]@{ State = $st; Result = $res } }
+          Start-Sleep -Milliseconds 700
+        }
+        return [pscustomobject]@{ State = 'timeout'; Result = $null }
+      }
+      $vmTot = 0; $can = 0; $none = 0; $err = 0; $canary = 'not_attempted'; $canaryClean = 'n/a'
+      $gate = ($env:BAS_CONFIRM_ESXI_LAB_WRITE -ceq 'true'); $labVm = $env:BAS_ESXI_LAB_VM
+      foreach ($s in $esxSessions) {
+        $vms = Get-EsxProps $s 'VirtualMachine' @('name','snapshot'); if ($null -eq $vms) { $err++; continue }
+        $vmTot += @($vms).Count
+        $none += @($vms | Where-Object { -not $_.Props.ContainsKey('snapshot') -or -not $_.Props['snapshot'] }).Count
+        $ids = @($vms | ForEach-Object { $_.Id })
+        for ($i = 0; $i -lt $ids.Count; $i += 100) { $g = Get-EsxPriv $s 'VirtualMachine' $ids[$i..([Math]::Min($i + 99, $ids.Count - 1))] 'VirtualMachine.State.RemoveSnapshot'; if ($null -eq $g) { $err++ } else { $can += $g } }
+        if ($gate -and $labVm -and $canary -eq 'not_attempted') {
+          $lab = @($vms | Where-Object { $_.Props['name'] -ceq $labVm }) | Select-Object -First 1
+          if ($lab) {
+            $nm = "bas_canary_$runId"
+            $c = Invoke-Vim $s.Host ('<CreateSnapshot_Task xmlns="urn:vim25"><_this type="VirtualMachine">' + $lab.Id + '</_this><name>' + $nm + '</name><description>[BAS-SIM-ESX] canary snapshot</description><memory>false</memory><quiesce>false</quiesce></CreateSnapshot_Task>') $s.Cookie
+            $t = Xt $c.Xml 'returnval'
+            if ($t) {
+              $w = Wait-EsxTask $s $t
+              if ($w.State -eq 'success' -and $w.Result) {
+                $canary = 'created'
+                $rm = Invoke-Vim $s.Host ('<RemoveSnapshot_Task xmlns="urn:vim25"><_this type="VirtualMachineSnapshot">' + $w.Result + '</_this><removeChildren>false</removeChildren></RemoveSnapshot_Task>') $s.Cookie
+                $rt = Xt $rm.Xml 'returnval'; $rw = if ($rt) { Wait-EsxTask $s $rt } else { $null }
+                $after = Get-EsxProps $s 'VirtualMachine' @('name','snapshot')
+                $still = @($after | Where-Object { $_.Props['name'] -ceq $labVm -and $_.Node.OuterXml -match [regex]::Escape($nm) }).Count -gt 0
+                $canaryClean = if ($rw -and $rw.State -eq 'success' -and -not $still) { 'verified' } else { 'FAILED_remove_manually' }
+              } else { $canary = "create_$($w.State)" }
+            } else { $canary = 'denied_or_failed' }
+          } else { $canary = 'lab_vm_not_found' }
+        }
+      }
+      Add-Ledger 'E6' ($esxSessions[0].Host) $(if ($can -gt 0 -or $canary -eq 'created') { 'privileged' } else { 'not_privileged' }) @{ vms=$vmTot; can_remove_snapshots=$can; without_snapshot=$none; canary=$canary }
+      Write-Output "EVIDENCE T1485: vms=$vmTot account_may_remove_snapshots_on=$can vms_without_any_snapshot=$none query_errors=$err canary_snapshot=$canary canary_cleanup=$canaryClean. Existing snapshots are never touched; the canary exists only on the named lab VM, behind BAS_CONFIRM_ESXI_LAB_WRITE=true (exact) and BAS_ESXI_LAB_VM. [BAS-SIM-ESX-E6]"
+      if ($canaryClean -like 'FAILED*') { Write-Output "WARNING: canary snapshot $('bas_canary_' + $runId) may remain on $labVm; remove it in the vSphere client. [BAS-SIM-ESX-E6]" }
+      if ($err -gt 0 -and $vmTot -eq 0) { Write-Output "SKIP: the VM or privilege query failed on every host, so snapshot exposure could not be determined. [BAS-SIM-ESX-E6]" }
+      elseif ($can -gt 0 -or $canary -eq 'created') { Write-Output "FAIL: snapshot-destruction rights are exposed ($can VM(s) by privilege; canary=$canary) - attackers delete snapshots to remove rollback points before encryption. $none VM(s) have no snapshot at all. [BAS-SIM-ESX-E6]" }
+      else { Write-Output "PASS: the account holds no snapshot-removal privilege on any of the $vmTot VM(s)$(if ($gate) { " and the canary snapshot was not created (canary=$canary)" }). [BAS-SIM-ESX-E6]" }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  - id: esx-e7-datastore-write-exposure
+    name: "ESXi E7 - Datastore Write and Encryption-Impact Exposure (T1485)"
+    technique_id: T1485
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 300
+    fidelity: lab-only
+    production_safe: false
+    risk: medium
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Privilege query for Datastore.FileManagement and Datastore.LowLevelFileOperations. With BAS_CONFIRM_ESXI_LAB_WRITE=true (exact) and BAS_ESXI_LAB_DATASTORE it uploads one tiny XOR-transformed file to a bas_canary_<run> folder on that datastore, reads it back, deletes it and verifies removal. No VM disk or existing file is touched."
+    preconditions: ["Windows agent that can reach the lab ESXi hosts.", "BAS_ESXI_HOSTS lists hosts the operator owns.", "Steps E1-E8 run in order within one run."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; any canary created on a host is removed and removal verified; E8 removes the work directory."]
+    abort_on: []
+    telemetry:
+      - "ESXi hostd.log and vpxa/auth logs: login events and API calls from the agent address"
+    detection:
+      - "SIEM/ESXi syslog: logins from a non-management network, SSH enablement, snapshot and datastore file operations outside change windows"
+    expected_telemetry_count: 1
+    false_positive_notes: "vCenter, backup and monitoring systems use the same APIs; correlate with source address and account."
+    mitigations:
+      - "Lockdown mode, management network isolation and disabled SSH/ESXi Shell/SLP."
+      - "Least-privilege read-only service roles; no AD ESX Admins group exposure; patched builds."
+      - "Immutable backups and snapshot-removal alerting."
+    references: ["CISA AA24-109A"]
+    evidence: ["Emit privilege counts, canary and canary_cleanup."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { 'norun' }
+      $work = Join-Path $env:TEMP "bas_esx_$runId"
+      $ledger = Join-Path $work 'ledger.jsonl'
+      try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch { }
+      [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+      $hosts = @(); $badHosts = 0
+      foreach ($h in @($env:BAS_ESXI_HOSTS -split '[;,]' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) { if ($h -match '^[A-Za-z0-9._-]{1,253}(:\d{1,5})?$') { $hosts += $h } else { $badHosts++ } }
+      function Split-HostPort($h, $def) { if ($h -match '^(.+):(\d+)$') { return @($Matches[1], [int]$Matches[2]) } else { return @($h, $def) } }
+      function Add-Ledger($step, $target, $result, $facts) {
+        if (-not (Test-Path $work)) { New-Item -ItemType Directory -Path $work -Force | Out-Null }
+        $o = [ordered]@{ step=$step; target=$target; ts=(Get-Date).ToUniversalTime().ToString('o'); result=$result; facts=$facts }
+        Add-Content -Path $ledger -Value ($o | ConvertTo-Json -Compress -Depth 4) -Encoding UTF8
+      }
+      function Read-Ledger { if (Test-Path $ledger) { @(Get-Content $ledger | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json }) } else { @() } }
+      function Get-EsxCred { $f = $env:BAS_ESXI_CRED_FILE; if (-not $f -or -not (Test-Path $f)) { return $null }; try { $j = Get-Content $f -Raw | ConvertFrom-Json; if ($j.user -and $j.password) { return $j } } catch { }; return $null }
+      function Test-TcpPort($h, $p) { try { $c = New-Object Net.Sockets.TcpClient; $a = $c.BeginConnect($h, $p, $null, $null); $ok = $a.AsyncWaitHandle.WaitOne(3000) -and $c.Connected; $c.Close(); return [bool]$ok } catch { return $false } }
+      function Invoke-Vim($h, $inner, $cookie) {
+        $body = '<?xml version="1.0" encoding="UTF-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><soapenv:Body>' + $inner + '</soapenv:Body></soapenv:Envelope>'
+        $res = [pscustomobject]@{ Ok = $false; Xml = $null; Cookie = $null; Fault = $null; Status = 0 }
+        try {
+          $req = [Net.HttpWebRequest]::Create("https://$h/sdk"); $req.Method = 'POST'; $req.ContentType = 'text/xml; charset=UTF-8'; $req.Timeout = 15000
+          $req.Headers.Add('SOAPAction', '"urn:vim25/6.7"'); if ($cookie) { $req.Headers.Add('Cookie', $cookie) }
+          $bytes = [Text.Encoding]::UTF8.GetBytes($body); $req.ContentLength = $bytes.Length
+          $s = $req.GetRequestStream(); $s.Write($bytes, 0, $bytes.Length); $s.Close()
+          $resp = $req.GetResponse(); $res.Status = [int]$resp.StatusCode; $res.Cookie = $resp.Headers['Set-Cookie']
+          $txt = (New-Object IO.StreamReader($resp.GetResponseStream())).ReadToEnd(); $resp.Close()
+          $res.Xml = [xml]$txt; $res.Ok = $true
+        } catch [Net.WebException] {
+          try { $r = $_.Exception.Response; if ($r) { $res.Status = [int]$r.StatusCode; $t = (New-Object IO.StreamReader($r.GetResponseStream())).ReadToEnd(); $x = [xml]$t; $res.Xml = $x; $res.Fault = ($x.SelectNodes("//*[local-name()='faultstring']") | Select-Object -First 1).InnerText } } catch { }
+        } catch { }
+        return $res
+      }
+      function Xt($xml, $name) { if (-not $xml) { return $null }; $n = $xml.SelectNodes("//*[local-name()='$name']") | Select-Object -First 1; if ($n) { return $n.InnerText } else { return $null } }
+      function Get-EsxContent($h) {
+        $r = Invoke-Vim $h '<RetrieveServiceContent xmlns="urn:vim25"><_this type="ServiceInstance">ServiceInstance</_this></RetrieveServiceContent>' $null
+        if (-not $r.Ok) { return $null }
+        [pscustomobject]@{ FullName=(Xt $r.Xml 'fullName'); Version=(Xt $r.Xml 'version'); Build=(Xt $r.Xml 'build'); ApiType=(Xt $r.Xml 'apiType'); Root=(Xt $r.Xml 'rootFolder'); Pc=(Xt $r.Xml 'propertyCollector'); Sm=(Xt $r.Xml 'sessionManager'); Am=(Xt $r.Xml 'authorizationManager'); Vm=(Xt $r.Xml 'viewManager') }
+      }
+      function Connect-Esx($h, $cred) {
+        $c = Get-EsxContent $h; if (-not $c -or -not $c.Sm) { return $null }
+        $u = [Security.SecurityElement]::Escape([string]$cred.user); $p = [Security.SecurityElement]::Escape([string]$cred.password)
+        $r = Invoke-Vim $h ('<Login xmlns="urn:vim25"><_this type="SessionManager">' + $c.Sm + '</_this><userName>' + $u + '</userName><password>' + $p + '</password></Login>') $null
+        if (-not $r.Ok -or -not $r.Cookie) { return [pscustomobject]@{ Ok = $false; Fault = $r.Fault } }
+        [pscustomobject]@{ Ok = $true; Cookie = ($r.Cookie -split ';')[0]; SessionId = (Xt $r.Xml 'key'); Content = $c; Host = $h }
+      }
+      function Get-EsxProps($s, $type, $paths) {
+        $c = $s.Content
+        $v = Invoke-Vim $s.Host ('<CreateContainerView xmlns="urn:vim25"><_this type="ViewManager">' + $c.Vm + '</_this><container type="Folder">' + $c.Root + '</container><type>' + $type + '</type><recursive>true</recursive></CreateContainerView>') $s.Cookie
+        $view = Xt $v.Xml 'returnval'; if (-not $view) { return $null }
+        $ps = ($paths | ForEach-Object { '<pathSet>' + $_ + '</pathSet>' }) -join ''
+        $r = Invoke-Vim $s.Host ('<RetrieveProperties xmlns="urn:vim25"><_this type="PropertyCollector">' + $c.Pc + '</_this><specSet><propSet><type>' + $type + '</type>' + $ps + '</propSet><objectSet><obj type="ContainerView">' + $view + '</obj><skip>true</skip><selectSet xsi:type="TraversalSpec"><name>view</name><type>ContainerView</type><path>view</path><skip>false</skip></selectSet></objectSet></specSet></RetrieveProperties>') $s.Cookie
+        if (-not $r.Ok) { return $null }
+        $out = @()
+        foreach ($rv in @($r.Xml.SelectNodes("//*[local-name()='returnval']"))) {
+          $obj = $rv.SelectSingleNode("*[local-name()='obj']"); if (-not $obj) { continue }
+          $props = @{}; foreach ($p in @($rv.SelectNodes("*[local-name()='propSet']"))) { $nm = $p.SelectSingleNode("*[local-name()='name']").InnerText; $val = $p.SelectSingleNode("*[local-name()='val']"); $props[$nm] = if ($val) { $val.InnerText } else { $null } }
+          $out += [pscustomobject]@{ Id = $obj.InnerText; Props = $props; Node = $rv }
+        }
+        return ,$out
+      }
+      function Get-EsxPriv($s, $type, $ids, $priv) {
+        if (@($ids).Count -eq 0) { return 0 }
+        $ents = ($ids | ForEach-Object { '<entity type="' + $type + '">' + $_ + '</entity>' }) -join ''
+        $r = Invoke-Vim $s.Host ('<HasPrivilegeOnEntities xmlns="urn:vim25"><_this type="AuthorizationManager">' + $s.Content.Am + '</_this>' + $ents + '<sessionId>' + $s.SessionId + '</sessionId><privId>' + $priv + '</privId></HasPrivilegeOnEntities>') $s.Cookie
+        if (-not $r.Ok) { return $null }
+        $g = 0; foreach ($n in @($r.Xml.SelectNodes("//*[local-name()='privAvailability']"))) { $isg = $n.SelectSingleNode("*[local-name()='isGranted']"); if ($isg -and $isg.InnerText -eq 'true') { $g++ } }
+        return $g
+      }
+      function Open-Sessions {
+        $script:esxSessions = @(); $script:esxSkipMsg = $null
+        if ($hosts.Count -eq 0) { $script:esxSkipMsg = 'prerequisite missing (BAS_ESXI_HOSTS not set).'; return $false }
+        $cred = Get-EsxCred
+        if (-not $cred) { $script:esxSkipMsg = 'prerequisite missing (BAS_ESXI_CRED_FILE not set, unreadable, or lacks user and password); no authentication was attempted.'; return $false }
+        foreach ($h in $hosts) { $s = Connect-Esx $h $cred; if ($s -and $s.Ok) { $script:esxSessions += $s } }
+        if ($script:esxSessions.Count -eq 0) { $script:esxSkipMsg = 'prerequisite missing (no host accepted the supplied account from this network, so there is nothing to assess; see E2).'; return $false }
+        return $true
+      }
+      if (-not (Open-Sessions)) { Write-Output "SKIP: $esxSkipMsg [BAS-SIM-ESX-E7]"; return }
+      function Invoke-Ds($h, $method, $path, $bytes, $cred) {
+        try {
+          $req = [Net.HttpWebRequest]::Create("https://$h$path"); $req.Method = $method; $req.Timeout = 15000
+          $req.Headers.Add('Authorization', 'Basic ' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("$($cred.user):$($cred.password)")))
+          if ($bytes) { $req.ContentLength = $bytes.Length; $req.ContentType = 'application/octet-stream'; $s = $req.GetRequestStream(); $s.Write($bytes, 0, $bytes.Length); $s.Close() }
+          $r = $req.GetResponse(); $code = [int]$r.StatusCode; $out = $null
+          if ($method -eq 'GET') { $ms = New-Object IO.MemoryStream; $r.GetResponseStream().CopyTo($ms); $out = $ms.ToArray() }
+          $r.Close(); return [pscustomobject]@{ Code = $code; Body = $out }
+        } catch [Net.WebException] { $c = 0; try { $c = [int]$_.Exception.Response.StatusCode } catch { }; return [pscustomobject]@{ Code = $c; Body = $null } } catch { return [pscustomobject]@{ Code = 0; Body = $null } }
+      }
+      $cred = Get-EsxCred
+      $gate = ($env:BAS_CONFIRM_ESXI_LAB_WRITE -ceq 'true'); $labDs = $env:BAS_ESXI_LAB_DATASTORE
+      $dsTot = 0; $fm = 0; $ll = 0; $err = 0; $canary = 'not_attempted'; $clean = 'n/a'
+      foreach ($s in $esxSessions) {
+        $ds = Get-EsxProps $s 'Datastore' @('name'); if ($null -eq $ds) { $err++; continue }
+        $ids = @($ds | ForEach-Object { $_.Id }); $dsTot += $ids.Count
+        if ($ids.Count -gt 0) {
+          $a = Get-EsxPriv $s 'Datastore' $ids 'Datastore.FileManagement'; if ($null -eq $a) { $err++ } else { $fm += $a }
+          $b = Get-EsxPriv $s 'Datastore' $ids 'Datastore.LowLevelFileOperations'; if ($null -eq $b) { $err++ } else { $ll += $b }
+        }
+        if ($gate -and $labDs -and $canary -eq 'not_attempted') {
+          $d = @($ds | Where-Object { $_.Props['name'] -ceq $labDs }) | Select-Object -First 1
+          if ($d) {
+            $dir = "bas_canary_$runId"; $q = "?dcPath=ha-datacenter&dsName=$([uri]::EscapeDataString($labDs))"
+            $plain = [Text.Encoding]::UTF8.GetBytes("[BAS-SIM-ESX] canary $runId"); $xor = New-Object byte[] $plain.Length; for ($i = 0; $i -lt $plain.Length; $i++) { $xor[$i] = $plain[$i] -bxor 0x41 }
+            $put = Invoke-Ds $s.Host 'PUT' "/folder/$dir/canary.bin$q" $xor $cred
+            if ($put.Code -in 200,201,204) {
+              $get = Invoke-Ds $s.Host 'GET' "/folder/$dir/canary.bin$q" $null $cred
+              $same = ($get.Body -and ([Convert]::ToBase64String($get.Body) -eq [Convert]::ToBase64String($xor)))
+              $differs = ([Convert]::ToBase64String($xor) -ne [Convert]::ToBase64String($plain))
+              $canary = "written transform_roundtrip=$same content_differs_from_plain=$differs"
+              $null = Invoke-Ds $s.Host 'DELETE' "/folder/$dir/canary.bin$q" $null $cred
+              $null = Invoke-Ds $s.Host 'DELETE' "/folder/$dir$q" $null $cred
+              $chk = Invoke-Ds $s.Host 'GET' "/folder/$dir/canary.bin$q" $null $cred
+              $clean = if ($chk.Code -eq 404) { 'verified' } else { "FAILED_http_$($chk.Code)_remove_manually" }
+            } else { $canary = "denied_or_failed_http_$($put.Code)" }
+          } else { $canary = 'lab_datastore_not_found' }
+        }
+      }
+      Add-Ledger 'E7' ($esxSessions[0].Host) $(if ($fm -gt 0 -or $ll -gt 0 -or $canary -like 'written*') { 'privileged' } else { 'not_privileged' }) @{ datastores=$dsTot; file_mgmt=$fm; low_level=$ll; canary=$canary }
+      Write-Output "EVIDENCE T1485: datastores=$dsTot account_has_FileManagement_on=$fm account_has_LowLevelFileOperations_on=$ll query_errors=$err canary=[$canary] canary_cleanup=$clean. The transform simulation applies XOR to one tiny BAS-owned file only; no VM disk or existing datastore file is read, written or encrypted. Needs BAS_CONFIRM_ESXI_LAB_WRITE=true (exact) and BAS_ESXI_LAB_DATASTORE. [BAS-SIM-ESX-E7]"
+      if ($clean -like 'FAILED*') { Write-Output "WARNING: canary folder bas_canary_$runId may remain on datastore $labDs; delete it in the datastore browser. [BAS-SIM-ESX-E7]" }
+      if ($err -gt 0 -and $dsTot -eq 0) { Write-Output "SKIP: the datastore or privilege query failed on every host, so write exposure could not be determined. [BAS-SIM-ESX-E7]" }
+      elseif ($fm -gt 0 -or $ll -gt 0 -or $canary -like 'written*') { Write-Output "FAIL: datastore write rights are exposed (FileManagement=$fm, LowLevelFileOperations=$ll, canary=[$canary]) - an attacker with these can encrypt or delete VM disk files directly on the datastore. [BAS-SIM-ESX-E7]" }
+      else { Write-Output "PASS: the account holds no datastore file-management privilege on any of the $dsTot datastore(s)$(if ($gate) { " and the canary write was not accepted (canary=[$canary])" }). [BAS-SIM-ESX-E7]" }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  - id: esx-e8-chain-correlation
+    name: "ESXi E8 - Hypervisor Ransomware Chain Correlation (T1078)"
+    technique_id: T1078
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Reads this run ledger, checks for an AD group named ESX Admins when ESXi is AD-joined and the agent is domain joined (read-only LDAP), judges whether the chain is viable and removes the BAS work directory with verification."
+    preconditions: ["Windows agent that can reach the lab ESXi hosts.", "BAS_ESXI_HOSTS lists hosts the operator owns.", "Steps E1-E8 run in order within one run."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; any canary created on a host is removed and removal verified; E8 removes the work directory."]
+    abort_on: []
+    telemetry:
+      - "ESXi hostd.log and vpxa/auth logs: login events and API calls from the agent address"
+    detection:
+      - "SIEM/ESXi syslog: logins from a non-management network, SSH enablement, snapshot and datastore file operations outside change windows"
+    expected_telemetry_count: 1
+    false_positive_notes: "vCenter, backup and monitoring systems use the same APIs; correlate with source address and account."
+    mitigations:
+      - "Lockdown mode, management network isolation and disabled SSH/ESXi Shell/SLP."
+      - "Least-privilege read-only service roles; no AD ESX Admins group exposure; patched builds."
+      - "Immutable backups and snapshot-removal alerting."
+    references: ["CISA AA24-109A"]
+    evidence: ["Emit chain facts and cleanup_verified."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { 'norun' }
+      $work = Join-Path $env:TEMP "bas_esx_$runId"
+      $ledger = Join-Path $work 'ledger.jsonl'
+      try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch { }
+      [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+      $hosts = @(); $badHosts = 0
+      foreach ($h in @($env:BAS_ESXI_HOSTS -split '[;,]' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) { if ($h -match '^[A-Za-z0-9._-]{1,253}(:\d{1,5})?$') { $hosts += $h } else { $badHosts++ } }
+      function Split-HostPort($h, $def) { if ($h -match '^(.+):(\d+)$') { return @($Matches[1], [int]$Matches[2]) } else { return @($h, $def) } }
+      function Add-Ledger($step, $target, $result, $facts) {
+        if (-not (Test-Path $work)) { New-Item -ItemType Directory -Path $work -Force | Out-Null }
+        $o = [ordered]@{ step=$step; target=$target; ts=(Get-Date).ToUniversalTime().ToString('o'); result=$result; facts=$facts }
+        Add-Content -Path $ledger -Value ($o | ConvertTo-Json -Compress -Depth 4) -Encoding UTF8
+      }
+      function Read-Ledger { if (Test-Path $ledger) { @(Get-Content $ledger | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json }) } else { @() } }
+      function Get-EsxCred { $f = $env:BAS_ESXI_CRED_FILE; if (-not $f -or -not (Test-Path $f)) { return $null }; try { $j = Get-Content $f -Raw | ConvertFrom-Json; if ($j.user -and $j.password) { return $j } } catch { }; return $null }
+      function Test-TcpPort($h, $p) { try { $c = New-Object Net.Sockets.TcpClient; $a = $c.BeginConnect($h, $p, $null, $null); $ok = $a.AsyncWaitHandle.WaitOne(3000) -and $c.Connected; $c.Close(); return [bool]$ok } catch { return $false } }
+      function Invoke-Vim($h, $inner, $cookie) {
+        $body = '<?xml version="1.0" encoding="UTF-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><soapenv:Body>' + $inner + '</soapenv:Body></soapenv:Envelope>'
+        $res = [pscustomobject]@{ Ok = $false; Xml = $null; Cookie = $null; Fault = $null; Status = 0 }
+        try {
+          $req = [Net.HttpWebRequest]::Create("https://$h/sdk"); $req.Method = 'POST'; $req.ContentType = 'text/xml; charset=UTF-8'; $req.Timeout = 15000
+          $req.Headers.Add('SOAPAction', '"urn:vim25/6.7"'); if ($cookie) { $req.Headers.Add('Cookie', $cookie) }
+          $bytes = [Text.Encoding]::UTF8.GetBytes($body); $req.ContentLength = $bytes.Length
+          $s = $req.GetRequestStream(); $s.Write($bytes, 0, $bytes.Length); $s.Close()
+          $resp = $req.GetResponse(); $res.Status = [int]$resp.StatusCode; $res.Cookie = $resp.Headers['Set-Cookie']
+          $txt = (New-Object IO.StreamReader($resp.GetResponseStream())).ReadToEnd(); $resp.Close()
+          $res.Xml = [xml]$txt; $res.Ok = $true
+        } catch [Net.WebException] {
+          try { $r = $_.Exception.Response; if ($r) { $res.Status = [int]$r.StatusCode; $t = (New-Object IO.StreamReader($r.GetResponseStream())).ReadToEnd(); $x = [xml]$t; $res.Xml = $x; $res.Fault = ($x.SelectNodes("//*[local-name()='faultstring']") | Select-Object -First 1).InnerText } } catch { }
+        } catch { }
+        return $res
+      }
+      function Xt($xml, $name) { if (-not $xml) { return $null }; $n = $xml.SelectNodes("//*[local-name()='$name']") | Select-Object -First 1; if ($n) { return $n.InnerText } else { return $null } }
+      function Get-EsxContent($h) {
+        $r = Invoke-Vim $h '<RetrieveServiceContent xmlns="urn:vim25"><_this type="ServiceInstance">ServiceInstance</_this></RetrieveServiceContent>' $null
+        if (-not $r.Ok) { return $null }
+        [pscustomobject]@{ FullName=(Xt $r.Xml 'fullName'); Version=(Xt $r.Xml 'version'); Build=(Xt $r.Xml 'build'); ApiType=(Xt $r.Xml 'apiType'); Root=(Xt $r.Xml 'rootFolder'); Pc=(Xt $r.Xml 'propertyCollector'); Sm=(Xt $r.Xml 'sessionManager'); Am=(Xt $r.Xml 'authorizationManager'); Vm=(Xt $r.Xml 'viewManager') }
+      }
+      function Connect-Esx($h, $cred) {
+        $c = Get-EsxContent $h; if (-not $c -or -not $c.Sm) { return $null }
+        $u = [Security.SecurityElement]::Escape([string]$cred.user); $p = [Security.SecurityElement]::Escape([string]$cred.password)
+        $r = Invoke-Vim $h ('<Login xmlns="urn:vim25"><_this type="SessionManager">' + $c.Sm + '</_this><userName>' + $u + '</userName><password>' + $p + '</password></Login>') $null
+        if (-not $r.Ok -or -not $r.Cookie) { return [pscustomobject]@{ Ok = $false; Fault = $r.Fault } }
+        [pscustomobject]@{ Ok = $true; Cookie = ($r.Cookie -split ';')[0]; SessionId = (Xt $r.Xml 'key'); Content = $c; Host = $h }
+      }
+      function Get-EsxProps($s, $type, $paths) {
+        $c = $s.Content
+        $v = Invoke-Vim $s.Host ('<CreateContainerView xmlns="urn:vim25"><_this type="ViewManager">' + $c.Vm + '</_this><container type="Folder">' + $c.Root + '</container><type>' + $type + '</type><recursive>true</recursive></CreateContainerView>') $s.Cookie
+        $view = Xt $v.Xml 'returnval'; if (-not $view) { return $null }
+        $ps = ($paths | ForEach-Object { '<pathSet>' + $_ + '</pathSet>' }) -join ''
+        $r = Invoke-Vim $s.Host ('<RetrieveProperties xmlns="urn:vim25"><_this type="PropertyCollector">' + $c.Pc + '</_this><specSet><propSet><type>' + $type + '</type>' + $ps + '</propSet><objectSet><obj type="ContainerView">' + $view + '</obj><skip>true</skip><selectSet xsi:type="TraversalSpec"><name>view</name><type>ContainerView</type><path>view</path><skip>false</skip></selectSet></objectSet></specSet></RetrieveProperties>') $s.Cookie
+        if (-not $r.Ok) { return $null }
+        $out = @()
+        foreach ($rv in @($r.Xml.SelectNodes("//*[local-name()='returnval']"))) {
+          $obj = $rv.SelectSingleNode("*[local-name()='obj']"); if (-not $obj) { continue }
+          $props = @{}; foreach ($p in @($rv.SelectNodes("*[local-name()='propSet']"))) { $nm = $p.SelectSingleNode("*[local-name()='name']").InnerText; $val = $p.SelectSingleNode("*[local-name()='val']"); $props[$nm] = if ($val) { $val.InnerText } else { $null } }
+          $out += [pscustomobject]@{ Id = $obj.InnerText; Props = $props; Node = $rv }
+        }
+        return ,$out
+      }
+      function Get-EsxPriv($s, $type, $ids, $priv) {
+        if (@($ids).Count -eq 0) { return 0 }
+        $ents = ($ids | ForEach-Object { '<entity type="' + $type + '">' + $_ + '</entity>' }) -join ''
+        $r = Invoke-Vim $s.Host ('<HasPrivilegeOnEntities xmlns="urn:vim25"><_this type="AuthorizationManager">' + $s.Content.Am + '</_this>' + $ents + '<sessionId>' + $s.SessionId + '</sessionId><privId>' + $priv + '</privId></HasPrivilegeOnEntities>') $s.Cookie
+        if (-not $r.Ok) { return $null }
+        $g = 0; foreach ($n in @($r.Xml.SelectNodes("//*[local-name()='privAvailability']"))) { $isg = $n.SelectSingleNode("*[local-name()='isGranted']"); if ($isg -and $isg.InnerText -eq 'true') { $g++ } }
+        return $g
+      }
+      $rows = Read-Ledger
+      $e1 = @($rows | Where-Object { $_.step -eq 'E1' })
+      if ($e1.Count -eq 0) { Write-Output "SKIP: prerequisite missing (no E1 ledger for this run; run E1 first). [BAS-SIM-ESX-E8]"; return }
+      $reach = @($e1 | Where-Object { $_.result -eq 'reachable' } | ForEach-Object { $_.target })
+      $login = @($rows | Where-Object { $_.step -eq 'E2' -and $_.result -eq 'executed' } | ForEach-Object { $_.target })
+      $priv = @($rows | Where-Object { $_.step -in 'E5','E6','E7' -and $_.result -eq 'privileged' })
+      $viableHosts = @($reach | Where-Object { $login -contains $_ })
+      $adDomains = @($rows | Where-Object { $_.step -eq 'E2' -and $_.facts.ad_domain } | ForEach-Object { $_.facts.ad_domain } | Sort-Object -Unique)
+      $escan = 'not_assessed'
+      if ($adDomains.Count -gt 0) {
+        $joined = [bool](Get-WmiObject Win32_ComputerSystem).PartOfDomain
+        if ($joined) { try { $ds = New-Object DirectoryServices.DirectorySearcher; $ds.Filter = '(&(objectCategory=group)(sAMAccountName=ESX Admins))'; $escan = if ($ds.FindOne()) { 'group_exists' } else { 'group_absent' } } catch { $escan = 'ldap_failed' } } else { $escan = 'agent_not_domain_joined' }
+      }
+      $steps = (($rows | ForEach-Object { $_.step } | Sort-Object -Unique) -join ',')
+      Remove-Item $work -Recurse -Force
+      $clean = -not (Test-Path $work)
+      Write-Output "EVIDENCE T1078: steps_recorded=[$steps] hosts_management_reachable=$($reach.Count) hosts_login_ok=$($login.Count) hosts_reachable_and_login_ok=$($viableHosts.Count) privileged_findings_E5_E6_E7=$($priv.Count) esxi_ad_domains=[$($adDomains -join ',')] esx_admins_group=$escan cleanup_verified=$clean. The chain is judged from this agent's own ledger; E6 and E7 record one row for their first host, so the per-host link is approximate. Real ESXi behaviour was not verified by the scenario author. [BAS-SIM-ESX-E8]"
+      if (-not $clean) { Write-Output "WARNING: work directory $work remains; remove it manually. [BAS-SIM-ESX-E8]" }
+      if ($escan -eq 'group_exists') { Write-Output "FINDING: an AD group named 'ESX Admins' exists and ESXi is AD-joined - the CVE-2024-37085 path lets AD users in that group administer ESXi; verify the host build is patched and the setting Config.HostAgent.plugins.hostsvc.esxAdminsGroupAutoAdd is false. [BAS-SIM-ESX-E8]" }
+      if ($viableHosts.Count -gt 0 -and $priv.Count -gt 0) { Write-Output "FAIL: ransomware-on-hypervisor path is viable: management reachable and authenticated on $($viableHosts.Count) host(s) with destructive-privilege exposure ($($priv.Count) finding(s)). [BAS-SIM-ESX-E8]" }
+      elseif ($escan -eq 'group_exists') { Write-Output "FAIL: the AD 'ESX Admins' escalation path is present (see FINDING) even though the destructive-privilege chain was not demonstrated. [BAS-SIM-ESX-E8]" }
+      elseif ($reach.Count -eq 0) { Write-Output "PASS: no ESXi management port was reachable, so the chain is broken at its first link. [BAS-SIM-ESX-E8]" }
+      elseif ($login.Count -eq 0) { Write-Output "PASS: management ports were reachable but no authenticated access was obtained (or credentials were not supplied; see E2). [BAS-SIM-ESX-E8]" }
+      else { Write-Output "PASS: authenticated access was obtained but the account holds none of the assessed destructive privileges. [BAS-SIM-ESX-E8]" }
+    cleanup: |
+      $id = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { 'norun' }
+      Remove-Item (Join-Path $env:TEMP "bas_esx_$id") -Recurse -Force -ErrorAction SilentlyContinue

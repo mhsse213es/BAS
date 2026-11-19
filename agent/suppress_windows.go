@@ -42,6 +42,11 @@ func setErrorMode(flags uint32) uint32 {
 //  4. HungAppTimeout / AutoEndTasks — Windows auto-kills hung windows in 1 s
 //  5. DisablePCA    — Program Compatibility Assistant won't intercept crashes
 func suppressSystemDialogs() {
+	// Record the values this is about to change, once, so they can be put back exactly (see syssettings.go).
+	if err := ensureSettingsBackup(settingsBackupPath(), registryStore{}, systemSettingTargets()); err != nil {
+		log.Printf("[suppress] could not record the original settings: %v -- they will be restored to Windows defaults instead", err)
+	}
+
 	suppressedFlags := uint32(semFailCriticalErrors | semNoGPFaultErrorBox |
 		semNoOpenFileErrorBox | semNoAlignFaultBox)
 
@@ -133,6 +138,17 @@ func applyPCASuppression() {
 // Called on clean agent shutdown so the machine reverts to standard Windows
 // behaviour when BAS is not running.
 func RestoreSystemDialogs() {
+	// Exact restore from the record made before anything was changed; the fixed-defaults code below is only for an
+	// agent that changed settings before the record existed.
+	if restored, failed := restoreSettingsFromBackup(settingsBackupPath(), registryStore{}); restored {
+		for _, f := range failed {
+			log.Printf("[suppress] could not restore %s", f)
+		}
+		setErrorMode(0)
+		log.Printf("[suppress] system settings restored to their recorded original values")
+		return
+	}
+
 	// Restore WER interactive mode
 	const werKey = `Software\Microsoft\Windows\Windows Error Reporting`
 	if k, err := registry.OpenKey(registry.LOCAL_MACHINE, werKey, registry.SET_VALUE); err == nil {

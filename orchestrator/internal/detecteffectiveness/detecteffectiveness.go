@@ -143,6 +143,7 @@ func Compute(ctx context.Context, pool *pgxpool.Pool, scenarioID, agentID string
 		`SELECT id, scenario_id, name, agent_id, results, detection_summary, started_at
 		   FROM scenario_runs
 		  WHERE status IN ('completed', 'partial')
+		    AND execution_kind <> 'factory_validation'
 		    AND results IS NOT NULL
 		    AND ($1 = '' OR scenario_id = $1)
 		    AND ($2 = '' OR agent_id = $2)
@@ -191,16 +192,24 @@ func Compute(ctx context.Context, pool *pgxpool.Pool, scenarioID, agentID string
 		runSumm := RunAnalyticSummary{RunID: rid, ScenarioID: scID, Name: name, AgentID: agID, StartedAt: startedAt}
 
 		for _, res := range results {
-			switch res.Result {
-			case models.ResultError, models.ResultSkipped:
-				continue
-			}
 			tid := strings.ToUpper(res.Technique.ID)
+			// A telemetry probe ran but has no prevention verdict. It counts only when something detected it; a probe
+			// nobody saw is left out rather than called a miss, because no alert source was shown to be watching.
+			probeV, probeCounts := telemetryProbeVerdict(res, detected)
+			if !probeCounts {
+				switch res.Result {
+				case models.ResultError, models.ResultSkipped:
+					continue
+				}
+			}
 			if tid == "" {
 				continue
 			}
 			var v Verdict
-			switch res.Result {
+			if probeCounts {
+				v = probeV
+			} else {
+				switch res.Result {
 			case models.ResultPass, models.ResultBlocked:
 				v = VerdictPrevented
 			case models.ResultFail:
@@ -215,6 +224,7 @@ func Compute(ctx context.Context, pool *pgxpool.Pool, scenarioID, agentID string
 				// nor missed by a customer control -- excluded from
 				// detection-effectiveness scoring (verified, B5 Task 9 audit).
 				continue
+				}
 			}
 
 			e := techMap[tid]
@@ -403,4 +413,16 @@ func Compute(ctx context.Context, pool *pgxpool.Pool, scenarioID, agentID string
 		RecentRuns:        recent,
 		PrivilegeCoverage: PrivilegeCoverage{ByTier: tierStats, GapTechs: gapTechs},
 	}, nil
+}
+
+// telemetryProbeVerdict: a telemetry-only probe that something detected counts as detected-only (it was not
+// prevented, since it has no prevention verdict, but it was seen). Anything else returns false and is not counted.
+func telemetryProbeVerdict(res models.SimulationResult, detected map[string]bool) (Verdict, bool) {
+	if !res.IsTelemetryProbe() {
+		return 0, false
+	}
+	if detected[res.Technique.ID] || detected[strings.ToUpper(res.Technique.ID)] {
+		return VerdictDetectedOnly, true
+	}
+	return 0, false
 }

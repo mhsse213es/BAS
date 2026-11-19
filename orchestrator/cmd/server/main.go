@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"fmt"
 	"log"
 	"log/slog"
@@ -18,8 +17,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/config"
+	"github.com/audspect/bas/internal/advisory"
+	aleefstore "github.com/audspect/bas/internal/aleef/store"
 	"github.com/audspect/bas/internal/api"
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/cigate"
 	"github.com/audspect/bas/internal/cmdsigning"
 	"github.com/audspect/bas/internal/compliance"
 	"github.com/audspect/bas/internal/connector"
@@ -27,6 +29,10 @@ import (
 	"github.com/audspect/bas/internal/controlhealth"
 	"github.com/audspect/bas/internal/correlation"
 	"github.com/audspect/bas/internal/db"
+	apibasjobs "github.com/audspect/bas/internal/apibas/jobs"
+	"github.com/audspect/bas/internal/segprobe"
+	"github.com/audspect/bas/internal/segprobe/runstore"
+	"github.com/audspect/bas/internal/secretstore"
 	"github.com/audspect/bas/internal/detect"
 	"github.com/audspect/bas/internal/dnssink"
 	"github.com/audspect/bas/internal/emailgwefficacy"
@@ -57,6 +63,7 @@ import (
 	"github.com/audspect/bas/internal/sftpsink"
 	"github.com/audspect/bas/internal/smtpsink"
 	"github.com/audspect/bas/internal/taxii"
+	"github.com/audspect/bas/internal/tcv"
 	"github.com/audspect/bas/internal/threatidentity"
 	"github.com/audspect/bas/internal/threatpriority"
 	"github.com/audspect/bas/internal/ticketing"
@@ -97,7 +104,7 @@ func runHealthcheck() int {
 		Timeout: 3 * time.Second,
 		Transport: &http.Transport{
 			// The enrollment listener's server identity is the deployment
-			// CA's own self-signed certificate (see ca.TLSCertificate()) --
+			// server certificate (see pki.ServerCertSource) --
 			// this is a loopback liveness probe, not a security boundary,
 			// so skipping verification here is correct, not a shortcut.
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
@@ -193,6 +200,14 @@ func main() {
 		os.Exit(runHealthcheck())
 	}
 
+	if len(os.Args) > 1 && os.Args[1] == "ca-rotation" {
+		dir := os.Getenv("PKI_DIR")
+		if dir == "" {
+			dir = "/etc/audspect/pki"
+		}
+		os.Exit(runCARotation(os.Args[2:], dir, os.Stdout))
+	}
+
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	api.Version = Version
@@ -239,6 +254,9 @@ func main() {
 			log.Fatalf("[FATAL] %v", licErr)
 		}
 		license.SetInitial(initialLicenseInfo)
+		if msg := license.BuildMismatch(license.BuildTier(), lic.EffectiveTier()); msg != "" {
+			log.Printf("[license] WARNING: %s", msg)
+		}
 		switch initialLicenseInfo.State {
 		case license.StateLocked:
 			log.Printf("[license] LOCKED — grace period expired on %s. Serving lockout-only mode.", initialLicenseInfo.LockoutAt.Format(time.RFC3339))
@@ -281,11 +299,23 @@ func main() {
 	if err := db.EnsureAgentUninstallSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] agent uninstall schema bootstrap: %v", err)
 	}
+	if err := db.EnsureContentImportSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] content import schema bootstrap: %v", err)
+	}
+	if err := db.EnsureRecoverySchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] recovery schema bootstrap: %v", err)
+	}
 	if err := db.EnsureExerciseSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] exercise schema: %v", err)
 	}
 	if err := db.EnsureK8sScenarioSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] k8s scenario schema: %v", err)
+	}
+	if err := db.EnsureK8sClusterSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] k8s cluster schema: %v", err)
+	}
+	if err := db.EnsureK8sAuthorizationSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] k8s authorization schema: %v", err)
 	}
 	if err := db.EnsureContentRegistrySchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] content registry schema: %v", err)
@@ -305,6 +335,12 @@ func main() {
 	if err := db.EnsureTCVSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] TCV schema: %v", err)
 	}
+	if err := db.EnsureTCFPipelineEventsSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] TCF pipeline events schema: %v", err)
+	}
+	if err := db.EnsureAdvisorySchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] advisory intake schema: %v", err)
+	}
 	if err := db.EnsureCloudRunSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] cloud run schema: %v", err)
 	}
@@ -313,6 +349,25 @@ func main() {
 	}
 	if err := db.EnsureAPIBASRunSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] apibas run schema: %v", err)
+	}
+	if err := db.EnsureAPIBASJobSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] apibas job schema: %v", err)
+	}
+	if err := db.EnsureSegmentationSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] segmentation schema: %v", err)
+	}
+	if err := db.EnsureSecretStoreSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] secret store schema: %v", err)
+	}
+	// Validate the interim encryption key at boot. A missing or invalid key does not stop the server: plaintext credentials
+	// still work, and any credential reference that cannot be resolved fails its own operation (secretstore.Resolve).
+	if _, err := secretstore.LoadKeyFile(secretstore.DefaultKeyPath); err != nil {
+		log.Printf("[secretstore] WARNING: encryption key not usable: %v; credential references cannot be resolved", err)
+	} else {
+		log.Printf("[secretstore] encryption key verified")
+	}
+	if err := aleefstore.EnsureSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] aleef schema: %v", err)
 	}
 	if err := db.EnsureEmailGWRunSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] email gw run schema: %v", err)
@@ -436,6 +491,9 @@ func main() {
 		log.Printf("[+] EPSS scores seeded: %d CVE entries", n)
 	}
 
+	if err := api.SeedRecoveryPassphrase(context.Background(), pool, cfg.RecoveryPassphrase); err != nil {
+		log.Printf("[!] recovery passphrase not stored: %v", err)
+	}
 	if err := ensureAdminUser(pool, cfg.AdminEmail, cfg.AdminPassword); err != nil {
 		log.Printf("[!] admin sync: %v", err)
 	}
@@ -637,8 +695,7 @@ func main() {
 	} else if len(legacy) > 0 {
 		log.Printf("[!] %d legacy name-derived intel content item(s); see GET /api/content-registry/migration-report (legacyIntel)", len(legacy))
 	}
-	scheduler := connector.NewScheduler(tiSources, gen, engine, cfg.ThreatIntelPollHours, pool, priorityEngine).
-		WithIdentityStore(identityStore)
+	scheduler := connector.NewProductionScheduler(tiSources, gen, engine, cfg.ThreatIntelPollHours, pool, priorityEngine, evStore, identityStore)
 	tiActivitySources, err := connector.LoadActivitySourcesFromDB(context.Background(), pool)
 	if err != nil {
 		log.Printf("[!] threat-intel activity source load warning: %v", err)
@@ -709,11 +766,9 @@ func main() {
 		} else {
 			created, updated, skipped, errored = result.Created, result.Updated, result.Skipped, result.Errored
 		}
-		pool.Exec(ctx,
-			`UPDATE openaev_config SET last_sync_at = NOW(), last_sync_status = $1, last_error = $2,
-			   last_sync_created = $3, last_sync_updated = $4, last_sync_skipped = $5, last_sync_errored = $6
-			 WHERE id = 1`,
-			status, lastErr, created, updated, skipped, errored)
+		if err := api.RecordOpenAEVSyncOutcome(ctx, pool, status, lastErr, created, updated, skipped, errored); err != nil {
+			log.Printf("[openaev] could not record sync outcome: %v", err)
+		}
 		log.Printf("[openaev] sync: created=%d updated=%d skipped=%d errored=%d", created, updated, skipped, errored)
 	})
 	defer openaevScheduler.Stop()
@@ -933,7 +988,68 @@ func main() {
 		log.Printf("[WARN] network discovery vantage point not configured: %v -- /api/network-discovery-runs will return 503 until NETWORK_VANTAGE_POINT_ID and NETWORK_VANTAGE_POINT_POSITION are both set", err)
 	}
 
+	// Cloud settings (account allow-list, Azure secrets file, discovery gate) are
+	// validated before the handler is built. A bad setting stops startup.
+	cloudSettings, err := api.LoadCloudSettings(observability.NewDefaultCloudMetrics())
+	if err != nil {
+		log.Fatalf("[FATAL] cloud settings: %v", err)
+	}
+
+	// Credential store for reference columns. A missing or invalid key leaves the store nil: references then fail their own
+	// operation, and plaintext columns keep working (see secretstore.Resolve).
+	// BAS_KMS=vault selects the customer-controlled envelope store (REQ-039); unset keeps the existing pgcrypto store.
+	secretStore, secretErr := secretstore.OpenConfigured(pool, secretstore.DefaultKeyPath, os.Getenv)
+	if secretErr != nil {
+		log.Printf("[secretstore] credential references unavailable: %v", secretErr)
+	}
+
+	// API BAS assessment execution. Disabled unless BAS_APIBAS_RUNNER names the runner binary and the secret store is usable;
+	// the job endpoints then answer 503. Jobs left running by an earlier process are failed now and periodically after.
+	var apibasJobs *apibasjobs.Service
+	if runnerPath := os.Getenv("BAS_APIBAS_RUNNER"); runnerPath != "" && secretStore != nil {
+		svc, jerr := apibasjobs.New(pool, secretStore, apibasjobs.Config{RunnerPath: runnerPath})
+		if jerr != nil {
+			log.Printf("[apibas] job execution disabled: %v", jerr)
+		} else {
+			apibasJobs = svc
+			if n, rerr := svc.ReconcileStale(context.Background(), 0); rerr != nil {
+				log.Printf("[apibas] startup reconcile failed: %v", rerr)
+			} else if n > 0 {
+				log.Printf("[apibas] failed %d job(s) left running by an earlier process", n)
+			}
+			go func() {
+				for range time.Tick(5 * time.Minute) {
+					if _, rerr := svc.ReconcileStale(context.Background(), 30*time.Minute); rerr != nil {
+						log.Printf("[apibas] reconcile failed: %v", rerr)
+					}
+				}
+			}()
+		}
+	} else {
+		log.Printf("[apibas] job execution disabled: set BAS_APIBAS_RUNNER and provision the encryption key to enable it")
+	}
+
+	// Segmentation lab: runs only when SEGMENTATION_LAB_DIR names a lab checkout. A run left in progress by a
+	// previous process is failed here, so the single-run guard cannot stay stuck after a crash.
+	segStore := runstore.New(pool)
+	if n, serr := segStore.FailStale(context.Background(), "interrupted by server restart"); serr != nil {
+		log.Printf("[WARN] segmentation stale-run sweep: %v", serr)
+	} else if n > 0 {
+		log.Printf("[INFO] segmentation: failed %d run(s) left in progress by a previous process", n)
+	}
+	var segService *segprobe.Service
+	if labDir := os.Getenv("SEGMENTATION_LAB_DIR"); labDir != "" {
+		compose := filepath.Join(labDir, "docker-compose.yml")
+		segService = segprobe.NewService(segStore, filepath.Join(labDir, "scenarios"), func() segprobe.LabProvider {
+			return segprobe.NewDockerProvider(compose)
+		})
+		log.Printf("[INFO] segmentation lab enabled: %s", labDir)
+	}
 	handler := api.New(pool, hub, engine, cfg.JWTSecret).
+		WithSecretStore(secretStore).
+		WithAPIBASJobs(apibasJobs).
+		WithSegmentation(segService, segStore).
+		WithCloudSettings(cloudSettings).
 		WithDeploymentClass(cfg.Classification()).
 		WithEvidenceStore(evStore).
 		WithCaldera(cfg.CalderaURL, cfg.CalderaAPIKey).
@@ -942,9 +1058,11 @@ func main() {
 		WithContentSeed(cfg.ARTDir, cfg.ARTPayloadDir, cfg.KEVFile, cfg.ARTContentVersion).
 		WithEPSSFile(cfg.EPSSFile).
 		WithAgentSecret(cfg.AgentSecret).
+		WithEnrollmentMode(enrollmentModeFromEnv()).
 		WithIngestAPIKey(cfg.IngestAPIKey).
 		WithAdvertisedPorts(cfg.AdvertisedMTLSPort, cfg.AdvertisedEnrollPort).
 		WithPKI(ca).
+		WithPKIDir(cfg.PKIDir).
 		WithCommandSigningKey(signingKey).
 		WithMetricsToken(cfg.MetricsToken).
 		WithMetrics(exMetrics).
@@ -965,14 +1083,17 @@ func main() {
 		WithLicensePath(cfg.LicensePath).
 		WithPublicBaseURL(cfg.PublicBaseURL).
 		WithExercise(exStore, exExecutor, exChain).
-		WithK8sScenario(buildK8sScenarioService(pool)).
+		WithK8sScenario(buildK8sClusterService(pool)).
 		WithK8sAnalysis(buildK8sAnalysisRunner()).
 		WithVerificationStore(verificationStore).
 		WithRelationshipStore(relationshipStore).
+		WithAdvisoryStore(advisory.NewStore(pool)).
 		WithRuleLibrary(rulesEngine).
 		WithVexSweep(vexSweepStore, vexSweepDispatcher).
 		WithEMSweep(emSweepStore, emSweepDispatcher).
 		WithTAXII(taxiiStore, taxiiManager).
+		// Aleef API discovery. Token references resolve from ALEEF_SECRET_* environment variables (api.AleefEnvSecrets).
+		WithAleef(aleefstore.New(pool), nil).
 		WithIOCProvider(iocProvider).
 		WithNetworkVantagePoint(networkVP).
 		WithEmailGWRun(emailgwProvider, emailgwInjectionTarget, emailgwEnvironment).
@@ -985,6 +1106,12 @@ func main() {
 			FromAddr: cfg.SMTPFrom,
 			FromName: cfg.SMTPFromName,
 		})
+
+	// Aleef campaigns this process did not finish (killed or crashed) are marked interrupted before any
+	// new run can start. Their target objects may remain; the run records say so.
+	if err := handler.RecoverAleefRuns(context.Background()); err != nil {
+		log.Printf("[!] aleef run recovery: %v", err)
+	}
 
 	// Resume every EmailGW run a previous process restart abandoned
 	// mid-wait (see internal/api.RecoverEmailGWRuns's own doc comment).
@@ -1015,6 +1142,10 @@ func main() {
 		go api.RunPhishingDispatchPoller(context.Background(), pool, time.Minute)
 	}
 
+	// OpenAEV scenarios sync on a timer, so new scenarios appear without a manual sync.
+	// A disabled connector is skipped quietly.
+	go api.StartOpenAEVAutoSync(context.Background(), pool, time.Hour)
+
 	// Content registry migration marker: only after a clean scenario load with zero intake
 	// infrastructure failures, so a partial intake never ends custom-file grandfathering. A failure here is
 	// logged and retried next boot (marker stays absent); it never blocks boot.
@@ -1029,15 +1160,28 @@ func main() {
 		log.Printf("[contentregistry] migration deferred: %d intake failures (load error: %v)", bootIntakeFailures, scenarioLoadErr)
 	}
 
+	// The lab flag follows the configured ID in BOTH directions, every start. A set ID makes that agent the sole
+	// factory lab (is_factory_lab is required for dispatch, see EnsureSoleFactoryLabAgent) so an operator never
+	// flags it by hand; an EMPTY ID clears every flag. Without the empty case, removing VALIDATION_LAB_AGENT_ID
+	// from setup.conf left the old agent flagged in the database, and ordinary runs on it were refused as "lab
+	// agent" with the lab itself switched off. Non-fatal: the agent may just not be enrolled yet.
+	if err := validationlab.EnsureSoleFactoryLabAgent(context.Background(), pool, cfg.ValidationLabAgentID); err != nil {
+		log.Printf("[validationlab] WARNING: could not apply is_factory_lab for %q: %v", cfg.ValidationLabAgentID, err)
+	}
+	// Lab-only spray and guessing exemption: is_spray_lab follows SPRAY_LAB_AGENT_ID in both directions, like the
+	// factory flag. An empty value clears it, so the exemption is off unless an operator sets the variable.
+	if err := api.EnsureSoleSprayLabAgent(context.Background(), pool, cfg.SprayLabAgentID); err != nil {
+		log.Printf("[spraylab] WARNING: could not apply is_spray_lab for %q: %v", cfg.SprayLabAgentID, err)
+	}
+	// CI validation gate (REQ-057): start one lab run and read its verdict, behind a dedicated CI token.
+	handler.SetCIGate(cigate.NewHandler(
+		cigate.NewService(pool, contentRegistry, handler, cfg.ValidationLabAgentID),
+		cigate.NewStore(pool),
+	))
+	if cfg.ValidationLabAgentID == "" {
+		log.Printf("[validationlab] disabled: VALIDATION_LAB_AGENT_ID is not set, so no agent is a factory lab")
+	}
 	if cfg.ValidationLabAgentID != "" {
-		// Make the configured agent the sole factory lab so an operator never
-		// flags it by hand -- is_factory_lab is required for dispatch (see
-		// EnsureSoleFactoryLabAgent). Non-fatal: the agent may just not be
-		// enrolled yet, and the orchestrator below refuses cleanly until the
-		// flag lands on a later restart.
-		if err := validationlab.EnsureSoleFactoryLabAgent(context.Background(), pool, cfg.ValidationLabAgentID); err != nil {
-			log.Printf("[validationlab] WARNING: could not set is_factory_lab for %s: %v", cfg.ValidationLabAgentID, err)
-		}
 		pollMinutes := cfg.ValidationLabPollMinutes
 		if pollMinutes <= 0 {
 			pollMinutes = 5
@@ -1045,8 +1189,10 @@ func main() {
 		validationOrchestrator := validationlab.NewOrchestrator(
 			pool, contentRegistry, handler, cfg.ValidationLabAgentID, time.Duration(pollMinutes)*time.Minute,
 		)
+		validationTimeout := validationlab.ClampValidationTimeout(cfg.ValidationLabTimeoutMinutes)
+		validationOrchestrator.SetTimeout(validationTimeout)
 		validationOrchestrator.Start()
-		log.Printf("[validationlab] enabled, lab agent %s, poll every %dm", cfg.ValidationLabAgentID, pollMinutes)
+		log.Printf("[validationlab] enabled, lab agent %s, poll every %dm, run timeout %s", cfg.ValidationLabAgentID, pollMinutes, validationTimeout)
 	} else {
 		log.Println("[validationlab] disabled (VALIDATION_LAB_AGENT_ID not set)")
 	}
@@ -1135,11 +1281,20 @@ func main() {
 	// broadcasts the change so the dashboard updates in real time.
 	go runStalenessMonitor(pool, hub)
 
+	// ── TCF SLA Pipeline-Event Reconciler ─────────────────────────────────
+	// Backfills at boot and heals gaps every 5 minutes: forward ledger writes
+	// are log-and-continue outside the source transaction, so a crash between
+	// a source write and its ledger insert leaves a gap. Idempotent.
+	go runPipelineEventReconciler(pool)
+
 	// ── ITSM Auto-Revalidation Loop ───────────────────────────────────────
 	// Every 2 minutes: checks for findings whose ITSM ticket was resolved but
 	// BAS has not yet re-confirmed. Dispatches a targeted single-technique
 	// posture re-run on the original agent. Results in the audit log + WS push.
 	go handler.StartRevalidationLoop(context.Background())
+	// Scheduled API BAS assessments: due schedules are claimed and queued once a minute. A server with job execution disabled
+	// records each due run as not run instead of leaving it pending.
+	handler.StartAPIBASScheduler(context.Background(), time.Minute)
 
 	// ── Attack-Path Scheduler ─────────────────────────────────────────────
 	// Ticks every 60 s and re-dispatches fleet-wide attack-path collection
@@ -1266,11 +1421,20 @@ func main() {
 		log.Println("[smtpsink] disabled via SMTP_SINK_ENABLED=false")
 	}
 
-	clientCAPool := x509.NewCertPool()
-	clientCAPool.AddCert(ca.Certificate())
-	serverTLSCert, err := ca.TLSCertificate()
+	// The server's TLS identity is its own certificate signed by the CA (audit F-10), not the CA certificate
+	// itself. It renews while the server runs and never changes the CA agents trust.
+	// During a planned CA rotation the previous CA stays trusted for the agent certificates it issued.
+	trustedRoots, err := pki.TrustedClientRoots(cfg.PKIDir)
 	if err != nil {
-		log.Fatalf("[FATAL] build server TLS identity from CA: %v", err)
+		log.Fatalf("[FATAL] CA rotation files are inconsistent: %v", err)
+	}
+	serverCerts, err := pki.NewServerCertSource(ca, cfg.PKIDir, splitServerSANs(cfg.ServerSANs))
+	if err != nil {
+		log.Fatalf("[FATAL] build server TLS identity: %v", err)
+	}
+	serverTLSCert, err := serverCerts.GetCertificate(nil)
+	if err != nil {
+		log.Fatalf("[FATAL] build server TLS identity: %v", err)
 	}
 
 	// 9443 — mandatory mTLS, canonical secure endpoint for enrolled agents
@@ -1280,11 +1444,12 @@ func main() {
 	mtlsSrv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.HTTPPort),
 		Handler: mtlsHandler,
-		TLSConfig: &tls.Config{
-			Certificates: []tls.Certificate{serverTLSCert},
-			ClientAuth:   tls.RequireAndVerifyClientCert,
-			ClientCAs:    clientCAPool,
-		},
+		TLSConfig: pki.NewAgentTLSConfigWithRoots(serverCerts.GetCertificate, trustedRoots, func(serial, agentID string) (bool, error) {
+			// Fail closed: a database error refuses the connection (see pki.NewAgentTLSConfig).
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			return handler.AgentCertRevoked(ctx, serial, agentID)
+		}),
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 90 * time.Second,
 		IdleTimeout:  120 * time.Second,
@@ -1298,8 +1463,9 @@ func main() {
 		Addr:    fmt.Sprintf(":%d", cfg.EnrollHTTPPort),
 		Handler: api.MountEnrollment(handler), // enrollment + /health ONLY, never the full router
 		TLSConfig: &tls.Config{
-			Certificates: []tls.Certificate{serverTLSCert},
-			ClientAuth:   tls.NoClientCert,
+			GetCertificate: serverCerts.GetCertificate,
+			MinVersion:     tls.VersionTLS12,
+			ClientAuth:     tls.NoClientCert,
 		},
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 90 * time.Second,
@@ -1328,17 +1494,19 @@ func main() {
 	// otherwise -- browsers show a warning for the self-signed fallback,
 	// which is expected and documented in docs/guides/upgrade-guide.md,
 	// not a bug.
-	dashboardTLSCert, err := resolveDashboardTLSCert(*cfg, serverTLSCert)
+	dashboardTLSCert, err := resolveDashboardTLSCert(*cfg, *serverTLSCert)
 	if err != nil {
 		log.Fatalf("[FATAL] load dashboard TLS cert/key (TLS_CERT=%s, TLS_KEY=%s): %v", cfg.DashboardTLSCertPath, cfg.DashboardTLSKeyPath, err)
 	}
+	dashboardTLS := &tls.Config{Certificates: []tls.Certificate{dashboardTLSCert}, ClientAuth: tls.NoClientCert}
+	if cfg.DashboardTLSCertPath == "" || cfg.DashboardTLSKeyPath == "" {
+		// No operator certificate: present the server certificate, which renews while the server runs.
+		dashboardTLS = &tls.Config{GetCertificate: serverCerts.GetCertificate, ClientAuth: tls.NoClientCert}
+	}
 	dashboardSrv := &http.Server{
-		Addr:    fmt.Sprintf(":%d", cfg.DashboardHTTPPort),
-		Handler: router,
-		TLSConfig: &tls.Config{
-			Certificates: []tls.Certificate{dashboardTLSCert},
-			ClientAuth:   tls.NoClientCert,
-		},
+		Addr:         fmt.Sprintf(":%d", cfg.DashboardHTTPPort),
+		Handler:      router,
+		TLSConfig:    dashboardTLS,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 90 * time.Second,
 		IdleTimeout:  120 * time.Second,
@@ -1388,12 +1556,43 @@ func main() {
 	log.Println("[*] Shutting down gracefully...")
 	shutCtx, shutCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer shutCancel()
+	// Cancel in-flight Aleef campaigns first and give their cleanup sweeps time to compensate what they
+	// created on the target, while the rest of shutCtx remains for the servers.
+	handler.ShutdownAleef(8 * time.Second)
 	for _, s := range []*http.Server{mtlsSrv, enrollSrv, legacySrv, dashboardSrv} {
 		if err := s.Shutdown(shutCtx); err != nil {
 			log.Printf("[!] shutdown error: %v", err)
 		}
 	}
 	log.Println("[*] Server stopped.")
+}
+
+// runPipelineEventReconciler heals gaps in the TCF SLA event ledger. The
+// forward writers emit log-and-continue outside the source transaction, so a
+// crash between a source write and its ledger insert leaves a gap. It runs a
+// one-time full backfill at boot (since=zero), then every 5 minutes heals only
+// the last 24h so the periodic pass stays O(window) rather than O(history); a
+// forward gap is healed within one tick. Each pass is bounded by a timeout, and
+// every emit is idempotent, so a healthy ledger is a no-op.
+func runPipelineEventReconciler(pool *pgxpool.Pool) {
+	const passTimeout = 5 * time.Minute
+	const periodicLookback = 24 * time.Hour
+
+	reconcile := func(since time.Time) error {
+		ctx, cancel := context.WithTimeout(context.Background(), passTimeout)
+		defer cancel()
+		return tcv.ReconcilePipelineEvents(ctx, pool, since)
+	}
+	if err := reconcile(time.Time{}); err != nil {
+		log.Printf("[tcv] pipeline-event backfill at boot: %v", err)
+	}
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		if err := reconcile(time.Now().Add(-periodicLookback)); err != nil {
+			log.Printf("[tcv] pipeline-event reconcile: %v", err)
+		}
+	}
 }
 
 // runStalenessMonitor ticks every 30s and marks agents offline when their
@@ -1469,3 +1668,17 @@ func runStalenessMonitor(pool *pgxpool.Pool, hub *ws.Hub) {
 	}
 }
 
+// enrollmentModeFromEnv reads BAS_ENROLLMENT_MODE: "secret" (default, the shared secret enrols) or "token"
+// (single-use per-agent tokens). Anything else stops the server rather than silently weakening enrolment.
+func enrollmentModeFromEnv() string {
+	switch m := strings.ToLower(strings.TrimSpace(os.Getenv("BAS_ENROLLMENT_MODE"))); m {
+	case "", api.EnrollmentModeSecret:
+		return api.EnrollmentModeSecret
+	case api.EnrollmentModeToken:
+		log.Println("[*] enrollment mode: token (single-use per-agent tokens; the shared secret no longer enrols agents)")
+		return api.EnrollmentModeToken
+	default:
+		log.Fatalf("[FATAL] BAS_ENROLLMENT_MODE=%q is not valid: use \"secret\" or \"token\"", m)
+		return ""
+	}
+}

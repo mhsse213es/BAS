@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { setupDom, load } from './dom.mjs';
 
 setupDom();
-const fns = await load(['toggleRowMenuById', 'openComplianceDetail', 'tmplGroupChange', 'runGroupChange', 'vexSweepGroupChange', 'vexRunGroupChange', 'openAgentGroupMenuStop', 'toggleScenarioPinFromEvent', 'scenarioPinKeydown', 'techKeydown', 'abortExecutionStop']);
+const fns = await load(['toggleRowMenuById', 'openComplianceDetail', 'tmplGroupChange', 'runGroupChange', 'vexSweepGroupChange', 'vexRunGroupChange', 'openAgentGroupMenuStop', 'runScenarioCard', 'scenarioCardKeydown', 'techKeydown', 'abortExecutionStop']);
 const { state } = await import('../../src/core/state.js');
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
@@ -59,31 +59,27 @@ const table = [
     },
   },
   {
-    name: 'toggleScenarioPinFromEvent pins the tile id and stops propagation',
+    name: 'runScenarioCard stops propagation so the card does not also open the drawer',
     run() {
-      state.overlayPinned = null;
-      const tile = document.createElement('div');
-      const ev = delegatedEvent({ target: tile });
-      dispatchTo(fns.toggleScenarioPinFromEvent, tile, ['sc-1'], ev);
+      const btn = document.createElement('button');
+      const ev = delegatedEvent({ target: btn });
+      dispatchTo(fns.runScenarioCard, btn, ['sc-1'], ev);
       assert.equal(ev.cancelBubble, true);
-      assert.equal(state.overlayPinned, 'sc-1');
-      state.overlayPinned = null;
     },
   },
   {
-    name: 'scenarioPinKeydown acts on Enter and Space only',
+    name: 'scenarioCardKeydown acts on Enter and Space only, and only on the card itself',
     run() {
-      state.overlayPinned = null;
-      const tile = document.createElement('div');
-      const other = delegatedEvent({ target: tile, key: 'a' });
-      dispatchTo(fns.scenarioPinKeydown, tile, ['sc-2'], other);
+      const card = document.createElement('div');
+      const other = delegatedEvent({ target: card, key: 'a' });
+      dispatchTo(fns.scenarioCardKeydown, card, ['sc-2'], other);
       assert.equal(other.defaultPrevented, false);
-      assert.equal(state.overlayPinned, null);
-      const enter = delegatedEvent({ target: tile, key: 'Enter' });
-      dispatchTo(fns.scenarioPinKeydown, tile, ['sc-2'], enter);
+      const enter = delegatedEvent({ target: card, key: 'Enter' });
+      dispatchTo(fns.scenarioCardKeydown, card, ['sc-2'], enter);
       assert.equal(enter.defaultPrevented, true);
-      assert.equal(state.overlayPinned, 'sc-2');
-      state.overlayPinned = null;
+      const inner = delegatedEvent({ target: document.createElement('span'), key: 'Enter' });
+      dispatchTo(fns.scenarioCardKeydown, card, ['sc-2'], inner);
+      assert.equal(inner.defaultPrevented, false);
     },
   },
   {

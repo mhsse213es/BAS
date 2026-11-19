@@ -42,9 +42,9 @@ func TestBuildNarrative_NoTestedControls(t *testing.T) {
 }
 
 func TestBuildNarrative_AllPassing(t *testing.T) {
-	s := ComplianceSummary{TestedControls: 10, PassingControls: 10, CompliancePercent: 100}
+	s := ComplianceSummary{TestableControls: 10, TestedControls: 10, PassingControls: 10, CompliancePercent: 100, CoveragePercent: 100, SufficientCoverage: true}
 	got := buildNarrative(s, nil, nil)
-	want := "100% compliant — 10 of 10 tested controls are passing."
+	want := "Resistance rate 100%: 10 of 10 tested controls resisted the techniques executed. Control coverage 10 of 10 testable controls (100.0%)."
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -52,8 +52,8 @@ func TestBuildNarrative_AllPassing(t *testing.T) {
 
 func TestBuildNarrative_MixedWithTopDomainAndTechnique(t *testing.T) {
 	s := ComplianceSummary{
-		TestedControls: 21, PassingControls: 13, FailingControls: 5,
-		UntestedControls: 3, CompliancePercent: 62,
+		TestableControls: 24, TestedControls: 21, PassingControls: 13, FailingControls: 5,
+		UntestedControls: 3, CompliancePercent: 62, CoveragePercent: 87.5, SufficientCoverage: true,
 	}
 	domains := []DomainResult{
 		{Name: "Identity & Access", Failing: 3},
@@ -69,14 +69,14 @@ func TestBuildNarrative_MixedWithTopDomainAndTechnique(t *testing.T) {
 		}},
 	}
 	got := buildNarrative(s, domains, controls)
-	want := "62% compliant — 13 of 21 tested controls are passing. 5 control(s) are failing, most concentrated in Identity & Access (3 of 5). The most common failing technique is Brute Force (T1110). 3 control(s) haven't been tested yet — run additional scenarios to close coverage gaps."
+	want := "Resistance rate 62%: 13 of 21 tested controls resisted the techniques executed. Control coverage 21 of 24 testable controls (87.5%). 5 control(s) are failing, most concentrated in Identity & Access (3 of 5). The most common failing technique is Brute Force (T1110). 3 control(s) haven't been tested yet — run additional scenarios to close coverage gaps."
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
 func TestBuildNarrative_DomainTieBreaksAlphabetically(t *testing.T) {
-	s := ComplianceSummary{TestedControls: 4, PassingControls: 2, FailingControls: 2, CompliancePercent: 50}
+	s := ComplianceSummary{TestableControls: 4, TestedControls: 4, PassingControls: 2, FailingControls: 2, CompliancePercent: 50, CoveragePercent: 100, SufficientCoverage: true}
 	// domains is pre-sorted alphabetically by GenerateReport -- Alpha comes
 	// before Bravo, both tied at 1 failing control each.
 	domains := []DomainResult{
@@ -84,14 +84,14 @@ func TestBuildNarrative_DomainTieBreaksAlphabetically(t *testing.T) {
 		{Name: "Bravo", Failing: 1},
 	}
 	got := buildNarrative(s, domains, nil)
-	want := "50% compliant — 2 of 4 tested controls are passing. 2 control(s) are failing, most concentrated in Alpha (1 of 2)."
+	want := "Resistance rate 50%: 2 of 4 tested controls resisted the techniques executed. Control coverage 4 of 4 testable controls (100.0%). 2 control(s) are failing, most concentrated in Alpha (1 of 2)."
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
 func TestBuildNarrative_TechniqueTieBreaksByID(t *testing.T) {
-	s := ComplianceSummary{TestedControls: 4, PassingControls: 2, FailingControls: 2, CompliancePercent: 50}
+	s := ComplianceSummary{TestableControls: 4, TestedControls: 4, PassingControls: 2, FailingControls: 2, CompliancePercent: 50, CoveragePercent: 100, SufficientCoverage: true}
 	controls := []ControlResult{
 		{Evidence: []TechniqueEvidence{
 			{TechniqueID: "T2000", TechniqueName: "Zeta Technique", Result: "fail"},
@@ -99,7 +99,7 @@ func TestBuildNarrative_TechniqueTieBreaksByID(t *testing.T) {
 		}},
 	}
 	got := buildNarrative(s, nil, controls)
-	want := "50% compliant — 2 of 4 tested controls are passing. 2 control(s) are failing. The most common failing technique is Alpha Technique (T1000)."
+	want := "Resistance rate 50%: 2 of 4 tested controls resisted the techniques executed. Control coverage 4 of 4 testable controls (100.0%). 2 control(s) are failing. The most common failing technique is Alpha Technique (T1000)."
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}

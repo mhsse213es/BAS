@@ -1,0 +1,22 @@
+id: "cscrf-mii-siem"
+product_line: common
+name: "CSCRF-MII SIEM Telemetry Pipeline Configuration Checks (P0)"
+description: >
+  Internal control-validation configuration checks for the telemetry pipeline on an endpoint: time source,
+  Windows Event Forwarding subscription manager, and Security log retention. Verdicts are internal control
+  references (CSCRF-SIEM-*), not SEBI clause identifiers. All checks are read only. Ingestion verification
+  (an event generated here arriving at the SIEM) is deferred until a collector endpoint is named. A PASS
+  here shows only that the endpoint is configured; it does not show the SOC received or acted on anything.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cscrf-mii
+  - siem
+  - telemetry
+  - p0
+mitre_phases:
+  - defense-evasion
+
+steps:

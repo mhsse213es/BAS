@@ -9,7 +9,7 @@ test('Scenarios sections appear in the agreed order with the agreed names', () =
   const got = scenarioSectionOrder().map((s) => s.label);
   assert.deepEqual(got, [
     'Antivirus', 'WAF', 'Network', 'Email', 'DLP', 'Phishing', 'Kill Chain', 'Ransomware',
-    'Web Gateway', 'Cloud', 'API BAS', 'AD BAS', 'Common', 'Threat-Intel',
+    'Web Gateway', 'Cloud', 'API BAS', 'AD BAS', 'DB Simulation', 'Simulation Frameworks', 'Threat-Intel',
   ]);
 });
 

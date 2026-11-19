@@ -89,7 +89,7 @@ func (f *synthFake) ReadSecretAs(_ context.Context, token []byte, _, _ string) (
 
 func synthRequest(t *testing.T, store *memApprovals, live bool) RunRequest {
 	t.Helper()
-	req := RunRequest{RunID: "syn-1", Requester: "operator-1",
+	req := RunRequest{ClusterID: testClusterID, RunID: "syn-1", Requester: "operator-1",
 		Cluster:   ClusterRef{Name: testCluster, Server: testServer},
 		Namespace: "bas-sandbox", ActionID: "synthetic-secret-read", Params: map[string]string{}, Live: live}
 	if live {

@@ -31,7 +31,7 @@ func validCloudTopologyImportBody() map[string]any {
 
 func TestCreateCloudTopologyImport_Valid_Created(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111"))
 		b, _ := json.Marshal(validCloudTopologyImportBody())
 		userID := seedUser(t, pool, "cloudtopo-op", "pw12345678", string(auth.RoleAnalyst), true)
 		req := authedRequest(t, http.MethodPost, "/api/cloud-topology-imports", bytes.NewReader(b), auth.RoleAnalyst, userID)
@@ -55,7 +55,7 @@ func TestCreateCloudTopologyImport_Valid_Created(t *testing.T) {
 // Limitations entry must be rejected, not silently accepted.
 func TestCreateCloudTopologyImport_UnresolvedGroupWithoutLimitations_Rejected(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111"))
 		body := validCloudTopologyImportBody()
 		body["groups"] = []map[string]any{{"canonicalId": "sg-1", "networkId": "vpc-1", "scope": "unresolved"}}
 		b, _ := json.Marshal(body)
@@ -70,7 +70,7 @@ func TestCreateCloudTopologyImport_UnresolvedGroupWithoutLimitations_Rejected(t 
 
 func TestCreateCloudTopologyImport_SGReferenceRuleWithoutUnresolvedAction_Rejected(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111"))
 		body := validCloudTopologyImportBody()
 		body["rules"] = []map[string]any{
 			{"id": "r1", "groupId": "sg-1", "order": 10, "direction": "outbound", "action": "allow", "protocol": "tcp", "portRange": "443", "referencedGroupId": "sg-2"},
@@ -94,7 +94,7 @@ func TestCreateCloudTopologyImport_SGReferenceRuleWithoutUnresolvedAction_Reject
 // inside the route search.
 func TestCreateCloudTopologyImport_InvalidRouteTarget_Rejected(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111"))
 		body := validCloudTopologyImportBody()
 		body["routes"] = []map[string]any{
 			{"id": "rt-1", "subnetId": "subnet-1", "destinationCidr": "0.0.0.0/0", "target": "Active"},
@@ -111,7 +111,7 @@ func TestCreateCloudTopologyImport_InvalidRouteTarget_Rejected(t *testing.T) {
 
 func TestCreateCloudTopologyImport_InvalidPeeringState_Rejected(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111"))
 		body := validCloudTopologyImportBody()
 		body["networks"] = []map[string]any{
 			{"canonicalId": "vpc-1", "cidrBlocks": []string{"10.0.0.0/16"}},
@@ -138,7 +138,7 @@ func TestCreateCloudTopologyImport_InvalidPeeringState_Rejected(t *testing.T) {
 // never actually attaches to any subnet.
 func TestCreateCloudTopologyImport_UnresolvedGroupWithUnknownNetworkID_Rejected(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111"))
 		body := validCloudTopologyImportBody()
 		body["groups"] = []map[string]any{{"canonicalId": "sg-1", "networkId": "does-not-exist", "scope": "unresolved"}}
 		body["limitations"] = []string{"per-instance security-group attachment not resolvable by this schema"}
@@ -154,7 +154,7 @@ func TestCreateCloudTopologyImport_UnresolvedGroupWithUnknownNetworkID_Rejected(
 
 func TestListAndGetCloudTopologyImport_RoundTrip(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111"))
 		b, _ := json.Marshal(validCloudTopologyImportBody())
 		userID := seedUser(t, pool, "cloudtopo-op-rt", "pw12345678", string(auth.RoleAnalyst), true)
 		createReq := authedRequest(t, http.MethodPost, "/api/cloud-topology-imports", bytes.NewReader(b), auth.RoleAnalyst, userID)

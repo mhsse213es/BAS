@@ -26,6 +26,14 @@ readonly DEFAULT_PORT="9000"
 readonly MIN_RAM_MB=3800
 readonly MIN_DISK_MB=5120
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Bundled (offline) Docker installer, shared with install.sh.
+# shellcheck source=docker-offline-lib.sh
+if [[ -f "${SCRIPT_DIR}/docker-offline-lib.sh" ]]; then
+  . "${SCRIPT_DIR}/docker-offline-lib.sh"
+else
+  _bundled_has() { return 1; }
+fi
 readonly SCRIPT_DIR
 
 # RECONCILE NOTE (TCF Phase 8 x main airgap-r11): FRESH/INTERRUPTED/COMPLETE
@@ -38,6 +46,12 @@ readonly SCRIPT_DIR
 # shellcheck source=setup-install-state.sh
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/setup-install-state.sh"
+# Database encryption key, database TLS, CA backup wrapping and backup key (REQ-039). Same helpers as install.sh.
+for _helper in db-encryption-key.sh db-tls.sh ca-backup.sh backup-key.sh; do
+  [[ -f "${SCRIPT_DIR}/${_helper}" ]] || { echo "missing ${SCRIPT_DIR}/${_helper}" >&2; exit 1; }
+  # shellcheck disable=SC1090
+  source "${SCRIPT_DIR}/${_helper}"
+done
 
 # Version is read from the bundle's VERSION file (written by the packager) so the
 # .env image tag ALWAYS matches the images shipped in THIS bundle — never a
@@ -94,6 +108,7 @@ export TERM="${TERM:-xterm}"
 load_config() {
   local cfg="$1"
   [[ -f "$cfg" ]] || { err "Config file not found: $cfg"; exit 1; }
+  SETUP_CONFIG_PATH="$cfg"
 
   local key val
   while IFS='=' read -r key val; do
@@ -111,6 +126,9 @@ load_config() {
       DB_PASSWORD)    DB_PASSWORD="$val"    ;;
       ADMIN_EMAIL)    ADMIN_EMAIL="$val"    ;;
       ADMIN_PASSWORD) ADMIN_PASSWORD="$val" ;;
+      RECOVERY_PASSPHRASE) RECOVERY_PASSPHRASE="$val" ;;
+      BAS_BACKUP_KEY_RECOVERY_PATH) BAS_BACKUP_KEY_RECOVERY_PATH="$val" ;;
+      BAS_BACKUP_KEY_PASSPHRASE)    BAS_BACKUP_KEY_PASSPHRASE="$val" ;;
       LIC_PATH)       LIC_PATH="$val"       ;;
     esac
   done < "$cfg"
@@ -130,6 +148,9 @@ load_config() {
 
   [[ ${#DB_PASSWORD}    -lt 8  ]] && { err "DB_PASSWORD must be at least 8 characters.";     exit 1; }
   [[ ${#ADMIN_PASSWORD} -lt 10 ]] && { err "ADMIN_PASSWORD must be at least 10 characters."; exit 1; }
+  if [[ -n "${RECOVERY_PASSPHRASE:-}" ]] && ! [[ "$RECOVERY_PASSPHRASE" =~ ^[A-Za-z0-9]{14}$ ]]; then
+    err "RECOVERY_PASSPHRASE must be exactly 14 letters and digits (no spaces or symbols)."; exit 1
+  fi
 
   JWT_SECRET=$(openssl rand -hex 32)
   AGENT_SECRET=$(openssl rand -hex 24)
@@ -163,7 +184,13 @@ require_root() {
 # ── whiptail availability ──────────────────────────────────────────────────────
 ensure_whiptail() {
   if command -v whiptail &>/dev/null; then return; fi
-  warn "whiptail not found — installing..."
+  # whiptail is a convenience for this text wizard, not a prerequisite of the product. Never reach for the
+  # network behind the operator's back: ask first, and point at the plain installer that needs nothing.
+  warn "whiptail (the text-wizard screen library) is not installed."
+  echo "  Installing it needs the internet (package manager). The plain installer needs nothing extra:"
+  echo "      sudo bash install.sh --install"
+  read -rp "  Download and install whiptail from the internet now? [yes/N] " _wt
+  [[ "$_wt" == "yes" ]] || { err "whiptail not installed. Use install.sh --install, or install whiptail yourself and re-run."; exit 1; }
   if command -v apt-get &>/dev/null; then
     apt-get install -y -qq whiptail
   elif command -v dnf &>/dev/null; then
@@ -396,6 +423,35 @@ check_port() {
   fi
 }
 
+# Surfaces an existing INTERRUPTED/COMPLETE install through the same
+# PASS/FAIL prereq-check display an operator already reads before "READY
+# TO INSTALL" -- without this, that message is shown first and the
+# install-state abort inside _do_install_steps only happens after the
+# operator has already clicked past it.
+check_install_state() {
+  local state
+  state=$(detect_install_state "${INSTALL_DIR}")
+  case "$state" in
+    FRESH)
+      echo "PASS:Install state — fresh install"
+      ;;
+    INTERRUPTED)
+      if $RESUME_INSTALL; then
+        echo "PASS:Install state — resuming interrupted install, existing credentials preserved"
+      else
+        echo "FAIL:Install state — $(install_state_message INTERRUPTED)"
+      fi
+      ;;
+    COMPLETE)
+      if $REINSTALL; then
+        echo "PASS:Install state — reinstalling over a completed install"
+      else
+        echo "FAIL:Install state — $(install_state_message COMPLETE)"
+      fi
+      ;;
+  esac
+}
+
 # ── Binary manifest verification ──────────────────────────────────────────────
 # GPG key selection (precedence): --gpg-pub flag, BAS_GPG_PUB env, then the
 # bundle's agents/pubkey.asc. An external key is used EXCLUSIVELY (the bundled
@@ -509,6 +565,11 @@ verify_bundle_signatures() {
 
 # ── Docker CE installation (Ubuntu/Debian) ─────────────────────────────────────
 install_docker() {
+  # Prefer the copy inside this release bundle: no internet, any systemd Linux.
+  if _bundled_has docker && _bundled_has compose; then
+    _install_bundled_docker && _install_bundled_compose
+    return
+  fi
   log "Installing Docker CE..."
   apt-get update -qq
   apt-get install -y -qq ca-certificates curl gnupg lsb-release
@@ -631,6 +692,7 @@ page_prereqs() {
     check_docker
     check_compose
     check_cosign
+    check_install_state
     check_port "9000"
     check_port "5432"
   )
@@ -803,6 +865,7 @@ _do_install_steps() {
           CALDERA_API_KEY_BLUE) CALDERA_API_KEY_BLUE="$_v" ;;
           BAS_ADMIN_EMAIL)      ADMIN_EMAIL="$_v" ;;
           BAS_ADMIN_PASSWORD)   ADMIN_PASSWORD="$_v" ;;
+          BAS_RECOVERY_PASSPHRASE) RECOVERY_PASSPHRASE="$_v" ;;
           DASHBOARD_PORT)       DASHBOARD_PORT="$_v" ;;
         esac
       done < "${INSTALL_DIR}/.env"
@@ -880,9 +943,24 @@ CALDERA_API_KEY=${CALDERA_API_KEY}
 CALDERA_API_KEY_BLUE=${CALDERA_API_KEY_BLUE}
 BAS_ADMIN_EMAIL=${ADMIN_EMAIL}
 BAS_ADMIN_PASSWORD=${ADMIN_PASSWORD}
+BAS_RECOVERY_PASSPHRASE=${RECOVERY_PASSPHRASE:-}
 EOF
   chmod 640 "${INSTALL_DIR}/.env"
   chown root:root "${INSTALL_DIR}/.env"
+
+  # Database TLS, database encryption key and backup key (REQ-039). All of it is in place, and the recovery copy of the
+  # backup key is confirmed, before any service starts.
+  DATA_DIR="${INSTALL_DIR}"
+  DB_TLS_DIR="${INSTALL_DIR}/dbtls"
+  db_tls_ensure || { err "database TLS setup failed; nothing was started."; _bk_options "Your options:" "Fix the file reported above, then run setup again." "Or move ${INSTALL_DIR}/dbtls aside so it is regenerated, then run setup again."; exit 1; }
+  db_key_provision fresh >/dev/null || { err "database encryption key provisioning failed; nothing was started."; exit 1; }
+  backup_key_provision || { err "backup encryption key could not be created; nothing was started."; exit 1; }
+  backup_key_gate || { err "installation stopped: no confirmed recovery copy of the backup key. Nothing has been started."; exit 1; }
+  # The backup passphrase was needed for the recovery copy only. Remove it from the config file.
+  if [[ -n "${SETUP_CONFIG_PATH:-}" && -f "${SETUP_CONFIG_PATH}" ]] && grep -q '^BAS_BACKUP_KEY_PASSPHRASE=' "${SETUP_CONFIG_PATH}"; then
+    sed -i '/^BAS_BACKUP_KEY_PASSPHRASE=/d' "${SETUP_CONFIG_PATH}"
+    log "Removed the backup passphrase from ${SETUP_CONFIG_PATH}."
+  fi
 
   _step 50 "Loading Docker images..."
   # Everything was verified up front (_verify_all_images). The other images are
@@ -1065,6 +1143,18 @@ input:disabled{opacity:.5}
       </div>
     </div>
     <hr class="sep">
+    <p class="section-title">Backup recovery copy</p>
+    <p style="color:#8b98a5;font-size:12px;margin:4px 0 10px">Backups cannot run until a recovery copy of the backup key exists. Keep the file and the passphrase off this host. Without them, backups cannot be restored after the key is lost.</p>
+    <div class="row">
+      <div class="field">
+        <label>Recovery copy path <span style="color:#4d5f72">(outside the install directory)</span></label>
+        <input type="text" name="BAS_BACKUP_KEY_RECOVERY_PATH" value="/root/audspect-backup-key-recovery.enc" required>
+      </div>
+      <div class="field">
+        <label>Recovery passphrase <span style="color:#4d5f72">(16 characters or more)</span></label>
+        <input type="password" name="BAS_BACKUP_KEY_PASSPHRASE" minlength="16" required>
+      </div>
+    </div>
     <p class="section-title">Admin Account</p>
     <div class="row">
       <div class="field">
@@ -1386,6 +1476,7 @@ main() {
       check_docker
       check_compose
       check_cosign
+      check_install_state
       check_port "$DASHBOARD_PORT"
       check_port "5432"
     )
@@ -1438,4 +1529,6 @@ Edit setup.conf, update LIC_PATH, and re-run." 14 64; } 2>/dev/null || \
   start_web_wizard
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
+fi

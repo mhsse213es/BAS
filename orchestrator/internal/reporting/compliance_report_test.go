@@ -66,7 +66,7 @@ func TestRenderComplianceHTML(t *testing.T) {
 	}
 	// The per-control detail section and its column headers must render — the
 	// whole point of P0-1 (detail that was previously CSV/JSON-only).
-	for _, want := range []string{"Control Detail", "Domain Breakdown", "Compliance (passing / tested)"} {
+	for _, want := range []string{"Control Detail", "Domain Breakdown", "Resistance rate (resisted / tested)", "Control coverage (tested / testable)"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output missing section %q", want)
 		}
@@ -79,7 +79,7 @@ func TestRenderComplianceHTML(t *testing.T) {
 		t.Errorf("output missing first control id %q", cr.Controls[0].ID)
 	}
 	// A status pill label must be present.
-	if !strings.Contains(out, "PASSING") && !strings.Contains(out, "FAILING") &&
+	if !strings.Contains(out, "RESISTED") && !strings.Contains(out, "FAILED") && !strings.Contains(out, "PARTIAL") &&
 		!strings.Contains(out, "UNTESTED") && !strings.Contains(out, "MANUAL ATTESTATION") {
 		t.Error("output has no status pill labels")
 	}
@@ -223,7 +223,7 @@ func TestComplianceTrendRendering(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := buf.String()
-	if !strings.Contains(out, "Compliance trend") {
+	if !strings.Contains(out, "Resistance-rate trend") {
 		t.Error("trend block not rendered")
 	}
 	if !strings.Contains(out, "<polyline") {
@@ -261,5 +261,32 @@ func TestComplianceArc(t *testing.T) {
 	parts := strings.Fields(full)
 	if len(parts) != 2 || parts[0] != parts[1] {
 		t.Errorf("arc(100) = %q, want filled==circumference", full)
+	}
+}
+
+// The report must never present a resistance rate as compliance, and must carry the coverage and mapping caveats.
+func TestRenderComplianceHTML_NeverClaimsComplianceAndStatesCaveats(t *testing.T) {
+	m, err := compliance.NewMapper()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cr, err := m.GenerateReport(nil, "RBI_CSF", "agent", "run", "scenario")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf strings.Builder
+	if err := RenderComplianceHTML(&buf, cr, ""); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, want := range []string{"not a determination of compliance", "Insufficient coverage for framework-level conclusions", "Mapping note", "RESISTANCE RATE"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("report lacks %q", want)
+		}
+	}
+	for _, banned := range []string{">COMPLIANCE<", "Compliant", "Non-Compliant", "Passing controls"} {
+		if strings.Contains(out, banned) {
+			t.Errorf("report still says %q", banned)
+		}
 	}
 }

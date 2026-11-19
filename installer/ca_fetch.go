@@ -127,7 +127,7 @@ func validateEnrollment(serverURL, secret string, caPool *x509.CertPool) error {
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("cannot reach server at %s — check URL and firewall", serverURL)
+		return fmt.Errorf("cannot reach server at %s — check URL and firewall: %w", serverURL, err)
 	}
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {

@@ -1,0 +1,26 @@
+id: appcontrol-packaging-trust
+product_line: av
+name: "Application Control Mastery - Packaging and Trust Boundaries"
+description: >
+  Four read-only tests of the trust boundaries that application control rests on: whether
+  packaged-app (Appx) rules are enforced next to the other collections, whether sideloading or
+  developer mode lets loose packages in while enforcement is on, whether AlwaysInstallElevated
+  makes MSI rules meaningless, and whether directories under the Windows directory that the
+  default path rule trusts are writable by ordinary users (ATT&CK T1553, T1548). Nothing is
+  installed, launched or changed. Verdicts are observed directly and carry their own reason; a
+  host that does not enforce application control reports not_applicable for the steps that only
+  matter under enforcement, never a pass. Verified against stubbed fixtures; no enforced host
+  was available.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - application-control
+  - appcontrol-mastery
+  - packaging-trust
+  - behavioral
+mitre_phases:
+  - execution
+  - defense-evasion
+
+steps:

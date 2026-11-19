@@ -19,6 +19,8 @@ Read this before making any external claim about cloud coverage. Every item belo
 
 ## Open items (for the single live-QA session)
 
+Exact resources, permissions and preflight checks to provision per provider for O-1 through O-5: `docs/cloud-tenant-trial-checklist.md`.
+
 Status key: **OPEN** = needs a live account or a decision. **MODEL** = known limit of the current evaluation model; documented, not fixed.
 
 ### O-1 — Azure tenant readiness (sub-project 2) — OPEN, tenant action
@@ -26,10 +28,19 @@ Status key: **OPEN** = needs a live account or a decision. **MODEL** = known lim
 - **Why not code:** subscription activation and consent need a human with the right role. The earlier diagnosis is in `project_azure_real_discovery_integration`.
 - **Resolution path:** set `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_SUBSCRIPTION_ID`, then run `Preflight`. It returns one line per gap: `token-graph`, `token-arm`, `subscription-visible`, `rbac-readable`, `deny-assignments-readable`, `mg-hierarchy-readable`, `graph-users-readable`, `graph-service-principals-readable`. Then run the existing integration test with `-tags=integration`.
 
+- **Status check 2026-11-09 (read-only, `az` CLI as `Tausif@essenvision.com`):** still blocked, and one assumption above is wrong.
+  - No subscription: `az account list` shows only the tenant-level placeholder ("N/A(tenant level account)").
+  - The signed-in account has no directory role, so it cannot grant admin consent.
+  - **App `870e1fcd-0338-46b4-89a7-cc19f5517097` no longer exists in the tenant** (`az ad app show` returns not found). A new app registration is needed, not just consent: register it, add Graph application permissions `User.Read.All` and `Application.Read.All`, grant admin consent, assign Reader on the subscription (optionally on the root management group so `mg-hierarchy-readable` passes), and create a new client secret.
+  - No `AZURE_*` variables are set on the build host.
+- **Owner position 2026-11-09:** there is no tenant to use at present. This item is parked until one is available. Nothing else in cloud BAS depends on it except the live Azure checks in O-4 and O-5.
+
 ### O-2 — Live AWS discovery — OPEN
 - **What's needed:** a least-privilege read role in a test account. It needs `iam:GetAccountAuthorizationDetails`, `sts:GetCallerIdentity`, `s3:ListAllMyBuckets`, `backup:ListBackupVaults`, and for enforcement layers `organizations:ListParents`, `organizations:ListPoliciesForTarget`, `organizations:DescribePolicy`. Then compare the discovered edges against IAM Policy Simulator for a sample of identities.
 - **Also needs** `s3:GetBucketPolicy` on each bucket. A bucket with no policy is normal. Any other failure fails the pass, naming the permission. Buckets in another region may return a redirect from `GetBucketPolicy`; if that happens, the pass fails rather than skipping the bucket. Verify this on a bucket in a second region.
 - **Verify:** the `GetAccountAuthorizationDetails` pagination marker; that policy documents arrive URL-encoded and decode cleanly; that the `backup_vaults` count matches the console; that `scp_levels` and `boundary_attached` in the discovery report match the Organizations console and each identity's permissions boundary. A discovery pass fails if Organizations cannot be read, so a missing permission shows up as a named error, not as silent over-reporting.
+
+- **Status check 2026-11-09:** not run. The AWS CLI on the build host is signed in as `arn:aws:iam::165228763915:user/opshddbackup` (account `165228763915`). Only `sts get-caller-identity` was called. That account was **not** used: it is not established as a test account, and `iam:GetAccountAuthorizationDetails` reads every user, role and policy in it. Discovery waits for a dedicated test account with `docs/aws/bas-server-readonly-policy.json` attached and `CLOUD_ALLOWED_ACCOUNTS` set to that account, or an explicit owner decision to read `165228763915`.
 
 ### O-3 — Live GCP discovery — OPEN
 - **What's needed:** a project with a read-only service account. It needs `resourcemanager.projects.getIamPolicy`, `resourcemanager.projects.get` (for ancestry), `iam.roles.get`, `iam.serviceAccounts.list`, `storage.buckets.list`, `storage.buckets.getIamPolicy`, and `iam.denypolicies.list` at the project. If the project sits under a folder or organization, the same account also needs `resourcemanager.folders.getIamPolicy`, `resourcemanager.organizations.getIamPolicy`, and `iam.denypolicies.list` at each of those levels. A missing permission fails the pass with the call named.
@@ -163,9 +174,51 @@ SCPs, permission boundaries, S3 bucket policies, management-group inheritance, a
 - **Not done:** no provider-backed integration test against a dedicated sandbox account has been run. That test is the next step and needs a sandbox account. Probes for GCP and Azure are not registered, so those providers are rejected.
 - **Deferred: state-changing actions.** Not implemented, and rejected by default, even in live mode. Before any is built, it needs: (1) per-step approval bound to the exact account, resource, action and parameters; (2) a precondition check immediately before execution, so an approval cannot be reused against a changed target; (3) a defined rollback and post-cleanup verification for each supported action; (4) a durable record of attempted changes and cleanup results; (5) a defined response to partial execution, crashes, lost credentials and failed rollback. Some actions are irreversible and must stay unsupported unless a recovery strategy is proven.
 
+### R-20 — Operational hardening (O-9): account allow-list, Azure secrets file, discovery concurrency, metrics — RESOLVED (this commit)
+
+Implements the owner's O-9 decisions in the priority order given: allow-list, secret injection, concurrency limits, metrics and tracing.
+
+- **Account allow-list (security boundary).** `CLOUD_ALLOWED_ACCOUNTS` is parsed once at startup. It applies to discovery, every plan run (with or without discovery), every campaign sub-run, scenario runs (including their event source), preflight and live probes. An unlisted account returns 403 before any provider client is built. The refusal is written synchronously to `audit_logs` as `<action>.refused` with the actor, account and reason, and counted in `cloud_request_refusals_total{reason="allow-list"}`. An unset variable permits nothing. The old `CLOUD_PROBE_ALLOWED_ACCOUNTS` is no longer read, so a deployment that still sets it gets no probe access until `CLOUD_ALLOWED_ACCOUNTS` is set.
+- **Azure credentials from a file, not the environment.** The four Azure keys load from the file named by `CLOUD_AZURE_SECRETS_FILE` once, at startup. The server refuses to start if `AZURE_CLIENT_SECRET` is set in the process environment, or if the file is missing, malformed, has an unknown or duplicate key, or lists a subscription other than the allow-listed Azure account. Errors name the setting or key, never a value. `AzureDiscoveryConfig` prints `secret=[REDACTED]` under `%v`, `%+v`, `%#v` and `%s`. Rotation is by editing the file and restarting the server; there is no live reload.
+- **Concurrency limits.** One discovery pass per account (second request: 409). A server-wide maximum of concurrent passes, with a bounded queue and a bounded wait. Saturation returns 503 immediately when the queue is full, or after the wait expires. Queued requests that the client abandons are released. Preflight also takes a gate slot because it makes account calls. Live probes do not take a slot (decision: discovery and preflight only).
+- **Telemetry.** `internal/observability/cloud_metrics.go`. Labels are bounded: provider, outcome, object kind, failure category, preflight check name (without any `:` suffix), probe operation (unregistered operations are counted as `unregistered`), and refusal reason. Account IDs, identity IDs and resource names are never labels. Metrics: `cloud_discovery_pass_duration_seconds`, `cloud_discovery_objects_total`, `cloud_discovery_failures_total`, `cloud_preflight_failures_total`, `cloud_probe_outcomes_total`, `cloud_rate_limit_wait_seconds`, `cloud_request_refusals_total`.
+- **Structured logs and traces.** Discovery, preflight, probe outcome and refusal events are written to slog with `account_id`, `provider` and `event`. Spans `cloud.discovery.pass` and `cloud.preflight` carry the account ID. **OpenTelemetry is not initialised in production (no tracer provider is installed in `cmd/server`), so these spans are no-ops until one is configured.** Logs are the working record today.
+- **Audit stays separate from telemetry.** Audit rows keep actor, account, action and outcome, and are written synchronously. Telemetry counts and times, and never carries identifiers.
+
+**Operator configuration**
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `CLOUD_ALLOWED_ACCOUNTS` | unset (permits nothing) | Comma-separated `provider:accountId` entries, for example `aws:111111111111,azure:<subscription-id>`. Read once at startup. |
+| `CLOUD_AZURE_SECRETS_FILE` | unset | Path to the Azure secrets file. Required when any `azure:` account is listed. |
+| `CLOUD_DISCOVERY_MAX_CONCURRENT` | 4 (1–64) | Server-wide concurrent discovery and preflight passes. |
+| `CLOUD_DISCOVERY_MAX_QUEUED` | 8 (0–256) | Requests allowed to wait for a server slot. Beyond this, refuse at once. |
+| `CLOUD_DISCOVERY_QUEUE_WAIT` | 10s (up to 5m) | Longest a queued request waits before a 503. |
+| `AZURE_CLIENT_SECRET` | must NOT be set | Setting it in the environment stops startup. |
+
+**Secrets file format.** One `KEY=VALUE` per line, with `#` comments. The keys are exactly `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` and `AZURE_SUBSCRIPTION_ID`, each once and non-empty. Values may not contain quotes, backslashes or leading or trailing spaces. On Unix the file must not be readable by group or others (mode 0600). **On Windows the code does not check the file's ACL; the operator must restrict it to the service account.**
+
+**Known limits (R-20)**
+
+- AWS SDK retries are not reported in `cloud_rate_limit_wait_seconds`. The SDK applies its own retries and the code has no hook for them. The metric covers GCP and Azure only.
+- Tracing is inert until a tracer provider is configured (see above).
+- The EmailGW Defender client secret reaches compose through `.env`, which is an environment exposure outside the Azure discovery path. Flagged, not changed in this phase.
+- The runbook generator script from the earlier session is no longer in the scratchpad, so the runbook is maintained by hand in this file.
+
+**Tests.** `internal/api`: refusal for every unlisted account path, fail-closed permit, gate exclusivity, server limit, queue bound, queue timeout and cancellation, secrets-file parser (valid, missing key, unknown key, duplicate, empty, quoted, malformed, missing file), environment-secret refusal, metric label bounds, failure categories. `internal/cloudgraph`: Azure config redaction under every format verb. The `api` group of `scripts/cloud-qa.sh` runs the whole package, so these are included.
+
 ### R-8 — Credentials never come from a request — RESOLVED `28304ead`, `7ae44b57`
 - AWS uses the SDK default chain, GCP uses Application Default Credentials, Azure reads service-principal variables. Each discoverer proves the credentials resolve to the account the run names before it reads inventory. Error text names a missing variable, never its value.
 
+## Kubernetes network-policy boundary analysis (scenario 9, 2026-11-03)
+
+Configured-state analysis only. Design: `docs/superpowers/specs/2026-10-23-k8s-network-policy-analysis-design.md`. Built in `948767c0` (evaluator and discovery) and `3af9bdad` (expectations file, runner wiring, lab manifests).
+
+- Verified by unit tests: open, allow, wrong port, default-deny, egress overriding ingress, ipBlock (UNKNOWN), named port (UNKNOWN), podSelector scoped to the policy namespace, external source, disagreeing pods (UNKNOWN), incomplete policy list (UNKNOWN everywhere), unresolvable selector (UNKNOWN), invalid expectations rejected, unknown selector operator reported as a gap. Discovery: policies and labels collected; forbidden policy list is a gap.
+- Not verified live. The lab fixtures in `orchestrator/testdata/k8s-netpol/` are committed but NOT applied to `kind-bas-lab` (the apply was denied by the permission check on 2026-11-03). Expected results once applied: four boundaries match their expectations.
+- Not verified on staging: `KUBE_DISCOVERY_*` is unset there, so the analysis returns 503.
+- Enforcement by the CNI is not tested.
+
 ## Kubernetes state-changing scenarios (2026-10-23)
 
 Scope: lab only (kind-bas-lab, bas-sandbox), three labelled non-privileged actions. Design: `docs/superpowers/specs/2026-10-23-k8s-state-changing-scenarios-design.md`.
@@ -211,13 +264,35 @@ What the groups cover (see `docs/cloud-qa-test-runbook.md` for the full list of 
 
 Dependencies: `aws-sdk-go-v2` (config, iam, sts, s3, cloudtrail, backup, organizations), `google.golang.org/api` v0.264.0 (cloud resource manager v1 and v2, iam v1 and v2, storage, logging, transport). `go mod tidy` moved Google API from v0.200.0 to v0.264.0.
 
+## Pre-build status (2026-11-03)
+
+What is built and pushed on `main`, what is verified, and what waits for the build or a tenant.
+
+| Item | Built | Verified here | Waits for |
+|---|---|---|---|
+| O-9 hardening: allow-list, Azure secrets file, discovery gate, metrics (R-20) | `401038ea` | Cloud QA gate exit 0; fresh clone builds | Staging rebuild. Staging runs an older build: the allow-list is not enforced there. |
+| R-20b trace export | `6059b2a1` | Unit tests for scheme, port 4317 refusal, console to stdout | Decided: disabled in production (owner) |
+| Scenario 9, Kubernetes network-policy analysis | `948767c0`, `3af9bdad` | Unit tests; cloudgraph suite | Lab fixtures applied to kind-bas-lab (owner) |
+| O-10 console: scenario runs | `0329b9ea`, `51a90ce0` | 19 model tests; 627 web unit tests on host Node; build | Rebuild; a browser check |
+| O-10 console: discovery-only runs and recent runs | `064ccbeb` | Same as above | Rebuild; a browser check |
+| Operator notes on the Cloud Scenarios page | `19b2e2e8` | Build; 627 unit tests | Rebuild |
+| R-19d read-only AWS policy | `33ddc777` | JSON validated | Owner review; attach to the server's role (operator) |
+| R-20c Azure secrets file ACL (Windows) | operator command in the console notes | none | Operator run on the Windows host |
+
+Known test limits, recorded so they are not mistaken for passes:
+- The pinned Docker test image ran out of memory (Docker VM at 1.86 GiB). The web unit tests were run on host Node 24 instead. Raise the Docker memory to about 4 GiB to run the pinned run.
+- One lint error exists in `src/features/attack-path.js` (`getComputedStyle` not defined). It was there before this work and is not touched here.
+- The action-registry check fails on three unused actions and a stale inline-style baseline. These predate the Cloud Scenarios page.
+
+Not yet verified anywhere: the Cloud Scenarios page in a browser; the discovery run's real response shape from a live server; the allow-list on a build that has it.
+
 ## Open items register (consolidated)
 
 Every item here is open, unbuilt, or a documented limit. Nothing is hidden in a closed entry.
 
 | ID | Item | Type | Blocked on |
 |---|---|---|---|
-| O-1 | Azure tenant readiness: subscription activation and Graph admin consent | Open | A person with tenant rights |
+| O-1 | Azure tenant readiness: new app registration, subscription activation, Graph admin consent, Reader role (parked: no tenant, 2026-11-09) | Open | A person with tenant rights |
 | O-2 | Live AWS discovery | Open | A least-privilege read role in a test account |
 | O-3 | Live GCP discovery | Open | A project with a read-only service account |
 | O-4 | Live audit evidence coverage (CloudTrail data events, Azure blob reads, GCP Data Access logs off by default) | Open | Live accounts with logging configured |
@@ -229,10 +304,14 @@ Every item here is open, unbuilt, or a documented limit. Nothing is hidden in a 
 | O-12 | Kubernetes validation on managed platforms (EKS, AKS, GKE, OpenShift) | Open | Cloud accounts and managed clusters; the operator has neither |
 | O-13 | Kubernetes validation on multi-node K3s and on K3s beyond a single-node k3d cluster | Open | A multi-node K3s environment |
 | O-14 | Kubernetes attack-path routes (bind, escalate, impersonate, create-pods, token request, exec, node proxy) | Done as configured-permission modelling | Node proxy is modelled from RBAC grants only; kubelet behaviour is not validated live |
+| O-15 | Stratus Red Team cloud attack-execution subsystem (REQ-010 broaden-cloud: AWS IAM-abuse/storage-exposure/workload) | **PARKED 2026-11-09** (owner confirmed) | AWS sandbox account: not yet provisioned (see `docs/cloud-open-decisions.md` R-21) |
 | R-19a | Sandbox provider integration test for read-only probes | Open | A dedicated sandbox account |
 | R-19b | Probes for GCP and Azure are not registered | Open | Decision on which probes to add |
-| R-19c | `CLOUD_PROBE_ALLOWED_ACCOUNTS` is unset, so no probe can run against a real account | Operational | Sandbox test passing first |
-| R-19d | Least-privilege setup of the server's AWS credential chain | Operator task | Operator configuration; code does not enforce it |
+| R-19c | `CLOUD_ALLOWED_ACCOUNTS` is unset, so no probe can run against a real account (replaces `CLOUD_PROBE_ALLOWED_ACCOUNTS`, which is no longer read) | Operational | Sandbox test passing first |
+| R-20a | Concurrency and refusal paths under real load | Open | Staging run of the discovery gate |
+| R-20b | OpenTelemetry tracer provider not configured in production | Decided: disabled in production (owner, 2026-11-03) | None until a collector is approved |
+| R-20c | Windows ACL of the Azure secrets file not checked by code | Operator task | Run the `icacls` steps in the console notes on the Windows host |
+| R-19d | Least-privilege setup of the server's AWS credential chain | Policy written (`docs/aws/bas-server-readonly-policy.json`); operator attaches it | Owner review, then attach to the server's role |
 
 ## Known limits (consolidated)
 

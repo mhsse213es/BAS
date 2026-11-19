@@ -21,6 +21,10 @@ type DetectionFixture struct {
 	AlertEvidence        wafval.CollectionResult
 	EventObservedAt      time.Time
 	AlertObservedAt      time.Time
+	// EvidenceSource overrides the assertion's reported source; the
+	// zero value defaults to EvidenceSourceFixture, same as every other
+	// evaluator in this package.
+	EvidenceSource EvidenceSource
 }
 
 // detectionOutcomeClass classifies a detection/telemetry verdict as
@@ -170,11 +174,15 @@ func EvaluateDetectionTelemetryScenario(scenario EnterpriseScenario, fixtures ma
 		if err != nil {
 			return ScenarioResult{}, fmt.Errorf("evaluating detection scenario %q: %w", id, err)
 		}
+		src := fixture.EvidenceSource
+		if src == "" {
+			src = EvidenceSourceFixture
+		}
 		assertions = append(assertions, VectorAssertion{
 			VectorID:       id,
 			Severity:       wafcatalog.Severity(""),
 			Verdict:        wafval.Verdict(verdict),
-			EvidenceSource: EvidenceSourceFixture,
+			EvidenceSource: src,
 			Reason:         reason,
 		})
 		failing, inconclusive := detectionOutcomeClass(shape, verdict)

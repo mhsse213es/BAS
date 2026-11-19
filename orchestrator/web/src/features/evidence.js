@@ -2,18 +2,24 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
-import { ago, daysAgo, fmtDate, showToast } from '../core/util.js';
+import { ago, fmtDate, showToast } from '../core/util.js';
+import { setHeroStat } from './shell-ui.js';
 import { _apOnCollected, _apOnJobUpdate, _apOnProgress, _onRevalidationStarted, _onSIEMCorrelationComplete, renderScenarios, requestAgentsLiveRefresh, showSettingsSection, showThreatPriorityDetail } from './attack-path.js';
 import { loadEndpointPostureWidget, loadKEVWidget, loadReadinessTrends } from './campaigns.js';
 import { loadComplianceScores, refreshDashboardCampaigns } from './compliance.js';
 import { openTechnique } from './coverage.js';
 import { onRunEvent } from './live-run.js';
-import { findingSevBadge, loadDashboardITSM, openFinding } from './findings.js';
+import { loadDashboardITSM, openFinding } from './findings.js';
 import { loadRansomwareReadiness } from './ransomware.js';
 import { additionalAgentIds, closeModal, loadRuns, openBuilder, openModal, resolvedAllTargetIds, resolvedGroupTargetIds, scenarioFramework, viewRunResults } from './reports.js';
-import { ROLE, _riskScoreColor, showTab, showTamperBanner } from './shell.js';
-import { killChainNodes } from './variant-report.js';
+import { createThrottledRefresh, isRunsTabActive } from './runs-refresh.js';
+import { ROLE, showTab, showTamperBanner } from './shell.js';
+import { renderDashAll, setDashAgents, setDashRuns, setDashFindings, setDashAlerts, setDashSchedules, dashRunById } from './dash-rich.js';
+import { effectiveness as dashEffectiveness, isAgentOnline } from './dash-model.js';
 import { displayOf, replaceClasses, setDisplay } from '../core/inline-style.js';
+import { empty } from '../core/kit.js';
+import { renderUsersInsights } from './settings-insights.js';
+import { setUsersRows } from './set-view.js';
 
 
 // ── Evidence Panel ────────────────────────────────────────────────────────────
@@ -267,6 +273,24 @@ function renderEvidencePanel(c) {
   tlHtml += '</div>';
   html += section('Detection Timeline', null, tlHtml);
 
+  // ── 4b. Execution assessment (only for a step that did not run to a result) ──
+  if (c.executionFailure) {
+    var ef = c.executionFailure;
+    var efStatus = { not_executed: 'Not executed', timed_out: 'Timed out', execution_error: 'Execution error', cancelled: 'Cancelled' }[ef.executionStatus] || 'Not executed';
+    var efHtml = kv('Execution status', x(efStatus))
+      + kv('Security verdict', 'Not assessed')
+      + kv('Why', x(ef.reason || ''))
+      + kv('Evidence confidence', 'None')
+      + kv('What to do', x(ef.remediation || ''))
+      + '<details style="margin-top:0.4rem"><summary style="cursor:pointer;font-size:0.7rem;color:var(--muted)">Technical diagnostics</summary>'
+      + kv('Category', x((ef.category || '').replace(/_/g, ' ')))
+      + kv('Failure stage', x((ef.stage || '').replace(/_/g, ' ')))
+      + kv('Owner', ef.owner === 'audspect' ? 'Audspect (content or agent)' : 'Endpoint environment')
+      + (ef.rawError ? kv('Raw error', '<code style="font-size:0.68rem;word-break:break-word">' + x(ef.rawError) + '</code>') : '')
+      + '</details>';
+    html += section('Execution assessment', 'Not counted in the score', efHtml);
+  }
+
   // ── 5. Cleanup (only if cleanup verdict exists) ──
   if (c.cleanupVerdict) {
     var cv   = c.cleanupVerdict;
@@ -437,14 +461,13 @@ export function triggerDownload(href, filename) {
 // (internal/api/handlers.go) so every downloaded report -- whether the
 // server streams it directly or the browser saves it via an <a download>
 // link -- gets the same consistent, sortable, self-explanatory name:
-// Audspect_<ReportType>_<Scope>_<YYYY-MM-DD_HH-mm-ss>.<ext>.
+// Audspect_<ReportType>_<Scope>_<YYYY-MM-DD>.<ext>.
 export function buildReportFilename(reportType, scope, ext) {
   var safe = (scope || '').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
   if (!safe) safe = 'report';
   var d = new Date();
   var pad = function(n) { return String(n).padStart(2, '0'); };
-  var ts = d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()) +
-    '_' + pad(d.getUTCHours()) + '-' + pad(d.getUTCMinutes()) + '-' + pad(d.getUTCSeconds());
+  var ts = d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
   return 'Audspect_' + reportType + '_' + safe + '_' + ts + '.' + ext;
 }
 
@@ -675,6 +698,8 @@ export function confirmRun() {
   });
 }
 
+var _requestRunsRefresh = createThrottledRefresh(function() { if (isRunsTabActive(document)) loadRuns(); }, 2000);
+
 export function connectWS() {
   if (state.socket) state.socket.close();
   var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -693,6 +718,9 @@ export function connectWS() {
       var msg = JSON.parse(evt.data);
       if (msg.type === 'run_event') {
         onRunEvent(msg);
+        // Step events also move the in-flight cards on Live Runs (throttled): the cards read the runs list, which
+        // used to be re-fetched only when a run finished, so they sat on "Starting…" until the run was opened.
+        _requestRunsRefresh();
         // A paused/resumed confirmation must refresh the Live Runs table --
         // onRunEvent above only updates the Live drawer (scoped to
         // whichever single run's drawer, if any, is currently open). Filtered
@@ -716,306 +744,14 @@ export function connectWS() {
   };
 }
 
-/* ── Command palette (Ctrl/Cmd-K) ─────────────────────────────────────────
-   Launcher routing to existing tabs + global actions, plus live search
-   (Global Search Phase 2) over GET /api/search -- results merge into the
-   same flat/selectable/run mechanism the static nav list already uses, so
-   keyboard nav and click-to-select work identically for both. Respects
-   role: Users/Settings (admin) and New scenario (admin/analyst) appear only
-   when permitted — same gating as the sidebar. */
-var _cmdkOpen = false;
-function cmdkCommands() {
-  var nav = [
-    { t: 'Dashboard',   fn: function() { showTab('dashboard'); } },
-    { t: 'Scenarios',   fn: function() { showTab('scenarios'); } },
-    { t: 'Live Runs',   fn: function() { showTab('runs'); } },
-    { t: 'Compliance',  fn: function() { showTab('compliance'); } },
-    { t: 'Agents',      fn: function() { showTab('agents'); } }
-  ];
-  if (ROLE === 'admin') {
-    nav.push({ t: 'Users & roles', fn: function() { showTab('settings'); showSettingsSection('users'); } });
-    nav.push({ t: 'Settings', fn: function() { showTab('settings'); } });
-  }
-  var actions = [{ t: 'Run simulation', fn: function() { openModal(null, null); } }];
-  if (ROLE === 'admin' || ROLE === 'analyst') {
-    actions.unshift({ t: 'New scenario', fn: function() { openBuilder(); } });
-  }
-  return [{ sec: 'Navigate', items: nav }, { sec: 'Actions', items: actions }];
-}
-
-// CMDK_SEARCH_LABELS maps a search result's docType to its section header.
-// "campaign" -> "Threat Campaigns", deliberately not "Campaigns" -- the
-// sidebar's existing Campaigns tab is internal/campaign (BAS execution
-// rollups), a different concept from intelligence_campaigns.
-var CMDK_SEARCH_LABELS = {
-  scenario: 'Scenarios', run: 'Runs', finding: 'Findings',
-  actor: 'Threat Actors', campaign: 'Threat Campaigns',
-  malware: 'Malware', tool: 'Tools', technique: 'Techniques',
-  rule: 'Detection Rules', compliance_control: 'Compliance Controls',
-  detection_connector: 'Detection Connectors', action_connector: 'Response Connectors'
-};
-
-// cmdkOpenResult dispatches a selected search result to a real navigation
-// action per docType, or the minimal fallback popup for the 3 types with
-// no detail view anywhere in this app yet (campaign/malware/tool). Also
-// fires a fire-and-forget selection-tracking call (Global Search Phase 3) --
-// never blocks navigation, failures are silently swallowed.
-function cmdkOpenResult(r) {
-  apicall('/api/search/select', {
-    method: 'POST',
-    body: JSON.stringify({ docType: r.docType, sourceId: r.sourceId })
-  }).catch(function() {});
-  if (r.docType === 'run') {
-    openRunReport(r.sourceId);
-  } else if (r.docType === 'finding') {
-    showTab('findings');
-    setTimeout(function() { openFinding(r.sourceId); }, 150);
-  } else if (r.docType === 'actor') {
-    showTab('threat-priority');
-    setTimeout(function() { showThreatPriorityDetail(r.title); }, 150);
-  } else if (r.docType === 'technique') {
-    // The 150ms delay matters here, not just as a defensive habit:
-    // openTechnique() reads state._covSt[id], populated asynchronously by
-    // loadCoverageMatrix() (kicked off by showTab('attack-coverage')) --
-    // calling it too early shows a wrong "Untested" badge for a technique
-    // that may actually be covered.
-    showTab('attack-coverage');
-    setTimeout(function() { openTechnique(r.sourceId); }, 150);
-  } else if (r.docType === 'scenario') {
-    // No true "open by ID" exists for scenarios -- they expand inline
-    // within the Scenarios tab's own tile grid. Reuse the existing sc-search
-    // filter box rather than building new expand-by-ID logic.
-    showTab('scenarios');
-    setTimeout(function() {
-      document.getElementById('sc-search').value = r.title;
-      renderScenarios();
-    }, 150);
-  } else {
-    cmdkResultFallback(r);
-  }
-}
-
-// cmdkResultFallback reuses the existing #results-overlay drawer (the same
-// one openFinding/openTechnique already populate) to show a search result's
-// own title/description/tags for entity types with no detail view built
-// yet. No network request -- everything shown is already in `r`.
-function cmdkResultFallback(r) {
-  document.getElementById('results-overlay').classList.remove('run-mode');
-  document.getElementById('results-title').textContent = r.title + ' — ' + CMDK_SEARCH_LABELS[r.docType];
-  document.getElementById('results-export').innerHTML = '';
-  document.getElementById('results-summary').innerHTML = '';
-  document.getElementById('results-body').innerHTML =
-    (r.description ? '<p style="margin-bottom:0.8rem">' + x(r.description) + '</p>' : '') +
-    ((r.tags || []).length ? '<div style="display:flex;gap:0.4rem;flex-wrap:wrap">' +
-      r.tags.map(function(t) { return '<span class="sbadge" style="background:transparent;border:1px solid var(--border)">' + x(t) + '</span>'; }).join('') +
-      '</div>' : '');
-  document.getElementById('results-overlay').classList.add('open');
-}
-
-// cmdkToggleFavorite calls POST /api/search/favorite for r, mutates
-// r.favorited in place on success (r is a reference into whichever array
-// it came from -- cmdkSearchResults or cmdkRecents inside openCmdk()'s
-// closure -- so that array reflects the new state on the next render),
-// then invokes onDone to trigger a repaint. Fails soft: a network error
-// leaves r.favorited untouched but still calls onDone so the UI never hangs.
-function cmdkToggleFavorite(r, onDone) {
-  apicall('/api/search/favorite', {
-    method: 'POST',
-    body: JSON.stringify({ docType: r.docType, sourceId: r.sourceId })
-  }).then(function(res) {
-    r.favorited = !!(res && res.favorited);
-    onDone();
-  }).catch(function() { onDone(); });
-}
-
-export function openCmdk() {
-  if (_cmdkOpen || !ROLE) return;
-  _cmdkOpen = true;
-  var cmds = cmdkCommands();
-  var wrap = document.createElement('div');
-  replaceClasses(wrap, 'cmdk-scrim');
-  wrap.innerHTML =
-    '<div class="cmdk" role="dialog" aria-label="Command palette">' +
-      '<div class="cmdk-in">' +
-        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>' +
-        '<input id="cmdk-input" placeholder="Type a command or search…" autocomplete="off">' +
-        '<span class="cmdk-esc">esc</span>' +
-      '</div><div class="cmdk-list" id="cmdk-list"></div>' +
-      '<div class="bld-mode-help" id="cmdk-ops-hint" style="display:none;margin:0;padding:8px 15px;border-top:1px solid var(--border)"></div>' +
-    '</div>';
-  document.body.appendChild(wrap);
-  var input = wrap.querySelector('#cmdk-input');
-  var list = wrap.querySelector('#cmdk-list');
-  var flat = [], active = 0, currentQ = '';
-
-  // Search state: cmdkSearchResults holds the last successful response
-  // (kept across in-flight requests so results don't flicker to empty
-  // while typing), null means the last request failed, [] means empty
-  // query or genuinely no matches. cmdkSearchToken discards responses to
-  // requests a newer keystroke has already superseded.
-  var cmdkSearchResults = [];
-  var cmdkSearchToken = 0;
-  var cmdkSearchTimer = null;
-  function cmdkSearch(q, onDone) {
-    clearTimeout(cmdkSearchTimer);
-    if (!q) { cmdkSearchResults = []; onDone(); return; }
-    cmdkSearchTimer = setTimeout(function() {
-      var token = ++cmdkSearchToken;
-      apicall('/api/search?q=' + encodeURIComponent(q) + '&limit=20')
-        .then(function(results) {
-          if (token !== cmdkSearchToken) return;
-          cmdkSearchResults = Array.isArray(results) ? results : null;
-          onDone();
-        })
-        .catch(function() {
-          if (token !== cmdkSearchToken) return;
-          cmdkSearchResults = null;
-          onDone();
-        });
-    }, 150);
-  }
-
-  // cmdkRecents holds the one-shot GET /api/search/recents response,
-  // fetched once when the palette opens (not on every keystroke) and only
-  // ever shown when the input is empty (Global Search Phase 3).
-  var cmdkRecents = [];
-  apicall('/api/search/recents').then(function(r) {
-    cmdkRecents = Array.isArray(r) ? r : [];
-    if (currentQ === '') render(currentQ);
-  }).catch(function() { cmdkRecents = []; });
-
-  // One-shot fetch of the supported search-box operators, rendered as a
-  // persistent footer hint below the results list. Fails soft -- the hint
-  // just stays hidden if the request errors, never blocks the palette.
-  apicall('/api/search/operators').then(function(r) {
-    var ops = (r && Array.isArray(r.operators)) ? r.operators : [];
-    var typeOp = ops.filter(function(o) { return o.name === 'type' && Array.isArray(o.values) && o.values.length; })[0];
-    if (!typeOp) return;
-    var hint = wrap.querySelector('#cmdk-ops-hint');
-    hint.textContent = 'Tip: ' + typeOp.values.map(function(v) { return 'type:' + v; }).join(', ') + ' to filter by type.';
-    setDisplay(hint, '');
-  }).catch(function() { /* fails soft -- footer just stays hidden */ });
-
-  function selectable() { return flat.map(function(f, i) { return f.sec ? -1 : i; }).filter(function(i) { return i >= 0; }); }
-  function paint() {
-    var nodes = list.querySelectorAll('[data-ci]');
-    Array.prototype.forEach.call(nodes, function(n) { n.classList.toggle('active', +n.dataset.ci === active); });
-  }
-
-  function staticFlatFor(q) {
-    var out = [];
-    cmds.forEach(function(c) {
-      var items = c.items.filter(function(i) { return i.t.toLowerCase().indexOf(q) >= 0; });
-      if (items.length) { out.push({ sec: c.sec }); items.forEach(function(i) { out.push(i); }); }
-    });
-    return out;
-  }
-
-  // recentsFlat only contributes rows when the input is empty -- it's
-  // prepended above the static Navigate/Actions list, which keeps
-  // rendering unchanged from Phase 2 (see render()'s concat order below).
-  function recentsFlat(q) {
-    if (q !== '' || !cmdkRecents.length) return [];
-    var out = [{ sec: 'Recents' }];
-    cmdkRecents.forEach(function(r) {
-      out.push({ t: r.title, docType: r.docType, sourceId: r.sourceId, fav: r.favorited, ref: r, fn: function() { cmdkOpenResult(r); } });
-    });
-    return out;
-  }
-
-  function searchFlat() {
-    var out = [];
-    if (cmdkSearchResults === null) { out.push({ sec: 'Search unavailable' }); return out; }
-    var byType = {};
-    cmdkSearchResults.forEach(function(r) { (byType[r.docType] = byType[r.docType] || []).push(r); });
-    ['scenario', 'run', 'finding', 'actor', 'campaign', 'malware', 'tool', 'technique',
-     'rule', 'compliance_control', 'detection_connector', 'action_connector'].forEach(function(dt) {
-      var items = byType[dt];
-      if (!items || !items.length) return;
-      out.push({ sec: CMDK_SEARCH_LABELS[dt] });
-      items.forEach(function(r) { out.push({ t: r.title, docType: r.docType, sourceId: r.sourceId, fav: r.favorited, ref: r, fn: function() { cmdkOpenResult(r); } }); });
-    });
-    return out;
-  }
-
-  function render(q) {
-    flat = recentsFlat(q).concat(staticFlatFor(q)).concat(searchFlat());
-    var sel = selectable(); active = sel.length ? sel[0] : 0;
-    if (!flat.length) { list.innerHTML = '<div class="cmdk-empty">No matches</div>'; return; }
-    list.innerHTML = flat.map(function(f, i) {
-      if (f.sec) return '<div class="cmdk-sec">' + x(f.sec) + '</div>';
-      // f.docType is only set for search-result/recents rows (Phase 3) --
-      // static Navigate/Actions rows never get the star affordance.
-      var star = f.docType
-        ? '<span data-fav-ci="' + i + '" style="cursor:pointer;margin-right:0.5rem;color:' + (f.fav ? 'var(--warning)' : 'var(--muted)') + '">★</span>'
-        : '';
-      return '<div class="cmdk-item" data-ci="' + i + '">' + star + x(f.t) + '</div>';
-    }).join('');
-    Array.prototype.forEach.call(list.querySelectorAll('[data-ci]'), function(node) {
-      node.onmousemove = function() { active = +node.dataset.ci; paint(); };
-      node.onclick = function() { run(+node.dataset.ci); };
-    });
-    Array.prototype.forEach.call(list.querySelectorAll('[data-fav-ci]'), function(node) {
-      node.onclick = function(e) {
-        e.stopPropagation(); // don't also trigger the parent row's onclick (navigation)
-        var it = flat[+node.dataset.favCi];
-        if (!it || !it.ref) return;
-        cmdkToggleFavorite(it.ref, function() { render(currentQ); });
-      };
-    });
-    paint();
-  }
-
-  function draw(q) {
-    q = (q || '').toLowerCase();
-    currentQ = q;
-    render(q);
-    cmdkSearch(input.value, function() { render(q); });
-  }
-
-  function move(dir) {
-    var sel = selectable(); if (!sel.length) return;
-    var pos = sel.indexOf(active); if (pos < 0) pos = 0;
-    active = sel[(pos + dir + sel.length) % sel.length]; paint();
-    var node = list.querySelector('[data-ci="' + active + '"]'); if (node) node.scrollIntoView({ block: 'nearest' });
-  }
-  function run(i) { var it = flat[i]; if (!it || it.sec) return; close(); it.fn(); }
-  function close() { _cmdkOpen = false; document.removeEventListener('keydown', onKey, true); wrap.remove(); }
-  function onKey(e) {
-    if (e.key === 'Escape') { e.preventDefault(); close(); }
-    else if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
-    else if (e.key === 'Enter') { e.preventDefault(); run(active); }
-  }
-  wrap.addEventListener('mousedown', function(e) { if (e.target === wrap) close(); });
-  document.addEventListener('keydown', onKey, true);
-  input.addEventListener('input', function() { draw(input.value); });
-  draw('');
-  setTimeout(function() { input.focus(); }, 20);
-}
-
-var ROLE_LABELS = { admin: 'Admin', analyst: 'Analyst', viewer: 'Viewer' };
+// The command palette / global search lives in gsearch.js.
+export { openCmdk } from './gsearch.js';
 
 export function loadUsers() {
   apicall('/api/users').then(function(data) {
     document.getElementById('users-cnt').textContent = data.length;
-    var tbody = document.getElementById('users-body');
-    if (!data.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty">No users found.</td></tr>'; return; }
-    tbody.innerHTML = data.map(function(u) {
-      var statusBadge = u.isActive ? '<span class="sbadge s-completed">Active</span>' : '<span class="sbadge s-offline">Disabled</span>';
-      var mustPw = u.mustChangePw ? ' <span class="tag u-warning">pw reset</span>' : '';
-      var actions =
-        '<button class="btn btn-outline btn-sm"' + on('click', 'openEditUser', u.id, u.username, u.role) + '>Edit</button>' +
-        ' <button class="btn btn-outline btn-sm"' + on('click', 'doResetPassword', u.id, u.username) + ' style="margin-left:0.3rem">Reset PW</button>' +
-        ' <button class="btn btn-outline-' + (u.isActive ? 'red' : 'green') + ' btn-sm"' + on('click', 'toggleUserActive', u.id, !u.isActive) + ' style="margin-left:0.3rem">' + (u.isActive ? 'Disable' : 'Enable') + '</button>';
-      return '<tr>' +
-        '<td><strong>' + x(u.username) + '</strong>' + mustPw + '</td>' +
-        '<td>' + (ROLE_LABELS[u.role] || x(u.role)) + '</td>' +
-        '<td>' + statusBadge + '</td>' +
-        '<td style="color:var(--muted);font-size:0.78rem">' + fmtDate(u.createdAt) + '</td>' +
-        '<td style="color:var(--muted);font-size:0.78rem">' + (u.lastLogin ? fmtDate(u.lastLogin) : 'Never') + '</td>' +
-        '<td>' + actions + '</td></tr>';
-    }).join('');
+    renderUsersInsights(data);
+    setUsersRows(data);
   }).catch(function(e) { showToast('Failed to load users: ' + e.message, 'err'); });
 }
 
@@ -1091,33 +827,6 @@ export function doResetPassword(id, username) {
   .catch(function(e) { showToast(e.message, 'err'); });
 }
 
-// donutSVG renders a stacked donut from [{v,color}] segments (no chart lib).
-function donutSVG(segs, size, stroke) {
-  size = size || 124; stroke = stroke || 16;
-  var r = (size - stroke) / 2, cx = size / 2, cy = size / 2, C = 2 * Math.PI * r;
-  var total = segs.reduce(function(s, seg) { return s + seg.v; }, 0) || 1, off = 0;
-  var c = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="var(--elevated)" stroke-width="' + stroke + '"/>';
-  segs.forEach(function(s) {
-    var len = s.v / total * C;
-    c += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + s.color + '" stroke-width="' + stroke +
-         '" stroke-dasharray="' + len + ' ' + (C - len) + '" stroke-dashoffset="' + (-off) + '" transform="rotate(-90 ' + cx + ' ' + cy + ')"/>';
-    off += len;
-  });
-  return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">' + c + '</svg>';
-}
-
-// sparkSVG — minimal sparkline (polyline + soft fill) for KPI tiles.
-function sparkSVG(data, w, h, color) {
-  w = w || 110; h = h || 32; color = color || 'var(--accent)';
-  if (!data || data.length < 2) return '<svg width="' + w + '" height="' + h + '"></svg>';
-  var max = Math.max.apply(null, data), min = Math.min.apply(null, data), rng = (max - min) || 1;
-  var pts = data.map(function(v, i) { return [i / (data.length - 1) * w, h - ((v - min) / rng) * (h - 6) - 3]; });
-  var d = pts.map(function(p, i) { return (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1); }).join(' ');
-  return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' +
-    '<path d="' + d + ' L' + w + ' ' + h + ' L0 ' + h + ' Z" fill="' + color + '" opacity="0.12"/>' +
-    '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-}
-
 // gaugeSVG — 270° arc gauge for a 0–100 value. Colour reflects the band.
 export function gaugeSVG(value, size, stroke) {
   size = size || 124; stroke = stroke || 14;
@@ -1131,374 +840,38 @@ export function gaugeSVG(value, size, stroke) {
       '" stroke-dasharray="' + len + ' ' + C + '" stroke-linecap="round" transform="rotate(135 ' + cx + ' ' + cy + ')" style="transition:stroke-dasharray .8s cubic-bezier(.2,.8,.2,1)"/></svg>';
 }
 
-// miniBars — small labelled bar chart (e.g. score across recent runs).
-function miniBars(data, w, h) {
-  w = w || 300; h = h || 70;
-  if (!data || !data.length) return '<svg width="100%" height="' + h + '"></svg>';
-  var max = Math.max.apply(null, data.map(function(d) { return d.v; })) || 1, bw = w / data.length, out = '';
-  data.forEach(function(d, i) {
-    var bh = d.v / max * (h - 16);
-    out += '<rect x="' + (i * bw + bw * 0.18).toFixed(1) + '" y="' + (h - bh - 12).toFixed(1) + '" width="' + (bw * 0.64).toFixed(1) +
-      '" height="' + bh.toFixed(1) + '" rx="2" fill="' + (d.color || 'var(--accent)') + '"/>' +
-      '<text x="' + (i * bw + bw / 2).toFixed(1) + '" y="' + (h - 2) + '" text-anchor="middle" font-size="8.5" fill="var(--muted)" font-family="var(--font-mono)">' + x(d.l) + '</text>';
-  });
-  return '<svg width="100%" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none">' + out + '</svg>';
-}
-
 export function loadDashboard() {
+  // Cards appear at once with their last known (or empty) state; each source then fills its own cells.
+  renderDashAll();
   Promise.all([apicall('/api/agents'), apicall('/api/scenarios/runs')])
   .then(function(res) {
-    var ag = res[0] || [], runs = res[1] || [];
+    var ag = Array.isArray(res[0]) ? res[0] : ((res[0] && res[0].items) || []);
+    var runs = Array.isArray(res[1]) ? res[1] : [];
 
-    // Hero subtitle — agents, distinct techniques exercised, and last assessment.
-    // tacticSet is the cumulative union of ATT&CK tactics ever exercised across
-    // every run (not just the recent scored window below) -- used for the
-    // Prevention Score tile's kill-chain-breadth caveat.
-    var techSet = {}, tacticSet = {};
+    // Banner chips and the note beside the view toggle: counts the loaders already hold.
+    var techSet = {};
     runs.forEach(function(r) {
-      (r.results || []).forEach(function(c) {
-        var id = c.technique && c.technique.id;
-        if (id) techSet[id] = true;
-        var tac = c.technique && c.technique.tactic;
-        if (tac) tacticSet[tac] = true;
-      });
+      (r.results || []).forEach(function(c) { var id = c.technique && c.technique.id; if (id) techSet[id] = true; });
     });
     var techCount = Object.keys(techSet).length;
     var lastRun = runs[0];
-    var lastStr = lastRun ? ago(lastRun.completedAt || lastRun.startedAt) : '';
-    var subEl = document.getElementById('dash-subtitle');
-    if (subEl) {
-      subEl.textContent = 'Continuous validation across ' + ag.length + ' agent' + (ag.length === 1 ? '' : 's') +
-        ' and ' + techCount + ' ATT&CK technique' + (techCount === 1 ? '' : 's') + '.' +
-        (lastStr ? ' Last assessment ' + lastStr + '.' : ' No runs yet.');
-    }
+    var since = Date.now() - 30 * 86400000;
+    var recent = runs.filter(function(r) { var t = new Date(r.startedAt || r.completedAt).getTime(); return t >= since; }).length;
+    var eff = dashEffectiveness(runs);
+    var judged = eff.prevented + eff.detected + eff.missed;
+    var online = ag.filter(isAgentOnline).length;
+    setHeroStat('hs-dash-validations', recent);
+    setHeroStat('hs-dash-detect', judged ? Math.round((eff.prevented + eff.detected) / judged * 100) + '%' : '—');
+    setHeroStat('hs-dash-online', ag.length ? online + ' / ' + ag.length : '—');
+    setHeroStat('hs-dash-last', lastRun ? ago(lastRun.completedAt || lastRun.startedAt) : 'no runs yet');
+    var note = document.getElementById('dash-op-note');
+    if (note) note.textContent = 'Continuous validation across ' + ag.length + ' agent' + (ag.length === 1 ? '' : 's') + ' and ' + techCount + ' ATT&CK technique' + (techCount === 1 ? '' : 's') + '.';
 
-    // KPI — Prevention score: weighted aggregate across the last ~8 scored runs
-    // (weighted by technique count, not a flat average of percentages) + trend
-    // chip + sparkline of the same window (oldest→newest).
-    // Only include runs with at least one scoreable result (pass OR fail).
-    // A run where everything errored/skipped has preventionScore=0 but that 0
-    // means "no data", not "0% prevention" — exclude it from the gauge.
-    var scored = runs.filter(function(r) {
-      if (!r.score) return false;
-      if (r.score.preventionScore == null && r.score.riskScore == null) return false;
-      return (r.score.passedTechniques || 0) + (r.score.failedTechniques || 0) > 0;
-    });
-    var prevPctOf = function(r) { return Math.round(r.score.preventionScore != null ? r.score.preventionScore : r.score.preventionEffectiveness || 0); };
-    // techWeightOf: how many scored techniques (pass+fail) a run contributes —
-    // used to weight the aggregate below so a 50-technique run counts more
-    // than a 1-technique run, same principle as the server-side weighted score.
-    var techWeightOf = function(r) { return (r.score.passedTechniques || 0) + (r.score.failedTechniques || 0); };
-    if (scored.length) {
-      // Aggregate Prevention Score across a recent window of runs (weighted by
-      // technique count), not just the single most-recently-completed run --
-      // a full-sweep dispatches one scenario_runs row per variant, so "latest
-      // run" during a sweep is often a single low-N sample (e.g. one variant
-      // that happened to bypass) rather than the fleet's real recent posture.
-      // See project_docs_freshness_audit / the Variant Sweep dashboard report
-      // this fixed 2026-08-10.
-      var windowRuns = scored.slice(0, 8);
-      var totalWeight = 0, weightedSum = 0;
-      windowRuns.forEach(function(r) {
-        var w = techWeightOf(r);
-        totalWeight += w;
-        weightedSum += prevPctOf(r) * w;
-      });
-      var prevPct = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : prevPctOf(scored[0]);
-      var prevCol = prevPct >= 80 ? 'var(--teal)' : prevPct >= 50 ? 'var(--warning)' : 'var(--danger)';
-      document.getElementById('kpi-score-val').textContent = prevPct + '%';
-      document.getElementById('kpi-score-val').style.color = prevCol;
-      document.getElementById('kpi-score-sub').textContent = 'across last ' + windowRuns.length +
-        ' run' + (windowRuns.length === 1 ? '' : 's');
-
-      // Coverage caveat: this score only speaks for tactics you've actually
-      // exercised (cumulatively, across every run -- not just this window).
-      // A high Prevention Score from a handful of tested scenarios does not
-      // mean the fleet is broadly prepared; it means those specific controls
-      // are effective. ENTERPRISE_TACTICS mirrors the same 14-tactic MITRE
-      // ATT&CK Enterprise set internal/models/score.go's enterpriseTacticCount
-      // is defined against, so this is directly comparable to a single run's
-      // own killChainCoverage figure, just accumulated across run history.
-      var ENTERPRISE_TACTICS = ['reconnaissance', 'resource-development', 'initial-access', 'execution',
-        'persistence', 'privilege-escalation', 'defense-evasion', 'credential-access', 'discovery',
-        'lateral-movement', 'collection', 'command-and-control', 'exfiltration', 'impact'];
-      var testedTacticCount = Object.keys(tacticSet).filter(function(t) { return ENTERPRISE_TACTICS.indexOf(t) !== -1; }).length;
-      var killChainPct = Math.round(testedTacticCount / ENTERPRISE_TACTICS.length * 100);
-      var covEl = document.getElementById('kpi-score-coverage');
-      if (covEl) {
-        covEl.textContent = killChainPct < 50
-          ? 'Based on ' + testedTacticCount + '/' + ENTERPRISE_TACTICS.length + ' ATT&CK tactics tested — see Technique Coverage for gaps'
-          : '';
-      }
-
-      // Trend: compare the newer half of the window against the older half
-      // (both weighted the same way) rather than reusing a single run's
-      // server-computed trend, which only ever compared that one run to its
-      // immediate predecessor.
-      var tEl = document.getElementById('kpi-score-trend');
-      var mid = Math.ceil(windowRuns.length / 2);
-      var newerHalf = windowRuns.slice(0, mid), olderHalf = windowRuns.slice(mid);
-      var aggOf = function(list) {
-        var tw = 0, ws = 0;
-        list.forEach(function(r) { var w = techWeightOf(r); tw += w; ws += prevPctOf(r) * w; });
-        return tw > 0 ? ws / tw : null;
-      };
-      var newerAgg = aggOf(newerHalf), olderAgg = aggOf(olderHalf);
-      var trend = 'Stable';
-      if (newerAgg != null && olderAgg != null) {
-        if (newerAgg - olderAgg >= 3) trend = 'Improving';
-        else if (olderAgg - newerAgg >= 3) trend = 'Degrading';
-      }
-      if (trend === 'Improving')      tEl.innerHTML = '<span class="trend up">▲</span> ';
-      else if (trend === 'Degrading') tEl.innerHTML = '<span class="trend down">▼</span> ';
-      else                            tEl.innerHTML = '<span class="trend flat">—</span> ';
-      var prevSeries = windowRuns.map(prevPctOf).reverse();
-      document.getElementById('kpi-score-spark').innerHTML = sparkSVG(prevSeries, 110, 30, 'var(--teal)');
-
-      // Posture card — ring gauge + trend + run-history mini-bars.
-      document.getElementById('dash-gauge').innerHTML = gaugeSVG(prevPct, 124, 14) +
-        '<div class="ring-c"><span class="rv" style="color:' + prevCol + '">' + prevPct + '</span><span class="rl">of 100</span></div>';
-      document.getElementById('dash-posture-trend').textContent = trend;
-      var barRuns = scored.slice(0, 6).reverse();
-      var barData = barRuns.map(function(r) {
-        var d = new Date(r.completedAt || r.startedAt);
-        var v = prevPctOf(r);
-        return { l: isNaN(d) ? '' : (d.getMonth() + 1) + '/' + d.getDate(), v: v,
-                 color: v >= 80 ? 'var(--teal)' : v >= 50 ? 'var(--warning)' : 'var(--danger)' };
-      });
-      document.getElementById('dash-posture-bars').innerHTML = miniBars(barData, 320, 64);
-      document.getElementById('dash-posture-cap').textContent = 'Prevention across the last ' + barRuns.length +
-        ' validated run' + (barRuns.length === 1 ? '' : 's') + '.';
-    }
-
-    // KPI — ATT&CK coverage: share of distinct exercised techniques prevented at
-    // least once (pass|blocked). Sparkline = per-run prevention rate, last ~8.
-    var techCov = {};
-    runs.forEach(function(r) {
-      (r.results || []).forEach(function(c) {
-        var id = c.technique && c.technique.id;
-        if (!id) return;
-        if (c.result === 'pass' || c.result === 'blocked') { techCov[id] = techCov[id] || {}; techCov[id].exercised = true; techCov[id].prevented = true; }
-        else if (c.result === 'fail') { techCov[id] = techCov[id] || {}; techCov[id].exercised = true; }
-      });
-    });
-    var exIds = Object.keys(techCov).filter(function(k) { return techCov[k].exercised; });
-    var prevIds = exIds.filter(function(k) { return techCov[k].prevented; });
-    var covPct = exIds.length ? Math.round(prevIds.length / exIds.length * 100) : 0;
-    var covCol = covPct >= 80 ? 'var(--teal)' : covPct >= 50 ? 'var(--warning)' : 'var(--danger)';
-    document.getElementById('kpi-cov-val').textContent = exIds.length ? covPct + '%' : '—';
-    document.getElementById('kpi-cov-val').style.color = exIds.length ? covCol : '';
-    document.getElementById('kpi-cov-sub').textContent = exIds.length + ' technique' + (exIds.length === 1 ? '' : 's') + ' tested';
-    var covSeries = runs.slice(0, 8).map(function(r) {
-      var p = 0, f = 0;
-      (r.results || []).forEach(function(c) { if (c.result === 'pass' || c.result === 'blocked') p++; else if (c.result === 'fail') f++; });
-      return (p + f) ? Math.round(p / (p + f) * 100) : 0;
-    }).reverse();
-    document.getElementById('kpi-cov-spark').innerHTML = sparkSVG(covSeries, 110, 30, 'var(--warning)');
-
-    // Control effectiveness donut — 4-way verdict split across all runs.
-    // Prevented = pass|blocked; a fail is Detected-only when the blue team still
-    // caught it (run.detectedTechs[id]) else Missed; Not-tested = error|skipped.
-    var eff = { prevented: 0, detected: 0, missed: 0, other: 0 };
-    runs.forEach(function(r) {
-      var det = r.detectedTechs || {};
-      (r.results || []).forEach(function(c) {
-        if (c.result === 'pass' || c.result === 'blocked') eff.prevented++;
-        else if (c.result === 'fail') {
-          var id = c.technique && c.technique.id;
-          if (id && det[id]) eff.detected++; else eff.missed++;
-        }
-        else eff.other++;
-      });
-    });
-    var effTotal = eff.prevented + eff.detected + eff.missed + eff.other;
-    var donutEl = document.getElementById('dash-donut');
-    if (!effTotal) {
-      donutEl.innerHTML = '<div class="empty">No run data yet.</div>';
-    } else {
-      var prevPctEff = Math.round(eff.prevented / (eff.prevented + eff.detected + eff.missed || 1) * 100);
-      var lg = function(color, label, val) {
-        return '<div style="display:flex;align-items:center;gap:0.5rem;font-size:0.82rem">' +
-          '<span style="width:10px;height:10px;border-radius:3px;background:' + color + ';flex-shrink:0"></span>' +
-          label + '<span style="margin-left:auto;font-weight:600;color:var(--text)">' + val + '</span></div>';
-      };
-      setDisplay(donutEl, 'flex');
-      donutEl.style.gap = '1.5rem';
-      donutEl.style.alignItems = 'center';
-      donutEl.innerHTML =
-        '<div style="position:relative;flex-shrink:0">' +
-          donutSVG([
-            { v: eff.prevented, color: 'var(--teal)' },
-            { v: eff.detected, color: 'var(--warning)' },
-            { v: eff.missed, color: 'var(--danger)' },
-            { v: eff.other, color: 'var(--elevated)' }
-          ]) +
-          '<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">' +
-            '<span style="font-size:1.5rem;font-weight:700;line-height:1;color:' + (prevPctEff >= 80 ? 'var(--teal)' : prevPctEff >= 50 ? 'var(--warning)' : 'var(--danger)') + '">' + prevPctEff + '%</span>' +
-            '<span style="font-size:0.62rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted)">prevented</span>' +
-          '</div>' +
-        '</div>' +
-        '<div style="flex:1;display:flex;flex-direction:column;gap:0.55rem;min-width:160px">' +
-          lg('var(--teal)',    'Prevented',     eff.prevented) +
-          (eff.detected > 0 ? lg('var(--warning)', 'Detected only', eff.detected) : '') +
-          lg('var(--danger)', 'Missed',         eff.missed) +
-          (eff.other > 0    ? lg('var(--elevated)', 'Not tested',   eff.other)    : '') +
-          (eff.detected === 0 ? '<div style="font-size:0.63rem;color:var(--muted);margin-top:0.3rem;line-height:1.4">Detected-only appears once a SIEM/EDR integration is reporting alerts.</div>' : '') +
-        '</div>';
-    }
-
-    // Attack flow — dual-rail kill-chain of the latest completed/partial run.
-    var afEl = document.getElementById('dash-attackflow');
-    var lastDone = runs.filter(function(r) { return r.status === 'completed' || r.status === 'partial'; })[0];
-    if (afEl && lastDone) {
-      document.getElementById('dash-attackflow-title').textContent = 'Attack flow · ' + (lastDone.name || lastDone.scenarioId || 'latest run');
-      apicall('/api/scenarios/runs/' + encodeURIComponent(lastDone.id) + '/report.json').then(function(rep) {
-        if (document.getElementById('dash-attackflow') !== afEl) return;
-        var kc = (rep && rep.killChain) || [];
-        if (!kc.length) { afEl.innerHTML = '<div class="empty" style="padding:1.5rem">No kill-chain data for the latest run.</div>'; return; }
-        afEl.innerHTML = '<div class="killchain">' + killChainNodes(kc) + '</div>';
-        var openLink = document.getElementById('dash-attackflow-open');
-        if (openLink) { setDisplay(openLink, ''); openLink.onclick = function() { viewRunResults(lastDone); }; }
-      }).catch(function() { afEl.innerHTML = '<div class="empty" style="padding:1.5rem">Attack flow unavailable.</div>'; });
-    }
-
-    // Recent runs (last 5)
-    var recent = runs.slice(0, 5);
-    var rrEl = document.getElementById('dash-recent-runs');
-    if (!recent.length) {
-      rrEl.innerHTML = '<div class="empty" style="padding:1.5rem">No runs yet.</div>';
-    } else {
-      rrEl.innerHTML = recent.map(function(r) {
-        var cnt = (r.results || []).length;
-        var fail = (r.results || []).filter(function(c) { return c.result === 'fail'; }).length;
-        var scoreStr = '—';
-        var scol = 'var(--text-dim)';
-        if (r.score && r.score.preventionScore != null) {
-          var pp = Math.round(r.score.preventionScore);
-          var ta = r.score.trend === 'Improving' ? ' ↑' : r.score.trend === 'Degrading' ? ' ↓' : '';
-          scoreStr = pp + '%' + ta;
-          scol = pp >= 80 ? 'var(--teal)' : pp >= 50 ? 'var(--warning)' : 'var(--danger)';
-        } else if (r.score && r.score.riskScore != null) {
-          scoreStr = r.score.riskScore;
-          scol = r.score.classification === 'Protected' ? 'var(--teal)' :
-                 r.score.classification === 'Medium Risk' ? 'var(--warning)' : 'var(--danger)';
-        }
-        var dashPaused = r.status === 'running' && r.paused;
-        return '<div class="dash-run-row">' +
-          '<span class="sbadge ' + (dashPaused ? 's-paused' : 's-' + x(r.status)) + '" style="flex-shrink:0">' + (dashPaused ? 'paused' : x(r.status)) + '</span>' +
-          '<span class="dash-run-name">' + x(r.name) + '</span>' +
-          (cnt ? '<span style="font-size:0.72rem;color:var(--danger)">' + fail + ' fail</span>' : '') +
-          '<span style="font-size:0.8rem;font-weight:600;color:' + scol + ';flex-shrink:0">' + scoreStr + '</span>' +
-          '</div>';
-      }).join('');
-    }
-
-    // Top failing techniques
-    var techMap = {};
-    runs.forEach(function(r) {
-      (r.results || []).forEach(function(c) {
-        var id = (c.technique && c.technique.id) || c.name || 'unknown';
-        var name = (c.technique && c.technique.name) || c.name || id;
-        if (!techMap[id]) techMap[id] = { name: name, fail: 0, pass: 0 };
-        if (c.result === 'fail') techMap[id].fail++;
-        else if (c.result === 'pass') techMap[id].pass++;
-      });
-    });
-    var topFails = Object.keys(techMap)
-      .map(function(id) { return techMap[id]; })
-      .filter(function(t) { return t.fail > 0; })
-      .sort(function(a, b) { return b.fail - a.fail; })
-      .slice(0, 6);
-    var tfEl = document.getElementById('dash-top-fails');
-    if (!topFails.length) {
-      tfEl.innerHTML = '<div class="empty" style="padding:1.5rem">No failures recorded.</div>';
-    } else {
-      var maxFail = topFails[0].fail;
-      tfEl.innerHTML = topFails.map(function(t) {
-        var pct = Math.round((t.fail / (t.fail + t.pass)) * 100);
-        var w = Math.round((t.fail / maxFail) * 100);
-        return '<div class="bar-row">' +
-          '<div class="bar-label"><span style="color:var(--text-dim)">' + x(t.name) + '</span><span>' + t.fail + ' fail &middot; ' + pct + '%</span></div>' +
-          '<div class="bar-track"><div class="bar-fill" style="width:' + w + '%;background:var(--danger);opacity:0.7"></div></div>' +
-          '</div>';
-      }).join('');
-    }
-
-    // ATT&CK tactic coverage
-    var tacticMap = {};
-    runs.forEach(function(r) {
-      (r.results || []).forEach(function(c) {
-        var tactic = (c.technique && c.technique.tactic) || 'other';
-        if (!tacticMap[tactic]) tacticMap[tactic] = { pass: 0, fail: 0 };
-        if (c.result === 'pass') tacticMap[tactic].pass++;
-        else if (c.result === 'fail') tacticMap[tactic].fail++;
-      });
-    });
-    var tactics = Object.keys(tacticMap);
-    var attckEl = document.getElementById('dash-attck');
-    if (!tactics.length) {
-      attckEl.innerHTML = '<div class="empty" style="padding:1.5rem;grid-column:1/-1">No run data yet.</div>';
-    } else {
-      attckEl.innerHTML = tactics.map(function(tactic) {
-        var d = tacticMap[tactic];
-        var total = d.pass + d.fail;
-        var pct = total ? Math.round((d.pass / total) * 100) : 0;
-        var col = _riskScoreColor(pct);
-        return '<div class="bar-row">' +
-          '<div class="bar-label"><span style="text-transform:capitalize">' + x(tactic) + '</span><span style="color:' + col + '">' + pct + '%</span></div>' +
-          '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + col + '"></div></div>' +
-          '<div style="font-size:0.68rem;color:var(--muted);margin-top:0.15rem">' + d.pass + ' pass &middot; ' + d.fail + ' fail</div>' +
-          '</div>';
-      }).join('');
-    }
-
-    // Open findings KPI + Top exposure gaps
-    apicall('/api/findings').then(function(fs) {
-      var open = (fs || []).filter(function(f) { return f.status === 'open'; });
-      var el = document.getElementById('kpi-findings-val');
-      if (el) { el.textContent = open.length; el.style.color = open.length ? 'var(--danger)' : 'var(--success)'; }
-      var sub = document.getElementById('kpi-findings-sub');
-      if (sub) { var crit = open.filter(function(f) { return f.severity === 'Critical'; }).length; sub.textContent = crit ? crit + ' critical' : (open.length ? 'awaiting triage' : 'none open'); }
-      var maxAge = 0;
-      var oldestFinding = null;
-      open.forEach(function(f) {
-        var age = daysAgo(f.firstSeen);
-        if (age > maxAge) {
-          maxAge = age;
-          oldestFinding = f;
-        }
-      });
-      var surfEl = document.getElementById('kpi-surface-val');
-      if (surfEl) {
-        surfEl.textContent = open.length ? maxAge + 'd' : '0d';
-        surfEl.style.color = maxAge >= 90 ? 'var(--danger)' : maxAge >= 30 ? 'var(--warning)' : 'var(--success)';
-      }
-      var surfSub = document.getElementById('kpi-surface-sub');
-      if (surfSub) {
-        if (open.length && oldestFinding) {
-          surfSub.textContent = 'oldest: ' + (oldestFinding.techniqueId || 'unknown');
-          surfSub.title = 'Oldest exposed weakness: ' + (oldestFinding.techniqueName || oldestFinding.techniqueId) + ' on ' + oldestFinding.agentId;
-        } else {
-          surfSub.textContent = 'no open weaknesses';
-          surfSub.title = '';
-        }
-      }
-      var gaps = document.getElementById('dash-gaps');
-      if (gaps) {
-        gaps.classList.remove('dash-soon');
-        var bodyEl = gaps.querySelector('.dash-panel-body');
-        var top = open.slice(0, 5);
-        if (bodyEl) {
-          bodyEl.innerHTML = top.length ? top.map(function(f) {
-            return '<div class="lrow u-pointer"' + on('click', 'openFindingFromDashboard', f.id) + '>' +
-              '<div class="lmain"><div class="lt">' + x(f.techniqueName || f.techniqueId) + '</div>' +
-              '<div class="ls"><span class="tech-id">' + x(f.techniqueId) + '</span> · ' + x(f.controlClass) + ' · ' + x(f.agentId) + '</div></div>' +
-              '<div class="lr">' + findingSevBadge(f.severity, f.exposureState) + '</div></div>';
-          }).join('') : '<div class="empty" style="padding:1.5rem">No open findings.</div>';
-        }
-      }
-    }).catch(function() {});
-
+    setDashAgents(ag);
+    setDashRuns(runs);
+    apicall('/api/findings').then(function(fs) { setDashFindings(Array.isArray(fs) ? fs : []); }).catch(function() { setDashFindings([]); });
+    loadDashAlerts();
+    loadDashSchedules();
     loadRansomwareReadiness(runs);
     refreshDashboardCampaigns();
     loadComplianceScores();
@@ -1508,4 +881,19 @@ export function loadDashboard() {
     loadReadinessTrends();
   })
   .catch(function(e) { showToast('Dashboard load failed: ' + e.message, 'err'); });
+}
+
+// Recent alerts: the notification history (needs the remediation permission; others see an empty card).
+function loadDashAlerts() {
+  apicall('/api/notifications?limit=5').then(function(d) { setDashAlerts((d && d.notifications) || []); }).catch(function() { setDashAlerts([]); });
+}
+// Up next: the scheduled assessments that are still enabled.
+function loadDashSchedules() {
+  apicall('/api/scheduled-assessments').then(function(d) { setDashSchedules((d && d.schedules) || []); }).catch(function() { setDashSchedules([]); });
+}
+
+// A dashboard card opens the run's results by id (the run object is kept by the dashboard renderer).
+export function openDashRun(id) {
+  var r = dashRunById(id);
+  if (r) viewRunResults(r); else showToast('Run not found', 'err');
 }

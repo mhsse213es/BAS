@@ -6,9 +6,11 @@
 
 ## Overview
 
-Audspect BAS maps simulation results to regulatory and security framework requirements, enabling continuous compliance evidence generation. Every simulation run that tests a technique mapped to a framework control automatically updates the compliance score for that control.
+Audspect BAS maps simulation results to regulatory and security framework requirements, enabling continuous control-effectiveness evidence. Every simulation run that tests a technique mapped to a framework control automatically updates the evidence for that control.
 
-Compliance scores represent **control effectiveness** (does the control block the technique?) — not configuration compliance. Audspect BAS tests runtime behavior, not configuration snapshots.
+The figures represent **control resistance** (did the control stop the techniques that were executed?). They are **not a determination of compliance**: a control can resist the techniques tested and still not meet its requirement. Audspect BAS tests runtime behavior, not configuration snapshots.
+
+The technique-to-control mappings are Audspect's own work. They have not been certified by any regulator. The RBI mapping carries an explicit warning in the product: it has not been verified against the paragraph numbering of the 2026 directions.
 
 ---
 
@@ -54,7 +56,7 @@ The RBI CSF mapping covers these control categories:
 2. Navigate to **Reports** → **Compliance Report**, select the RBI framework, and click **Generate**
 3. Click **↓ PDF** or **↗ HTML**
 
-The report shows: control category → tested techniques → pass/fail results → compliance score → gaps.
+The report shows: control category → tested techniques → results → control status and coverage → gaps.
 
 ---
 
@@ -83,29 +85,42 @@ ISO 27001 Annex A controls are mapped to ATT&CK technique families:
 
 ---
 
-## Compliance Scores
+## Control Scores
 
 Compliance scores for all configured frameworks are available at:
 ```
 GET /api/compliance/scores
 ```
 
-The response is a list with one entry per framework. Each entry includes `frameworkId`, `frameworkName`, `shortName`, `regulator`, `totalControls`, `testableControls`, `manualControls`, `testedControls`, `passingControls`, `failingControls`, `untestedControls`, `coveragePct`, `compliancePct`, `runCount` and `snapshotAt`. Add `?agentId=<id>` to scope the scores to one agent; without it the scores are fleet-wide.
+The response is a list with one entry per framework. Each entry includes `frameworkId`, `frameworkName`, `shortName`, `regulator`, `totalControls`, `testableControls`, `manualControls`, `testedControls`, `passingControls`, `failingControls`, `untestedControls`, `coveragePct`, `compliancePct` (the resistance rate), `sufficientCoverage`, `coverageNote`, `mappingWarning`, `runCount` and `snapshotAt`. Add `?agentId=<id>` to scope the scores to one agent; without it the scores are fleet-wide.
 
 ---
 
-## Coverage vs. Effectiveness
+## Control status, resistance rate and coverage
 
-Two distinct metrics appear in compliance reports:
+Each testable control gets a status **derived from technique-level evidence**. The raw execution results are never changed.
+
+| Status | Meaning |
+|---|---|
+| **Resisted** | Every mapped technique was executed and none succeeded |
+| **Failed** | At least one executed technique succeeded. This wins over every other state |
+| **Partial** | Some, but not all, mapped techniques were executed, and none succeeded |
+| **Inconclusive** | Nothing ran cleanly: the attempts errored or were vetoed |
+| **Untested** | No mapped technique was executed |
+| **Manual** | A governance or policy control that a simulation cannot test; it needs attestation and is never scored |
+
+A technique counts as tested only when a step ran and gave a verdict (pass, blocked or fail). Errored, vetoed and skipped steps are never evidence. A base technique such as T1003 is covered by a run of any of its sub-techniques; a sub-technique such as T1003.001 only by itself.
+
+Two numbers are always shown together:
 
 | Metric | Meaning |
 |---|---|
-| **Coverage** | Percentage of testable controls that have been tested (`testedControls` / `testableControls`). Manual controls are not scored |
-| **Effectiveness** | Percentage of tested controls that passed (`passingControls` / `testedControls`) |
+| **Resistance rate** | Tested controls where no executed technique succeeded, divided by tested controls (`passingControls` / `testedControls`; the API field is still `compliancePct`) |
+| **Control coverage** | Tested controls divided by testable controls (`testedControls` / `testableControls`). Manual controls are excluded |
 
-A 100% coverage score with 0% effectiveness means every technique is tested but no controls are working. A 50% coverage score with 100% effectiveness means only half the framework is tested, but every tested technique is blocked.
+The resistance rate says nothing about controls that were not tested. One resisted control out of 117 is a 100% rate at 0.85% coverage, and the report says "Insufficient coverage for framework-level conclusions" until coverage reaches 50% of the testable controls. Each control also shows how many of its mapped techniques were tested ("2 of 3").
 
-Both metrics together tell the complete story.
+Do not present the resistance rate as framework compliance.
 
 ---
 

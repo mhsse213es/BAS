@@ -1,0 +1,107 @@
+[
+  {
+    "id": "cvl-c22",
+    "n": 1,
+    "name": "Cloud VM Linux Credentials 22 - Shared AWS Credentials File (T1552.001)",
+    "technique_id": "T1552.001",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Reads the AWS credentials file under the user profile into memory to match a key name. Values are never printed or recorded.",
+    "telemetry": [
+      "Sysmon EID 11 / file access: .aws\\credentials"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "local_credential_scan",
+    "no_default_cleanup": false
+  },
+  {
+    "id": "cvl-c23",
+    "n": 2,
+    "name": "Cloud VM Linux Credentials 23 - Azure CLI Token Cache (T1552.001)",
+    "technique_id": "T1552.001",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Counts token entries in the Azure CLI cache. Token values are never printed.",
+    "telemetry": [
+      "Sysmon EID 11 / file access: .azure token cache"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "local_credential_scan",
+    "no_default_cleanup": false
+  },
+  {
+    "id": "cvl-c24",
+    "n": 3,
+    "name": "Cloud VM Linux Credentials 24 - Cloud Credential Environment Variables (T1552.001)",
+    "technique_id": "T1552.001",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Lists the names of cloud credential environment variables. Values are never printed.",
+    "telemetry": [
+      "Sysmon EID 1: process environment inspection (none; in-process)"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "local_credential_scan",
+    "no_default_cleanup": false
+  },
+  {
+    "id": "cvl-c25",
+    "n": 4,
+    "name": "Cloud VM Linux Credentials 25 - Terraform State Exposure (T1552.001)",
+    "technique_id": "T1552.001",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Searches the user profile for Terraform state files (capped at 20) and counts secret-like attribute names. Values are never printed.",
+    "telemetry": [
+      "Sysmon EID 11: .tfstate reads"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "local_credential_scan",
+    "no_default_cleanup": false
+  },
+  {
+    "id": "cvl-c26",
+    "n": 5,
+    "name": "Cloud VM Linux Credentials 26 - Cloud SDK Configuration Exposure (T1552.001)",
+    "technique_id": "T1552.001",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Counts secret-like keys in AWS, Azure and gcloud configuration files. Values are never printed.",
+    "telemetry": [
+      "Sysmon EID 11: SDK config reads"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "local_credential_scan",
+    "no_default_cleanup": false
+  }
+]

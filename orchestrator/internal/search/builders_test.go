@@ -67,39 +67,54 @@ func TestRulesFrom_MapsRealEmbeddedRules(t *testing.T) {
 		t.Fatalf("rulesFrom() returned %d documents, want %d (engine.RuleCount())", len(docs), engine.RuleCount())
 	}
 
+	// Picks a real rule with at least one technique ID from the engine's own current corpus, rather than
+	// pinning to one embedded rule's exact snapshot -- the embedded bundle is periodically re-synced from
+	// its upstream Sigma source and specific IDs/titles can disappear or get renumbered (AUDRULE-000001/
+	// 000002 did), so this test must stay grounded in whatever the corpus actually contains now.
+	var want rulelib.Rule
+	for _, r := range engine.Search(rulelib.SearchFilter{}) {
+		if len(r.TechniqueIDs) > 0 {
+			want = r
+			break
+		}
+	}
+	if want.ID == "" {
+		t.Fatal("no embedded rule with a technique ID found -- check internal/rulelib/ruledata/rules.json")
+	}
+
 	var found bool
 	for _, d := range docs {
-		if d.SourceID != "AUDRULE-000001" {
+		if d.SourceID != want.ID {
 			continue
 		}
 		found = true
 		if d.DocType != "rule" {
 			t.Errorf("DocType = %q, want %q", d.DocType, "rule")
 		}
-		if d.Title != "Suspicious PowerShell Encoded Command" {
-			t.Errorf("Title = %q, want %q", d.Title, "Suspicious PowerShell Encoded Command")
+		if d.Title != want.Title {
+			t.Errorf("Title = %q, want %q", d.Title, want.Title)
 		}
-		if d.Description != "Detects encoded PowerShell command execution" {
-			t.Errorf("Description = %q, want %q", d.Description, "Detects encoded PowerShell command execution")
+		if d.Description != want.Description {
+			t.Errorf("Description = %q, want %q", d.Description, want.Description)
 		}
 		hasTechnique, hasSeverity := false, false
 		for _, tag := range d.Tags {
-			if tag == "T1059.001" {
+			if tag == want.TechniqueIDs[0] {
 				hasTechnique = true
 			}
-			if tag == "medium" {
+			if tag == want.Severity {
 				hasSeverity = true
 			}
 		}
 		if !hasTechnique {
-			t.Errorf("Tags = %v, want to include technique %q", d.Tags, "T1059.001")
+			t.Errorf("Tags = %v, want to include technique %q", d.Tags, want.TechniqueIDs[0])
 		}
 		if !hasSeverity {
-			t.Errorf("Tags = %v, want to include severity %q", d.Tags, "medium")
+			t.Errorf("Tags = %v, want to include severity %q", d.Tags, want.Severity)
 		}
 	}
 	if !found {
-		t.Fatal("rulesFrom() did not include AUDRULE-000001 -- check the embedded rule bundle in internal/rulelib/ruledata/rules.json")
+		t.Fatalf("rulesFrom() did not include %s -- check the embedded rule bundle in internal/rulelib/ruledata/rules.json", want.ID)
 	}
 }
 

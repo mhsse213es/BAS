@@ -67,7 +67,7 @@ func oneCloudCampaignRun(scenarioID, accountID, target string) map[string]any {
 
 func TestCreateCloudCampaign_ThreeAccountsAllComplete(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111,aws:222,aws:333"))
 		body := map[string]any{
 			"name": "Three Account Sweep",
 			"runs": []map[string]any{
@@ -103,7 +103,7 @@ func TestCreateCloudCampaign_ThreeAccountsAllComplete(t *testing.T) {
 
 func TestCreateCloudCampaign_OneMalformedSubRequestRejectsWholeRequest(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111,aws:222,aws:333"))
 		goodRun := oneCloudCampaignRun("s1", "111", "arn:aws:iam::111:role/admin")
 		badRun := oneCloudCampaignRun("s2", "222", "arn:aws:iam::222:role/admin")
 		delete(badRun, "target") // malformed: missing required field
@@ -129,7 +129,7 @@ func TestCreateCloudCampaign_OneMalformedSubRequestRejectsWholeRequest(t *testin
 // into memory before either cap gets a chance to reject it.
 func TestCreateCloudCampaign_OversizedBodyRejectedBeforeFullDecode(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111,aws:222,aws:333"))
 		// An oversized JSON *string* value, not a bare number -- the decoder
 		// must scan through to a closing quote that never arrives within the
 		// byte budget, forcing it to keep reading (and so hit the
@@ -149,7 +149,7 @@ func TestCreateCloudCampaign_OversizedBodyRejectedBeforeFullDecode(t *testing.T)
 
 func TestCreateCloudCampaign_TooManyAccountsRejectsWholeRequest(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111,aws:222,aws:333"))
 		runs := make([]map[string]any, 26)
 		for i := range runs {
 			runs[i] = oneCloudCampaignRun(fmt.Sprintf("s%d", i), fmt.Sprintf("%d", 100+i), "arn:aws:iam::999:role/admin")
@@ -170,7 +170,7 @@ func TestCreateCloudCampaign_TooManyAccountsRejectsWholeRequest(t *testing.T) {
 
 func TestCreateCloudCampaign_TooManyEdgesOnOneSubRequestRejectsWholeRequest(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111,aws:222,aws:333"))
 		goodRun := oneCloudCampaignRun("s1", "111", "arn:aws:iam::111:role/admin")
 		heavyRun := oneCloudCampaignRun("s2", "222", "arn:aws:iam::222:role/admin")
 		edges := make([]map[string]any, 501)
@@ -199,7 +199,7 @@ func TestCreateCloudCampaign_TooManyEdgesOnOneSubRequestRejectsWholeRequest(t *t
 
 func TestCreateCloudCampaign_OneAccountMismatchDoesNotAffectOthers(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111,aws:222,aws:333"))
 		goodRun1 := oneCloudCampaignRun("s1", "111", "arn:aws:iam::111:role/admin")
 		mismatchRun := map[string]any{
 			"scenarioId": "mismatch-scenario",
@@ -258,7 +258,7 @@ func TestCreateCloudCampaign_OneAccountMismatchDoesNotAffectOthers(t *testing.T)
 
 func TestCreateCloudCampaign_InitiatedByAndCampaignIDAreServerControlled(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111,aws:222,aws:333"))
 		run1 := oneCloudCampaignRun("s1", "111", "arn:aws:iam::111:role/admin")
 		run1["initiatedBy"] = "spoofed-user-1"
 		run2 := oneCloudCampaignRun("s2", "222", "arn:aws:iam::222:role/admin")
@@ -297,7 +297,7 @@ func TestCreateCloudCampaign_InitiatedByAndCampaignIDAreServerControlled(t *test
 
 func TestCreateCloudCampaign_AuditsOkEvenWhenSomeAccountsFail(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111,aws:222,aws:333"))
 		goodRun := oneCloudCampaignRun("s1", "111", "arn:aws:iam::111:role/admin")
 		mismatchRun := map[string]any{
 			"scenarioId": "mismatch-scenario-audit",
@@ -344,7 +344,7 @@ func TestCreateCloudCampaign_AuditsOkEvenWhenSomeAccountsFail(t *testing.T) {
 
 func TestGetCloudCampaign_RoundTripsARealCampaign(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111,aws:222,aws:333"))
 		body := map[string]any{
 			"name": "Round Trip Test",
 			"runs": []map[string]any{
@@ -386,7 +386,7 @@ func TestGetCloudCampaign_RoundTripsARealCampaign(t *testing.T) {
 
 func TestGetCloudCampaign_NonexistentIDReturns404(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111,aws:222,aws:333"))
 		getReq := authedRequest(t, http.MethodGet, "/api/cloud-campaigns/nonexistent-id", nil, auth.RoleAnalyst, "any-authenticated-user")
 		getReq = withURLParam(getReq, "id", "nonexistent-id")
 		rec := callAuthed(h.GetCloudCampaign, getReq)
@@ -405,7 +405,7 @@ func TestGetCloudCampaign_NonexistentIDReturns404(t *testing.T) {
 // documented, accepted gap for that branch.
 func TestGetCloudCampaign_RollupIsRecomputedIndependentlyOfPostTime(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111,aws:222,aws:333"))
 		body := map[string]any{
 			"name": "Recompute Test",
 			"runs": []map[string]any{oneCloudCampaignRun("s1", "111", "arn:aws:iam::111:role/admin")},
@@ -433,7 +433,7 @@ func TestGetCloudCampaign_RollupIsRecomputedIndependentlyOfPostTime(t *testing.T
 
 func TestListCloudCampaigns_LimitBoundaryValues(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithCloudSettings(cloudTestSettings(t, "aws:111,aws:222,aws:333"))
 		for i := 0; i < 3; i++ {
 			body := map[string]any{"name": fmt.Sprintf("Limit Test %d", i), "runs": []map[string]any{oneCloudCampaignRun("s1", "111", "arn:aws:iam::111:role/admin")}}
 			req, _ := createCloudCampaignReq(t, pool, body)

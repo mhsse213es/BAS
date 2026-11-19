@@ -55,12 +55,12 @@ func TestLive_KindLab(t *testing.T) {
 	}
 	engine := NewEngine(cfg)
 	approve := func(id, runID, action string, params map[string]string) string {
-		_ = store.Put(Approval{ID: id, ApproverID: "operator-2", RequesterID: "operator-1", RunID: runID, Cluster: cluster,
+		_ = store.Put(Approval{ClusterID: testClusterID, ID: id, ApproverID: "operator-2", RequesterID: "operator-1", RunID: runID, Cluster: cluster,
 			Namespace: "bas-sandbox", ActionID: action, ParamsHash: HashParams(params), ExpiresAt: time.Now().Add(15 * time.Minute)})
 		return id
 	}
 	podRun := func(runID string, live bool) RunRequest {
-		return RunRequest{RunID: runID, Requester: "operator-1", Cluster: ClusterRef{Name: cluster, Server: api},
+		return RunRequest{ClusterID: testClusterID, RunID: runID, Requester: "operator-1", Cluster: ClusterRef{Name: cluster, Server: api},
 			Namespace: "bas-sandbox", ActionID: "pod-create-unprivileged", Params: map[string]string{"name": "bas-sbx-lab-" + runID}, Live: live}
 	}
 	podGone := func(name string) bool {
@@ -104,7 +104,7 @@ func TestLive_KindLab(t *testing.T) {
 
 	t.Run("self-approval is refused and creates nothing", func(t *testing.T) {
 		req := podRun("self-1", true)
-		_ = store.Put(Approval{ID: "appr-self-1", ApproverID: "operator-1", RequesterID: "operator-1", RunID: req.RunID,
+		_ = store.Put(Approval{ClusterID: testClusterID, ID: "appr-self-1", ApproverID: "operator-1", RequesterID: "operator-1", RunID: req.RunID,
 			Cluster: cluster, Namespace: "bas-sandbox", ActionID: req.ActionID, ParamsHash: HashParams(req.Params), ExpiresAt: time.Now().Add(time.Minute)})
 		req.ApprovalID = "appr-self-1"
 		if res := engine.Run(ctx, req); res.State != StateRefused {
@@ -117,7 +117,7 @@ func TestLive_KindLab(t *testing.T) {
 
 	t.Run("configmap patch is restored to the prior value", func(t *testing.T) {
 		params := map[string]string{"name": "bas-fixture", "value": "lab-changed"}
-		req := RunRequest{RunID: "cm-1", Requester: "operator-1", Cluster: ClusterRef{Name: cluster, Server: api},
+		req := RunRequest{ClusterID: testClusterID, RunID: "cm-1", Requester: "operator-1", Cluster: ClusterRef{Name: cluster, Server: api},
 			Namespace: "bas-sandbox", ActionID: "configmap-patch-labelled", Params: params, Live: true}
 		req.ApprovalID = approve("appr-cm-1", req.RunID, req.ActionID, params)
 		res := engine.Run(ctx, req)
@@ -208,9 +208,9 @@ func TestLive_RollbackFailure(t *testing.T) {
 	store := newMemApprovals()
 	alert := &recordAlert{}
 	params := map[string]string{"name": pod}
-	req := RunRequest{RunID: "rbf-1", Requester: "operator-1", Cluster: ClusterRef{Name: cluster, Server: api},
+	req := RunRequest{ClusterID: testClusterID, RunID: "rbf-1", Requester: "operator-1", Cluster: ClusterRef{Name: cluster, Server: api},
 		Namespace: "bas-sandbox", ActionID: "pod-create-unprivileged", Params: params, Live: true, ApprovalID: "appr-rbf-1"}
-	_ = store.Put(Approval{ID: "appr-rbf-1", ApproverID: "operator-2", RequesterID: "operator-1", RunID: req.RunID, Cluster: cluster,
+	_ = store.Put(Approval{ClusterID: testClusterID, ID: "appr-rbf-1", ApproverID: "operator-2", RequesterID: "operator-1", RunID: req.RunID, Cluster: cluster,
 		Namespace: "bas-sandbox", ActionID: req.ActionID, ParamsHash: HashParams(params), ExpiresAt: time.Now().Add(15 * time.Minute)})
 
 	wrapped := revokeBeforeDelete{Client: client, revoke: func() error { return setVerbs(`["create","get"]`) }}
@@ -275,9 +275,9 @@ func TestLive_TokenProbe(t *testing.T) {
 	store := newMemApprovals()
 	audit := &captureAudit{}
 	params := map[string]string{}
-	req := RunRequest{RunID: "tok-live-1", Requester: "operator-1", Cluster: ClusterRef{Name: cluster, Server: api},
+	req := RunRequest{ClusterID: testClusterID, RunID: "tok-live-1", Requester: "operator-1", Cluster: ClusterRef{Name: cluster, Server: api},
 		Namespace: "bas-sandbox", ActionID: "sa-token-probe", Params: params, Live: true, ApprovalID: "appr-tok-live-1"}
-	_ = store.Put(Approval{ID: "appr-tok-live-1", ApproverID: "operator-2", RequesterID: "operator-1", RunID: req.RunID,
+	_ = store.Put(Approval{ClusterID: testClusterID, ID: "appr-tok-live-1", ApproverID: "operator-2", RequesterID: "operator-1", RunID: req.RunID,
 		Cluster: cluster, Namespace: "bas-sandbox", ActionID: req.ActionID, ParamsHash: HashParams(params), ExpiresAt: time.Now().Add(15 * time.Minute)})
 	cfg := Config{
 		AllowedClusters:   map[string]string{cluster: api},

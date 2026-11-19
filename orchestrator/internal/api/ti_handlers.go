@@ -195,7 +195,7 @@ func (h *Handler) GetSuggestPack(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) kevPackTechs(r *http.Request) ([]packTech, map[string]interface{}, error) {
 	rows, err := h.db.Query(r.Context(), `
 		SELECT t.technique_id, t.name, t.tactic,
-		       COUNT(*) AS kev_count,
+		       COUNT(DISTINCT c.cve_id) AS kev_count,
 		       bool_or(c.known_ransomware) AS ransomware_linked
 		FROM technique_cves tc
 		JOIN cves c ON c.cve_id = tc.cve_id AND c.source = 'cisa-kev'
@@ -209,7 +209,7 @@ func (h *Handler) kevPackTechs(r *http.Request) ([]packTech, map[string]interfac
 	defer rows.Close()
 
 	var techs []packTech
-	totalCVEs, ransomwareCount := 0, 0
+	ransomwareTechs := 0
 	for rows.Next() {
 		var t packTech
 		var kevCount int
@@ -219,17 +219,37 @@ func (h *Handler) kevPackTechs(r *http.Request) ([]packTech, map[string]interfac
 		}
 		t.KEVCount = kevCount
 		t.RansomwareLinked = ransomware
-		totalCVEs += kevCount
 		if ransomware {
-			ransomwareCount++
+			ransomwareTechs++
 		}
 		techs = append(techs, t)
 	}
-	extra := map[string]interface{}{
-		"totalKevCves":    totalCVEs,
-		"ransomwareCount": ransomwareCount,
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
 	}
-	return techs, extra, rows.Err()
+
+	// Unique CVEs in scope. A CVE linked to three techniques is one KEV CVE, not three.
+	var uniqueCVEs, ransomwareCVEs int
+	if err := h.db.QueryRow(r.Context(), `
+		SELECT COUNT(DISTINCT c.cve_id),
+		       COUNT(DISTINCT c.cve_id) FILTER (WHERE c.known_ransomware)
+		FROM technique_cves tc
+		JOIN cves c ON c.cve_id = tc.cve_id AND c.source = 'cisa-kev'
+		JOIN techniques t ON t.technique_id = tc.technique_id
+		WHERE EXISTS (SELECT 1 FROM art_atomic_tests a WHERE a.technique_id = t.technique_id)`,
+	).Scan(&uniqueCVEs, &ransomwareCVEs); err != nil {
+		return nil, nil, err
+	}
+
+	extra := map[string]interface{}{
+		// totalKevCves / ransomwareCveCount are CVE counts. ransomwareCount is a TECHNIQUE count
+		// (kept for existing callers). kevScope names the population both are drawn from.
+		"totalKevCves":       uniqueCVEs,
+		"ransomwareCveCount": ransomwareCVEs,
+		"ransomwareCount":    ransomwareTechs,
+		"kevScope":           "ART-testable techniques",
+	}
+	return techs, extra, nil
 }
 
 // ransomwarePackTechs returns ART-testable techniques used by ransomware ATT&CK groups.

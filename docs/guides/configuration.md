@@ -103,7 +103,7 @@ Both settings groups are off by default. Changes take effect when the orchestrat
 | `KUBE_DISCOVERY_TOKEN` | (none) | Read-only token, pasted once. Only token characters are accepted. |
 | `KUBE_DISCOVERY_CA_FILE` | (none) | Path on the server to the cluster CA (PEM) |
 
-The orchestrator reads the analysis settings from `KUBE_DISCOVERY_API`, `KUBE_DISCOVERY_CLUSTER`, `KUBE_DISCOVERY_TOKEN_FILE` and `KUBE_DISCOVERY_CA_FILE`.
+The orchestrator reads the analysis settings from `KUBE_DISCOVERY_API`, `KUBE_DISCOVERY_CLUSTER`, `KUBE_DISCOVERY_TOKEN_FILE` and `KUBE_DISCOVERY_CA_FILE`. The optional `KUBE_NETPOL_EXPECTATIONS_FILE` names a reviewed YAML file of network-policy boundary expectations (see `orchestrator/testdata/k8s-netpol/lab-boundaries.yaml` for the format). It is read once at startup, and an invalid file stops the server. The discovery identity needs get and list on `networking.k8s.io` `networkpolicies`.
 
 **Scenario checks (lab only).** These are environment variables only. The installer does not set them. Setting `KUBE_SCENARIO_API` enables the state-changing checks, so leave it unset on anything except the dedicated lab cluster.
 

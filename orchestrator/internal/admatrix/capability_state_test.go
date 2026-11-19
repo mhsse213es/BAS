@@ -250,10 +250,20 @@ func TestCapabilityStates_ACLExposureCheckCitesRealScenarioContent(t *testing.T)
 	if err != nil {
 		t.Fatalf("parse %s: %v", path, err)
 	}
-	if len(sc.Steps) != 1 {
-		t.Fatalf("expected exactly 1 step in %s, got %d", path, len(sc.Steps))
+	// The scenario is multi-step (Stage 0 builds shared context; Stages 1-5 each audit a distinct
+	// ACL exposure variant independently). This primitive's own Cleanup citation names "Stage 1"
+	// (privileged group DACL exposure) specifically, so that is the step graded here.
+	const stageName = "ACL Stage 1 — Privileged Group DACL Exposure (Domain/Enterprise/Schema Admins)"
+	var step *scenario.Step
+	for i := range sc.Steps {
+		if sc.Steps[i].Name == stageName {
+			step = &sc.Steps[i]
+			break
+		}
 	}
-	step := sc.Steps[0]
+	if step == nil {
+		t.Fatalf("expected a step named %q in %s", stageName, path)
+	}
 
 	byID := capStatesByID(t)
 	cs := byID["acl-privilege-exposure-check"]
@@ -399,4 +409,78 @@ func TestReport_ExposesCapabilityStatesAsTheAuthoritativeModel(t *testing.T) {
 	if len(r.ContentStates) != 28 {
 		t.Fatalf("ContentStates must still cover all 28 primitives, got %d", len(r.ContentStates))
 	}
+}
+
+func TestCapabilityStates_RealDCSyncEvidenceUpgradesExecutionValidation(t *testing.T) {
+	orig := LookupADControlVerification
+	t.Cleanup(func() { LookupADControlVerification = orig })
+
+	t.Run("no evidence stays at the honest not_executed default", func(t *testing.T) {
+		LookupADControlVerification = func(primitiveID string) (result string, correlated, found bool) {
+			return "", false, false
+		}
+		for _, cs := range CapabilityStates() {
+			if cs.PrimitiveID == "dcsync" {
+				if cs.ExecutionValidation != ExecNotExecuted {
+					t.Fatalf("ExecutionValidation = %q, want not_executed", cs.ExecutionValidation)
+				}
+				return
+			}
+		}
+		t.Fatal("dcsync primitive not found")
+	})
+
+	t.Run("a succeeded, correlated positive-control result verifies the postcondition", func(t *testing.T) {
+		LookupADControlVerification = func(primitiveID string) (result string, correlated, found bool) {
+			if primitiveID != "dcsync" {
+				return "", false, false
+			}
+			return "succeeded", true, true
+		}
+		for _, cs := range CapabilityStates() {
+			if cs.PrimitiveID == "dcsync" {
+				if cs.ExecutionValidation != ExecPostconditionVerified {
+					t.Fatalf("ExecutionValidation = %q, want postcondition_verified", cs.ExecutionValidation)
+				}
+				return
+			}
+		}
+		t.Fatal("dcsync primitive not found")
+	})
+
+	t.Run("an access_denied (negative control) result is a real attempt, not a verified postcondition", func(t *testing.T) {
+		LookupADControlVerification = func(primitiveID string) (result string, correlated, found bool) {
+			return "access_denied", true, true
+		}
+		for _, cs := range CapabilityStates() {
+			if cs.PrimitiveID == "dcsync" {
+				if cs.ExecutionValidation != ExecAttempted {
+					t.Fatalf("ExecutionValidation = %q, want execution_attempted", cs.ExecutionValidation)
+				}
+				if cs.DetectionValidation != DetNotValidated {
+					t.Fatalf("DetectionValidation = %q, want not_validated -- no real detection source is wired yet", cs.DetectionValidation)
+				}
+				return
+			}
+		}
+		t.Fatal("dcsync primitive not found")
+	})
+
+	t.Run("evidence under a different primitive ID never leaks onto dcsync", func(t *testing.T) {
+		LookupADControlVerification = func(primitiveID string) (result string, correlated, found bool) {
+			if primitiveID == "dcsync" {
+				return "", false, false
+			}
+			return "succeeded", true, true
+		}
+		for _, cs := range CapabilityStates() {
+			if cs.PrimitiveID == "dcsync" {
+				if cs.ExecutionValidation != ExecNotExecuted {
+					t.Fatalf("ExecutionValidation = %q, want not_executed", cs.ExecutionValidation)
+				}
+				return
+			}
+		}
+		t.Fatal("dcsync primitive not found")
+	})
 }

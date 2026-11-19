@@ -244,7 +244,7 @@ steps:
     reversible: true
     blast_radius: "Writes one benign .vbs that echoes a marker, runs it under cscript.exe, deletes it. Changes no policy."
     telemetry:
-      - "AppLocker MSI and Script event 8006 (block) naming the unique .vbs, if enforced"
+      - "AppLocker MSI and Script event 8007 (block) naming the unique .vbs, if enforced"
       - "Sysmon EID 1: cscript.exe with the unique .vbs argument"
     detection:
       - "AppLocker script block event for this test's unique .vbs file"
@@ -301,7 +301,7 @@ steps:
       $logReadable = $true
       $attr = 0
       try {
-        $ev = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-AppLocker/MSI and Script'; Id = 8006; StartTime = $start } -ErrorAction Stop)
+        $ev = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-AppLocker/MSI and Script'; Id = 8007; StartTime = $start } -ErrorAction Stop)
         $attr = @($ev | Where-Object { $_.Message -like "*$needle*" }).Count
       } catch { $logReadable = $false }
       $r = Resolve-AppCtlOutcome -Expected $expected -Coverage $coverage -Ran $ran -AttrCount $attr -LogReadable $logReadable -ControlAvailable $control
@@ -431,8 +431,8 @@ steps:
     cleanup: |
       Remove-Item (Join-Path $env:TEMP 'bas-appctl-*.txt') -Force -ErrorAction SilentlyContinue
 
-  - name: "Application control parent-child ASR: spoofed Office parent (T1204.002)"
-    technique_id: T1204.002
+  - name: "Application control parent-child ASR: Office-named parent image (T1036.005)"
+    technique_id: T1036.005
     framework: custom
     executor: powershell
     requires_priv: admin
@@ -443,8 +443,8 @@ steps:
     reversible: true
     blast_radius: "Copies cmd.exe into a uniquely named temp directory as winword.exe, runs one benign marker child, deletes the copy. Changes no policy."
     telemetry:
-      - "Defender Operational event 1121 (ASR block) naming the spoofed parent, if enforced"
-      - "Sysmon EID 1: powershell.exe with the spoofed parent image"
+      - "Defender Operational event 1121 (ASR block) naming the Office-named parent, if enforced"
+      - "Sysmon EID 1: powershell.exe with the Office-named parent image"
     detection:
       - "ASR block event for an Office child-process rule violation"
     command: |
@@ -464,15 +464,15 @@ steps:
         if (-not $LogReadable) { return @{ Outcome = 'inconclusive'; Reason = 'the Defender Operational log is unreadable; execution cannot be attributed' } }
         if ($Ran) {
           if ($Expected -eq 'blocked') {
-            if ($Coverage -eq 'Enabled') { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'spoofed-parent child executed although the ASR rule is in Block mode' } }
-            return @{ Outcome = 'not_enforced'; Reason = "spoofed-parent child executed; ASR rule mode is $Coverage" }
+            if ($Coverage -eq 'Enabled') { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'Office-named-parent child executed although the ASR rule is in Block mode' } }
+            return @{ Outcome = 'not_enforced'; Reason = "Office-named-parent child executed; ASR rule mode is $Coverage" }
           }
-          return @{ Outcome = 'allowed_by_policy'; Reason = 'spoofed-parent child executed; the contract expects it allowed' }
+          return @{ Outcome = 'allowed_by_policy'; Reason = 'Office-named-parent child executed; the contract expects it allowed' }
         }
         if ($Expected -eq 'allowed') { return @{ Outcome = 'inconclusive'; Reason = 'not executed although the contract expects it allowed' } }
         if ($AttrCount -ne 1) { return @{ Outcome = 'inconclusive'; Reason = "not executed; $AttrCount matching ASR block events (exactly 1 required for attribution)" } }
         if ($Coverage -ne 'Enabled') { return @{ Outcome = 'inconclusive'; Reason = "ASR block event present but rule mode is $Coverage" } }
-        return @{ Outcome = 'blocked_as_expected'; Reason = 'spoofed-parent child not executed; one matching ASR block event for this parent' }
+        return @{ Outcome = 'blocked_as_expected'; Reason = 'Office-named-parent child not executed; one matching ASR block event for this parent' }
       }
 
       $pref = Get-MpPreference -ErrorAction SilentlyContinue

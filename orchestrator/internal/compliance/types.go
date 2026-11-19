@@ -10,6 +10,9 @@ type FrameworkMeta struct {
 	Regulator     string `json:"regulator"     yaml:"regulator"`
 	PublishedYear string `json:"publishedYear" yaml:"published_year"`
 	TotalControls int    `json:"totalControls"`
+	// MappingWarning is shown wherever this framework's figures are shown. It is set when the control-to-technique
+	// mapping is known to be unverified against the regulator's primary text.
+	MappingWarning string `json:"mappingWarning,omitempty" yaml:"mapping_warning"`
 }
 
 // FrameworkDef is the full parsed YAML for a framework (meta + control list).
@@ -25,6 +28,9 @@ type ControlDef struct {
 	Domain     string   `yaml:"domain"`
 	Category   string   `yaml:"category"`
 	Techniques []string `yaml:"techniques"` // MITRE technique IDs (base or sub)
+	// Reference cites where the regulator's text states the requirement, for example "¶110, ¶114". Empty when the
+	// framework's mapping has not been reviewed against the source.
+	Reference string `yaml:"reference"`
 	// Testable marks whether a control's posture can be validated by executing
 	// the mapped ATT&CK techniques. Governance/process/policy controls (board
 	// policy, asset inventory, risk-assessment cadence, data residency, IR/DR
@@ -55,6 +61,17 @@ type ComplianceReport struct {
 // are BAS-validatable and ManualControls require manual attestation. The tested/
 // passing/failing/untested tallies and both percentages are computed over the
 // TESTABLE subset only — manual controls are never scored as pass/fail.
+//
+// These are results of simulated attack techniques, not a determination of compliance. Control status is derived from
+// technique-level evidence (see ControlResult.Status); the raw execution results are never changed. The legacy field
+// names are kept so stored snapshots, history and the risk score keep their meaning:
+//
+//	TestedControls    controls where at least one mapped technique ran and gave a result (resisted + partial + failed)
+//	PassingControls   tested controls where no executed technique succeeded (resisted + partial)
+//	FailingControls   controls where at least one executed technique succeeded
+//	UntestedControls  testable controls with no executed technique (untested + inconclusive)
+//	CompliancePercent the RESISTANCE RATE: PassingControls / TestedControls. It says nothing about the controls that
+//	                  were not tested, so it must always be shown with CoveragePercent.
 type ComplianceSummary struct {
 	TotalControls     int     `json:"totalControls"`
 	TestableControls  int     `json:"testableControls"`
@@ -64,32 +81,71 @@ type ComplianceSummary struct {
 	FailingControls   int     `json:"failingControls"`
 	UntestedControls  int     `json:"untestedControls"`
 	CoveragePercent   float64 `json:"coveragePct"`   // TestedControls / TestableControls * 100
-	CompliancePercent float64 `json:"compliancePct"` // PassingControls / TestedControls * 100
+	CompliancePercent float64 `json:"compliancePct"` // the resistance rate: PassingControls / TestedControls * 100
+
+	ResistedControls     int `json:"resistedControls"`     // every mapped technique ran and none succeeded
+	PartialControls      int `json:"partialControls"`      // some, not all, mapped techniques ran; none succeeded
+	InconclusiveControls int `json:"inconclusiveControls"` // nothing ran cleanly, but steps errored or were vetoed
+
+	TechniquesMapped         int     `json:"techniquesMapped"` // summed over testable controls
+	TechniquesTested         int     `json:"techniquesTested"`
+	TechniqueCoveragePercent float64 `json:"techniqueCoveragePct"`
+
+	// SufficientCoverage is false while CoveragePercent is below MinConclusiveCoveragePercent. CoverageNote then says
+	// so and must be shown beside the resistance rate.
+	SufficientCoverage bool   `json:"sufficientCoverage"`
+	CoverageNote       string `json:"coverageNote,omitempty"`
 }
+
+// MinConclusiveCoveragePercent is the share of a framework's testable controls that must have been tested before a
+// framework-level conclusion is reasonable. Below it the report says coverage is insufficient. It is a judgment, not a
+// regulatory figure.
+const MinConclusiveCoveragePercent = 50.0
+
+// InsufficientCoverageNote is the wording shown beside a resistance rate that rests on too little testing.
+const InsufficientCoverageNote = "Insufficient coverage for framework-level conclusions"
 
 // DomainResult is the per-domain (e.g. "Protect") aggregate.
 type DomainResult struct {
 	Name          string  `json:"name"`
 	Total         int     `json:"total"`
-	Passing       int     `json:"passing"`
+	Passing       int     `json:"passing"` // tested with no executed technique succeeding (resisted + partial)
 	Failing       int     `json:"failing"`
-	Untested      int     `json:"untested"`
+	Untested      int     `json:"untested"` // untested + inconclusive
 	Manual        int     `json:"manual"`
-	CompliancePct float64 `json:"compliancePct"`
+	CompliancePct float64 `json:"compliancePct"` // the domain's resistance rate
+
+	Resisted     int `json:"resisted"`
+	Partial      int `json:"partial"`
+	Inconclusive int `json:"inconclusive"` // included in Untested
 }
 
 // ControlResult is the per-control detail with evidence from BAS results.
 type ControlResult struct {
-	ID       string              `json:"id"`
-	Name     string              `json:"name"`
-	Domain   string              `json:"domain"`
-	Category string              `json:"category"`
-	Testable bool                `json:"testable"`
-	Status   string              `json:"status"` // pass | fail | untested | manual
-	Tested   int                 `json:"tested"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Domain    string `json:"domain"`
+	Category  string `json:"category"`
+	Testable  bool   `json:"testable"`
+	Reference string `json:"reference,omitempty"` // where the regulator's text states the requirement
+	// Status is derived from technique-level evidence: resisted | failed | partial | inconclusive | untested | manual.
+	Status   string              `json:"status"`
+	Tested   int                 `json:"tested"` // execution results that gave a verdict (not techniques)
 	Passed   int                 `json:"passed"`
 	Failed   int                 `json:"failed"`
 	Evidence []TechniqueEvidence `json:"evidence"`
+
+	TechniquesMapped       int                 `json:"techniquesMapped"`
+	TechniquesTested       int                 `json:"techniquesTested"`
+	TechniquesFailed       int                 `json:"techniquesFailed"`
+	TechniquesInconclusive int                 `json:"techniquesInconclusive"`
+	TechniqueCoverage      []TechniqueCoverage `json:"techniqueCoverage"`
+}
+
+// TechniqueCoverage is one mapped technique and what the executed results say about it.
+type TechniqueCoverage struct {
+	ID    string `json:"id"`
+	State string `json:"state"` // resisted | failed | inconclusive | untested
 }
 
 // TechniqueEvidence links a BAS result to a compliance control.

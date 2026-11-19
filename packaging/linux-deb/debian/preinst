@@ -1,0 +1,21 @@
+#!/bin/sh
+# preinst: before an upgrade replaces the package files, keep the working binary so a failed upgrade can recover it.
+set -e
+
+case "$1" in
+  install)
+    # The older bas-agent package ships its configuration without marking it as one, so dpkg deletes it when this
+    # package replaces that one. Keep a copy now, before the removal; postinst re-installs from it.
+    if [ -f /etc/bas-agent/config ] && [ ! -f /etc/systemd/system/bas-agent.service ]; then
+      install -d -m 0700 /var/lib/audspect-agent/legacy
+      cp -p /etc/bas-agent/config /var/lib/audspect-agent/legacy/config
+    fi
+    ;;
+  upgrade)
+    if [ -x /usr/local/bin/bas-agent ]; then
+      install -d -m 0700 /var/lib/audspect-agent/rollback
+      cp -p /usr/local/bin/bas-agent /var/lib/audspect-agent/rollback/bas-agent.prev
+    fi
+    ;;
+esac
+exit 0

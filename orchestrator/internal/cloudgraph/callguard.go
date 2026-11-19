@@ -2,6 +2,7 @@ package cloudgraph
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"net/http"
@@ -19,6 +20,37 @@ type RetryPolicy struct {
 	MaxAttempts int           // total attempts including the first
 	BaseDelay   time.Duration // first backoff; doubles on each retry
 	MaxDelay    time.Duration // cap on any single wait, including Retry-After
+	// OnWait, when set, receives each rate-limiter delay that was actually
+	// imposed. Telemetry only; it never changes the request.
+	OnWait func(time.Duration)
+}
+
+// waitLimiter takes one token from limiter, sleeping for any delay the limiter
+// imposes. observe, when set, receives that delay. A nil limiter returns at once.
+func waitLimiter(ctx context.Context, limiter *rate.Limiter, observe func(time.Duration)) error {
+	if limiter == nil {
+		return nil
+	}
+	r := limiter.ReserveN(time.Now(), 1)
+	if !r.OK() {
+		return errors.New("rate limiter cannot grant a request")
+	}
+	delay := r.Delay()
+	if delay <= 0 {
+		return nil
+	}
+	if observe != nil {
+		observe(delay)
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		r.Cancel()
+		return ctx.Err()
+	}
 }
 
 // DefaultRetryPolicy is used by the real discovery clients. Four attempts
@@ -109,10 +141,8 @@ func doWithRetry(ctx context.Context, client *http.Client, limiter *rate.Limiter
 	attempts := max(policy.MaxAttempts, 1)
 	var lastErr error
 	for attempt := 1; attempt <= attempts; attempt++ {
-		if limiter != nil {
-			if err := limiter.Wait(ctx); err != nil {
-				return nil, err
-			}
+		if err := waitLimiter(ctx, limiter, policy.OnWait); err != nil {
+			return nil, err
 		}
 		req, err := build(ctx)
 		if err != nil {

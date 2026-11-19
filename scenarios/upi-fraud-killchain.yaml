@@ -94,6 +94,7 @@ steps:
       if ($original) { [System.Windows.Forms.Clipboard]::SetText($original) } else { [System.Windows.Forms.Clipboard]::Clear() }
       $restored = [System.Windows.Forms.Clipboard]::GetText() -eq $original
       Write-Output "EXEC: clipboard VPA probe  -  wrote/read $($results.Count) VPA variants ($($vpas -join ', ')); clipboard restored=$restored. DLP rules targeting @upi/@oksbi/@ybl patterns should fire. [BAS-SIM]"
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
     cleanup: ""
 
   - name: "Screen Capture Probe (1x1 pixel, blank overwrite, cleanup verified)"
@@ -130,6 +131,7 @@ steps:
       Remove-Item $file -Force -ErrorAction SilentlyContinue
       $cleaned = -not (Test-Path $file)
       Write-Output "EXEC: 1x1 screen capture (created=$created, blank-overwrite done, cleaned=$cleaned)  -  expect Sysmon EID 11. [BAS-SIM]"
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
     cleanup: |
       Remove-Item (Join-Path $env:TEMP 'bas_screen_*.bmp') -Force -ErrorAction SilentlyContinue
 
@@ -200,6 +202,7 @@ steps:
       $beacon = "bas-upi-$tenant-$runId.invalid"
       nslookup $beacon 2>&1 | Out-Null
       Write-Output "EXEC: DNS exfil beacon '$beacon' queried  -  Sysmon EID 22 + nslookup EID 4688. NXDOMAIN expected. Use tenant='$tenant' + run-id='$runId' for multi-tenant SIEM correlation. [BAS-SIM]"
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
     cleanup: ""
 
   - name: "HTTP Exfil Probe (RFC5737 + versioned UPI payload)"
@@ -230,6 +233,7 @@ steps:
       } catch {
         Write-Output "EXEC: HTTP exfil POST to $uri attempted (timeout/refused  -  expected)  -  expect Sysmon EID 3 + EID 4688. Payload schema: bas-upi-v1 run_id=$runId vpa=bas-sim@upi. Set BAS_C2_URI for BAS listener. [BAS-SIM]"
       }
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
     cleanup: ""
 
   # -- Lab-only steps ---------------------------------------------------------
@@ -367,4 +371,5 @@ steps:
       } catch {
         Write-Output "EXEC: HTTP exfil POST to $uri attempted (timeout  -  expected without listener). Schema: bas-upi-v1 run_id=$runId vpa=bas-sim@upi txn_id=BAS-$runId. Set BAS_C2_URI for full simulation. [BAS-SIM]"
       }
+      Write-Output "SKIP: lab HTTP exfil POST; no verdict is defined yet for this listener, so it is not scored."
     cleanup: ""

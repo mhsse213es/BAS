@@ -1,0 +1,38 @@
+# Listener for the lab network check S9. Lab cluster only. Apply after lab-fixtures.yaml.
+# A pod labelled app: db (so the np-db NetworkPolicies apply to it exactly as they would to a database) that listens on
+# TCP 5432 and 3306, and a Service named db that routes to it. Nothing here sends traffic.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: db-listener
+  namespace: np-db
+  labels:
+    app: db
+    bas-role: listener
+spec:
+  containers:
+    - name: listener
+      image: busybox:1.36
+      command:
+        - sh
+        - -c
+        # Each port restarts its listener after every connection: busybox nc -lk exits after one connection.
+        - "while true; do nc -l -p 5432 >/dev/null; done & while true; do nc -l -p 3306 >/dev/null; done & wait"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db
+  namespace: np-db
+spec:
+  selector:
+    bas-role: listener
+  ports:
+    - name: postgres
+      protocol: TCP
+      port: 5432
+      targetPort: 5432
+    - name: mysql
+      protocol: TCP
+      port: 3306
+      targetPort: 3306

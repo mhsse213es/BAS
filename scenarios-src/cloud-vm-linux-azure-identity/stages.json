@@ -1,0 +1,172 @@
+[
+  {
+    "id": "cvl-a6",
+    "n": 1,
+    "name": "Cloud VM Linux Azure 6 - IMDS Access From an Unexpected Process (T1552.005)",
+    "technique_id": "T1552.005",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Spawns a child powershell.exe that makes one IMDS GET with a distinct user agent. Read-only.",
+    "telemetry": [
+      "Sysmon EID 1: child powershell.exe",
+      "Sysmon EID 3: connection to 169.254.169.254:80"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "cloud_imds_probe",
+    "no_default_cleanup": false
+  },
+  {
+    "id": "cvl-a7",
+    "n": 2,
+    "name": "Cloud VM Linux Azure 7 - Managed-Identity Token for Unexpected Resources (T1552.005)",
+    "technique_id": "T1552.005",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Requests managed-identity tokens for four resources from IMDS. Tokens are held in memory only and never printed or stored.",
+    "telemetry": [
+      "Azure Entra sign-in / managed identity token issuance (cloud side)",
+      "Sysmon EID 3: IMDS token requests"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "cloud_token_issue",
+    "no_default_cleanup": false
+  },
+  {
+    "id": "cvl-a8",
+    "n": 3,
+    "name": "Cloud VM Linux Azure 8 - Subscription and Resource Enumeration (T1580)",
+    "technique_id": "T1580",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Lists subscriptions visible to the managed identity via the management plane. Read-only.",
+    "telemetry": [
+      "Azure Activity Log: subscriptions read (cloud side)"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "cloud_inventory_read",
+    "no_default_cleanup": false
+  },
+  {
+    "id": "cvl-a9",
+    "n": 4,
+    "name": "Cloud VM Linux Azure 9 - Role Assignment Discovery (T1069.003)",
+    "technique_id": "T1069.003",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Lists role assignments at subscription scope. Read-only.",
+    "telemetry": [
+      "Azure Activity Log: roleAssignments read (cloud side)"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "cloud_role_read",
+    "no_default_cleanup": false
+  },
+  {
+    "id": "cvl-a10",
+    "n": 5,
+    "name": "Cloud VM Linux Azure 10 - VM Extension Inventory (T1526)",
+    "technique_id": "T1526",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Lists extensions on this VM only. Read-only.",
+    "telemetry": [
+      "Azure Activity Log: extensions read (cloud side)"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "cloud_inventory_read",
+    "no_default_cleanup": false
+  },
+  {
+    "id": "cvl-a11",
+    "n": 6,
+    "name": "Cloud VM Linux Azure 11 - Storage Account Discovery (T1580)",
+    "technique_id": "T1580",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Lists storage accounts at subscription scope. Read-only.",
+    "telemetry": [
+      "Azure Activity Log: storageAccounts read (cloud side)"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "cloud_inventory_read",
+    "no_default_cleanup": false
+  },
+  {
+    "id": "cvl-a12",
+    "n": 7,
+    "name": "Cloud VM Linux Azure 12 - Key Vault Secret Name Listing With Managed Identity (T1555)",
+    "technique_id": "T1555",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Lists Key Vault secret names on a designated synthetic test vault. Secret values are never requested.",
+    "telemetry": [
+      "Key Vault audit log: secrets list (cloud side)"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "cloud_secret_name_read",
+    "no_default_cleanup": false
+  },
+  {
+    "id": "cvl-a13",
+    "n": 8,
+    "name": "Cloud VM Linux Azure 13 - Managed-Identity Token Use Outside VM Scope (T1528)",
+    "technique_id": "T1528",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Uses a token acquired in this step for one read of a designated resource group outside the VM's own. Read-only.",
+    "telemetry": [
+      "Azure Activity Log: cross-resource-group read (cloud side)"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "cloud_token_use_read",
+    "no_default_cleanup": false
+  }
+]

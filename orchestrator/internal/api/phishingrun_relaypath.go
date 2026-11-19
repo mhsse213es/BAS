@@ -29,9 +29,10 @@ func loadRelayPathLeg(ctx context.Context, pool *pgxpool.Pool, egRunID string, a
 	var gotEG, status, environment string
 	var resultRaw []byte
 	var completedAt *time.Time
+	var campaign string
 	if err := pool.QueryRow(ctx,
-		`SELECT scenario_id, status, environment, result, completed_at FROM email_gw_runs WHERE id = $1`, egRunID,
-	).Scan(&gotEG, &status, &environment, &resultRaw, &completedAt); err != nil {
+		`SELECT scenario_id, status, environment, result, completed_at, COALESCE(campaign_id, '') FROM email_gw_runs WHERE id = $1`, egRunID,
+	).Scan(&gotEG, &status, &environment, &resultRaw, &completedAt, &campaign); err != nil {
 		return phishval.Observation{}, nil, fmt.Errorf("phishingrun: PH-EVA-002 load email gateway run %q: %w", egRunID, err)
 	}
 	legOK := false
@@ -59,6 +60,7 @@ func loadRelayPathLeg(ctx context.Context, pool *pgxpool.Pool, egRunID string, a
 		EmailGWScenarioID:  gotEG,
 		EmailGWEnvironment: environment,
 		EmailGWCompletedAt: completedAt,
+		CampaignID:         campaign,
 	}
 	return phishbridge.FromEmailGWEfficacyResult(r), prov, nil
 }
@@ -87,6 +89,17 @@ func executePHEVA002(ctx context.Context, env PhishingRunExecutorEnv, runID stri
 	if err != nil {
 		return phishval.Outcome{}, err
 	}
+
+	// Both legs must come from one campaign. Refusing a mismatch or a missing campaign
+	// keeps two unrelated runs from being graded together.
+	if directProv.CampaignID == "" || relayProv.CampaignID == "" {
+		return phishval.Outcome{}, fmt.Errorf("phishingrun: PH-EVA-002 refused: both legs must belong to a campaign, and %q or %q has none", directRunID, relayRunID)
+	}
+	if directProv.CampaignID != relayProv.CampaignID {
+		return phishval.Outcome{}, fmt.Errorf("phishingrun: PH-EVA-002 refused: the legs belong to different campaigns (%s and %s); both must be from the same campaign", directProv.CampaignID, relayProv.CampaignID)
+	}
+	directProv.Role = "direct_path"
+	relayProv.Role = "relay_path"
 
 	catalogExp, err := lookupPhishingCatalogExpectation("PH-EVA-002")
 	if err != nil {

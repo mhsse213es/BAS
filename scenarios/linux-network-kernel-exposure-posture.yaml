@@ -1,5 +1,5 @@
 id: linux-network-kernel-exposure-posture
-product_line: common
+product_line: network
 name: Linux Network Exposure and Kernel Protection Posture
 description: >
   Read-only posture audit of three exposure points: TCP listeners bound to all

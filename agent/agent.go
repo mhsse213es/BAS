@@ -43,6 +43,10 @@ type Agent struct {
 	// HTTP handler goroutine, no torn read. recordConnError/clearConnError
 	// below are the only two things that touch it.
 	lastConnErrPtr atomic.Pointer[LastConnError]
+	// enrollRejected is set while the server is refusing this agent's enrollment (401/403). The fallback transport's
+	// follow-on certificate errors are a symptom of that, so recordConnError keeps the rejection visible until the
+	// agent enrolls or a connection succeeds.
+	enrollRejected atomic.Bool
 	// setServerMu guards handleSetServer's whole read-previous -> persist ->
 	// restart -> verify-or-rollback sequence so two overlapping Settings
 	// Save calls can never interleave (one call's rollback racing another's
@@ -134,6 +138,10 @@ func newAgent(cfg Config, id Identity) *Agent {
 		spoolKick: make(chan struct{}, 1),
 	}
 	a.cfgPtr.Store(&cfg)
+	// A run that never finished restoring (agent or machine went down mid-run) is restored before anything new runs.
+	if n := len(recoverPendingRestores()); n > 0 {
+		log.Printf("[restore] recovered %d registry change(s) left by an interrupted run", n)
+	}
 	a.clientPtr.Store(&http.Client{Timeout: 30 * time.Second, Transport: transport})
 	if h, err := SelfHash(); err == nil {
 		a.binaryHash = h
@@ -200,6 +208,7 @@ func (a *Agent) httpClient() *http.Client { return a.clientPtr.Load() }
 // bootstrap compatibility mechanism, never something an already-enrolled
 // identity returns to.
 func (a *Agent) upgradeToMTLS(newCfg Config) {
+	a.enrollRejected.Store(false)
 	a.swapLiveConfig(newCfg)
 	log.Printf("[+] certificate obtained -- switched permanently to mTLS (%s); legacy transport disabled for this process", newCfg.ServerURL)
 	a.logger.Op("info", "connectivity", fmt.Sprintf("upgraded to mTLS transport: %s", newCfg.ServerURL))
@@ -239,6 +248,18 @@ func (a *Agent) swapLiveConfig(newCfg Config) {
 // to diagnose).
 func (a *Agent) recordConnError(err error) {
 	classified := ClassifyConnError(err)
+	if a.enrollRejected.Load() && !a.cfg().MTLS &&
+		(classified.Category == ConnErrorTLS || classified.Category == ConnErrorUnknown) {
+		return // a symptom of the rejected enrollment, which is already recorded
+	}
+	a.lastConnErrPtr.Store(&classified)
+}
+
+// recordEnrollmentError records a failed enrollment attempt. A rejected secret (401/403) is remembered so the
+// certificate errors that follow on the fallback transport do not replace it as the reported cause.
+func (a *Agent) recordEnrollmentError(err error) {
+	classified := ClassifyConnError(err)
+	a.enrollRejected.Store(classified.Category == ConnErrorServerRejected)
 	a.lastConnErrPtr.Store(&classified)
 }
 
@@ -247,6 +268,7 @@ func (a *Agent) recordConnError(err error) {
 // prior outage doesn't linger in Troubleshoot after the agent has already
 // recovered.
 func (a *Agent) clearConnError() {
+	a.enrollRejected.Store(false)
 	a.lastConnErrPtr.Store(&LastConnError{Category: ConnErrorNone, At: time.Now()})
 }
 
@@ -267,7 +289,7 @@ func (a *Agent) retryBootstrapUntilEnrolled(ctx context.Context) {
 			a.upgradeToMTLS(newCfg)
 			return
 		}
-		a.recordConnError(err)
+		a.recordEnrollmentError(err)
 		delay := bootstrapRetryBackoff(attempt)
 		log.Printf("[!] still on legacy transport, retrying enrollment in %s (attempt %d)", delay.Round(time.Second), attempt+1)
 		attempt++
@@ -339,6 +361,10 @@ func (a *Agent) enrollWithServer() {
 		log.Printf("[!] AGENT IS QUARANTINED — scenario execution blocked; contact your BAS administrator")
 		a.logger.Op("error", "lifecycle", "agent quarantined — contact administrator to resolve before running scenarios")
 	}
+	if resp.State == "retired" {
+		log.Printf("[!] THIS MACHINE IS RETIRED on the server — it will not run scenarios; reinstall the agent to bring it back")
+		a.logger.Op("error", "lifecycle", "machine retired on the server — reinstall the agent to bring it back")
+	}
 }
 
 // buildHeartbeat constructs the real heartbeat payload for status --
@@ -372,6 +398,8 @@ func (a *Agent) buildHeartbeat(status string) protocol.Heartbeat {
 		ProtocolVersion:  protocol.ProtocolVersion,
 		EmitsEvents:      true,
 		SecurityProducts: products,
+
+		TrustedRootFingerprints: trustedRootFingerprints(),
 	}
 	if a.cfg().MTLS {
 		hb.Transport = "mtls"
@@ -428,7 +456,13 @@ func (a *Agent) sendHeartbeat(status string) {
 			log.Printf("[!] SERVER HAS QUARANTINED THIS AGENT — scenario execution blocked; contact administrator")
 			a.logger.Op("error", "lifecycle", "server quarantined this agent — contact administrator")
 		}
+		if resp.State == "retired" && prev != "retired" {
+			log.Printf("[!] SERVER HAS RETIRED THIS MACHINE — it will not run scenarios; reinstall the agent to bring it back")
+			a.logger.Op("error", "lifecycle", "server retired this machine — reinstall the agent to bring it back")
+		}
 	}
+	// The server's resolved tray-icon visibility. Repeated every heartbeat; applying the current state is a no-op.
+	applyTrayPolicy(resp.Policy.HideTrayIcon)
 	log.Printf("[~] heartbeat: %s (state=%s latency=%.0fms)", status, resp.State, latencyMs)
 }
 
@@ -521,6 +555,7 @@ var (
 	platformDisableAutoStartFn = platformDisableAutoStart
 	platformExitAfterStopFn    = platformExitAfterStop
 	platformSelfUninstallFn    = platformSelfUninstall
+	platformPurgeLocalDataFn   = platformPurgeLocalData
 )
 
 // stopSelf performs a durable, operator-requested shutdown: finalize any
@@ -564,6 +599,11 @@ func (a *Agent) uninstallSelf(reason string) {
 		log.Printf("[!] self-uninstall cleanup failed: %v", uninstallErr)
 	}
 	reportUninstallResultFn(a, uninstallErr)
+	// Once the success is reported the credentials are no longer needed: remove the agent's data. Never when the
+	// cleanup failed -- the agent will come back and still needs its certificates.
+	if uninstallErr == nil {
+		platformPurgeLocalDataFn()
+	}
 
 	if err := platformDisableAutoStartFn(); err != nil {
 		log.Printf("[!] disable auto-start: %v — agent may restart at next boot", err)
@@ -727,6 +767,23 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 	// dropped by the server (scenario.ExecResult has no Blocked field) and
 	// fell through to ResultFail -- a false "attack succeeded, defenses did
 	// not stop it" finding for a run that never attempted anything.
+	// Spray limits from the signed policy: refuse before any step runs when the
+	// allowlist and attempt cap are inconsistent. See sprayPolicyRefusal.
+	if reason := sprayPolicyRefusal(cmd.Policy); reason != "" {
+		log.Printf("[!] ABORT: spray policy refused (run %s): %s", cmd.RunID, reason)
+		a.submitResults(cmd, []protocol.ExecResult{{
+			ExitCode:             -1,
+			Vetoed:               true,
+			VetoedActionKey:      "live_spray_execution",
+			VetoedExecutionClass: "environment_safety_policy",
+			VetoedBlockSource:    "spray_policy_interlock",
+			ExecutedAt:           time.Now(),
+		}}, false, nil)
+		a.setStatus("idle")
+		a.sendHeartbeat("idle")
+		return
+	}
+
 	if cmd.Policy != nil && cmd.Policy.BlockOnDomainController && hostIsDomainController() {
 		log.Printf("[!] ABORT: host is a domain controller and policy blocks live execution on DCs (run %s)", cmd.RunID)
 		a.submitResults(cmd, []protocol.ExecResult{{
@@ -968,7 +1025,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 				// Pre-execution gates: the dbsim step-shape pre-gate, then B5 (see
 				// gateStep). Both run BEFORE payload staging so nothing is written
 				// to disk for a step that is about to be vetoed.
-				if v := gateStep(step); v != nil {
+				if v := gateStepExempt(step, cmd.ScenarioID, sprayLabExempt(cmd.Policy, cmd.ScenarioID, step.ActionKey)); v != nil {
 					log.Printf("[!]   [%d/%d] %s VETOED -- %s (class=%s, action=%s, source=%s)",
 						i+1, total, step.TechniqueID, v.reason, step.ExecutionClass, step.ActionKey, v.source)
 					a.logger.Sec("warn", cmd.ScenarioID, cmd.RunID, step.TaskID, step.TechniqueID,
@@ -1495,6 +1552,11 @@ func (a *Agent) verifyAndDispatch(msgType string, data []byte) bool {
 	env, err := a.verifyCommandEnvelope(data, msgType)
 	if err != nil {
 		log.Printf("[!] WS: command envelope rejected (%s): %v", msgType, err)
+		if strings.Contains(err.Error(), "signature verification failed") {
+			// A well-formed signature that does not verify means the server signs with a different key than the
+			// certificate this agent pinned. Say what fixes it, so nobody has to read the source to find out.
+			log.Printf("[!] The server's command-signing key does not match the one this agent trusts. Re-run the agent installer (the Setup file) on this host to trust the current key.")
+		}
 		a.logger.Op("warn", "security", fmt.Sprintf("rejected command envelope for %s: %v", msgType, err))
 		return false
 	}
@@ -1517,7 +1579,13 @@ type stepVeto struct {
 // The dbsim gate never replaces or weakens B5; executeDBProbe applies the
 // remaining dbsim gates (policy, identity) before any probe SQL. Returns nil
 // when the step may proceed.
-func gateStep(step ScenarioStep) *stepVeto {
+func gateStep(step ScenarioStep, scenarioID string) *stepVeto {
+	return gateStepExempt(step, scenarioID, false)
+}
+
+// gateStepExempt is gateStep with the lab spray exemption applied to the B5
+// signed-class check. See sprayLabExempt.
+func gateStepExempt(step ScenarioStep, scenarioID string, labExempt bool) *stepVeto {
 	if msg := dbprobeStepShapeRefusal(step); msg != "" {
 		return &stepVeto{source: "dbsim_gate", category: "dbsim_veto", reason: "dbsim gate: " + msg,
 			result: protocol.ExecResult{
@@ -1535,12 +1603,12 @@ func gateStep(step ScenarioStep) *stepVeto {
 	// Command): a compromised orchestrator controls the signed ExecutionClass
 	// and could hide a destructive action in Cleanup (which runs unconditionally
 	// after any non-vetoed step) or in a payload (final whole-branch review, C3).
-	if vetoed, source := evaluateB5Gate(protocol.ScenarioStep{
+	if vetoed, source := evaluateB5GateExempt(labExempt, protocol.ScenarioStep{
 		ExecutionClass: step.ExecutionClass,
 		Command:        step.Command,
 		Cleanup:        step.Cleanup,
 		Payloads:       step.Payloads,
-	}); vetoed {
+	}, scenarioID); vetoed {
 		return &stepVeto{source: source, category: "b5_veto", reason: "destructive-action policy",
 			result: protocol.ExecResult{
 				TaskID:               step.TaskID,
@@ -1563,6 +1631,14 @@ func gateStep(step ScenarioStep) *stepVeto {
 // command_scenario), never the raw WS frame.
 func (a *Agent) dispatchVerifiedCommand(msgType string, payload json.RawMessage) {
 	switch msgType {
+	case "command_trust_ca":
+		if err := acceptCARoot(payload); err != nil {
+			log.Printf("[!] CA rotation: new root refused: %v", err)
+			a.logger.Op("warn", "security", fmt.Sprintf("refused a new CA root: %v", err))
+			return
+		}
+		log.Printf("[+] CA rotation: now trusting %d CA root(s)", len(trustedRootFingerprints()))
+		a.logger.Op("info", "security", "accepted a new CA root vouched for by the pinned CA")
 	case "command_scenario":
 		var cmd protocol.ScenarioCommand
 		if err := json.Unmarshal(payload, &cmd); err != nil {

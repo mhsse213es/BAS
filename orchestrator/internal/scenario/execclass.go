@@ -76,6 +76,24 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			DestructiveAction: "",
 			BlastRadius:       "rundll32 comsvcs.dll MiniDump of REAL lsass process -- genuinely extracts credential material to a temp file (briefly, then deleted) -- real risk if a race/crash prevents cleanup",
 		},
+		"credential_lsass_simulation": catalogClass(ClassNonDestructive, "credential_lsass_simulation", "Get-Process lsass only; no process handle, no memory read"),
+	},
+	"T1003.006": {
+		// Distinct action_keys for the negative (no rights) and positive
+		// (rights granted) control stages -- each is a separately
+		// authorizable local policy grant, since they're genuinely
+		// different requests (different principal, different expected
+		// outcome), not one action run twice.
+		"negative": {
+			Class:             ClassDestructive,
+			DestructiveAction: "dcsync_replication_read",
+			BlastRadius:       "DRSUAPI replication request (DCSync) as a principal WITHOUT replication rights -- genuinely attempts to retrieve real directory account secret material (password hashes) from a domain controller over the standard replication protocol. Lab-only; requires a local policy grant.",
+		},
+		"positive": {
+			Class:             ClassDestructive,
+			DestructiveAction: "dcsync_replication_read",
+			BlastRadius:       "DRSUAPI replication request (DCSync) as a principal WITH replication rights deliberately granted for this verification -- genuinely retrieves real directory account secret material (password hashes) from a domain controller over the standard replication protocol. Lab-only; requires a local policy grant.",
+		},
 	},
 	"T1003.002": {
 		"enumerate": {
@@ -88,6 +106,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			DestructiveAction: "hive_save",
 			BlastRadius:       "reg.exe save of SAM/SYSTEM hives to temp then delete -- genuinely extracts real credential-hash material to disk",
 		},
+		"credential_sam_simulation": catalogClass(ClassNonDestructive, "credential_sam_simulation", "Read attempt on HKLM:\\SAM; blocked by default, no hive data read"),
 	},
 	"T1003.004": {
 		"enumerate": {
@@ -109,6 +128,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			DestructiveAction: "",
 			BlastRadius:       "RDP/NLA registry posture reads only, no connection attempted",
 		},
+		"lateral_rdp_connectivity": catalogClass(ClassNonDestructive, "lateral_rdp_connectivity", "Port connectivity check only"),
 	},
 	"T1021.002": {
 		"enumerate": {
@@ -116,6 +136,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			DestructiveAction: "",
 			BlastRadius:       "net use ADMIN$ probe (immediately /delete'd, real cleanup), SMB1/signing registry reads",
 		},
+		"lateral_smb_shares": catalogClass(ClassNonDestructive, "lateral_smb_shares", "Read-only share enumeration on the target"),
 	},
 	"T1021.006": {
 		"enumerate": {
@@ -123,6 +144,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			DestructiveAction: "",
 			BlastRadius:       "Test-WSMan reachability + harmless Invoke-Command echo to localhost; Get-Service WinRM status read",
 		},
+		"lateral_winrm_session": catalogClass(ClassPotentiallyDestructive, "lateral_winrm_session", "Opens a remote WinRM session to the target, closed by the step"),
 	},
 	"T1027": {
 		"enumerate": {
@@ -130,6 +152,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			DestructiveAction: "",
 			BlastRadius:       "string-concat/XOR obfuscation demo, in-memory only, no disk writes",
 		},
+		"evasion_powershell_obfuscation": catalogClass(ClassNonDestructive, "evasion_powershell_obfuscation", "Encoded harmless command execution"),
 	},
 	"T1027.010": {
 		"enumerate": {
@@ -146,11 +169,19 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1046": {
+		"cscrf_bdr_dr_connectivity":     catalogClass(ClassNonDestructive, "cscrf_bdr_dr_connectivity", "One TCP connection attempt to the DR target; no state changed"),
+		"cscrf_net_subnet_reachability": catalogClass(ClassNonDestructive, "cscrf_net_subnet_reachability", "TCP connection attempts to up to 62 hosts on one private lab subnet; no state changed"),
+		"cscrf_net_listener_inventory":  catalogClass(ClassNonDestructive, "cscrf_net_listener_inventory", "Read-only query of listening TCP sockets"),
+		"cscrf_net_segmentation_probe":  catalogClass(ClassNonDestructive, "cscrf_net_segmentation_probe", "One TCP connection attempt to a second-zone target; no state changed"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
 			BlastRadius:       "sysctl/ufw reads, localhost-only TCP port reachability probes",
 		},
+		"bfsi_banking_app_discovery":     catalogClass(ClassNonDestructive, "bfsi_banking_app_discovery", "GET to the lab simulator's banking-app endpoint"),
+		"bfsi_payment_gateway_discovery": catalogClass(ClassNonDestructive, "bfsi_payment_gateway_discovery", "GET to the lab simulator's payment-gateway endpoint"),
+		"bfsi_atm_discovery":             catalogClass(ClassNonDestructive, "bfsi_atm_discovery", "GET to the lab simulator's ATM-switch endpoint"),
+		"bfsi_cardholder_data_discovery": catalogClass(ClassNonDestructive, "bfsi_cardholder_data_discovery", "GET to the lab simulator's synthetic cardholder endpoint"),
 	},
 	"T1047": {
 		"enumerate": {
@@ -160,6 +191,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1048": {
+		"cscrf_dp_marker_egress": catalogClass(ClassPotentiallyDestructive, "cscrf_dp_marker_egress", "Writes one synthetic marker file to a named share; deleted in undo"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -186,6 +218,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			DestructiveAction: "",
 			BlastRadius:       "DLP validation: synthetic data via HTTP/FTP/SMTP/Telnet to .invalid or a dedicated monitored sink; DNS beacon to .invalid",
 		},
+		"exfil_dns_simulation": catalogClass(ClassNonDestructive, "exfil_dns_simulation", "DNS query under .invalid, which never resolves"),
 	},
 	"T1052": {
 		"enumerate": {
@@ -226,6 +259,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			DestructiveAction: "",
 			BlastRadius:       "sysctl/proc reads; OpenProcess VM_READ handle to a self-spawned notepad.exe (killed via cleanup); /proc/1/mem 1-byte read discarded to /dev/null",
 		},
+		"evasion_process_injection_readiness": catalogClass(ClassNonDestructive, "evasion_process_injection_readiness", "Spawns a harmless sleep process only; no injection performed"),
 	},
 	"T1055.012": {
 		"enumerate": {
@@ -301,6 +335,8 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1070.001": {
+		"cscrf_ir_evidence_export": catalogClass(ClassNonDestructive, "cscrf_ir_evidence_export", "Exports the Security log to a per-run temp file; the export is deleted in undo"),
+		"cscrf_siem_log_retention": catalogClass(ClassNonDestructive, "cscrf_siem_log_retention", "Read-only Security log size and mode query"),
 		"clear_bas_owned_log": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -321,6 +357,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			DestructiveAction: "clear_real_security_log_gated",
 			BlastRadius:       "cscrf-mii-drill -- if env var BAS_CONFIRM_LOG_CLEAR=true calls real wevtutil cl Security, irreversibly wiping the Windows Security event log",
 		},
+		"evasion_event_log_clearing": catalogClass(ClassDestructive, "evasion_event_log_clearing", "Clears a log; limited to the dedicated synthetic BAS-SIM-Test log but still a log clear"),
 	},
 	"T1070.004": {
 		"enumerate": {
@@ -335,6 +372,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			DestructiveAction: "",
 			BlastRadius:       "DNS beacon to .invalid, HTTPS beacon to RFC5737 (192.0.2.1), HTTP POST to BAS listener -- all network-only synthetic C2 simulation",
 		},
+		"c2_http_beaconing": catalogClass(ClassNonDestructive, "c2_http_beaconing", "Five periodic GET requests to the lab simulator; no state changed"),
 	},
 	"T1071.004": {
 		"enumerate": {
@@ -344,6 +382,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1074.001": {
+		"cscrf_fc_synthetic_copy": catalogClass(ClassPotentiallyDestructive, "cscrf_fc_synthetic_copy", "Copies synthetic files to the named target and removes them in undo"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -351,9 +390,14 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1078": {
-		"dbprobe_read_only":         dbprobeClass(ClassNonDestructive, "", "read_only database probe (named, read-only transaction, row/time bounded) -- T1078"),
-		"dbprobe_bounded_synthetic": dbprobeClass(ClassPotentiallyDestructive, "dbprobe_bounded_synthetic", "bounded_synthetic database probe (writes only fixture-tagged synthetic rows/roles) -- T1078"),
-		"dbprobe_mutation":          dbprobeClass(ClassDestructive, "dbprobe_mutation", "mutation database probe (changes real database state) -- T1078"),
+		"cscrf_ir_account_disable":      catalogClass(ClassDestructive, "cscrf_ir_account_disable", "Creates one synthetic local account, disables it, and deletes it in undo"),
+		"cscrf_id_logon_audit_presence": catalogClass(ClassNonDestructive, "cscrf_id_logon_audit_presence", "Read-only query of recent Security log logon events"),
+		"cscrf_id_excessive_privilege":  catalogClass(ClassNonDestructive, "cscrf_id_excessive_privilege", "Read-only query of Administrators membership against an allowlist"),
+		"cscrf_id_disabled_logon":       catalogClass(ClassDestructive, "cscrf_id_disabled_logon", "Creates a synthetic account, disables it, attempts one logon, and deletes it in undo"),
+		"cscrf_id_mfa_enforcement":      catalogClass(ClassNonDestructive, "cscrf_id_mfa_enforcement", "No change; reports SKIP because no identity provider is integrated"),
+		"dbprobe_read_only":             dbprobeClass(ClassNonDestructive, "", "read_only database probe (named, read-only transaction, row/time bounded) -- T1078"),
+		"dbprobe_bounded_synthetic":     dbprobeClass(ClassPotentiallyDestructive, "dbprobe_bounded_synthetic", "bounded_synthetic database probe (writes only fixture-tagged synthetic rows/roles) -- T1078"),
+		"dbprobe_mutation":              dbprobeClass(ClassDestructive, "dbprobe_mutation", "mutation database probe (changes real database state) -- T1078"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -361,6 +405,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1078.003": {
+		"cscrf_id_service_account_admin": catalogClass(ClassNonDestructive, "cscrf_id_service_account_admin", "Read-only query of service accounts and Administrators membership"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -368,6 +413,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1083": {
+		"cscrf_dp_data_acl": catalogClass(ClassNonDestructive, "cscrf_dp_data_acl", "Read-only ACL read of the configured data path"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -386,6 +432,39 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
 			BlastRadius:       "net group/view, nltest /dclist, LDAP DirectorySearcher enumeration -- all read-only",
+		},
+	},
+	// Hunters International read-only checks (scenarios/hunters-international-kill-chain.yaml).
+	// Each command only reads configuration, service state, or file contents; none writes,
+	// connects to a remote host, or uses credentials.
+	// Rhysida read-only check (scenarios/rhysida-kill-chain.yaml). wevtutil gl reads channel
+	// configuration only; no channel is disabled.
+	"T1562.008": {
+		"enumerate": {
+			Class:             ClassNonDestructive,
+			DestructiveAction: "",
+			BlastRadius:       "wevtutil gl (get-log) reads the enabled state of required log channels -- read-only, no channel is changed",
+		},
+	},
+	"T1190": {
+		"enumerate": {
+			Class:             ClassNonDestructive,
+			DestructiveAction: "",
+			BlastRadius:       "Get-Service / Get-NetTCPConnection listener check and read-only inspection of WebLogic install state -- no request is sent to any listener",
+		},
+	},
+	"T1505.003": {
+		"enumerate": {
+			Class:             ClassNonDestructive,
+			DestructiveAction: "",
+			BlastRadius:       "read-only scan of web-server root directories for web-shell signature strings -- files are read, never written or executed",
+		},
+	},
+	"T1556": {
+		"enumerate": {
+			Class:             ClassNonDestructive,
+			DestructiveAction: "",
+			BlastRadius:       "reads the Netlogon FullSecureChannelProtection registry value on a domain controller -- no secure-channel traffic, no password reset",
 		},
 	},
 	"T1090": {
@@ -413,6 +492,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			DestructiveAction: "",
 			BlastRadius:       "certutil/bitsadmin download attempts against RFC5737/.invalid targets, any downloaded file deleted via cleanup",
 		},
+		"c2_ingress_tool_transfer": catalogClass(ClassPotentiallyDestructive, "c2_ingress_tool_transfer", "Downloads one response body from the lab simulator into a per-run temp file, removed by undo"),
 	},
 	"T1110": {
 		"enumerate": {
@@ -421,12 +501,44 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			BlastRadius:       "sshd/login.defs/shadow reads, net accounts policy reads",
 		},
 	},
+	"T1550.003": {
+		"enumerate": {
+			Class:             ClassNonDestructive,
+			DestructiveAction: "",
+			BlastRadius:       "Kerberos lifetime registry read and read-only DC event-count query; no ticket is read, exported, requested or reused",
+		},
+	},
+	"T1558.001": {
+		"enumerate": {
+			Class:             ClassNonDestructive,
+			DestructiveAction: "",
+			BlastRadius:       "KRBTGT password-age and msDS-SupportedEncryptionTypes attribute read, plus read-only 4768/4769 event count; no key material accessed, no ticket requested",
+		},
+	},
+	"T1558.002": {
+		"enumerate": {
+			Class:             ClassNonDestructive,
+			DestructiveAction: "",
+			BlastRadius:       "read-only count of 4768/4769 Security events in the last hour; no ticket data read",
+		},
+	},
+	"T1187": {
+		"enumerate": {
+			Class:             ClassNonDestructive,
+			DestructiveAction: "",
+			BlastRadius:       "one Test-Path against an unresolvable .invalid UNC; name does not resolve, so no SMB session and no credential is sent",
+		},
+	},
+	"T1110.004": {
+		"credential_stuffing": catalogClass(ClassDestructive, "credential_stuffing", "Wrong-password pair attempts against named accounts; can lock out real accounts if pointed at a real domain"),
+	},
 	"T1110.001": {
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
 			BlastRadius:       "single ValidateCredentials failed-auth attempt against a guaranteed-nonexistent username -- lockout-safe by design",
 		},
+		"credential_password_guess": catalogClass(ClassDestructive, "credential_password_guess", "Wrong-password guesses against named accounts; can lock out real accounts if pointed at a real domain"),
 	},
 	"T1110.003": {
 		"enumerate": {
@@ -434,6 +546,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			DestructiveAction: "",
 			BlastRadius:       "single failed domain auth against a guaranteed-nonexistent probe account -- lockout-safe by design",
 		},
+		"credential_password_spray": catalogClass(ClassDestructive, "credential_password_spray", "Wrong-password auth attempts against named accounts; can lock out real accounts if pointed at a real domain"),
 	},
 	"T1113": {
 		"enumerate": {
@@ -446,7 +559,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
-			BlastRadius:       "Set-Clipboard to synthetic DLP test data, checked, then explicitly restores the ORIGINAL clipboard value inline",
+			BlastRadius:       "Runs only when the clipboard is already empty: writes a synthetic marker, reads back only that marker, then clears it, returning the clipboard to empty. If the clipboard holds content the step skips without reading or changing it",
 		},
 	},
 	"T1127.001": {
@@ -478,6 +591,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1136.001": {
+		"cscrf_id_local_admin_create": catalogClass(ClassDestructive, "cscrf_id_local_admin_create", "Creates a synthetic account placed in Administrators, deleted in undo; a failed undo leaves an admin account"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -488,6 +602,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			DestructiveAction: "",
 			BlastRadius:       "New-LocalUser/net user /add creates a REAL local SAM account (BAS-SIM-prefixed, randomized password) then deletes it -- real persistence-adjacent API",
 		},
+		"persistence_local_account_creation": catalogClass(ClassDestructive, "persistence_local_account_creation", "Creates a local user account; a failed undo leaves an account"),
 	},
 	"T1140": {
 		"enumerate": {
@@ -636,8 +751,10 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			DestructiveAction: "",
 			BlastRadius:       "WMI SecurityCenter2 AV/FW product enumeration, read-only",
 		},
+		"evasion_security_software_discovery": catalogClass(ClassNonDestructive, "evasion_security_software_discovery", "Read-only service enumeration"),
 	},
 	"T1526": {
+		"cloud_inventory_read": {Class: ClassNonDestructive, BlastRadius: "Read-only inventory listing of database or extension resources."},
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -645,6 +762,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1528": {
+		"cloud_token_use_read": {Class: ClassNonDestructive, BlastRadius: "One read-only call with a token acquired in the same step."},
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -659,6 +777,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1543.003": {
+		"cscrf_ea_unnecessary_services": catalogClass(ClassNonDestructive, "cscrf_ea_unnecessary_services", "Read-only service query"),
 		"service_create_start_stop_delete": {
 			Class:             ClassPotentiallyDestructive,
 			DestructiveAction: "",
@@ -681,6 +800,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			DestructiveAction: "",
 			BlastRadius:       "HKLM Run key entry count + Startup folder content count, read-only",
 		},
+		"persistence_registry_run_key": catalogClass(ClassPotentiallyDestructive, "persistence_registry_run_key", "Writes one BAS-SIM-named Run value, removed by undo"),
 	},
 	"T1548": {
 		"enumerate": {
@@ -711,11 +831,13 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1552.001": {
+		"local_credential_scan": {Class: ClassNonDestructive, BlastRadius: "Local read of credential-file presence and counts; values are never printed."},
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
 			BlastRadius:       "AWS/Azure/GCP CLI credential file existence checks only (Test-Path), no content read",
 		},
+		"credential_unsecured_discovery": catalogClass(ClassNonDestructive, "credential_unsecured_discovery", "Read-only search for credential files"),
 	},
 	"T1552.002": {
 		"enumerate": {
@@ -732,6 +854,8 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1552.005": {
+		"cloud_imds_probe":  {Class: ClassNonDestructive, BlastRadius: "Read-only request to the instance metadata service."},
+		"cloud_token_issue": {Class: ClassNonDestructive, BlastRadius: "Requests a managed-identity token into memory only; nothing is stored or changed."},
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -758,6 +882,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			DestructiveAction: "",
 			BlastRadius:       "Edge/Chrome Login Data file lock test (Open Read mode only, closes immediately, no content read)",
 		},
+		"credential_browser_discovery": catalogClass(ClassNonDestructive, "credential_browser_discovery", "Read-only check for browser credential store files"),
 	},
 	"T1555.004": {
 		"enumerate": {
@@ -765,6 +890,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			DestructiveAction: "",
 			BlastRadius:       "cmdkey /list credential vault enumeration, read-only",
 		},
+		"credential_manager_discovery": catalogClass(ClassNonDestructive, "credential_manager_discovery", "cmdkey /list, read-only"),
 	},
 	"T1556.007": {
 		"enumerate": {
@@ -793,6 +919,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			DestructiveAction: "",
 			BlastRadius:       "setspn SPN enumeration + LDAP servicePrincipalName search, no TGS-REP request",
 		},
+		"credential_kerberoasting": catalogClass(ClassNonDestructive, "credential_kerberoasting", "klist read-only check; no ticket request"),
 	},
 	"T1558.004": {
 		"enumerate": {
@@ -800,6 +927,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			DestructiveAction: "",
 			BlastRadius:       "AS-REP roastable account discovery via LDAP (no AS-REQ/TGS request)",
 		},
+		"credential_asrep_roasting": catalogClass(ClassNonDestructive, "credential_asrep_roasting", "Read-only AD user query against the current domain"),
 	},
 	"T1560.001": {
 		"enumerate": {
@@ -812,6 +940,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			DestructiveAction: "",
 			BlastRadius:       "Compress-Archive creates real .zip of BAS-owned synthetic decoy files in own TEMP dir, real cleanup",
 		},
+		"collection_archive_data": catalogClass(ClassPotentiallyDestructive, "collection_archive_data", "Creates a staging archive in temp, removed by undo; originals untouched"),
 	},
 	"T1562": {
 		"dbprobe_read_only":         dbprobeClass(ClassNonDestructive, "", "read_only database probe (named, read-only transaction, row/time bounded) -- T1562"),
@@ -824,6 +953,9 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1562.001": {
+		"cscrf_dp_dlp_service":     catalogClass(ClassNonDestructive, "cscrf_dp_dlp_service", "Read-only service lookup for the named DLP agent"),
+		"cscrf_ea_defender_status": catalogClass(ClassNonDestructive, "cscrf_ea_defender_status", "Read-only Defender status query"),
+		"cscrf_ea_sysmon_status":   catalogClass(ClassNonDestructive, "cscrf_ea_sysmon_status", "Read-only Sysmon service query; the service is not stopped"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -834,6 +966,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			DestructiveAction: "",
 			BlastRadius:       "Attempts to stop the Linux auditd service via systemctl — if it succeeds, briefly disables audit logging until cleanup restarts it",
 		},
+		"evasion_security_tool_impairment_probe": catalogClass(ClassNonDestructive, "evasion_security_tool_impairment_probe", "Reads Defender preferences only; no setting changed"),
 	},
 	"T1574.008": {
 		"enumerate": {
@@ -864,6 +997,10 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1490": {
+		"cscrf_bdr_backup_available":  catalogClass(ClassNonDestructive, "cscrf_bdr_backup_available", "Read-only wbadmin version query"),
+		"cscrf_bdr_rpo_age":           catalogClass(ClassNonDestructive, "cscrf_bdr_rpo_age", "Read-only wbadmin version query for the latest recovery point"),
+		"cscrf_bdr_restore_integrity": catalogClass(ClassPotentiallyDestructive, "cscrf_bdr_restore_integrity", "Writes one synthetic 1 MB file and a copy in a per-run temp folder, restores the copy, and deletes the folder in undo"),
+		"cscrf_bdr_rto_measure":       catalogClass(ClassPotentiallyDestructive, "cscrf_bdr_rto_measure", "Times one restore of a synthetic 1 MB file in a per-run temp folder; the folder is deleted in undo"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -873,6 +1010,11 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
 			BlastRadius:       "Read-only query of VSS service status and scheduled backup tasks (Get-Service, Get-ScheduledTask). No state changed.",
+		},
+		"survival": {
+			Class:             ClassNonDestructive,
+			DestructiveAction: "",
+			BlastRadius:       "Read-only count of VSS shadow copies after the deletion stage (vssadmin list shadows). No state changed.",
 		},
 		"vss_delete": {
 			Class:             ClassDestructive,
@@ -910,6 +1052,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			DestructiveAction: "",
 			BlastRadius:       "Creates a BAS-owned, uniquely-named decoy Windows service (rundll32 binpath), starts it, stops it, deletes it. Self-contained -- never touches a pre-existing real service.",
 		},
+		"lateral_remote_service": catalogClass(ClassDestructive, "lateral_remote_service", "Creates, starts and deletes a service on the target host"),
 	},
 	"T1003.003": {
 		"enumerate": {
@@ -919,6 +1062,8 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1016": {
+		"cscrf_net_firewall_inventory": catalogClass(ClassNonDestructive, "cscrf_net_firewall_inventory", "Read-only firewall rule query"),
+		"cscrf_net_dns_config":         catalogClass(ClassNonDestructive, "cscrf_net_dns_config", "Read-only DNS client configuration query"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -931,6 +1076,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			DestructiveAction: "",
 			BlastRadius:       "Remote system enumeration via network queries (nbtstat, ping, Get-WmiObject, etc.)",
 		},
+		"lateral_system_discovery": catalogClass(ClassNonDestructive, "lateral_system_discovery", "Read-only remote system query"),
 	},
 	"T1057": {
 		"enumerate": {
@@ -940,6 +1086,10 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1082": {
+		"cscrf_ea_patch_currency":     catalogClass(ClassNonDestructive, "cscrf_ea_patch_currency", "Read-only hotfix query"),
+		"cscrf_ea_os_supported":       catalogClass(ClassNonDestructive, "cscrf_ea_os_supported", "Read-only OS caption and build query"),
+		"cscrf_ea_weak_local_config":  catalogClass(ClassNonDestructive, "cscrf_ea_weak_local_config", "Read-only SMB1, Guest and UAC query"),
+		"cscrf_ea_app_control_status": catalogClass(ClassNonDestructive, "cscrf_ea_app_control_status", "Read-only effective AppLocker policy query"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -947,6 +1097,9 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1562.002": {
+		"cscrf_siem_ingestion":         catalogClass(ClassPotentiallyDestructive, "cscrf_siem_ingestion", "Writes one tagged synthetic event (ID 4242, source BAS-SIEM) to the Application log; the event is not removable"),
+		"cscrf_siem_forwarding_config": catalogClass(ClassNonDestructive, "cscrf_siem_forwarding_config", "Read-only registry query of the event forwarding subscription manager"),
+		"cscrf_ea_audit_policy_change": catalogClass(ClassDestructive, "cscrf_ea_audit_policy_change", "Sets Process Creation auditing off and restores it in the same run and in undo; a failed undo leaves auditing changed"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -954,6 +1107,8 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1562.004": {
+		"cscrf_ir_block_capability":       catalogClass(ClassNonDestructive, "cscrf_ir_block_capability", "Read-only query of outbound firewall block rules"),
+		"cscrf_net_firewall_policy_state": catalogClass(ClassNonDestructive, "cscrf_net_firewall_policy_state", "Read-only firewall profile state query; no rule or profile changed"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -961,14 +1116,22 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1565.001": {
-		"dbprobe_read_only":         dbprobeClass(ClassNonDestructive, "", "read_only database probe (named, read-only transaction, row/time bounded) -- T1565.001"),
-		"dbprobe_bounded_synthetic": dbprobeClass(ClassPotentiallyDestructive, "dbprobe_bounded_synthetic", "bounded_synthetic database probe (writes only fixture-tagged synthetic rows/roles) -- T1565.001"),
-		"dbprobe_mutation":          dbprobeClass(ClassDestructive, "dbprobe_mutation", "mutation database probe (changes real database state) -- T1565.001"),
+		"cscrf_mii_log_manifest":         catalogClass(ClassNonDestructive, "cscrf_mii_log_manifest", "Read-only hashing of sealed trade logs under the named log path"),
+		"cscrf_mii_settlement_integrity": catalogClass(ClassNonDestructive, "cscrf_mii_settlement_integrity", "Read-only hashing of settlement files listed in SHA256SUMS"),
+		"dbprobe_read_only":              dbprobeClass(ClassNonDestructive, "", "read_only database probe (named, read-only transaction, row/time bounded) -- T1565.001"),
+		"dbprobe_bounded_synthetic":      dbprobeClass(ClassPotentiallyDestructive, "dbprobe_bounded_synthetic", "bounded_synthetic database probe (writes only fixture-tagged synthetic rows/roles) -- T1565.001"),
+		"dbprobe_mutation":               dbprobeClass(ClassDestructive, "dbprobe_mutation", "mutation database probe (changes real database state) -- T1565.001"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
 			BlastRadius:       "Data destruction enumeration — read-only checks for backup/archive locations",
 		},
+		"financial_transaction_manipulation":         catalogClass(ClassPotentiallyDestructive, "financial_transaction_manipulation", "Ledger write on the lab simulator only, removed by undo"),
+		"financial_payment_instruction_manipulation": catalogClass(ClassPotentiallyDestructive, "financial_payment_instruction_manipulation", "Ledger write on the lab simulator only, removed by undo"),
+		"financial_atm_dispense_manipulation":        catalogClass(ClassPotentiallyDestructive, "financial_atm_dispense_manipulation", "Ledger write and reconcile on the lab simulator only, removed by undo"),
+		"financial_fraud_pattern_simulation":         catalogClass(ClassPotentiallyDestructive, "financial_fraud_pattern_simulation", "Several ledger writes on the lab simulator only, removed by undo"),
+		"financial_transaction_limit_bypass":         catalogClass(ClassPotentiallyDestructive, "financial_transaction_limit_bypass", "Ledger write on the lab simulator only, removed by undo"),
+		"financial_reconciliation_manipulation":      catalogClass(ClassPotentiallyDestructive, "financial_reconciliation_manipulation", "Ledger write and reconcile on the lab simulator only, removed by undo"),
 	},
 	"T1566.001": {
 		"enumerate": {
@@ -992,6 +1155,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		},
 	},
 	"T1567.002": {
+		"cloud_synthetic_upload": {Class: ClassDestructive, DestructiveAction: "synthetic_upload_then_delete", BlastRadius: "Uploads one 1 KB synthetic object to an operator-named test container and deletes it; cleanup is verified in-script. Tests egress to cloud storage."},
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
@@ -1030,7 +1194,10 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 	// entries above. T1120 is deliberately absent: see
 	// discoveryDefaultClassification.
 	"T1012": {"enumerate": discoveryDefaultClassification},
-	"T1007": {"enumerate": discoveryDefaultClassification},
+	"T1007": {
+		"cscrf_mii_service_running": catalogClass(ClassNonDestructive, "cscrf_mii_service_running", "Read-only service lookup for the named MII services"),
+		"enumerate":                 discoveryDefaultClassification,
+	},
 	"T1518": {"enumerate": discoveryDefaultClassification},
 	"T1010": {"enumerate": discoveryDefaultClassification},
 	"T1033": {"enumerate": discoveryDefaultClassification},
@@ -1044,6 +1211,112 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 	},
 	"T1069": {"enumerate": discoveryDefaultClassification},
 	"T1652": {"enumerate": discoveryDefaultClassification},
+	"T1649": {
+		"enumerate": {
+			Class:             ClassNonDestructive,
+			DestructiveAction: "",
+			BlastRadius:       "read-only LDAP reads of the AD Configuration partition (certificate templates, PKI containers, CA objects); no writes, no enrollment, no template or ACL changes",
+		},
+	},
+	"T1580": {
+		"cloud_inventory_read": {Class: ClassNonDestructive, BlastRadius: "Read-only inventory listing (names and counts)."},
+	},
+	"T1619": {
+		"cloud_inventory_read": {Class: ClassNonDestructive, BlastRadius: "Read-only listing of storage bucket names."},
+	},
+	"T1069.003": {
+		"cloud_role_read": {Class: ClassNonDestructive, BlastRadius: "Read-only listing of role assignments or attached policies."},
+	},
+	"T1087.004": {
+		"cloud_identity_read": {Class: ClassNonDestructive, BlastRadius: "Caller identity lookup, which every principal may perform."},
+	},
+	"T1555": {
+		"cloud_secret_name_read":  {Class: ClassNonDestructive, BlastRadius: "Lists secret names only; no value is requested."},
+		"cloud_secret_value_read": {Class: ClassPotentiallyDestructive, BlastRadius: "Requests one synthetic test secret value into memory; only its length is recorded and the value is discarded."},
+	},
+	"T1098": {
+		"cscrf_id_priv_group_change":       catalogClass(ClassDestructive, "cscrf_id_priv_group_change", "Creates a synthetic account, adds it to and removes it from Administrators, and deletes it in undo; a failed undo leaves an account"),
+		"policy_simulation_read":           {Class: ClassNonDestructive, BlastRadius: "IAM policy simulation only; no change is made."},
+		"cloud_role_assume":                {Class: ClassPotentiallyDestructive, BlastRadius: "Asks the cloud to issue temporary credentials for one operator-named test role; returned credentials are discarded."},
+		"persistence_account_manipulation": catalogClass(ClassDestructive, "persistence_account_manipulation", "Adds a local account to the built-in Users group; a failed undo leaves membership"),
+	},
+	"T1098.001": {
+		"cloud_access_key_create": {Class: ClassDestructive, DestructiveAction: "create_then_delete_access_key", BlastRadius: "Creates one access key for an operator-named test user and deletes it; cleanup is verified in-script."},
+		"cloud_client_secret_add": {Class: ClassDestructive, DestructiveAction: "add_then_remove_client_secret", BlastRadius: "Adds one client secret to an operator-named test application and removes it; cleanup is verified in-script."},
+	},
+	"T1021": {
+		"remote_mgmt_exposure_read": {Class: ClassNonDestructive, BlastRadius: "Read-only SSH or WinRM listener and firewall state check."},
+	},
+	"T1574": {
+		"startup_location_read": {Class: ClassNonDestructive, BlastRadius: "Read-only permission check of startup script locations; nothing is written."},
+	},
+	"T1530": {
+		"cloud_object_list_read": {Class: ClassNonDestructive, BlastRadius: "Lists container or bucket names on a synthetic test account."},
+		"cloud_object_head_read": {Class: ClassNonDestructive, BlastRadius: "Metadata-only request for one synthetic object; the body is never read."},
+	},
+	"T1573": {
+		"c2_encrypted_channel": catalogClass(ClassPotentiallyDestructive, "c2_encrypted_channel", "Loopback TLS session; self-signed cert in CurrentUser\\My, removed by step and undo"),
+	},
+	"T1571": {
+		"cscrf_net_inbound_probe":  catalogClass(ClassNonDestructive, "cscrf_net_inbound_probe", "One TCP connection attempt to a lab target on port 23; no state changed"),
+		"cscrf_net_outbound_probe": catalogClass(ClassNonDestructive, "cscrf_net_outbound_probe", "One TCP connection attempt to a non-routed documentation address; no state changed"),
+		"c2_non_standard_port":     catalogClass(ClassNonDestructive, "c2_non_standard_port", "One GET to the lab simulator on a non-standard port; no state changed"),
+	},
+	"T1005": {
+		"cscrf_fc_copy_manifest":  catalogClass(ClassNonDestructive, "cscrf_fc_copy_manifest", "Read-only hashing of files in the off-host copy listed in SHA256SUMS"),
+		"cscrf_mii_recon_recency": catalogClass(ClassNonDestructive, "cscrf_mii_recon_recency", "Read-only listing of the reconciliation evidence path"),
+		"cscrf_dp_bitlocker":      catalogClass(ClassNonDestructive, "cscrf_dp_bitlocker", "Read-only BitLocker status query on the system volume"),
+		"collection_local_data":   catalogClass(ClassNonDestructive, "collection_local_data", "Read-only enumeration and staging copies of synthetic files"),
+	},
+	"T1039": {
+		"collection_network_share": catalogClass(ClassNonDestructive, "collection_network_share", "Read-only enumeration of a lab share"),
+	},
+	"T1114.001": {
+		"collection_email_presence": catalogClass(ClassNonDestructive, "collection_email_presence", "Read-only check for mail-client data presence"),
+	},
+	"T1041": {
+		"exfil_over_c2_simulation": catalogClass(ClassPotentiallyDestructive, "exfil_over_c2_simulation", "Writes one synthetic row to the lab simulator ledger, removed by undo"),
+	},
+	"T1036": {
+		"evasion_masquerading_executable": catalogClass(ClassPotentiallyDestructive, "evasion_masquerading_executable", "Copies a renamed harmless binary into temp, removed by undo"),
+	},
+	"T1112": {
+		"evasion_registry_modification": catalogClass(ClassPotentiallyDestructive, "evasion_registry_modification", "Writes a BAS-SIM-named value under HKCU, removed by undo"),
+	},
+	"T1499": {
+		"financial_resilience_check": catalogClass(ClassNonDestructive, "financial_resilience_check", "Read-only GETs to the lab simulator"),
+	},
+	"T1546.003": {
+		"persistence_wmi_event_subscription": catalogClass(ClassDestructive, "persistence_wmi_event_subscription", "Creates a WMI filter, consumer and binding under root\\subscription; a failed undo leaves persistence"),
+	},
+	"T1590.001": {
+		"recon_subdomain_enumeration": catalogClass(ClassNonDestructive, "recon_subdomain_enumeration", "DNS queries under bas-sim.test, a reserved TLD"),
+	},
+	"T1589.003": {
+		"recon_employee_discovery": catalogClass(ClassNonDestructive, "recon_employee_discovery", "Read-only GET to the lab simulator's synthetic directory"),
+	},
+	"T1078.002": {
+		"access_valid_account_logon": catalogClass(ClassDestructive, "access_valid_account_logon", "Creates a synthetic local account, logs on with it, and removes it in undo; a failed undo leaves an account"),
+	},
+	"T1201": {
+		"cscrf_id_password_policy": catalogClass(ClassNonDestructive, "cscrf_id_password_policy", "Read-only query of the local account policy"),
+	},
+	"T1562.003": {
+		"cscrf_ea_ps_logging_config": catalogClass(ClassNonDestructive, "cscrf_ea_ps_logging_config", "Read-only registry query"),
+	},
+	"T1204.002": {
+		"cscrf_ir_malware_detect":    catalogClass(ClassPotentiallyDestructive, "cscrf_ir_malware_detect", "Writes the EICAR test string to a per-run temp folder; the folder is deleted in undo"),
+		"cscrf_ea_unauthorized_exec": catalogClass(ClassPotentiallyDestructive, "cscrf_ea_unauthorized_exec", "Copies cmd.exe to a per-run temp folder and runs it once with a harmless echo; the folder is deleted in undo"),
+	},
+	"T1070.006": {
+		"cscrf_siem_time_sync": catalogClass(ClassNonDestructive, "cscrf_siem_time_sync", "Read-only w32tm status query"),
+	},
+	"T1040": {
+		"cscrf_dp_smb_encryption": catalogClass(ClassNonDestructive, "cscrf_dp_smb_encryption", "Read-only SMB server configuration query"),
+	},
+	"T1059.003": {
+		"exe_command_shell": catalogClass(ClassNonDestructive, "exe_command_shell", "Runs one harmless echo through cmd.exe; no state changed"),
+	},
 }
 
 // discoveryDefaultClassification covers the read-only ATT&CK discovery
@@ -1136,6 +1409,11 @@ func AttachExecutionClassifications(steps []ScenarioStep) {
 		steps[i].DestructiveAction = c.DestructiveAction
 		steps[i].BlastRadius = c.BlastRadius
 	}
+}
+
+// catalogClass builds a hand-authored catalog entry for an explicitly classified step.
+func catalogClass(c ExecutionClass, action, blast string) *ExecutionClassification {
+	return &ExecutionClassification{Class: c, DestructiveAction: action, BlastRadius: blast}
 }
 
 // dbprobeClass builds a catalog entry for a dbsim probe class (spec A6). The

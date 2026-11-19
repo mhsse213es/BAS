@@ -135,15 +135,20 @@ type AssetExposureProfile struct {
 
 // AssetSummary is the lightweight index row for GET /api/exposure/assets.
 type AssetSummary struct {
-	Asset                  AssetIdentity `json:"asset"`
-	ExposureScore          int           `json:"exposureScore"`
-	AttackPathScore        int           `json:"attackPathScore"`
-	DetectionCoverageScore int           `json:"detectionCoverageScore"`
-	WorstCVESeverity       float64       `json:"worstCveSeverity,omitempty"`
-	KEVExposed             bool          `json:"kevExposed"`
-	OpenFindingsCount      int           `json:"openFindingsCount"`
-	CriticalityTier        string        `json:"criticalityTier,omitempty"`
-	CriticalityRisk        int           `json:"criticalityRisk"`
+	Asset         AssetIdentity `json:"asset"`
+	ExposureScore int           `json:"exposureScore"`
+	// ExposureMeasurable is false when no term behind ExposureScore came from
+	// real data (see ScoreBreakdown.ExposureMeasurable). Such an asset's
+	// ExposureScore is a flawless 100 by construction and must not be averaged
+	// into a fleet figure as if it were a measured result.
+	ExposureMeasurable     bool    `json:"exposureMeasurable"`
+	AttackPathScore        int     `json:"attackPathScore"`
+	DetectionCoverageScore int     `json:"detectionCoverageScore"`
+	WorstCVESeverity       float64 `json:"worstCveSeverity,omitempty"`
+	KEVExposed             bool    `json:"kevExposed"`
+	OpenFindingsCount      int     `json:"openFindingsCount"`
+	CriticalityTier        string  `json:"criticalityTier,omitempty"`
+	CriticalityRisk        int     `json:"criticalityRisk"`
 }
 
 // AgentRow is the minimal projection of the `agents` table Build needs to

@@ -38,6 +38,12 @@ func EnsurePhishingRunSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	if err != nil {
 		return fmt.Errorf("phishing_runs: ensure schema: %w", err)
 	}
+	if _, err := pool.Exec(ctx, `ALTER TABLE phishing_runs ADD COLUMN IF NOT EXISTS execution_id text`); err != nil {
+		return fmt.Errorf("phishing_runs: add execution_id: %w", err)
+	}
+	if _, err := pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_phishing_runs_execution ON phishing_runs (execution_id) WHERE execution_id IS NOT NULL`); err != nil {
+		return fmt.Errorf("phishing_runs: create execution index: %w", err)
+	}
 	if _, err := pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_phishing_runs_status ON phishing_runs (status)`); err != nil {
 		return fmt.Errorf("phishing_runs: create status index: %w", err)
 	}
@@ -55,23 +61,23 @@ func EnsurePhishingRunSchema(ctx context.Context, pool *pgxpool.Pool) error {
 // InsertEmailGWRun's own convention.
 func InsertPhishingRun(ctx context.Context, pool *pgxpool.Pool, run *phishingrun.PhishingRun) error {
 	_, err := pool.Exec(ctx, `
-		INSERT INTO phishing_runs (id, scenario_id, status, result, error, initiated_by, started_at, completed_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-		run.ID, run.ScenarioID, string(run.Status), run.Result, run.Error, run.InitiatedBy, run.StartedAt, run.CompletedAt)
+		INSERT INTO phishing_runs (id, scenario_id, status, result, error, initiated_by, started_at, completed_at, execution_id)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NULLIF($9,''))`,
+		run.ID, run.ScenarioID, string(run.Status), run.Result, run.Error, run.InitiatedBy, run.StartedAt, run.CompletedAt, run.ExecutionID)
 	if err != nil {
 		return fmt.Errorf("phishing_runs: insert %s: %w", run.ID, err)
 	}
 	return nil
 }
 
-const phishingRunColumns = `id, scenario_id, status, result, error, initiated_by, started_at, completed_at`
+const phishingRunColumns = `id, scenario_id, status, result, error, initiated_by, started_at, completed_at, COALESCE(execution_id, '')`
 
 // scanPhishingRun scans one phishing_runs row, shared by every reader
 // below so the column list exists in exactly one place.
 func scanPhishingRun(row pgx.Row) (*phishingrun.PhishingRun, error) {
 	run := &phishingrun.PhishingRun{}
 	var status string
-	if err := row.Scan(&run.ID, &run.ScenarioID, &status, &run.Result, &run.Error, &run.InitiatedBy, &run.StartedAt, &run.CompletedAt); err != nil {
+	if err := row.Scan(&run.ID, &run.ScenarioID, &status, &run.Result, &run.Error, &run.InitiatedBy, &run.StartedAt, &run.CompletedAt, &run.ExecutionID); err != nil {
 		return nil, err
 	}
 	run.Status = phishingrun.Status(status)
@@ -122,4 +128,35 @@ func ListPhishingRuns(ctx context.Context, pool *pgxpool.Pool, limit int) ([]*ph
 		return nil, fmt.Errorf("phishing_runs: list rows: %w", err)
 	}
 	return runs, nil
+}
+
+// ListPhishingRunsForExecution returns the phishing runs linked to one exercise
+// execution, newest started_at first.
+func ListPhishingRunsForExecution(ctx context.Context, pool *pgxpool.Pool, executionID string) ([]*phishingrun.PhishingRun, error) {
+	rows, err := pool.Query(ctx, `SELECT `+phishingRunColumns+` FROM phishing_runs WHERE execution_id = $1 ORDER BY started_at DESC`, executionID)
+	if err != nil {
+		return nil, fmt.Errorf("phishing_runs: list for execution: %w", err)
+	}
+	defer rows.Close()
+	var runs []*phishingrun.PhishingRun
+	for rows.Next() {
+		run, err := scanPhishingRun(rows)
+		if err != nil {
+			return nil, fmt.Errorf("phishing_runs: list for execution scan: %w", err)
+		}
+		runs = append(runs, run)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("phishing_runs: list for execution rows: %w", err)
+	}
+	return runs, nil
+}
+
+// ExerciseExecutionExists reports whether an exercise execution with this ID exists.
+func ExerciseExecutionExists(ctx context.Context, pool *pgxpool.Pool, id string) (bool, error) {
+	var exists bool
+	if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM exercise_executions WHERE id = $1)`, id).Scan(&exists); err != nil {
+		return false, fmt.Errorf("exercise_executions: exists %s: %w", id, err)
+	}
+	return exists, nil
 }

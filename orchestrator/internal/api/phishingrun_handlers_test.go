@@ -36,6 +36,7 @@ func TestTriggerPhishingRun_RouterLevel_ViewerForbidden_NoRowCreated(t *testing.
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		seedExecutionID(t, pool, "exec-1")
 		router := mountTestRouter(t)
 		tenantID := "default"
 		tok, err := auth.GenerateTenantToken("phishingrun-viewer", auth.RoleViewer, &tenantID, false, testJWTSecret, time.Hour)
@@ -73,6 +74,7 @@ func TestTriggerPhishingRun_UnregisteredScenario_400(t *testing.T) {
 
 func TestTriggerPhishingRun_PHDET002_201ThenGetReturnsCompletedRun(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		seedExecutionID(t, pool, "exec-1")
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).
 			WithPhishingRun(phishbridge.NewFixtureReportTicketProvider([]phishbridge.ReportTicketEvidence{{
 				ExecutionID: "exec-1", TargetID: "target-1", TicketCreated: true, Timestamp: time.Now(),
@@ -111,6 +113,7 @@ func TestTriggerPhishingRun_PHDET002_201ThenGetReturnsCompletedRun(t *testing.T)
 
 func TestListPhishingRuns_ReturnsNewestFirst(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		seedExecutionID(t, pool, "exec-1")
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).
 			WithPhishingRun(phishbridge.NewFixtureReportTicketProvider([]phishbridge.ReportTicketEvidence{{
 				ExecutionID: "exec-1", TargetID: "target-1", TicketCreated: true, Timestamp: time.Now(),

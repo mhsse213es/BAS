@@ -141,10 +141,14 @@ func complianceColor(pct float64) string {
 
 func complianceStatusBG(status string) string {
 	switch strings.ToLower(status) {
-	case "pass":
+	case "resisted", "pass":
 		return "#ecfdf5"
-	case "fail":
+	case "failed", "fail":
 		return "#fef2f2"
+	case "partial":
+		return "#eff6ff"
+	case "inconclusive":
+		return "#fff7ed"
 	case "manual":
 		return "#fffbeb"
 	default: // untested
@@ -154,10 +158,14 @@ func complianceStatusBG(status string) string {
 
 func complianceStatusFG(status string) string {
 	switch strings.ToLower(status) {
-	case "pass":
+	case "resisted", "pass":
 		return "#0d9488"
-	case "fail":
+	case "failed", "fail":
 		return "#da3633"
+	case "partial":
+		return "#1d4ed8"
+	case "inconclusive":
+		return "#c2410c"
 	case "manual":
 		return "#b45309"
 	default: // untested
@@ -167,10 +175,14 @@ func complianceStatusFG(status string) string {
 
 func complianceStatusLabel(status string) string {
 	switch strings.ToLower(status) {
-	case "pass":
-		return "PASSING"
-	case "fail":
-		return "FAILING"
+	case "resisted", "pass":
+		return "RESISTED"
+	case "failed", "fail":
+		return "FAILED"
+	case "partial":
+		return "PARTIAL"
+	case "inconclusive":
+		return "INCONCLUSIVE"
 	case "manual":
 		return "MANUAL ATTESTATION"
 	case "untested":
@@ -252,13 +264,13 @@ func complianceTmpl() (*template.Template, error) {
 	return t, nil
 }
 
-const complianceReportHTML = `<!DOCTYPE html>
+var complianceReportHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Regulatory Compliance Report — {{.Framework.Name}}</title>
-<style>
+<style>` + reportDesignCSS() + `
 *{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:13px}
 body{font-family:"Segoe UI",system-ui,-apple-system,Helvetica,Arial,sans-serif;
@@ -299,6 +311,8 @@ body{font-family:"Segoe UI",system-ui,-apple-system,Helvetica,Arial,sans-serif;
 .attest-box{border:1px solid var(--line);border-radius:6px;background:var(--surface);
   padding:12px 14px;margin-top:16px;font-size:.74rem;color:var(--muted);line-height:1.6}
 .attest-box b{color:var(--ink)}
+.warnbox{border:1px solid #f59e0b;border-radius:6px;background:#fffbeb;color:#92400e;padding:10px 14px;margin:12px 0;font-size:.82rem}
+.warnbox b{color:#78350f}
 .attest-box .mono{font-family:"Cascadia Code","Consolas",monospace;color:#0b5;word-break:break-all;color:var(--navy)}
 
 /* header / footer */
@@ -377,16 +391,17 @@ tr:nth-child(even) td{background:#fafbfd}
           stroke-dasharray="{{arc .Summary.CompliancePercent 52}}"
           transform="rotate(-90 60 60)"/>
         <text x="60" y="58" text-anchor="middle" fill="#fff" font-size="22" font-weight="800">{{pct .Summary.CompliancePercent}}</text>
-        <text x="60" y="76" text-anchor="middle" fill="#94a3b8" font-size="9" letter-spacing="1">COMPLIANCE</text>
+        <text x="60" y="76" text-anchor="middle" fill="#94a3b8" font-size="8" letter-spacing="1">RESISTANCE RATE</text>
       </svg>
       <div>
         <div class="lbl">Control Coverage<b>{{pct .Summary.CoveragePercent}}</b></div>
-        <div class="lbl" style="margin-top:12px">Passing / Tested<b>{{.Summary.PassingControls}} / {{.Summary.TestedControls}}</b></div>
+        <div class="lbl" style="margin-top:12px">Resisted / Tested<b>{{.Summary.PassingControls}} / {{.Summary.TestedControls}}</b></div>
+        {{if .Summary.CoverageNote}}<div class="lbl" style="margin-top:12px;color:#fbbf24"><b style="color:#fbbf24">{{.Summary.CoverageNote}}</b></div>{{end}}
       </div>
     </div>
     {{if .HasTrend}}
     <div class="cover-attest" style="padding-top:14px">
-      <b>Compliance trend</b> &mdash; now {{pct .TrendLast}}
+      <b>Resistance-rate trend</b> &mdash; now {{pct .TrendLast}}
       {{if gt .TrendDelta 0.0}}<span style="color:#34d399">&#9650; +{{printf "%.1f" .TrendDelta}} pts</span>{{else if lt .TrendDelta 0.0}}<span style="color:#f87171">&#9660; {{printf "%.1f" .TrendDelta}} pts</span>{{else}}<span style="color:#94a3b8">&#9644; flat</span>{{end}} since first assessment<br>
       <svg width="240" height="42" viewBox="0 0 200 36" preserveAspectRatio="none" style="margin-top:6px">
         <polyline points="{{.TrendPoints}}" fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -415,16 +430,20 @@ tr:nth-child(even) td{background:#fafbfd}
 
 <div class="stag">Compliance Overview</div>
 <div class="stitle">{{.Framework.Name}}</div>
-<p class="intro">Compliance is scored from breach-and-attack-simulation evidence over the <em>BAS-testable</em> control subset. A control is <em>Passing</em> when every mapped ATT&CK technique passed, <em>Failing</em> when at least one failed, and <em>Untested</em> when no mapped technique was included in the assessed run(s). <em>Manual</em> controls are governance/process requirements that cannot be validated by simulation and are excluded from both percentages — they require manual attestation.</p>
+<p class="intro">These figures show how the controls resisted simulated attack techniques. They are not a determination of compliance. A control is <em>Resisted</em> when every mapped ATT&amp;CK technique was executed and none succeeded, <em>Failed</em> when at least one executed technique succeeded, <em>Partial</em> when only some mapped techniques were executed and none succeeded, <em>Inconclusive</em> when the only attempts errored or were vetoed, and <em>Untested</em> when no mapped technique was executed. The resistance rate is taken over tested controls only, so it must be read together with control coverage. <em>Manual</em> controls are governance/process requirements that cannot be validated by simulation and are excluded from both percentages; they require manual attestation.</p>
+{{if .Framework.MappingWarning}}<div class="warnbox"><b>Mapping note.</b> {{.Framework.MappingWarning}}</div>{{end}}
+{{if .Summary.CoverageNote}}<div class="warnbox"><b>{{.Summary.CoverageNote}}.</b> {{.Summary.TestedControls}} of {{.Summary.TestableControls}} testable controls were tested ({{pct .Summary.CoveragePercent}}).</div>{{end}}
 
 <div class="cards">
-  <div class="card"><div class="n" style="color:{{compColor .Summary.CompliancePercent}}">{{pct .Summary.CompliancePercent}}</div><div class="k">Compliance (passing / tested)</div></div>
-  <div class="card"><div class="n" style="color:{{compColor .Summary.CoveragePercent}}">{{pct .Summary.CoveragePercent}}</div><div class="k">Coverage (tested / testable)</div></div>
-  <div class="card"><div class="n" style="color:var(--teal)">{{.Summary.PassingControls}}</div><div class="k">Passing controls</div></div>
-  <div class="card"><div class="n" style="color:var(--danger)">{{.Summary.FailingControls}}</div><div class="k">Failing controls</div></div>
+  <div class="card"><div class="n" style="color:{{compColor .Summary.CompliancePercent}}">{{pct .Summary.CompliancePercent}}</div><div class="k">Resistance rate (resisted / tested)</div></div>
+  <div class="card"><div class="n" style="color:{{compColor .Summary.CoveragePercent}}">{{pct .Summary.CoveragePercent}}</div><div class="k">Control coverage (tested / testable)</div></div>
+  <div class="card"><div class="n" style="color:var(--teal)">{{.Summary.ResistedControls}}</div><div class="k">Resisted controls</div></div>
+  <div class="card"><div class="n" style="color:#1d4ed8">{{.Summary.PartialControls}}</div><div class="k">Partial controls</div></div>
+  <div class="card"><div class="n" style="color:var(--danger)">{{.Summary.FailingControls}}</div><div class="k">Failed controls</div></div>
   <div class="card"><div class="n">{{.Summary.TotalControls}}</div><div class="k">Total controls</div></div>
   <div class="card"><div class="n">{{.Summary.TestableControls}}</div><div class="k">Testable</div></div>
-  <div class="card"><div class="n" style="color:var(--muted)">{{.Summary.UntestedControls}}</div><div class="k">Untested</div></div>
+  <div class="card"><div class="n" style="color:var(--muted)">{{.Summary.UntestedControls}}</div><div class="k">Untested or inconclusive</div></div>
+  <div class="card"><div class="n">{{.Summary.TechniquesTested}} / {{.Summary.TechniquesMapped}}</div><div class="k">Techniques tested</div></div>
   <div class="card"><div class="n" style="color:#b45309">{{.Summary.ManualControls}}</div><div class="k">Manual attestation</div></div>
 </div>
 
@@ -440,13 +459,14 @@ tr:nth-child(even) td{background:#fafbfd}
 {{if .Domains}}
 <div class="dom">Domain Breakdown</div>
 <table>
-  <thead><tr><th>Domain</th><th>Controls</th><th>Passing</th><th>Failing</th><th>Untested</th><th>Manual</th><th style="width:150px">Compliance</th></tr></thead>
+  <thead><tr><th>Domain</th><th>Controls</th><th>Resisted</th><th>Partial</th><th>Failed</th><th>Untested</th><th>Manual</th><th style="width:150px">Resistance rate</th></tr></thead>
   <tbody>
   {{range .Domains}}
   <tr>
     <td style="font-weight:600">{{.Name}}</td>
     <td>{{.Total}}</td>
-    <td style="color:var(--teal)">{{.Passing}}</td>
+    <td style="color:var(--teal)">{{.Resisted}}</td>
+    <td style="color:#1d4ed8">{{.Partial}}</td>
     <td style="color:{{if gt .Failing 0}}var(--danger){{else}}var(--muted){{end}}">{{.Failing}}</td>
     <td style="color:var(--muted)">{{.Untested}}</td>
     <td style="color:var(--muted)">{{.Manual}}</td>
@@ -484,8 +504,8 @@ tr:nth-child(even) td{background:#fafbfd}
   <div class="ctrl-h">
     <div>
       <span class="ctrl-id">{{.ID}}</span> &nbsp; <span class="ctrl-name">{{.Name}}</span>
-      <div class="ctrl-meta">{{if .Domain}}{{.Domain}}{{end}}{{if .Category}} &middot; {{.Category}}{{end}}
-        {{if .Testable}} &middot; Tested {{.Tested}} &middot; Passed {{.Passed}} &middot; Failed {{.Failed}}{{end}}</div>
+      <div class="ctrl-meta">{{if .Domain}}{{.Domain}}{{end}}{{if .Category}} &middot; {{.Category}}{{end}}{{if .Reference}} &middot; Source {{.Reference}}{{end}}
+        {{if .Testable}} &middot; Techniques tested {{.TechniquesTested}} of {{.TechniquesMapped}} &middot; Resisted {{.Passed}} &middot; Succeeded {{.Failed}}{{end}}</div>
     </div>
     <span class="pill" style="background:{{statusBG .Status}};color:{{statusFG .Status}}">{{statusLabel .Status}}</span>
   </div>
@@ -506,7 +526,7 @@ tr:nth-child(even) td{background:#fafbfd}
   {{else if eq .Status "manual"}}
   <div style="padding:8px 12px;font-size:.78rem;color:#b45309">Requires manual attestation — governance/process control, not simulation-validatable.</div>
   {{else}}
-  <div style="padding:8px 12px;font-size:.78rem;color:var(--muted)">No mapped technique was included in the assessed run(s).</div>
+  <div style="padding:8px 12px;font-size:.78rem;color:var(--muted)">No mapped technique was executed in the assessed run(s).</div>
   {{end}}
 </div>
 {{end}}

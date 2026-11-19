@@ -1,0 +1,109 @@
+#!/bin/sh
+# postinst. Three situations, told apart by what is on the host, not by dpkg's version argument (which is also set
+# after "remove" and when the older bas-agent package is replaced):
+#
+#   1. the agent service is installed          -> upgrade: swap the binary, check it, roll back if it does not run
+#   2. no service, but an enrolment is on disk -> re-install from it (package removed earlier, or old bas-agent package)
+#   3. nothing yet                             -> enrol from /etc/audspect-agent/enroll.env, or say how to
+#
+# Configuration, certificates and the agent's identity are never overwritten here.
+set -e
+
+LIB=/usr/lib/audspect-agent
+BIN=/usr/local/bin/bas-agent
+UNIT=/etc/systemd/system/bas-agent.service
+CONFIG=/etc/bas-agent/config
+CA_STORE=/etc/audspect-agent/deployment-ca.pem
+LEGACY_CA=/etc/audspect/certs/deployment-ca.pem
+LEGACY_CONFIG=/var/lib/audspect-agent/legacy/config
+ENROLL_ENV="${AUDSPECT_ENROLL_ENV:-/etc/audspect-agent/enroll.env}"
+ROLLBACK=/var/lib/audspect-agent/rollback/bas-agent.prev
+# How long the new binary must stay running before the upgrade counts as good (seconds). Overridable for tests.
+HEALTH_WAIT="${AUDSPECT_HEALTH_WAIT:-30}"
+HEALTH_STABLE="${AUDSPECT_HEALTH_STABLE:-6}"
+
+say() { echo "audspect-agent: $*"; }
+
+# healthy: the service is active and stays active for HEALTH_STABLE consecutive seconds within HEALTH_WAIT.
+healthy() {
+  waited=0; stable=0
+  while [ "$waited" -lt "$HEALTH_WAIT" ]; do
+    if systemctl is-active --quiet bas-agent.service; then
+      stable=$((stable + 1))
+      [ "$stable" -ge "$HEALTH_STABLE" ] && return 0
+    else
+      stable=0
+    fi
+    waited=$((waited + 1)); sleep 1
+  done
+  return 1
+}
+
+upgrade_binary() {
+  say "upgrading the agent binary"
+  install -m 0755 "$LIB/bas-agent" "$BIN.new"
+  systemctl stop bas-agent.service || true
+  mv -f "$BIN.new" "$BIN"
+  systemctl daemon-reload || true
+  systemctl start bas-agent.service || true
+  if healthy; then
+    say "the upgraded agent is running"
+    return 0
+  fi
+  say "ERROR: the upgraded agent did not stay running; restoring the previous version"
+  if [ -f "$ROLLBACK" ]; then
+    systemctl stop bas-agent.service || true
+    install -m 0755 "$ROLLBACK" "$BIN"
+    systemctl start bas-agent.service || true
+    say "the previous agent was restored. Look at: journalctl -u bas-agent -n 100"
+  else
+    say "no previous binary was kept, so nothing could be restored"
+  fi
+  return 1
+}
+
+# existing_config: the agent configuration to re-install from: the current one, else the copy preinst kept when the
+# older bas-agent package was replaced.
+existing_config() {
+  if [ -f "$CONFIG" ]; then echo "$CONFIG"; elif [ -f "$LEGACY_CONFIG" ]; then echo "$LEGACY_CONFIG"; fi
+}
+# read_config_value KEY: value of KEY= in that configuration.
+read_config_value() { f="$(existing_config)"; [ -n "$f" ] && sed -n "s/^$1=//p" "$f" 2>/dev/null | head -n 1; }
+
+reinstall_from_existing() {
+  url="$(read_config_value BAS_SERVER_URL)"
+  secret="$(read_config_value BAS_AGENT_SECRET)"
+  ca="$CA_STORE"; [ -s "$ca" ] || ca="$LEGACY_CA"
+  # 1 = nothing usable to re-install from (not an error); 2 = there was, and the installer failed
+  [ -n "$url" ] && [ -n "$secret" ] && [ -s "$ca" ] || return 1
+  host="${url#*://}"; host="${host%%/*}"; mtls="${host##*:}"; host="${host%%:*}"
+  say "an earlier enrolment was found; re-installing the agent from it"
+  BAS_SERVER_HOST="$host" BAS_MTLS_PORT="$mtls" BAS_AGENT_SECRET="$secret" \
+    BAS_ENROLL_PORT="$(read_config_value BAS_ENROLL_PORT)" BAS_ENV_LABEL="$(read_config_value BAS_ENV_LABEL)" \
+    /usr/sbin/audspect-agent-setup --ca-file "$ca" </dev/null || return 2
+  rm -rf /var/lib/audspect-agent/legacy
+}
+
+case "$1" in
+  configure)
+    if [ -f "$UNIT" ] && [ -x "$BIN" ]; then
+      upgrade_binary || exit 1
+    elif [ -f "$ENROLL_ENV" ] && grep -q '^BAS_AGENT_SECRET=.\+' "$ENROLL_ENV"; then
+      say "enrolling this host from $ENROLL_ENV"
+      /usr/sbin/audspect-agent-setup </dev/null || {
+        say "ERROR: enrolment failed (see above). Fix $ENROLL_ENV, then run: sudo dpkg --configure -a"
+        exit 1
+      }
+    elif [ -n "$(existing_config)" ] && { reinstall_from_existing; rc=$?; [ "$rc" -ne 1 ]; }; then
+      if [ "$rc" -ne 0 ]; then
+        say "ERROR: re-installing from the earlier enrolment failed (see above). Then run: sudo dpkg --configure -a"
+        exit 1
+      fi
+    else
+      say "installed, but not enrolled yet."
+      say "  1. copy /usr/share/doc/audspect-agent/enroll.env.example to /etc/audspect-agent/enroll.env (mode 0600) and fill it in"
+      say "  2. sudo audspect-agent-setup"
+    fi
+    ;;
+esac
+exit 0

@@ -1,0 +1,90 @@
+[
+  {
+    "id": "siem-01",
+    "n": 1,
+    "name": "Time Source Configuration (T1070.006, internal ref CSCRF-SIEM-01)",
+    "technique_id": "T1070.006",
+    "timeout_sec": 60,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Read-only query of the Windows time service status.",
+    "telemetry": [
+      "w32tm status query"
+    ],
+    "detection": [
+      "Time source drift review"
+    ],
+    "cleanup": "",
+    "action_key": "cscrf_siem_time_sync",
+    "no_default_cleanup": false,
+    "reversible": true
+  },
+  {
+    "id": "siem-02",
+    "n": 2,
+    "name": "Windows Event Forwarding Subscription Manager (T1562.002, internal ref CSCRF-SIEM-02)",
+    "technique_id": "T1562.002",
+    "timeout_sec": 30,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Read-only registry query.",
+    "telemetry": [
+      "Registry read"
+    ],
+    "detection": [
+      "Event forwarding configuration review"
+    ],
+    "cleanup": "",
+    "action_key": "cscrf_siem_forwarding_config",
+    "no_default_cleanup": false,
+    "reversible": true
+  },
+  {
+    "id": "siem-04",
+    "n": 3,
+    "name": "Security Log Retention Configuration (T1070.001, internal ref CSCRF-SIEM-04)",
+    "technique_id": "T1070.001",
+    "timeout_sec": 30,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Read-only query of the Security log size and retention mode.",
+    "telemetry": [
+      "Event log configuration query"
+    ],
+    "detection": [
+      "Log retention review"
+    ],
+    "cleanup": "",
+    "action_key": "cscrf_siem_log_retention",
+    "no_default_cleanup": false,
+    "reversible": true
+  },
+  {
+    "id": "siem-03",
+    "n": 4,
+    "name": "Tagged Event Ingestion to SIEM (T1562.002, internal ref CSCRF-SIEM-03)",
+    "technique_id": "T1562.002",
+    "timeout_sec": 120,
+    "requires_priv": "admin",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "low",
+    "blast_radius": "Writes one tagged synthetic event (ID 4242, source BAS-SIEM) to the Application log and polls the SIEM query API. Requires BAS_CONFIRM_SIEM_TEST=true and BAS_SIEM_ENDPOINT.",
+    "telemetry": [
+      "Application log event 4242"
+    ],
+    "detection": [
+      "SIEM ingestion check"
+    ],
+    "cleanup": "",
+    "action_key": "cscrf_siem_ingestion",
+    "no_default_cleanup": true,
+    "reversible": false
+  }
+]

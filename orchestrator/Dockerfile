@@ -12,15 +12,20 @@
 # largest single stage) take hours on a cache-less, memory-contended host.
 
 # ── ART Atomics (sparse clone — YAML only, ~10 MB, no binaries) ──────────────
+# Pinned to an exact commit so the build input is reproducible. The build
+# fails if the fetched revision is not exactly ART_COMMIT.
 FROM alpine AS art-fetcher
+ARG ART_COMMIT=a0e3f9bc69fed2fd711bd1f1aa87a40c33482fe6
 RUN apk add --no-cache git curl && \
     git init /art-repo && \
     cd /art-repo && \
     git remote add origin https://github.com/redcanaryco/atomic-red-team.git && \
     git sparse-checkout init --no-cone && \
     printf 'atomics/T[0-9]*/T[0-9]*.yaml\n' > .git/info/sparse-checkout && \
-    git -c protocol.version=2 fetch --depth=1 --filter=blob:none origin master && \
+    git -c protocol.version=2 fetch --depth=1 --filter=blob:none origin "${ART_COMMIT}" && \
     git checkout FETCH_HEAD && \
+    [ "$(git rev-parse HEAD)" = "a0e3f9bc69fed2fd711bd1f1aa87a40c33482fe6" ] || { echo "ART revision mismatch" >&2; exit 1; } && \
+    [ "${ART_COMMIT}" = "a0e3f9bc69fed2fd711bd1f1aa87a40c33482fe6" ] || { echo "ART_COMMIT override refused: pin is fixed in this Dockerfile" >&2; exit 1; } && \
     mkdir /art-atomics /art-payloads && \
     find atomics -name 'T[0-9]*.yaml' -exec cp {} /art-atomics/ \;
 
@@ -35,6 +40,7 @@ RUN mkdir -p /content && \
 
 # ── Agent + Installer Builder ────────────────────────────────────────────────
 FROM golang:1.26-alpine AS agent-builder
+ARG AGENT_VERSION=dev
 # Pinned to the same v0.17.0 used by the orchestrator's own builder stage
 # below -- v0.18.0 requires go >= 1.27, which this image's go1.26.7 cannot
 # satisfy under GOTOOLCHAIN=local (see that stage's comment for the full
@@ -53,11 +59,11 @@ COPY agent/ .
 # dependency's reflection/assembly code is never garble's business to
 # rewrite). All platform binaries.
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 GOGARBLE='audspect/*' garble -literals build -ldflags="-s -w" -o /agents/bas-agent-linux-amd64   . && \
-    CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 GOGARBLE='audspect/*' garble -literals build -ldflags="-s -w" -o /agents/bas-agent-linux-arm64   . && \
-    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 GOGARBLE='audspect/*' garble -literals build -ldflags="-s -w" -o /agents/bas-agent-windows-amd64.exe . && \
-    CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 GOGARBLE='audspect/*' garble -literals build -ldflags="-s -w" -o /agents/bas-agent-darwin-amd64  . && \
-    CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 GOGARBLE='audspect/*' garble -literals build -ldflags="-s -w" -o /agents/bas-agent-darwin-arm64  .
+    CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 GOGARBLE='audspect/*' garble -literals build -ldflags="-s -w -X main.version=${AGENT_VERSION}" -o /agents/bas-agent-linux-amd64   . && \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 GOGARBLE='audspect/*' garble -literals build -ldflags="-s -w -X main.version=${AGENT_VERSION}" -o /agents/bas-agent-linux-arm64   . && \
+    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 GOGARBLE='audspect/*' garble -literals build -ldflags="-s -w -X main.version=${AGENT_VERSION}" -o /agents/bas-agent-windows-amd64.exe . && \
+    CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 GOGARBLE='audspect/*' garble -literals build -ldflags="-s -w -X main.version=${AGENT_VERSION}" -o /agents/bas-agent-darwin-amd64  . && \
+    CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 GOGARBLE='audspect/*' garble -literals build -ldflags="-s -w -X main.version=${AGENT_VERSION}" -o /agents/bas-agent-darwin-arm64  .
 # BINARIES.sha256 is generated later, in the binaries-manifest stage, once
 # both this stage's and agent-legacy-builder's binaries exist to hash together.
 # Windows GUI installer — embeds the single Windows agent binary built above
@@ -77,7 +83,7 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
     go build -trimpath -ldflags="-s -w -H windowsgui" \
     -o /agents/Audspect_Agent.exe . && \
     EXE_MB=$(( $(stat -c%s /agents/Audspect_Agent.exe) / 1024 / 1024 )) && \
-    if [ "$EXE_MB" -gt 25 ]; then echo "Audspect_Agent.exe is ${EXE_MB}MB, expected ~14MB - something is being embedded that shouldn't be" >&2; exit 1; fi && \
+    if [ "$EXE_MB" -gt 40 ]; then echo "Audspect_Agent.exe is ${EXE_MB}MB, expected ~30MB - something is being embedded that shouldn't be" >&2; exit 1; fi && \
     cd /agents && zip -q bas-agent-windows-amd64-setup.zip Audspect_Agent.exe && rm Audspect_Agent.exe
 # macOS one-click installer -- each embeds its matching darwin agent binary
 # built above via go:embed, same reasoning as the Windows installer: this
@@ -137,12 +143,15 @@ RUN cd /agents-legacy && zip -q bas-agent-windows-legacy-amd64-setup.zip bas-age
 # ── Package Builder (.deb, .rpm) ─────────────────────────────────────────────
 FROM debian:bookworm-slim AS packager
 ARG BAS_VERSION=1.6.0
-ENV BAS_VERSION=${BAS_VERSION}
+ARG AGENT_VERSION=dev
+ENV BAS_VERSION=${BAS_VERSION} AGENT_VERSION=${AGENT_VERSION}
 RUN apt-get update && apt-get install -y --no-install-recommends \
     dpkg alien rpm && \
     rm -rf /var/lib/apt/lists/*
 COPY --from=agent-builder /agents /binaries
 COPY packaging/build-agent-packages.sh /build-packages.sh
+COPY packaging/linux-deb /linux-deb
+COPY orchestrator/internal/api/agentinstall/install-agent-linux.sh /install-agent-linux.sh
 RUN bash /build-packages.sh
 
 # ── Combined Binary Manifest ─────────────────────────────────────────────────
@@ -154,7 +163,12 @@ RUN bash /build-packages.sh
 # reference only against stages already declared earlier in the file,
 # regardless of the dependency graph it then builds in.
 FROM alpine AS binaries-manifest
+# The previous release's BINARIES.sha256, base64, from the build script. Its hashes are kept in the new manifest as
+# "#prev" lines, so an agent still on that release is marked "outdated" instead of being quarantined as an unknown
+# binary after an upgrade. Empty means the build had no earlier release to carry.
+ARG PREVIOUS_MANIFEST_B64=""
 RUN mkdir /agents
+COPY packaging/carry-previous-manifest.sh /carry-previous-manifest.sh
 COPY --from=agent-builder /agents/bas-agent-linux-amd64 /agents/bas-agent-linux-arm64 \
      /agents/bas-agent-windows-amd64.exe /agents/bas-agent-darwin-amd64 /agents/bas-agent-darwin-arm64 \
      /agents/bas-agent-windows-amd64-setup.zip \
@@ -173,6 +187,16 @@ RUN cd /agents && sha256sum \
       bas-agent-installer-darwin-arm64 bas-agent-installer-darwin-amd64 \
       bas-agent-linux-amd64.deb bas-agent-linux-arm64.deb bas-agent-linux-amd64.rpm \
     > /agents/BINARIES.sha256
+# This manifest is the one the final image ships and the signing steps later sign, so the previous hashes must be
+# in it here. verify fails the build if any of them is missing.
+RUN if [ -n "$PREVIOUS_MANIFEST_B64" ]; then \
+      printf '%s' "$PREVIOUS_MANIFEST_B64" | base64 -d > /tmp/previous.sha256 && \
+      n="$(sh /carry-previous-manifest.sh carry /agents/BINARIES.sha256 /tmp/previous.sha256)" && \
+      sh /carry-previous-manifest.sh verify /agents/BINARIES.sha256 /tmp/previous.sha256 && \
+      echo "carried $n previous-release hash(es) into BINARIES.sha256"; \
+    else \
+      echo "WARNING: no previous manifest supplied - agents still on the last release will be quarantined after the upgrade"; \
+    fi
 
 # ── Dashboard (G1c): Node only here, never in the final image ─────────────────
 FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS web
@@ -185,6 +209,9 @@ RUN npm run build && sha256sum dist/MANIFEST.sha256 | cut -d' ' -f1 > /web-manif
 # ── Go Orchestrator ───────────────────────────────────────────────────────────
 FROM golang:1.26-alpine AS builder
 ARG BAS_VERSION=dev
+# The licence tier this package is built for (Core, Advanced or Enterprise); empty for an untiered build. Compiled in,
+# so the server can warn when a licence grants more than the package contains.
+ARG BAS_BUILD_TIER=
 # Pinned, not @latest: garble v0.18.0 (2026-09-19) bumped its go.mod
 # requirement to go >= 1.27, which this golang:1.26-alpine base image
 # (go 1.26.7) can't satisfy under GOTOOLCHAIN=local, breaking the build
@@ -221,11 +248,16 @@ COPY --from=web /web-manifest.sha256 /web-manifest.sha256
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOGARBLE='github.com/audspect/*' \
     garble -literals build \
-    -ldflags="-s -w -X main.Version=${BAS_VERSION} -X main.expectedWWWManifestHash=$(cat /web-manifest.sha256) -X github.com/audspect/bas/internal/integrity.orchestratorManifestExpected=true" \
+    -ldflags="-s -w -X main.Version=${BAS_VERSION} -X github.com/audspect/bas/internal/license.buildTier=${BAS_BUILD_TIER} -X main.expectedWWWManifestHash=$(cat /web-manifest.sha256) -X github.com/audspect/bas/internal/integrity.orchestratorManifestExpected=true" \
     -o /bin/orchestrator ./cmd/server
+# API BAS assessment runner. The orchestrator starts it as a child process (BAS_APIBAS_RUNNER=/apibas-runner). Built with plain
+# go build, not garble: its report types carry no json tags, and garble renames fields that encoding/json reads by name.
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /bin/apibas-runner ./cmd/apibas-runner
 
 FROM gcr.io/distroless/static-debian12
 COPY --from=builder /bin/orchestrator /orchestrator
+COPY --from=builder /bin/apibas-runner /apibas-runner
 COPY --from=binaries-manifest /agents/BINARIES.sha256 /agents/BINARIES.sha256
 COPY --from=agent-builder /agents /agents
 COPY --from=agent-legacy-builder /agents-legacy/bas-agent-windows-legacy-amd64.exe /agents/bas-agent-windows-legacy-amd64.exe

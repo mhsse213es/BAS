@@ -12,7 +12,7 @@
 # who already has a package installed.
 #
 # Usage:
-#   bash packaging/licensing/issue-license.sh -customer "HDFC Bank" -id hdfc-001 [-days 365] [-features full] [-out PATH]
+#   bash packaging/licensing/issue-license.sh -customer "HDFC Bank" -id hdfc-001 [-days 365] [-features full] [-tier Core|Advanced|Enterprise] [-addons aleef] [-out PATH]
 #
 # All flags pass straight through to packaging/licensing/licensegen/main.go
 # (run `go run packaging/licensing/licensegen/main.go -h` for the full list).

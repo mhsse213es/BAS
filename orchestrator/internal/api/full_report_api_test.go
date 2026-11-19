@@ -424,7 +424,7 @@ func TestSanitizeFilename_Table(t *testing.T) {
 }
 
 func TestBuildReportFilename_Shape(t *testing.T) {
-	re := regexp.MustCompile(`^Audspect_BAS_Report_AcmeCorp_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.pdf$`)
+	re := regexp.MustCompile(`^Audspect_BAS_Report_AcmeCorp_\d{4}-\d{2}-\d{2}\.pdf$`)
 	got := buildReportFilename("BAS_Report", "AcmeCorp", "pdf")
 	if !re.MatchString(got) {
 		t.Errorf("buildReportFilename(...) = %q, want to match %s", got, re.String())

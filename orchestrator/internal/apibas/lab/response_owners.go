@@ -3,6 +3,7 @@ package lab
 import (
 	"context"
 	"net/http"
+	"slices"
 )
 
 // responseOwners lets a handler name the owners of the objects its response discloses. The access event attributes the
@@ -10,6 +11,8 @@ import (
 // is judged the way a request that names that owner's record is judged. The holder is created per request by logAccess.
 type responseOwners struct {
 	owners []string
+	// disclosed holds the protected field names the response emitted (see disclosure.go). Names only, never values.
+	disclosed []string
 }
 
 type responseOwnersKey struct{}
@@ -28,5 +31,18 @@ func noteResponseOwners(r *http.Request, owners ...string) {
 	}
 	for _, o := range owners {
 		h.owners = appendOwner(h.owners, o)
+	}
+}
+
+// noteDisclosedFields records the protected field names a response emitted. It does nothing when the request carries no holder.
+func noteDisclosedFields(r *http.Request, fields ...string) {
+	h, ok := r.Context().Value(responseOwnersKey{}).(*responseOwners)
+	if !ok {
+		return
+	}
+	for _, f := range fields {
+		if !slices.Contains(h.disclosed, f) {
+			h.disclosed = append(h.disclosed, f)
+		}
 	}
 }

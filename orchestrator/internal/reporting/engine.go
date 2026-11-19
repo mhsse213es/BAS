@@ -19,6 +19,7 @@ import (
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/pathcorrelation"
 	"github.com/audspect/bas/internal/reporting/attackdata"
+	"github.com/audspect/bas/internal/riskquant"
 	"github.com/audspect/bas/internal/rulelib"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/verification"
@@ -168,17 +169,21 @@ type FullReport struct {
 	// Validation Pack). HasData is false — and the section renders as before —
 	// for any run whose scenario declares no expected_detection.
 	DetectionValidation DetectionValidationSection `json:"detectionValidation"`
+	// DetectionGaps is the Detection Engineering Recommendations section: for each technique that ran and was
+	// reviewed as not detected, the Sigma rule and per-SIEM queries that could close it. Empty without reviewed gaps.
+	DetectionGaps DetectionGapSection `json:"detectionGaps"`
 	// AppControl is the Application Control Efficacy section (Section 18a).
 	// Built from this run's own results before any report filter, and
 	// hidden (HasData false) for a run with no application-control steps.
-	AppControl    AppControlSection `json:"appControl"`
+	AppControl AppControlSection `json:"appControl"`
 	// AppControlRuns holds one section per child run of a campaign, each mapped
 	// to the run that produced it. Campaign reports leave AppControl empty.
-	AppControlRuns []AppControlSection `json:"appControlRuns,omitempty"`
-	TrendAnalysis  TrendSummary        `json:"trendAnalysis"`
-	AttackPath          AttackPath                 `json:"attackPath"`
-	AttackFlow          []AttackFlowNode           `json:"attackFlow,omitempty"`
-	AttackFlowSummary   AttackFlowSummary          `json:"attackFlowSummary"`
+	AppControlRuns    []AppControlSection `json:"appControlRuns,omitempty"`
+	TrendAnalysis     TrendSummary        `json:"trendAnalysis"`
+	AttackPath        AttackPath          `json:"attackPath"`
+	AttackFlow        []AttackFlowNode    `json:"attackFlow,omitempty"`
+	AttackFlowGroups  []AttackFlowGroup   `json:"attackFlowGroups,omitempty"`
+	AttackFlowSummary AttackFlowSummary   `json:"attackFlowSummary"`
 	// VariantCoverage holds multi-variant evasion analysis for the HTML/PDF report.
 	// Populated from scenario_variant_technique_summary; nil for runs with no variant depth.
 	VariantCoverage *VariantCoverageSection `json:"variantCoverage,omitempty"`
@@ -212,13 +217,18 @@ type FullReport struct {
 	// TechniqueMatrix is the per-step detection validation table: execution result
 	// combined with post-run EDR alert correlation for every technique in the run.
 	TechniqueMatrix []TechniqueRow `json:"techniqueMatrix,omitempty"`
+	// TechniqueMatrixGroups is TechniqueMatrix with adjacent steps of one technique merged (rendered per technique).
+	TechniqueMatrixGroups []TechniqueMatrixGroup `json:"techniqueMatrixGroups,omitempty"`
 	// Executive-grade derivations (Cymulate-style report).
-	ExecutiveConclusion string          `json:"executiveConclusion"`
-	TopRiskDrivers      []RiskDriver    `json:"topRiskDrivers"`
-	Insights            Insights        `json:"insights"`
-	ActionPlan          []ActionItem    `json:"actionPlan"`
-	Reliability         Reliability     `json:"reliability"`
-	Glossary            []GlossaryEntry `json:"glossary"`
+	ExecutiveConclusion string       `json:"executiveConclusion"`
+	TopRiskDrivers      []RiskDriver `json:"topRiskDrivers"`
+	// RiskQuantification is the estimated annual loss range for open exposures, from customer-entered
+	// inputs (see internal/riskquant). Nil until inputs are supplied; the board card then does not render.
+	RiskQuantification *riskquant.Summary `json:"riskQuantification,omitempty"`
+	Insights           Insights           `json:"insights"`
+	ActionPlan         []ActionItem       `json:"actionPlan"`
+	Reliability        Reliability        `json:"reliability"`
+	Glossary           []GlossaryEntry    `json:"glossary"`
 	// Scope is set for fleet-wide (campaign) reports; nil for single-agent/run
 	// reports. When present the cover and Asset Context render the campaign scope
 	// and the per-agent breakdown instead of single-agent metadata.
@@ -598,6 +608,12 @@ func buildCoverageBreakdown(matrix []TechniqueRow) CoverageBreakdown {
 			t.Missed++
 			gapped = append(gapped, row)
 		}
+	}
+	if cb.Attempted == 0 {
+		// Rows exist but none carries a prevented/detected/undetected verdict (no post-run detection sweep ran, or
+		// every step errored or was skipped). Reporting HasData with 0 of 0 printed "Techniques missed 0 / 0" and
+		// "Techniques prevented 0 / 0" beside a run that executed techniques; no breakdown is the honest answer.
+		return CoverageBreakdown{}
 	}
 	if cb.Attempted > 0 {
 		cb.PreventionRate = cb.Prevented * 100 / cb.Attempted
@@ -1257,6 +1273,9 @@ type SkipBreakdown struct {
 	Content   int `json:"content"`
 	Platform  int `json:"platform"`
 	Scheduler int `json:"scheduler"`
+	// Telemetry counts steps that ran but have no control outcome to score (SkipReasonTelemetryOnly). They are not an
+	// environment gap and not a policy decision, so they are kept apart from Platform.
+	Telemetry int `json:"telemetry"`
 }
 
 // buildSkipBreakdown counts skipped results by SkipReason. An empty or
@@ -1278,6 +1297,8 @@ func buildSkipBreakdown(results []models.SimulationResult) SkipBreakdown {
 			sb.Content++
 		case models.SkipReasonCircuitOpen:
 			sb.Scheduler++
+		case models.SkipReasonTelemetryOnly:
+			sb.Telemetry++
 		default:
 			sb.Platform++
 		}
@@ -1528,6 +1549,10 @@ func buildObjectiveRisks(results []models.SimulationResult) []ObjectiveRisk {
 type ExecutiveSummary struct {
 	RiskScore          int                      `json:"riskScore"`
 	Classification     string                   `json:"classification"`
+	// Assessed is false when no step executed; the scores are then not a measurement. VetoedTechniques counts the
+	// steps Audspect's own policy refused, so the report can say why nothing was tested.
+	Assessed         bool `json:"assessed"`
+	VetoedTechniques int  `json:"vetoedTechniques"`
 	PreventionScore    float64                  `json:"preventionScore"`
 	ExposureScore      float64                  `json:"exposureScore"`
 	CoverageScore      float64                  `json:"coverageScore"`     // defense rate — tactics fully blocked
@@ -1718,6 +1743,7 @@ func (e *Engine) Build(ctx context.Context, agentID string, filter string) (*Ful
 	report.AttackPath = buildAttackPath(latestResults)
 	report.AttackFlow = BuildAttackFlow(latestResults)
 	report.AttackFlowSummary = summariseAttackFlow(report.AttackFlow)
+	report.AttackFlowGroups = groupAttackFlow(report.AttackFlow)
 	// Coverage breakdown: derive from results directly (no detection telemetry in Build()
 	// because the latest-run query omits detection_summary; we use exec verdict only).
 	report.TechniqueMatrix = buildTechniqueMatrix(latestResults, nil)
@@ -1733,7 +1759,9 @@ func (e *Engine) Build(ctx context.Context, agentID string, filter string) (*Ful
 	// ── 6. Executive summary ─────────────────────────────────────────────
 	report.Summary = ExecutiveSummary{
 		RiskScore:          latestScore.RiskScore,
-		Classification:     latestScore.Classification,
+		Classification:     summaryClassification(latestScore),
+		Assessed:           scoreAssessed(latestScore),
+		VetoedTechniques:   latestScore.VetoedTechniques,
 		PreventionScore:    latestScore.PreventionScore,
 		ExposureScore:      latestScore.ExposureScore,
 		CoverageScore:      latestScore.CoverageScore,
@@ -1994,9 +2022,11 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string, filter string) 
 	report.ObjectiveRisks = buildObjectiveRisks(results)
 	report.Detection = buildDetectionSummary(results)
 	report.DetectionValidation = e.buildDetectionValidation(ctx, runID, scenarioID, results)
+	report.DetectionGaps = e.buildDetectionGaps(ctx, runID, results)
 	report.AttackPath = buildAttackPath(results)
 	report.AttackFlow = BuildAttackFlow(results)
 	report.AttackFlowSummary = summariseAttackFlow(report.AttackFlow)
+	report.AttackFlowGroups = groupAttackFlow(report.AttackFlow)
 	report.KillChain = buildKillChain(results, report.DetectionTechniques)
 	report.TechniqueMatrix = buildTechniqueMatrix(results, report.DetectionTechniques)
 	report.CoverageBreakdown = buildCoverageBreakdown(report.TechniqueMatrix)
@@ -2010,7 +2040,9 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string, filter string) 
 
 	report.Summary = ExecutiveSummary{
 		RiskScore:          score.RiskScore,
-		Classification:     score.Classification,
+		Classification:     summaryClassification(score),
+		Assessed:           scoreAssessed(score),
+		VetoedTechniques:   score.VetoedTechniques,
 		PreventionScore:    score.PreventionScore,
 		ExposureScore:      score.ExposureScore,
 		CoverageScore:      score.CoverageScore,
@@ -3413,8 +3445,17 @@ func FilterResults(results []models.SimulationResult, filter string) []models.Si
 		if r.Result == models.ResultVetoed {
 			continue
 		}
+		// The same holds for SKIPPED and ERROR steps. A skipped step was not run, and an ERROR means the BAS hit a
+		// problem (timeout, missing prerequisite, ...): neither says anything about the customer's controls, and the
+		// score already leaves both out. Listing them under "Not prevented" or "Not detected" made the report claim
+		// defence failures that never happened.
+		if r.Result == models.ResultSkipped || r.Result == models.ResultError {
+			continue
+		}
 		isPrevented := r.Result == models.ResultPass || r.Result == models.ResultBlocked
 		isDetected := r.DetectionVerdict == "detected"
+		// A step the controls stopped has the verdict "prevented": that is an outcome of the control, not a miss.
+		isStoppedByControl := r.DetectionVerdict == "prevented"
 		switch filter {
 		case "prevented":
 			if isPrevented {
@@ -3429,7 +3470,7 @@ func FilterResults(results []models.SimulationResult, filter string) []models.Si
 				filtered = append(filtered, r)
 			}
 		case "not_detected":
-			if !isDetected {
+			if !isDetected && !isStoppedByControl {
 				filtered = append(filtered, r)
 			}
 		}
@@ -3797,6 +3838,10 @@ type EnvRestoration struct {
 	// counts from, so a step the whole-run safety net later confirmed
 	// removed (verdict "rescued") never appears here.
 	LeakedItems []LeakedCleanupItem `json:"leakedItems,omitempty"`
+	// RestoreIssues are the agent's own post-restore findings: after putting recorded changes back it asks Windows
+	// whether things still open the way they did (and whether a recorded change could be restored at all). One entry per
+	// "restore incomplete:" line the agent reported, with that machine prefix removed. A run with any is never "clean".
+	RestoreIssues []string `json:"restoreIssues,omitempty"`
 }
 
 // LeakedCleanupItem is one step's cleanup-failure detail: which step, what
@@ -3881,6 +3926,12 @@ func buildEnvRestoration(matrix []TechniqueRow, reverted []string) EnvRestoratio
 		StepsTotal:    len(matrix),
 		RevertedCount: len(reverted),
 	}
+	const incompletePrefix = "restore incomplete: "
+	for _, line := range reverted {
+		if strings.HasPrefix(line, incompletePrefix) {
+			e.RestoreIssues = append(e.RestoreIssues, strings.TrimPrefix(line, incompletePrefix))
+		}
+	}
 	for _, r := range matrix {
 		switch r.CleanupVerdict {
 		case "reverted":
@@ -3943,7 +3994,21 @@ func buildEnvRestoration(matrix []TechniqueRow, reverted []string) EnvRestoratio
 		e.ExecSummary += fmt.Sprintf(" %d of these were cleaned by the safety-net sweep, not by their own script.", e.StepsRescued)
 	}
 
-	e.HasData = e.StepsTotal > 0
+	// The endpoint is only "clean" if the agent's verification found nothing wrong either.
+	if n := len(e.RestoreIssues); n > 0 {
+		note := fmt.Sprintf(" The endpoint was not fully restored: %d item(s) the agent could not put back or verify (listed below).", n)
+		switch {
+		case n > 3:
+			e.ImpactLevel, e.StatusLabel = "persistent", "Failed"
+			e.ImpactLabel = fmt.Sprintf("Endpoint Not Fully Restored (%d)", n)
+		case e.ImpactLevel == "clean":
+			e.ImpactLevel, e.StatusLabel = "minor", "Attention Required"
+			e.ImpactLabel = fmt.Sprintf("Endpoint Not Fully Restored (%d)", n)
+		}
+		e.ExecSummary += note
+	}
+
+	e.HasData = e.StepsTotal > 0 || len(e.RestoreIssues) > 0
 	return e
 }
 
@@ -4449,4 +4514,19 @@ func (e *Engine) populateCampaignVariantCoverage(ctx context.Context, report *Fu
 	}
 
 	report.CampaignVariantCoverage = sec
+}
+
+// scoreAssessed reports whether a stored score measured anything. A run with no executed step (every step vetoed,
+// skipped or errored) has no measurement, whether or not the score carries the NotAssessed flag: scores stored before
+// that flag existed have only their counts.
+func scoreAssessed(s models.Score) bool {
+	return !s.NotAssessed && s.PassedTechniques+s.FailedTechniques > 0
+}
+
+// summaryClassification is the report's risk class for a score. An unassessed run is never "Protected".
+func summaryClassification(s models.Score) string {
+	if !scoreAssessed(s) {
+		return "Not assessed"
+	}
+	return s.Classification
 }

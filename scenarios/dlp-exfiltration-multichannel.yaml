@@ -2,6 +2,10 @@ id: dlp-exfiltration-multichannel
 product_line: dlp
 name: DLP Exfiltration Validation — All Channels
 description: >
+  SAFETY: the USB, clipboard and print steps change host state. The clipboard
+  step overwrites the user's clipboard (text is restored; images and formatting
+  are not). Run this scenario only on a lab endpoint.
+
   Combines every DLP exfiltration channel built so far into one scenario:
   the five agent-native, local-marker-observed channels from
   dlp-exfiltration-validation.yaml (USB-mounted-drive copy, clipboard,
@@ -76,8 +80,8 @@ steps:
     executor: powershell
     requires_priv: user
     timeout_sec: 30
-    fidelity: telemetry-safe
-    production_safe: true
+    fidelity: lab-only
+    production_safe: false
     risk: low
     blast_radius: "Copies a synthetic multi-type sensitive record file to a removable drive if one is attached, then deletes it immediately. No persistence, no real regulated data."
     reversible: true
@@ -97,7 +101,13 @@ steps:
         $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-$runId,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
         Set-Content -Path $srcFile -Value $csvContent -Encoding utf8
         $dest = "$($usbDrive.DriveLetter):\bas_sim_dlp_records_$runId.csv"
-        Copy-Item -Path $srcFile -Destination $dest -ErrorAction SilentlyContinue
+        try {
+          Copy-Item -Path $srcFile -Destination $dest -ErrorAction Stop
+        } catch {
+          Write-Output "SKIP: copy to removable drive raised an error; a DLP block cannot be told apart from a failure, so the step is not scored. [BAS-SIM-DLP-USB]"
+          Remove-Item -Path $srcFile -ErrorAction SilentlyContinue
+          return
+        }
         if (Test-Path $dest) {
           Write-Output "EXEC T1052.001: multi-type sensitive record file copied to removable drive $($usbDrive.DriveLetter): unimpeded. [BAS-SIM-DLP-USB]"
           Write-Output "FAIL: sensitive record file (PAN/Aadhaar/SWIFT/UPI/credit-card patterns) copied to USB without being blocked."
@@ -122,8 +132,8 @@ steps:
     executor: powershell
     requires_priv: user
     timeout_sec: 20
-    fidelity: telemetry-safe
-    production_safe: true
+    fidelity: lab-only
+    production_safe: false
     risk: low
     blast_radius: "Writes a synthetic multi-type sensitive record to the clipboard, checks whether it landed, then restores the original clipboard content. No persistence, no real regulated data."
     reversible: true
@@ -140,7 +150,11 @@ steps:
       Set-Clipboard -Value $csvContent -ErrorAction SilentlyContinue
       Start-Sleep -Milliseconds 300
       $nowClip = $null
-      try { $nowClip = Get-Clipboard -Raw -ErrorAction SilentlyContinue } catch {}
+      try { $nowClip = Get-Clipboard -Raw -ErrorAction Stop } catch {
+        Write-Output "SKIP: clipboard could not be read after the write; outcome unverifiable, step not scored. [BAS-SIM-DLP-CLIP]"
+        if ($null -ne $originalClip) { Set-Clipboard -Value $originalClip -ErrorAction SilentlyContinue } else { Set-Clipboard -Value '' -ErrorAction SilentlyContinue }
+        return
+      }
       if ($nowClip -and $nowClip.Contains('ABCDE1234F')) {
         Write-Output "EXEC T1115: multi-type sensitive record content set to clipboard unimpeded. [BAS-SIM-DLP-CLIP]"
         Write-Output "FAIL: sensitive record content (PAN/Aadhaar/SWIFT/UPI/credit-card patterns) was placed on the clipboard without being blocked or cleared."
@@ -163,8 +177,8 @@ steps:
     executor: powershell
     requires_priv: user
     timeout_sec: 30
-    fidelity: telemetry-safe
-    production_safe: true
+    fidelity: lab-only
+    production_safe: false
     risk: low
     blast_radius: "Submits a synthetic multi-type sensitive record to the default printer's spool queue if one is configured, then removes the job immediately. No persistence, no real regulated data."
     reversible: true
@@ -185,19 +199,17 @@ steps:
         try {
           Get-Content -Path $srcFile | Out-Printer -Name $printer.Name -ErrorAction Stop
           Start-Sleep -Milliseconds 500
-          $job = Get-PrintJob -PrinterName $printer.Name -ErrorAction SilentlyContinue | Where-Object { $_.DocumentName -match 'bas_sim_dlp_print' -or $_.JobStatus -match 'Printing|Spooling|Normal' } | Select-Object -First 1
+          $job = Get-PrintJob -PrinterName $printer.Name -ErrorAction SilentlyContinue | Where-Object { $_.DocumentName -like "*bas_sim_dlp_print_$runId*" } | Select-Object -First 1
           if ($job) {
             Write-Output "EXEC T1052: sensitive record content submitted to print spooler ($($printer.Name)) unimpeded. [BAS-SIM-DLP-PRINT]"
             Write-Output "FAIL: sensitive record content (PAN/Aadhaar/SWIFT/UPI/credit-card patterns) reached the print spooler without being blocked."
             Remove-PrintJob -PrinterName $printer.Name -ID $job.ID -ErrorAction SilentlyContinue
             Write-Output "DLP_OBSERVATION: OperationSucceeded"
           } else {
-            Write-Output "EXEC T1052: print submission did not appear in the spool queue - blocked or intercepted. [BAS-SIM-DLP-PRINT]"
-            Write-Output "DLP_OBSERVATION: OperationBlocked"
+            Write-Output "SKIP: this run's print job was not found in the spool queue, so submission cannot be verified and the step is not scored. [BAS-SIM-DLP-PRINT]"
           }
         } catch {
-          Write-Output "EXEC T1052: print submission threw an error - treated as blocked. [BAS-SIM-DLP-PRINT]"
-          Write-Output "DLP_OBSERVATION: OperationBlocked"
+          Write-Output "SKIP: print submission threw an error, so the outcome cannot be verified and the step is not scored. [BAS-SIM-DLP-PRINT]"
         }
         Remove-Item -Path $srcFile -ErrorAction SilentlyContinue
       }

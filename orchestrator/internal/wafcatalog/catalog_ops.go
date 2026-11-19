@@ -53,6 +53,17 @@ func cacheWeaknessVectors() ([]AttackVector, error) {
 	}
 	out = append(out, v2)
 
+	benign3 := RequestTemplate{Method: "GET", Path: "/products", PayloadLocation: "query:utm_source", Payload: "newsletter", Description: "ordinary request carrying a tracking parameter the cache key already ignores"}
+	v3, err := NewAttackVector("CACHE-003", 1, FamilyCacheWeakness, "Cache poisoning via parameter cloaking with an unkeyed query-string parameter", SeverityHigh,
+		"target's shared cache keys only on a subset of query-string parameters (e.g. ignoring tracking/marketing parameters) while the origin's response still varies based on the full query string",
+		RequestTemplate{Method: "GET", Path: "/products", PayloadLocation: "query:utm_source", Payload: "<script>alert(document.cookie)</script>", Description: "cache-poisoning attempt via parameter cloaking, injecting a malicious payload into a query parameter the cache key excludes but the origin still reflects, aiming for the poisoned response to be cached and served to subsequent users"},
+		&benign3, "", StandardsMapping{CWEIDs: []string{"CWE-20"}},
+		"manually authored from CWE-20")
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, v3)
+
 	return out, nil
 }
 

@@ -1,0 +1,29 @@
+id: apt36-collection-credential
+product_line: killchain
+name: "APT36 Mastery - Credential Access and Collection"
+description: >
+  Five credential-access and collection behaviors attributed to APT36 (Transparent Tribe) tradecraft, using
+  synthetic data and non-destructive probes only: a query-only lsass.exe handle (no memory read), Credential
+  Manager enumeration (no secret unlocked), a stealer-style copy of a synthetic browser credential store, a
+  synthetic clipboard read, and a screenshot saved only to a run-tagged temp file. No real credential is
+  extracted and no real user content is captured.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - apt36
+  - transparent-tribe
+  - projectm
+  - apt36-mastery
+  - credential-access
+  - collection
+  - t1003
+  - t1555
+  - t1115
+  - t1113
+mitre_phases:
+  - credential-access
+  - collection
+
+steps:

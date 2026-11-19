@@ -1,0 +1,38 @@
+# Core banking tiering (pack: core-banking).
+# Rules: fw/rules/core-banking.sh. Only the app tier may reach the database,
+# and only on 5432.
+#
+# corp-to-db and user-to-db are the same tuple (corp -> db:5432). The second
+# is kept as a repeat of the first, so the pack also shows that the verdict
+# holds across attempts on the same path.
+id: core-banking-tiering
+name: Core banking tiering
+probes:
+  - id: corp-to-db
+    src: corp
+    dst: db
+    port: 5432
+    proto: tcp
+    expect: deny
+    note: Corporate IT must not reach the core banking database directly.
+  - id: app-to-db-authorized
+    src: app
+    dst: db
+    port: 5432
+    proto: tcp
+    expect: allow
+    note: Positive control; the app tier reaches the database on 5432.
+  - id: app-to-db-other-port
+    src: app
+    dst: db
+    port: 3306
+    proto: tcp
+    expect: deny
+    note: The app tier is limited to the authorized port.
+  - id: user-to-db
+    src: corp
+    dst: db
+    port: 5432
+    proto: tcp
+    expect: deny
+    note: Repeat of corp-to-db; stability check on the same path.

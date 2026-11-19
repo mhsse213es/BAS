@@ -402,10 +402,7 @@ an explicit isolation test proving exactly three of the four scenarios carry EIC
 `internal/emailgwefficacy` suite, the `internal/api` email-gateway tests, and `go build ./...`/`go vet ./...`
 all pass unchanged.
 
-**Still open:** the console panel (`web/src/features/email.js`) was already stale before this work -- it lists
-only EG-001 through EG-010 and was never updated for EG-011 through EG-016 either. EG-017..020 are not added to
-it. This is a pre-existing gap, not introduced here, and is flagged rather than silently fixed as part of an
-unrelated task.
+**Resolved 2026-10-24:** the console panel (`web/src/features/email.js`) was stale when this item was written - it listed only EG-001 through EG-010. Item 21 below brought it up to EG-020 (commit `a764bd67`), so EG-011 through EG-020, including these four, are now in the console catalog.
 
 ### Correction: no "Email" console UI page exists
 
@@ -423,3 +420,95 @@ Found and verified intact 2026-10-18 (file present, diffs matched the original w
 - Verified: the catalog parses in Node with no array holes, and `node --check` passes. This is structural verification only.
 - Not verified: the page has not been loaded in a browser against a running orchestrator, so the rendered layout and run dispatch from the console are unconfirmed. This needs a running stack.
 - Pre-existing, left as-is: the console keeps EG-007 with known-good/known-bad rows. EG-007 is deliberately absent from the dispatch table because it is a mailbox-rule check, not an SMTP injection, so those console rows have no matching backend expectation.
+
+### 22. Container matrix (EG-021..025): the attachment content wrapped in archives and a forwarded message -- 2026-10-28
+
+Picked from `docs/cymulate-comparison-gap-analysis.md` (email, gap 1 and 2): the Cymulate email export is mostly attachments
+inside other files (about 13,300 of 14,683 messages have two or more levels), and Audspect sent only bare attachments.
+
+**Built (`containermatrix.go`), all from the Go standard library, EICAR or the benign placeholder only:**
+
+- **EG-021** `archive-zip` -- EICAR inside a ZIP (one level).
+- **EG-022** `nested-archive` -- EICAR inside a ZIP inside a ZIP inside a ZIP (three levels).
+- **EG-023** `archive-targz` -- EICAR inside a gzip-compressed tarball.
+- **EG-024** `attached-message` -- EICAR attached to an email that is itself attached (`message/rfc822`).
+- **EG-025** `script-extension-<ext>` -- eight scenarios (`bat`, `scr`, `pif`, `wsf`, `jse`, `vbe`, `com`, `cmd`), each a benign
+  placeholder, so only the extension policy is tested. EG-020 already covers `.vbs`.
+
+Each has a known-good (quarantined) and known-bad (delivered) expectation, wired for real injection like EG-017..020 and runnable
+through the existing `ExpectationByID` lookup (the run API, the report and the phishing mapping all use it). 24 expectations in total.
+
+**Proven:** `containermatrix_test.go` opens every container the way a scanner would. The ZIP has one entry that is the EICAR
+string; the nested ZIP is exactly three levels deep with EICAR at the bottom; the tarball has one file; the attached message parses
+and its inner attachment decodes to EICAR; each EG-025 file ends in its extension and carries the placeholder, not EICAR.
+`console_catalog_test.go` is new and fails the build if the server can run an expectation that is not in the console's `EG_CATALOG`
+(the console copy had fallen behind once already). The console catalog now lists 25 scenarios. The `emailgwefficacy` and the
+email-gateway `internal/api` tests pass; the console unit tests pass (506).
+
+**Still open:**
+- Not built, because the Go standard library cannot write them: RAR, 7z, CAB, ARJ, password-protected ZIP, and macro-enabled Office
+  files. Doing them needs either a writer library or checked-in templates, as `dlpfixture` does for DOCX/XLSX/PDF/PNG.
+- Not run against a live gateway: like every scenario here these are verified at the message-construction level. Whether a given
+  gateway quarantines each one needs a tenant or lab gateway.
+- The injector sends the archive as a base64 MIME attachment exactly as it does for EG-017..020. That path was not changed.
+
+## Second container matrix (EG-026..EG-029) — 2026-10-28
+
+Continues item 22 (EG-021..025). Gap analysis: email gap, the archive and Office file types a gateway must handle.
+
+**Built (9 expectation pairs = 18 scenarios):** EG-026 EICAR in a 7z; EG-027 EICAR in a Windows cabinet; EG-028 EICAR in an AES-256
+password-protected ZIP with the password in the message body (tests policy for content a gateway cannot scan); EG-029 `.docm`, `.xlsm`
+and `.pptm`. Registered in `internal/emailgwefficacy/containermatrix2.go` and in the console catalog (`email.js`, drift-tested).
+
+**How the files were made:** Go's standard library cannot write these, so each was generated once offline and embedded from
+`testdata/` (6 files, under 30 KB). Each was round-tripped with a real extractor when generated (py7zr for 7z, `makecab`/`expand` for CAB, pyzipper
+for the protected ZIP). The SHA-256 of every file is pinned in `containermatrix2_test.go`, so a change is deliberate.
+
+**Macro-enabled files carry no macro.** They are the fabricated carrier documents with the main part's content type switched to the
+macro-enabled one; a test asserts there is no `vba` part. They test type-based policy only, never macro detection. A gateway that scans
+for malicious macro code has nothing to find here.
+
+**Not built:** RAR and ARJ. No free writer exists for them, and checking in a binary produced by a proprietary tool is a licence
+question for the owner. **Not verified:** none of this has been delivered to a real gateway; the CAB and 7z are valid to the tools named, not
+proven to be opened by any particular product.
+
+## 23. Staging verification pass (2026-11-02) — closes the console's "not browser-verified" caveat from items 4/20/21/the "Update 2026-10-18" note; finds one new, real bug
+
+Prompted by a direct ask to see which of this doc's open items the staging deployment (`zain@audspecterver`, 192.168.10.78:9543, rebuilt from `main`) could actually close, as opposed to items genuinely blocked on an external tenant/vendor. Checked via `curl` against the live API, then with a real browser (Claude in Chrome) against the live console, not just a static read of the bundle.
+
+**Confirmed working, for real, against a live deployment (not a fixture/httptest):**
+- `GET /api/emailgw/coverage` returns 7/7 areas covered.
+- `GET /api/emailgw/report` returns the real `injectionGaps` list (6 entries — SPF/DKIM/DMARC known-good, EG-007's two checks, EG-009 known-good — all expected, all infra-gated, not a regression).
+- The deployed JS bundle (`app.JZA7BF6G.js`) contains the full EG-001..EG-029 catalogue (29 unique scenario IDs), confirming staging is current through the second container-matrix item, not stale.
+- The "Email" console tab (`web/src/features/email.js`) is live, reachable, and renders correctly in a real browser: nav entry, coverage panel (7/7 areas, matches the API), time-based metrics (honestly shows "no eligible samples" rather than a fabricated number, since 0 real runs exist), the full 29-scenario catalogue grid (confirmed "29 scenarios · 84 checks" in the page itself), and the Campaigns/Templates tab (correctly shows "Templates 2", matching the two real campaign templates — BEC supplier fraud and credential-phishing-url-chain — and "No campaigns yet"). No console errors.
+
+**New, real bug found by this pass (not previously known — found only by clicking through a live browser session, not by reading the bundle):** the per-check "Run" button inside a scenario's detail drawer (`email.js`, `renderScenarioDrawer`, ~line 326) is gated by `EG_CAN_RUN = (ROLE === 'admin' || ROLE === 'analyst')` (`email.js:179`). Logged in as staging's own admin account (`admin@k.com`, JWT `role:"admin"`, and confirmed `localStorage.bas_role === 'admin'` byte-for-byte via direct JS inspection in the live tab), the Run button is still absent from the rendered DOM — reproduced twice, including after a hard `location.reload()`. Same gate hides the "Launch" button on campaign templates (`email.js:339`) and the "Cancel campaign" button (`email.js:367`). **Net effect: on this deployment, nobody could trigger a scenario run or launch a campaign from the Email console UI at all, for any role** — the only working trigger was the API directly (`POST /api/emailgw-runs`, `POST /api/emailgw-campaigns`).
+
+**RESOLVED, same day:** `email.js` and `shell.js` import each other (`email.js` imports `ROLE` from `shell.js`; `shell.js` imports `loadEmailTab` from `email.js`) — a genuine circular dependency, confirmed by tracing `main.js`'s own import order: its first import, `globals.js`, itself imports from `shell.js`, so `shell.js` starts evaluating before `main.js`'s own direct `email.js` import is ever reached. `shell.js`'s import list reaches `email.js` at its own line 18, *before* `shell.js`'s line 69 (`export var ROLE = localStorage.getItem('bas_role') || '';')` runs. Per the ES module spec, a back-edge into an already-in-progress module returns its *current* (incomplete) namespace rather than waiting — so `email.js`'s `import { ROLE } from './shell.js'` resolved to `ROLE`'s hoisted-but-unassigned value (`undefined`) at that moment. `var EG_CAN_RUN = (ROLE === 'admin' || ROLE === 'analyst')`, computed once at `email.js` module-load time (line 179), captured that `undefined` permanently — `false === 'admin'` and `false === 'analyst'` both fail, regardless of what `ROLE` was later correctly assigned to. Confirmed as the actual mechanism, not just a plausible theory: `email.js` was the only file in the whole codebase computing this kind of role check at module scope — every other file (`adversaries.js:479`, `findings.js:56/111/149`, `endpoint-mastery.js:130`, etc.) recomputes `ROLE === 'admin' || ROLE === 'analyst'` inline, inside the render function, on every call, which is immune to this ordering issue since by the time any render function actually runs, both modules have long finished loading.
+
+**Fix:** replaced the one-time `var EG_CAN_RUN = ...` with `function egCanRun() { return ROLE === 'admin' || ROLE === 'analyst'; }`, called at each of its 6 use sites, matching the pattern used everywhere else in the console. `node --check` and `eslint src` both clean, `npm run build` clean, and the fix is confirmed present in the built bundle (`egCanRun` appears 6 times, `EG_CAN_RUN` zero times). Committed `ff2c1aa4`, pushed to `main`.
+
+**Re-verified live on staging, 2026-11-04**, after the user upgraded the deployment (`sudo bash install.sh --upgrade`, new bundle `app.XYUSBSO7.js`). Confirmed `egCanRun` present 6 times / `EG_CAN_RUN` zero times in the served bundle, then clicked through it in a real browser as the staging admin account: EG-002's drawer now shows both "▶ Run" buttons (known-good, known-bad), and the Templates tab shows a working "+ Launch" button on both campaign templates. Fully closed — not just a build-level check this time.
+
+**New, real fact found about staging's own configuration (not a code bug, but material to the still-open items below):** `POST /api/emailgw-runs` against staging returns `{"error":"EmailGW real-run execution is not configured on this deployment"}` — staging has no `AUDSPECT_EMAILGW_DEFENDER_*`/injection-target environment configured. Staging currently cannot execute a real EmailGW run at all, independent of the console bug above.
+
+**Filtered answer to "what can staging close":**
+- **Closed by this pass:** the "not browser-verified against a running stack" caveat on items 4, 20, 21, and the "Update 2026-10-18" section — now browser-verified, with one new bug found as a direct result (documented above, still open).
+- **NOT closeable by staging, regardless of the bug above:** item 1b and everything chained to it (items 14, 17, 18, 22's live-gateway verification, the second container matrix's live-gateway verification, and the EG-001/EG-009 injection gaps) — these need a real Microsoft 365 tenant with Defender for Office 365 licensing and admin consent. Staging is Audspect's own BAS server; standing it up does not create or license a Microsoft tenant. The one Entra tenant referenced anywhere in this initiative's memory (`ed059a30-...`, shared with the unrelated Azure-discovery work) still has no admin role and no subscription as of this pass — unchanged, not newly available.
+- **NOT closeable by staging:** item 19 (real SIEM/ticketing connector — needs new adapter code, since this package deliberately has no `internal/detectverify` import, plus a real external SIEM/ticketing system); the remaining 4 illustrative campaign families from items 9/15 (needs new campaign-template code, not a deployment); RAR/ARJ container support (needs a writer library or a licensing decision, not a deployment).
+- **Side finding, not an open item from this doc but relevant to any future staging-based verification:** staging itself would need `AUDSPECT_EMAILGW_DEFENDER_*` configured before any of the tenant-gated items above could even be attempted there, on top of the tenant itself existing.
+
+### 24. The last four of the six design-doc-named illustrative campaign families (2026-11-09) -- fully closes item 9/15's own "still open, by design" line
+
+Picked up from item 23's own punch list ("the remaining 4 illustrative campaign families from items 9/15 ... needs new campaign-template code, not a deployment"). BECSupplierFraudTemplate and CredentialPhishingURLChainTemplate had already proved the two-injected-stage-plus-gate-plus-two-derived-stage campaign model; this builds four of the other five families the design doc named (`docs/superpowers/specs/2026-10-16-emailgw-mastery-campaign-stage-execution-design.md` §11), each chaining already-wired `MailExpectation`s that had never been chained into a campaign before -- no new scenario content, no new injection mechanism, pure reuse at the campaign-template layer:
+
+- **`malware-post-delivery-response`** -- EG-004 (malicious attachment) then EG-008 (post-delivery remediation). EG-008's own premise is a message never caught at delivery time, so its two derived detection/response stages are this template's actual point, not a side effect.
+- **`exfiltration-credential-to-data-theft`** -- EG-011 (QR-code credential lure) then EG-006 (outbound DLP, `known-bad`/sensitive=true direction). The one genuinely exfiltration-shaped narrative the current catalogue supports; its second stage dispatches through Microsoft Graph `sendMail` with zero special-casing, since `dispatchInjectedStage`/`ExecuteEmailGWRun` already branch on `EnvelopeFrom` vs `OutboundSenderMailbox` transparently.
+- **`trust-configuration-weakness`** -- EG-016's own two legs (`RelayPathBypassDirectExpectation`/`RelayPathBypassRelayExpectation`), an already-paired scenario (same underlying spoofed identity, direct perimeter path vs. a differently-configured internal relay that skips the same policy) that had never actually been chained into a campaign before.
+- **`mailbox-compromise-consequence`** -- EG-015 (reply-chain hijack from an account presented as compromised) then EG-013 (malicious-link document), both already targeting the same mailbox (`finance-test@example-lab.test`) independently of this template. Tests the email-content *consequence* of a compromised mailbox, not the compromise mechanism itself -- the real mechanism (OAuth consent-grant + delegated-access) is a separate, non-`MailExpectation` assessment model (item 18) this package architecturally cannot chain into a stage.
+
+**Proven:** two new drift-guard tests in `internal/api`, matching the pattern `TestEmailGWInjectionGaps_MatchesExecuteEmailGWRunsOwnCheck` and `TestConsoleCatalogListsEveryExpectationTheServerCanRun` already proved valuable for standalone scenarios -- `TestAllEmailGWCampaignTemplates_InjectedStagesResolveToWiredExpectations` (every injected stage across every registered template resolves to a genuinely wired expectation, not a fixture-only or unknown one) and `TestConsoleCampaignCatalogListsEveryRegisteredTemplate` (every registered template ID appears in the console's own `CAMPAIGN_CATALOG`). `go build ./...`, `go vet ./...`, and the full emailgw-scoped `internal/api` suite all pass. `npm run build`/`eslint src`/`node --check` all clean on `email.js`; the four new template IDs are confirmed present in the built bundle. Pushed directly to `main` (`686a8755`).
+
+**Correction to this item's own heading:** re-counted carefully before closing this out -- the design doc's §11 names exactly six illustrative families: BEC (item 9), credential phishing (item 15), and the four built here (malware/post-delivery response, exfiltration, trust/configuration weaknesses, mailbox compromise). All six are now built, not four of five -- the title above undercounts by one family that was already done. Item 9/15's own "still open, by design" line is now fully closed, not "most of" it.
+
+**Still open:** not browser-verified live against a running stack -- same "not yet re-verified on staging" posture every other code change in this doc carries until the user's next `install.sh --upgrade`.

@@ -1,0 +1,45 @@
+/* Global search: the header search bar and the palette it opens. Theme tokens only. */
+
+/* Header bar: wide, centred between the page title and the status chips, with a blue ring like the design. */
+.header-spacer { flex: 1; }
+.cmdk-launch { width: min(640px, 44vw); height: 38px; margin: 0 auto; border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); background: color-mix(in srgb, var(--elevated) 82%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent), 0 0 18px -6px var(--accent-glow); font-size: 0.82rem; }
+.cmdk-launch:hover, .cmdk-launch:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim), 0 0 22px -4px var(--accent-glow); outline: none; }
+.cmdk-launch .kbd { margin-left: auto; padding: 2px 7px; border-radius: 6px; background: var(--surface); }
+@media (max-width: 1100px) { .cmdk-launch { width: auto; margin: 0; } }
+
+/* Palette */
+.cmdk.gs { width: min(760px, 94vw); border-radius: 16px; }
+.cmdk.gs .cmdk-in { padding: 15px 18px; }
+.cmdk.gs .cmdk-in input { font-size: 1.02rem; background: transparent; border: 0; box-shadow: none; padding: 0; }
+.cmdk.gs .cmdk-list { max-height: min(56vh, 520px); padding: 6px 8px 10px; }
+.gs-chips { display: flex; gap: 6px; padding: 9px 14px; overflow-x: auto; border-bottom: 1px solid var(--border); scrollbar-width: none; }
+.gs-chips::-webkit-scrollbar { display: none; }
+.gs-chip { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--muted-hi, var(--muted)); font-size: 12.5px; cursor: pointer; }
+.gs-chip em { font-style: normal; font-size: 10.5px; padding: 0 6px; border-radius: 999px; background: var(--elevated); color: var(--muted); }
+.gs-chip:hover { background: var(--elevated); color: var(--text); }
+.gs-chip.on { background: var(--accent-dim); border-color: var(--accent); color: var(--text); font-weight: 600; }
+.gs-chip.on em { background: var(--accent); color: #fff; }
+
+.gs-row { display: flex; align-items: center; gap: 12px; padding: 9px 10px; }
+.gs-ico { flex: none; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: var(--elevated); color: var(--muted-hi, var(--muted)); }
+.gs-scenario { color: var(--accent); background: var(--accent-dim); }
+.gs-technique { color: #a78bfa; background: color-mix(in srgb, #a78bfa 14%, transparent); }
+.gs-agent { color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
+.gs-finding { color: var(--warning); background: color-mix(in srgb, var(--warning) 14%, transparent); }
+.gs-report { color: #38bdf8; background: color-mix(in srgb, #38bdf8 14%, transparent); }
+.gs-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.gs-t { font-size: 13.5px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gs-s { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gs-badge { flex: none; font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; }
+.gs-star { flex: none; cursor: pointer; color: var(--muted); }
+.gs-star.on { color: var(--warning); }
+.gs-row.active { background: var(--elevated); box-shadow: inset 2px 0 0 var(--accent); }
+.gs mark { background: color-mix(in srgb, var(--accent) 28%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+.gs-more { float: right; text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--muted); }
+.gs-link { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0; font: inherit; text-decoration: underline; }
+.gs-foot { display: flex; gap: 16px; align-items: center; padding: 9px 16px; border-top: 1px solid var(--border); font-size: 11.5px; color: var(--muted); }
+.gs-foot kbd { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10.5px; padding: 1px 5px; margin-right: 3px; border: 1px solid var(--border); border-radius: 5px; background: var(--elevated); }
+.gs-tip { margin-left: auto; }
+.gs-fb { margin-bottom: .8rem; }
+.gs-fbtags { display: flex; gap: .4rem; flex-wrap: wrap; }
+@media (max-width: 700px) { .gs-foot span:not(.gs-tip) { display: none; } .gs-badge { display: none; } }

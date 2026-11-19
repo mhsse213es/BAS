@@ -1,0 +1,29 @@
+id: apt36-command-control
+product_line: killchain
+name: "APT36 Mastery - Command, Control and Lateral Movement"
+description: >
+  Four behaviors attributed to APT36 (Transparent Tribe) tradecraft, kept on loopback so nothing leaves the
+  host: HTTP beacons with jitter and an uncommon user agent (telemetry mode only), tar-archived collection with a
+  hash-verified extraction, staging through the loopback administrative share (gated), and a read-only WinRM
+  exposure check. The WinRM step never starts, stops or reconfigures the service; it only reports whether it is
+  already running with a listener, so lateral-movement reachability is assessed without changing the host's
+  remote-management surface.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - apt36
+  - transparent-tribe
+  - projectm
+  - apt36-mastery
+  - command-and-control
+  - lateral-movement
+  - t1071
+  - t1560
+  - t1021
+mitre_phases:
+  - command-and-control
+  - lateral-movement
+
+steps:

@@ -105,7 +105,7 @@ var contentEvidenceByID = map[string]ContentEvidence{
 	// four abuse primitives stay model-only, unchanged.
 	"acl-privilege-exposure-check": {
 		State: ContentScenarioComposable, RepoVerified: true,
-		Source:    "scenarios/acl-privilege-exposure-audit.yaml (Stage 1, T1069)",
+		Source:    "scenarios/acl-privilege-exposure-audit.yaml (Stage 1, T1069.002)",
 		Rationale: "committed scenario reads privileged objects' DACLs for dangerous rights granted to non-tier-0 principals",
 	},
 	// ADCS ESC template exposure audit -- the read-only DISCOVERY counterpart

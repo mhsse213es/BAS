@@ -425,3 +425,26 @@ Restores the most recent timestamped backup (`docker-compose.yml`, `.env`, versi
 ---
 
 *© Audspect — Confidential — Customer Distribution*
+
+## Uninstalling the server (clean slate for a fresh install)
+
+```
+sudo bash uninstall.sh                 # shows what it found, asks you to type "yes"
+sudo bash uninstall.sh --yes           # no question
+sudo bash uninstall.sh --dry-run       # show only, change nothing
+sudo bash uninstall.sh --backup-to /root/keep   # first save the CA, signing key and .env (mode 600)
+```
+
+`install.sh --uninstall` runs the same script. It finds the install directory itself (systemd unit, the running
+container's mounts, `setup.conf`, then `/opt/audspect`) and refuses to touch system locations or a directory that does
+not look like a BAS install. It removes the install directory (database, deployment CA, signing key, `.env` and agent
+secret, backups, logs), the containers, volumes and network, the `audspect` service **and the backup timers**, then
+checks that each is gone. It is safe to run again: a half-removed install is finished, a clean server reports
+"Nothing to remove". It works when Docker is stopped (the files and units are still removed).
+
+Not removed: other applications' containers, volumes, networks and images; firewall rules; the folder you unpacked the
+installer from and its `setup.conf` (keep `BAS_ENROLL_PORT` / `BAS_LEGACY_PORT` there if your server needs non-default
+ports). Add `--purge-images` to remove the BAS images too.
+
+A fresh install after this has a **new CA and agent secret**, so every enrolled agent stops working: uninstall each
+agent (Windows: Apps & features; Linux/macOS: the uninstaller from the Deploy Agent page) and install it again.

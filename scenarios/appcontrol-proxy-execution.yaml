@@ -1,0 +1,2439 @@
+id: appcontrol-proxy-execution
+product_line: av
+name: "Application Control Mastery - Trusted Binary Proxy Execution"
+description: >
+  Nine controlled, benign tests of whether application control stops signed Windows
+  utilities from being used as execution proxies: regsvr32, rundll32, mshta, msiexec,
+  InstallUtil, a Control Panel applet, CMSTP, WMIC XSL processing and MSBuild inline tasks
+  (ATT&CK T1218.x, T1220, T1127.001). Each step runs one benign artifact that writes a single
+  marker file, then resolves the result against both AppLocker and WDAC (App Control for
+  Business): blocked_as_expected needs the marker absent, exactly one matching block event from
+  an enforcing mechanism, and that mechanism Enabled. An audit-mode event is reported as
+  audited_only and never counts as prevention. Missing mechanisms, unreadable logs and
+  unattributable results are inconclusive or not_applicable, never a pass. Companion to
+  appcontrol-efficacy; it does not change policy, and every artifact is deleted by the step.
+  Block outcomes are verified only against stubbed fixtures; the executed path was run on a
+  host with no enforcement.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - application-control
+  - appcontrol-mastery
+  - proxy-execution
+  - behavioral
+mitre_phases:
+  - execution
+  - defense-evasion
+
+steps:
+
+  # -------------------------------------------------------------------------
+  - id: appctl-a07-regsvr32
+    name: "Application control Trusted Binary Proxy: Regsvr32 scriptlet execution (T1218.010)"
+    technique_id: T1218.010
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Writes a benign .sct scriptlet and runs regsvr32.exe /i against it; the scriptlet writes one marker file. All files are in a private temp directory deleted by the step."
+    telemetry:
+      - "AppLocker EXE and DLL event 8004 naming regsvr32.exe, if enforced"
+      - "Code Integrity 3077 naming regsvr32.exe, if WDAC enforced"
+      - "Sysmon EID 1: regsvr32.exe with /i: and scrobj.dll"
+    detection:
+      - "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:AppCtlTid = [guid]::NewGuid().ToString('N')
+      $script:AppCtlMarker = "BAS-SIM-APPCTL-$($script:AppCtlTid)"
+      $script:AppCtlWork = Join-Path $env:TEMP "bas-appctl-$($script:AppCtlTid)"
+      function Get-AppCtlState {
+      $st = @{ Build = [Environment]::OSVersion.Version.Build; AlReadable = $false; AlSvc = $false; Al = @{}; WdReadable = $false; Wd = 'NotConfigured'; WdKernel = 'NotConfigured' }
+      try {
+      $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+      $st.AlReadable = $true
+      foreach ($rc in @($pol.RuleCollections)) { $st.Al[[string]$rc.RuleCollectionType] = [string]$rc.EnforcementMode }
+      } catch {}
+      foreach ($t in 'Exe', 'Script', 'Dll', 'Msi', 'Appx') { if (-not $st.Al.ContainsKey($t)) { $st.Al[$t] = 'NotConfigured' } }
+      $st.AlSvc = ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running')
+      try {
+      $dg = Get-CimInstance -Namespace 'root\Microsoft\Windows\DeviceGuard' -ClassName Win32_DeviceGuard -ErrorAction Stop
+      $map = @{ 0 = 'NotConfigured'; 1 = 'AuditOnly'; 2 = 'Enabled' }
+      $u = [int]@($dg)[0].UsermodeCodeIntegrityPolicyEnforcementStatus
+      $k = [int]@($dg)[0].CodeIntegrityPolicyEnforcementStatus
+      $st.WdReadable = $true
+      $st.Wd = [string]$map[$u]
+      $st.WdKernel = [string]$map[$k]
+      } catch {}
+      return $st
+      }
+      function Get-AppCtlMechanisms {
+      param($State, [string]$Collection, [string[]]$Allow)
+      $m = @()
+      if ($Allow -contains 'applocker') {
+      $m += @{ Name = 'applocker'; Available = ($State.AlSvc -and $State.AlReadable); Mode = [string]$State.Al[$Collection] }
+      }
+      if ($Allow -contains 'wdac') {
+      $m += @{ Name = 'wdac'; Available = $State.WdReadable; Mode = [string]$State.Wd }
+      }
+      return $m
+      }
+      function Get-AppCtlEvents {
+      param([string]$Mechanism, [string]$Collection, [datetime]$Start, [string]$Needle)
+      $isScript = ($Collection -eq 'Script' -or $Collection -eq 'Msi')
+      if ($Mechanism -eq 'applocker') {
+      if ($isScript) { $log = 'Microsoft-Windows-AppLocker/MSI and Script'; $blk = 8007; $aud = 8006 } else { $log = 'Microsoft-Windows-AppLocker/EXE and DLL'; $blk = 8004; $aud = 8003 }
+      } else {
+      if ($isScript) { $log = 'Microsoft-Windows-AppLocker/MSI and Script'; $blk = 8029; $aud = 8028 } else { $log = 'Microsoft-Windows-CodeIntegrity/Operational'; $blk = 3077; $aud = 3076 }
+      }
+      $r = @{ Readable = $true; Block = 0; Audit = 0 }
+      try {
+      $b = @(Get-WinEvent -FilterHashtable @{ LogName = $log; Id = $blk; StartTime = $Start } -ErrorAction Stop)
+      $r.Block = @($b | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch { if ($_.FullyQualifiedErrorId -notlike '*NoMatchingEventsFound*') { $r.Readable = $false } }
+      try {
+      $a = @(Get-WinEvent -FilterHashtable @{ LogName = $log; Id = $aud; StartTime = $Start } -ErrorAction Stop)
+      $r.Audit = @($a | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch { if ($_.FullyQualifiedErrorId -notlike '*NoMatchingEventsFound*') { $r.Readable = $false } }
+      return $r
+      }
+      function Resolve-AppCtlOutcome {
+      param([string]$Expected, [bool]$Ran, $Mechs, [bool]$BuildOk, [bool]$Constrained = $false)
+      $avail = @($Mechs | Where-Object { $_.Available })
+      if (-not $BuildOk -or $avail.Count -eq 0) { return @{ Outcome = 'not_applicable'; Reason = 'no applicable enforcement mechanism is available on this host (service stopped, not installed, not readable, or Windows build below the test floor)' } }
+      $enabled = @($avail | Where-Object { $_.Mode -eq 'Enabled' })
+      $audit = @($avail | Where-Object { $_.Mode -eq 'AuditOnly' })
+      $unread = @($enabled | Where-Object { -not $_.Readable })
+      if ($Ran) {
+      if ($Expected -ne 'blocked') { return @{ Outcome = 'allowed_by_policy'; Reason = 'executed; the contract expects this path to be allowed' } }
+      if ($enabled.Count -gt 0) { return @{ Outcome = 'allowed_unexpectedly'; Reason = "executed although $((@($enabled | ForEach-Object { $_.Name }) -join ' and ')) is Enabled for this collection" } }
+      if ($audit.Count -gt 0) { return @{ Outcome = 'audited_only'; Reason = "executed; $((@($audit | ForEach-Object { $_.Name }) -join ' and ')) is in audit mode, which records but does not prevent" } }
+      return @{ Outcome = 'not_enforced'; Reason = 'executed; no applicable mechanism is enforcing this collection' }
+      }
+      if ($Expected -eq 'allowed') { return @{ Outcome = 'inconclusive'; Reason = 'not executed although the contract expects it allowed' } }
+      if ($Constrained -and $enabled.Count -gt 0) { return @{ Outcome = 'blocked_as_expected'; Reason = "the script ran only in ConstrainedLanguage under enforced $((@($enabled | ForEach-Object { $_.Name }) -join ' and ')) policy; full-language execution was prevented" } }
+      if ($enabled.Count -eq 0) { return @{ Outcome = 'inconclusive'; Reason = 'not executed, but no applicable mechanism is Enabled for this collection, so the absence cannot be attributed to application control' } }
+      if ($unread.Count -gt 0) { return @{ Outcome = 'inconclusive'; Reason = 'the enforcement event log is unreadable; the block cannot be attributed' } }
+      $multi = @($enabled | Where-Object { $_.Block -gt 1 })
+      if ($multi.Count -gt 0) { return @{ Outcome = 'inconclusive'; Reason = "not executed; $($multi[0].Name) logged $($multi[0].Block) matching block events (exactly 1 required for attribution)" } }
+      $by = @($enabled | Where-Object { $_.Block -eq 1 })
+      if ($by.Count -eq 0) { return @{ Outcome = 'inconclusive'; Reason = 'not executed; no matching block event from any Enabled mechanism' } }
+      return @{ Outcome = 'blocked_as_expected'; Reason = "not executed; one matching block event from $((@($by | ForEach-Object { $_.Name }) -join ' and '))" }
+      }
+      function Test-AppCtlMarker {
+      param([string]$Path)
+      $t = Get-Content -Path $Path -ErrorAction SilentlyContinue
+      return [bool](($t -join "`n") -like "*$($script:AppCtlMarker)*")
+      }
+      function Invoke-AppCtlProc {
+      param([string]$File, [string]$ArgLine, [int]$TimeoutSec = 25, [switch]$NoShell)
+      $r = @{ Started = $false; Exit = -1; TimedOut = $false }
+      try {
+      if ($NoShell) {
+      $psi = New-Object Diagnostics.ProcessStartInfo
+      $psi.FileName = $File; $psi.Arguments = $ArgLine; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+      $p = [Diagnostics.Process]::Start($psi)
+      } else {
+      $p = Start-Process -FilePath $File -ArgumentList $ArgLine -WindowStyle Hidden -PassThru -ErrorAction Stop
+      }
+      $r.Started = $true
+      if (-not $p.WaitForExit($TimeoutSec * 1000)) { $r.TimedOut = $true; try { $p.Kill() } catch {} } else { $r.Exit = $p.ExitCode }
+      } catch {}
+      return $r
+      }
+      function Get-AppCtlCompileReason {
+      $mode = [string]$ExecutionContext.SessionState.LanguageMode
+      if ($mode -ne 'FullLanguage') { return "PowerShell is running in $mode, which blocks compiling test programs; this is an effect of enforcement, so the test could not run and its result is unknown" }
+      return 'the test program could not be compiled on this host (no .NET Framework compiler)'
+      }
+      function New-AppCtlExe {
+      param([string]$Path)
+      $src = 'public class BasMain { public static void Main(string[] a) { System.IO.File.WriteAllText(a[0], "' + $script:AppCtlMarker + '"); } }'
+      try { Add-Type -TypeDefinition $src -OutputAssembly $Path -OutputType ConsoleApplication -ErrorAction Stop } catch { return $false }
+      return (Test-Path $Path)
+      }
+      function Invoke-AppCtlExeAt {
+      param([string]$Dir, [string]$Name, [switch]$MarkOfTheWeb)
+      New-Item -ItemType Directory -Path $Dir -Force | Out-Null
+      $exe = Join-Path $Dir $Name
+      if (-not (New-AppCtlExe -Path $exe)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = (Get-AppCtlCompileReason) } }
+      if ($MarkOfTheWeb) { try { Set-Content -Path "$exe`:Zone.Identifier" -Value "[ZoneTransfer]`r`nZoneId=3" -ErrorAction Stop } catch {} }
+      $mk = Join-Path $Dir "$Name.marker.txt"
+      $p = Invoke-AppCtlProc -File $exe -ArgLine "`"$mk`"" -NoShell
+      return @{ Ran = (Test-AppCtlMarker $mk); Exit = $p.Exit; Note = "started=$($p.Started) timed_out=$($p.TimedOut) location=$((Split-Path $Dir -Leaf))"; NotApplicable = '' }
+      }
+      function New-AppCtlMsi {
+      param([string]$Path, [string]$MarkerPath)
+      try {
+      $wi = New-Object -ComObject WindowsInstaller.Installer
+      $db = $wi.OpenDatabase($Path, 3)
+      $cmd = Join-Path $env:SystemRoot 'System32\cmd.exe'
+      $sql = @(
+      'CREATE TABLE `Property` (`Property` CHAR(72) NOT NULL, `Value` LONGCHAR NOT NULL LOCALIZABLE PRIMARY KEY `Property`)',
+      'CREATE TABLE `CustomAction` (`Action` CHAR(72) NOT NULL, `Type` SHORT NOT NULL, `Source` CHAR(72), `Target` CHAR(255) PRIMARY KEY `Action`)',
+      'CREATE TABLE `InstallExecuteSequence` (`Action` CHAR(72) NOT NULL, `Condition` CHAR(255), `Sequence` SHORT PRIMARY KEY `Action`)',
+      ('INSERT INTO `Property` (`Property`, `Value`) VALUES (''BASCMD'', ''' + $cmd + ''')'),
+      ('INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductCode'', ''{' + [guid]::NewGuid().ToString().ToUpper() + '}'')'),
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductName'', ''BAS SIM'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductVersion'', ''1.0.0'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductLanguage'', ''1033'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''Manufacturer'', ''BAS SIM'')',
+      ('INSERT INTO `CustomAction` (`Action`, `Type`, `Source`, `Target`) VALUES (''RunIt'', 50, ''BASCMD'', ''/c echo ' + $script:AppCtlMarker + '> "' + $MarkerPath + '"'')'),
+      'INSERT INTO `InstallExecuteSequence` (`Action`, `Condition`, `Sequence`) VALUES (''RunIt'', '''', 1)'
+      )
+      foreach ($q in $sql) { $v = $db.OpenView($q); $v.Execute(); $v.Close() }
+      $si = $db.SummaryInformation(20)
+      $si.Property(2) = 'BAS SIM'
+      $si.Property(4) = 'BAS SIM'
+      $si.Property(7) = 'Intel;1033'
+      $si.Property(9) = ('{' + [guid]::NewGuid().ToString().ToUpper() + '}')
+      $si.Property(14) = 200
+      $si.Property(15) = 2
+      $si.Persist()
+      $db.Commit()
+      foreach ($o in @($si, $v, $db, $wi)) { if ($o) { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($o) } }
+      [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+      } catch { return $false }
+      return (Test-Path $Path)
+      }
+      function Invoke-AppCtlAttempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:AppCtlExtra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:AppCtlExtra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Exit = -1; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
+      function Get-AppCtlAceSid {
+      param($Ace)
+      try { return $Ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } catch { return [string]$Ace.IdentityReference }
+      }
+      function Invoke-AppCtlTest {
+      param(
+      [Parameter(Mandatory)][string]$Family,
+      [Parameter(Mandatory)][string]$Collection,
+      [Parameter(Mandatory)][string]$Needle,
+      [Parameter(Mandatory)][scriptblock]$Attempt,
+      [string]$Expected = 'blocked',
+      [string[]]$Mechanisms = @('applocker', 'wdac'),
+      [int]$MinBuild = 17763,
+      [string]$Technique = '',
+      [string[]]$ExtraCleanup = @(),
+      [switch]$Direct
+      )
+      New-Item -ItemType Directory -Path $script:AppCtlWork -Force | Out-Null
+      $state = Get-AppCtlState
+      $mechs = @(Get-AppCtlMechanisms -State $state -Collection $Collection -Allow $Mechanisms)
+      $buildOk = ($state.Build -ge $MinBuild)
+      $script:AppCtlExtra = @()
+      $att = @{ Ran = $false; Exit = -1; Note = ''; NotApplicable = ''; Constrained = $false }
+      $start = Get-Date
+      if ($buildOk -and ($Direct -or @($mechs | Where-Object { $_.Available }).Count -gt 0)) {
+      try { $att = Invoke-AppCtlAttempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Exit = -1; Note = "attempt_error:$em"; NotApplicable = '' } }
+      Start-Sleep -Milliseconds 800
+      }
+      if ($att.NotApplicable -and -not $Direct) { $buildOk = $false }
+      foreach ($m in $mechs) {
+      if ($Direct) { $m.Block = 0; $m.Audit = 0; $m.Readable = $true; continue }
+      $ev = Get-AppCtlEvents -Mechanism $m.Name -Collection $Collection -Start $start.AddSeconds(-1) -Needle $Needle
+      $m.Block = $ev.Block; $m.Audit = $ev.Audit; $m.Readable = $ev.Readable
+      }
+      if ($Direct) {
+      $okOut = @('blocked_as_expected', 'allowed_unexpectedly', 'not_enforced', 'audited_only', 'inconclusive', 'not_applicable')
+      if (-not $buildOk) { $r = @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the test floor' } }
+      elseif ($att.NotApplicable) { $r = @{ Outcome = 'not_applicable'; Reason = [string]$att.NotApplicable } }
+      elseif ($att.Verdict -and ($okOut -contains [string]$att.Verdict.Outcome)) { $r = @{ Outcome = [string]$att.Verdict.Outcome; Reason = [string]$att.Verdict.Reason } }
+      else { $r = @{ Outcome = 'inconclusive'; Reason = 'the test did not reach a verdict' } }
+      } else {
+      $r = Resolve-AppCtlOutcome -Expected $Expected -Ran ([bool]$att.Ran) -Mechs $mechs -BuildOk $buildOk -Constrained ([bool]$att.Constrained)
+      }
+      Remove-Item -Path $script:AppCtlWork -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($x in $ExtraCleanup) { Remove-Item -Path $x -Recurse -Force -ErrorAction SilentlyContinue }
+      $cleanOk = -not (Test-Path $script:AppCtlWork)
+      foreach ($x in $ExtraCleanup) { if (Test-Path $x) { $cleanOk = $false } }
+      foreach ($x in @($script:AppCtlExtra)) { if ($x) { Write-Output $x } }
+      Write-Output "APPCTL_FAMILY: $Family"
+      Write-Output "APPCTL_HOST: os_build=$($state.Build) technique=$Technique"
+      Write-Output "APPCTL_COVERAGE: applocker_$Collection=$($state.Al[$Collection]) applocker_svc_running=$($state.AlSvc) wdac_umci=$($state.Wd) wdac_readable=$($state.WdReadable)"
+      Write-Output "APPCTL_EVIDENCE: test_id=$($script:AppCtlTid) expected=$Expected ran=$([bool]$att.Ran) exit=$($att.Exit) note=$($att.Note) block_events=[$((@($mechs | ForEach-Object { "$($_.Name)=$($_.Block)" })) -join ',')] audit_events=[$((@($mechs | ForEach-Object { "$($_.Name)=$($_.Audit)" })) -join ',')] cleanup_verified=$cleanOk capture=$((Get-Date).ToString('o'))"
+      $det = 'unknown'
+      try {
+      $sy = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-Sysmon/Operational'; Id = 1; StartTime = $start } -ErrorAction Stop)
+      $det = if (@($sy | Where-Object { $_.Message -like "*$($script:AppCtlTid)*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+      } catch {}
+      Write-Output "APPCTL_DETECTION: source=sysmon_process_create result=$det"
+      Write-Output "APPCTL_OUTCOME: $($r.Outcome)"
+      $reason = $r.Reason; if ($att.NotApplicable -and -not $Direct) { $reason = $att.NotApplicable }
+      switch ($r.Outcome) {
+      'blocked_as_expected'  { Write-Output "PASS: $reason. [BAS-SIM]" }
+      'allowed_by_policy'    { Write-Output "PASS: $reason. [BAS-SIM]" }
+      'allowed_unexpectedly' { Write-Output "FAIL: $reason. [BAS-SIM]" }
+      'not_enforced'         { Write-Output "FAIL: $reason. [BAS-SIM]" }
+      'audited_only'         { Write-Output "FAIL: $reason. [BAS-SIM]" }
+      default                { Write-Output "SKIP: $reason. [BAS-SIM]" }
+      }
+      }
+      Invoke-AppCtlTest -Family 'regsvr32_proxy' -Collection 'Exe' -Needle 'regsvr32.exe' -Technique 'T1218.010' -Attempt {
+      $mk = Join-Path $script:AppCtlWork 'regsvr32-marker.txt'
+      $sct = Join-Path $script:AppCtlWork 'proxy.sct'
+      $body = "<?XML version=`"1.0`"?><scriptlet><registration progid=`"BasSim`" classid=`"{$([guid]::NewGuid())}`"><script language=`"JScript`"><![CDATA[var f=new ActiveXObject('Scripting.FileSystemObject').CreateTextFile('$($mk.Replace([string][char]92,'/'))',true);f.Write('$($script:AppCtlMarker)');f.Close();]]></script></registration></scriptlet>"
+      Set-Content -Path $sct -Value $body -Encoding ASCII
+      $p = Invoke-AppCtlProc -File (Join-Path $env:SystemRoot 'System32\regsvr32.exe') -ArgLine "/s /n /u /i:`"$sct`" scrobj.dll"
+      return @{ Ran = (Test-AppCtlMarker $mk); Exit = $p.Exit; Note = "timed_out=$($p.TimedOut)"; NotApplicable = '' }
+      }
+    cleanup: |
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+
+  # -------------------------------------------------------------------------
+  - id: appctl-a08-rundll32
+    name: "Application control Trusted Binary Proxy: Rundll32 INF execution through advpack (T1218.011)"
+    technique_id: T1218.011
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Writes a benign INF and runs rundll32.exe advpack.dll,LaunchINFSection; the INF runs one cmd.exe that writes a marker file. Files are in a private temp directory deleted by the step."
+    telemetry:
+      - "AppLocker EXE and DLL event 8004 naming rundll32.exe, if enforced"
+      - "Code Integrity 3077 naming rundll32.exe, if WDAC enforced"
+      - "Sysmon EID 1: rundll32.exe advpack.dll,LaunchINFSection"
+    detection:
+      - "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:AppCtlTid = [guid]::NewGuid().ToString('N')
+      $script:AppCtlMarker = "BAS-SIM-APPCTL-$($script:AppCtlTid)"
+      $script:AppCtlWork = Join-Path $env:TEMP "bas-appctl-$($script:AppCtlTid)"
+      function Get-AppCtlState {
+      $st = @{ Build = [Environment]::OSVersion.Version.Build; AlReadable = $false; AlSvc = $false; Al = @{}; WdReadable = $false; Wd = 'NotConfigured'; WdKernel = 'NotConfigured' }
+      try {
+      $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+      $st.AlReadable = $true
+      foreach ($rc in @($pol.RuleCollections)) { $st.Al[[string]$rc.RuleCollectionType] = [string]$rc.EnforcementMode }
+      } catch {}
+      foreach ($t in 'Exe', 'Script', 'Dll', 'Msi', 'Appx') { if (-not $st.Al.ContainsKey($t)) { $st.Al[$t] = 'NotConfigured' } }
+      $st.AlSvc = ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running')
+      try {
+      $dg = Get-CimInstance -Namespace 'root\Microsoft\Windows\DeviceGuard' -ClassName Win32_DeviceGuard -ErrorAction Stop
+      $map = @{ 0 = 'NotConfigured'; 1 = 'AuditOnly'; 2 = 'Enabled' }
+      $u = [int]@($dg)[0].UsermodeCodeIntegrityPolicyEnforcementStatus
+      $k = [int]@($dg)[0].CodeIntegrityPolicyEnforcementStatus
+      $st.WdReadable = $true
+      $st.Wd = [string]$map[$u]
+      $st.WdKernel = [string]$map[$k]
+      } catch {}
+      return $st
+      }
+      function Get-AppCtlMechanisms {
+      param($State, [string]$Collection, [string[]]$Allow)
+      $m = @()
+      if ($Allow -contains 'applocker') {
+      $m += @{ Name = 'applocker'; Available = ($State.AlSvc -and $State.AlReadable); Mode = [string]$State.Al[$Collection] }
+      }
+      if ($Allow -contains 'wdac') {
+      $m += @{ Name = 'wdac'; Available = $State.WdReadable; Mode = [string]$State.Wd }
+      }
+      return $m
+      }
+      function Get-AppCtlEvents {
+      param([string]$Mechanism, [string]$Collection, [datetime]$Start, [string]$Needle)
+      $isScript = ($Collection -eq 'Script' -or $Collection -eq 'Msi')
+      if ($Mechanism -eq 'applocker') {
+      if ($isScript) { $log = 'Microsoft-Windows-AppLocker/MSI and Script'; $blk = 8007; $aud = 8006 } else { $log = 'Microsoft-Windows-AppLocker/EXE and DLL'; $blk = 8004; $aud = 8003 }
+      } else {
+      if ($isScript) { $log = 'Microsoft-Windows-AppLocker/MSI and Script'; $blk = 8029; $aud = 8028 } else { $log = 'Microsoft-Windows-CodeIntegrity/Operational'; $blk = 3077; $aud = 3076 }
+      }
+      $r = @{ Readable = $true; Block = 0; Audit = 0 }
+      try {
+      $b = @(Get-WinEvent -FilterHashtable @{ LogName = $log; Id = $blk; StartTime = $Start } -ErrorAction Stop)
+      $r.Block = @($b | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch { if ($_.FullyQualifiedErrorId -notlike '*NoMatchingEventsFound*') { $r.Readable = $false } }
+      try {
+      $a = @(Get-WinEvent -FilterHashtable @{ LogName = $log; Id = $aud; StartTime = $Start } -ErrorAction Stop)
+      $r.Audit = @($a | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch { if ($_.FullyQualifiedErrorId -notlike '*NoMatchingEventsFound*') { $r.Readable = $false } }
+      return $r
+      }
+      function Resolve-AppCtlOutcome {
+      param([string]$Expected, [bool]$Ran, $Mechs, [bool]$BuildOk, [bool]$Constrained = $false)
+      $avail = @($Mechs | Where-Object { $_.Available })
+      if (-not $BuildOk -or $avail.Count -eq 0) { return @{ Outcome = 'not_applicable'; Reason = 'no applicable enforcement mechanism is available on this host (service stopped, not installed, not readable, or Windows build below the test floor)' } }
+      $enabled = @($avail | Where-Object { $_.Mode -eq 'Enabled' })
+      $audit = @($avail | Where-Object { $_.Mode -eq 'AuditOnly' })
+      $unread = @($enabled | Where-Object { -not $_.Readable })
+      if ($Ran) {
+      if ($Expected -ne 'blocked') { return @{ Outcome = 'allowed_by_policy'; Reason = 'executed; the contract expects this path to be allowed' } }
+      if ($enabled.Count -gt 0) { return @{ Outcome = 'allowed_unexpectedly'; Reason = "executed although $((@($enabled | ForEach-Object { $_.Name }) -join ' and ')) is Enabled for this collection" } }
+      if ($audit.Count -gt 0) { return @{ Outcome = 'audited_only'; Reason = "executed; $((@($audit | ForEach-Object { $_.Name }) -join ' and ')) is in audit mode, which records but does not prevent" } }
+      return @{ Outcome = 'not_enforced'; Reason = 'executed; no applicable mechanism is enforcing this collection' }
+      }
+      if ($Expected -eq 'allowed') { return @{ Outcome = 'inconclusive'; Reason = 'not executed although the contract expects it allowed' } }
+      if ($Constrained -and $enabled.Count -gt 0) { return @{ Outcome = 'blocked_as_expected'; Reason = "the script ran only in ConstrainedLanguage under enforced $((@($enabled | ForEach-Object { $_.Name }) -join ' and ')) policy; full-language execution was prevented" } }
+      if ($enabled.Count -eq 0) { return @{ Outcome = 'inconclusive'; Reason = 'not executed, but no applicable mechanism is Enabled for this collection, so the absence cannot be attributed to application control' } }
+      if ($unread.Count -gt 0) { return @{ Outcome = 'inconclusive'; Reason = 'the enforcement event log is unreadable; the block cannot be attributed' } }
+      $multi = @($enabled | Where-Object { $_.Block -gt 1 })
+      if ($multi.Count -gt 0) { return @{ Outcome = 'inconclusive'; Reason = "not executed; $($multi[0].Name) logged $($multi[0].Block) matching block events (exactly 1 required for attribution)" } }
+      $by = @($enabled | Where-Object { $_.Block -eq 1 })
+      if ($by.Count -eq 0) { return @{ Outcome = 'inconclusive'; Reason = 'not executed; no matching block event from any Enabled mechanism' } }
+      return @{ Outcome = 'blocked_as_expected'; Reason = "not executed; one matching block event from $((@($by | ForEach-Object { $_.Name }) -join ' and '))" }
+      }
+      function Test-AppCtlMarker {
+      param([string]$Path)
+      $t = Get-Content -Path $Path -ErrorAction SilentlyContinue
+      return [bool](($t -join "`n") -like "*$($script:AppCtlMarker)*")
+      }
+      function Invoke-AppCtlProc {
+      param([string]$File, [string]$ArgLine, [int]$TimeoutSec = 25, [switch]$NoShell)
+      $r = @{ Started = $false; Exit = -1; TimedOut = $false }
+      try {
+      if ($NoShell) {
+      $psi = New-Object Diagnostics.ProcessStartInfo
+      $psi.FileName = $File; $psi.Arguments = $ArgLine; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+      $p = [Diagnostics.Process]::Start($psi)
+      } else {
+      $p = Start-Process -FilePath $File -ArgumentList $ArgLine -WindowStyle Hidden -PassThru -ErrorAction Stop
+      }
+      $r.Started = $true
+      if (-not $p.WaitForExit($TimeoutSec * 1000)) { $r.TimedOut = $true; try { $p.Kill() } catch {} } else { $r.Exit = $p.ExitCode }
+      } catch {}
+      return $r
+      }
+      function Get-AppCtlCompileReason {
+      $mode = [string]$ExecutionContext.SessionState.LanguageMode
+      if ($mode -ne 'FullLanguage') { return "PowerShell is running in $mode, which blocks compiling test programs; this is an effect of enforcement, so the test could not run and its result is unknown" }
+      return 'the test program could not be compiled on this host (no .NET Framework compiler)'
+      }
+      function New-AppCtlExe {
+      param([string]$Path)
+      $src = 'public class BasMain { public static void Main(string[] a) { System.IO.File.WriteAllText(a[0], "' + $script:AppCtlMarker + '"); } }'
+      try { Add-Type -TypeDefinition $src -OutputAssembly $Path -OutputType ConsoleApplication -ErrorAction Stop } catch { return $false }
+      return (Test-Path $Path)
+      }
+      function Invoke-AppCtlExeAt {
+      param([string]$Dir, [string]$Name, [switch]$MarkOfTheWeb)
+      New-Item -ItemType Directory -Path $Dir -Force | Out-Null
+      $exe = Join-Path $Dir $Name
+      if (-not (New-AppCtlExe -Path $exe)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = (Get-AppCtlCompileReason) } }
+      if ($MarkOfTheWeb) { try { Set-Content -Path "$exe`:Zone.Identifier" -Value "[ZoneTransfer]`r`nZoneId=3" -ErrorAction Stop } catch {} }
+      $mk = Join-Path $Dir "$Name.marker.txt"
+      $p = Invoke-AppCtlProc -File $exe -ArgLine "`"$mk`"" -NoShell
+      return @{ Ran = (Test-AppCtlMarker $mk); Exit = $p.Exit; Note = "started=$($p.Started) timed_out=$($p.TimedOut) location=$((Split-Path $Dir -Leaf))"; NotApplicable = '' }
+      }
+      function New-AppCtlMsi {
+      param([string]$Path, [string]$MarkerPath)
+      try {
+      $wi = New-Object -ComObject WindowsInstaller.Installer
+      $db = $wi.OpenDatabase($Path, 3)
+      $cmd = Join-Path $env:SystemRoot 'System32\cmd.exe'
+      $sql = @(
+      'CREATE TABLE `Property` (`Property` CHAR(72) NOT NULL, `Value` LONGCHAR NOT NULL LOCALIZABLE PRIMARY KEY `Property`)',
+      'CREATE TABLE `CustomAction` (`Action` CHAR(72) NOT NULL, `Type` SHORT NOT NULL, `Source` CHAR(72), `Target` CHAR(255) PRIMARY KEY `Action`)',
+      'CREATE TABLE `InstallExecuteSequence` (`Action` CHAR(72) NOT NULL, `Condition` CHAR(255), `Sequence` SHORT PRIMARY KEY `Action`)',
+      ('INSERT INTO `Property` (`Property`, `Value`) VALUES (''BASCMD'', ''' + $cmd + ''')'),
+      ('INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductCode'', ''{' + [guid]::NewGuid().ToString().ToUpper() + '}'')'),
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductName'', ''BAS SIM'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductVersion'', ''1.0.0'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductLanguage'', ''1033'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''Manufacturer'', ''BAS SIM'')',
+      ('INSERT INTO `CustomAction` (`Action`, `Type`, `Source`, `Target`) VALUES (''RunIt'', 50, ''BASCMD'', ''/c echo ' + $script:AppCtlMarker + '> "' + $MarkerPath + '"'')'),
+      'INSERT INTO `InstallExecuteSequence` (`Action`, `Condition`, `Sequence`) VALUES (''RunIt'', '''', 1)'
+      )
+      foreach ($q in $sql) { $v = $db.OpenView($q); $v.Execute(); $v.Close() }
+      $si = $db.SummaryInformation(20)
+      $si.Property(2) = 'BAS SIM'
+      $si.Property(4) = 'BAS SIM'
+      $si.Property(7) = 'Intel;1033'
+      $si.Property(9) = ('{' + [guid]::NewGuid().ToString().ToUpper() + '}')
+      $si.Property(14) = 200
+      $si.Property(15) = 2
+      $si.Persist()
+      $db.Commit()
+      foreach ($o in @($si, $v, $db, $wi)) { if ($o) { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($o) } }
+      [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+      } catch { return $false }
+      return (Test-Path $Path)
+      }
+      function Invoke-AppCtlAttempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:AppCtlExtra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:AppCtlExtra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Exit = -1; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
+      function Get-AppCtlAceSid {
+      param($Ace)
+      try { return $Ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } catch { return [string]$Ace.IdentityReference }
+      }
+      function Invoke-AppCtlTest {
+      param(
+      [Parameter(Mandatory)][string]$Family,
+      [Parameter(Mandatory)][string]$Collection,
+      [Parameter(Mandatory)][string]$Needle,
+      [Parameter(Mandatory)][scriptblock]$Attempt,
+      [string]$Expected = 'blocked',
+      [string[]]$Mechanisms = @('applocker', 'wdac'),
+      [int]$MinBuild = 17763,
+      [string]$Technique = '',
+      [string[]]$ExtraCleanup = @(),
+      [switch]$Direct
+      )
+      New-Item -ItemType Directory -Path $script:AppCtlWork -Force | Out-Null
+      $state = Get-AppCtlState
+      $mechs = @(Get-AppCtlMechanisms -State $state -Collection $Collection -Allow $Mechanisms)
+      $buildOk = ($state.Build -ge $MinBuild)
+      $script:AppCtlExtra = @()
+      $att = @{ Ran = $false; Exit = -1; Note = ''; NotApplicable = ''; Constrained = $false }
+      $start = Get-Date
+      if ($buildOk -and ($Direct -or @($mechs | Where-Object { $_.Available }).Count -gt 0)) {
+      try { $att = Invoke-AppCtlAttempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Exit = -1; Note = "attempt_error:$em"; NotApplicable = '' } }
+      Start-Sleep -Milliseconds 800
+      }
+      if ($att.NotApplicable -and -not $Direct) { $buildOk = $false }
+      foreach ($m in $mechs) {
+      if ($Direct) { $m.Block = 0; $m.Audit = 0; $m.Readable = $true; continue }
+      $ev = Get-AppCtlEvents -Mechanism $m.Name -Collection $Collection -Start $start.AddSeconds(-1) -Needle $Needle
+      $m.Block = $ev.Block; $m.Audit = $ev.Audit; $m.Readable = $ev.Readable
+      }
+      if ($Direct) {
+      $okOut = @('blocked_as_expected', 'allowed_unexpectedly', 'not_enforced', 'audited_only', 'inconclusive', 'not_applicable')
+      if (-not $buildOk) { $r = @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the test floor' } }
+      elseif ($att.NotApplicable) { $r = @{ Outcome = 'not_applicable'; Reason = [string]$att.NotApplicable } }
+      elseif ($att.Verdict -and ($okOut -contains [string]$att.Verdict.Outcome)) { $r = @{ Outcome = [string]$att.Verdict.Outcome; Reason = [string]$att.Verdict.Reason } }
+      else { $r = @{ Outcome = 'inconclusive'; Reason = 'the test did not reach a verdict' } }
+      } else {
+      $r = Resolve-AppCtlOutcome -Expected $Expected -Ran ([bool]$att.Ran) -Mechs $mechs -BuildOk $buildOk -Constrained ([bool]$att.Constrained)
+      }
+      Remove-Item -Path $script:AppCtlWork -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($x in $ExtraCleanup) { Remove-Item -Path $x -Recurse -Force -ErrorAction SilentlyContinue }
+      $cleanOk = -not (Test-Path $script:AppCtlWork)
+      foreach ($x in $ExtraCleanup) { if (Test-Path $x) { $cleanOk = $false } }
+      foreach ($x in @($script:AppCtlExtra)) { if ($x) { Write-Output $x } }
+      Write-Output "APPCTL_FAMILY: $Family"
+      Write-Output "APPCTL_HOST: os_build=$($state.Build) technique=$Technique"
+      Write-Output "APPCTL_COVERAGE: applocker_$Collection=$($state.Al[$Collection]) applocker_svc_running=$($state.AlSvc) wdac_umci=$($state.Wd) wdac_readable=$($state.WdReadable)"
+      Write-Output "APPCTL_EVIDENCE: test_id=$($script:AppCtlTid) expected=$Expected ran=$([bool]$att.Ran) exit=$($att.Exit) note=$($att.Note) block_events=[$((@($mechs | ForEach-Object { "$($_.Name)=$($_.Block)" })) -join ',')] audit_events=[$((@($mechs | ForEach-Object { "$($_.Name)=$($_.Audit)" })) -join ',')] cleanup_verified=$cleanOk capture=$((Get-Date).ToString('o'))"
+      $det = 'unknown'
+      try {
+      $sy = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-Sysmon/Operational'; Id = 1; StartTime = $start } -ErrorAction Stop)
+      $det = if (@($sy | Where-Object { $_.Message -like "*$($script:AppCtlTid)*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+      } catch {}
+      Write-Output "APPCTL_DETECTION: source=sysmon_process_create result=$det"
+      Write-Output "APPCTL_OUTCOME: $($r.Outcome)"
+      $reason = $r.Reason; if ($att.NotApplicable -and -not $Direct) { $reason = $att.NotApplicable }
+      switch ($r.Outcome) {
+      'blocked_as_expected'  { Write-Output "PASS: $reason. [BAS-SIM]" }
+      'allowed_by_policy'    { Write-Output "PASS: $reason. [BAS-SIM]" }
+      'allowed_unexpectedly' { Write-Output "FAIL: $reason. [BAS-SIM]" }
+      'not_enforced'         { Write-Output "FAIL: $reason. [BAS-SIM]" }
+      'audited_only'         { Write-Output "FAIL: $reason. [BAS-SIM]" }
+      default                { Write-Output "SKIP: $reason. [BAS-SIM]" }
+      }
+      }
+      Invoke-AppCtlTest -Family 'rundll32_proxy' -Collection 'Exe' -Needle 'rundll32.exe' -Technique 'T1218.011' -Attempt {
+      $mk = Join-Path $script:AppCtlWork 'rundll32-marker.txt'
+      $inf = Join-Path $script:AppCtlWork 'proxy.inf'
+      $cmd = "cmd.exe /c echo $($script:AppCtlMarker)> `"$mk`""
+      $body = "[Version]`r`nSignature=`"`$CHICAGO`$`"`r`n[DefaultInstall]`r`nRunPostSetupCommands=RunIt`r`n[RunIt]`r`n$cmd`r`n"
+      Set-Content -Path $inf -Value $body -Encoding ASCII
+      $p = Invoke-AppCtlProc -File (Join-Path $env:SystemRoot 'System32\rundll32.exe') -ArgLine "advpack.dll,LaunchINFSection `"$inf`",DefaultInstall,1,N"
+      Start-Sleep -Milliseconds 700
+      return @{ Ran = (Test-AppCtlMarker $mk); Exit = $p.Exit; Note = "timed_out=$($p.TimedOut)"; NotApplicable = '' }
+      }
+    cleanup: |
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+
+  # -------------------------------------------------------------------------
+  - id: appctl-a09-mshta
+    name: "Application control Trusted Binary Proxy: Mshta HTA and script execution (T1218.005)"
+    technique_id: T1218.005
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Writes a benign .hta that writes one marker file and closes. Files are in a private temp directory deleted by the step."
+    telemetry:
+      - "AppLocker EXE and DLL event 8004 naming mshta.exe, if enforced"
+      - "Code Integrity 3077 naming mshta.exe, if WDAC enforced"
+      - "Sysmon EID 1: mshta.exe with an .hta argument"
+    detection:
+      - "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:AppCtlTid = [guid]::NewGuid().ToString('N')
+      $script:AppCtlMarker = "BAS-SIM-APPCTL-$($script:AppCtlTid)"
+      $script:AppCtlWork = Join-Path $env:TEMP "bas-appctl-$($script:AppCtlTid)"
+      function Get-AppCtlState {
+      $st = @{ Build = [Environment]::OSVersion.Version.Build; AlReadable = $false; AlSvc = $false; Al = @{}; WdReadable = $false; Wd = 'NotConfigured'; WdKernel = 'NotConfigured' }
+      try {
+      $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+      $st.AlReadable = $true
+      foreach ($rc in @($pol.RuleCollections)) { $st.Al[[string]$rc.RuleCollectionType] = [string]$rc.EnforcementMode }
+      } catch {}
+      foreach ($t in 'Exe', 'Script', 'Dll', 'Msi', 'Appx') { if (-not $st.Al.ContainsKey($t)) { $st.Al[$t] = 'NotConfigured' } }
+      $st.AlSvc = ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running')
+      try {
+      $dg = Get-CimInstance -Namespace 'root\Microsoft\Windows\DeviceGuard' -ClassName Win32_DeviceGuard -ErrorAction Stop
+      $map = @{ 0 = 'NotConfigured'; 1 = 'AuditOnly'; 2 = 'Enabled' }
+      $u = [int]@($dg)[0].UsermodeCodeIntegrityPolicyEnforcementStatus
+      $k = [int]@($dg)[0].CodeIntegrityPolicyEnforcementStatus
+      $st.WdReadable = $true
+      $st.Wd = [string]$map[$u]
+      $st.WdKernel = [string]$map[$k]
+      } catch {}
+      return $st
+      }
+      function Get-AppCtlMechanisms {
+      param($State, [string]$Collection, [string[]]$Allow)
+      $m = @()
+      if ($Allow -contains 'applocker') {
+      $m += @{ Name = 'applocker'; Available = ($State.AlSvc -and $State.AlReadable); Mode = [string]$State.Al[$Collection] }
+      }
+      if ($Allow -contains 'wdac') {
+      $m += @{ Name = 'wdac'; Available = $State.WdReadable; Mode = [string]$State.Wd }
+      }
+      return $m
+      }
+      function Get-AppCtlEvents {
+      param([string]$Mechanism, [string]$Collection, [datetime]$Start, [string]$Needle)
+      $isScript = ($Collection -eq 'Script' -or $Collection -eq 'Msi')
+      if ($Mechanism -eq 'applocker') {
+      if ($isScript) { $log = 'Microsoft-Windows-AppLocker/MSI and Script'; $blk = 8007; $aud = 8006 } else { $log = 'Microsoft-Windows-AppLocker/EXE and DLL'; $blk = 8004; $aud = 8003 }
+      } else {
+      if ($isScript) { $log = 'Microsoft-Windows-AppLocker/MSI and Script'; $blk = 8029; $aud = 8028 } else { $log = 'Microsoft-Windows-CodeIntegrity/Operational'; $blk = 3077; $aud = 3076 }
+      }
+      $r = @{ Readable = $true; Block = 0; Audit = 0 }
+      try {
+      $b = @(Get-WinEvent -FilterHashtable @{ LogName = $log; Id = $blk; StartTime = $Start } -ErrorAction Stop)
+      $r.Block = @($b | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch { if ($_.FullyQualifiedErrorId -notlike '*NoMatchingEventsFound*') { $r.Readable = $false } }
+      try {
+      $a = @(Get-WinEvent -FilterHashtable @{ LogName = $log; Id = $aud; StartTime = $Start } -ErrorAction Stop)
+      $r.Audit = @($a | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch { if ($_.FullyQualifiedErrorId -notlike '*NoMatchingEventsFound*') { $r.Readable = $false } }
+      return $r
+      }
+      function Resolve-AppCtlOutcome {
+      param([string]$Expected, [bool]$Ran, $Mechs, [bool]$BuildOk, [bool]$Constrained = $false)
+      $avail = @($Mechs | Where-Object { $_.Available })
+      if (-not $BuildOk -or $avail.Count -eq 0) { return @{ Outcome = 'not_applicable'; Reason = 'no applicable enforcement mechanism is available on this host (service stopped, not installed, not readable, or Windows build below the test floor)' } }
+      $enabled = @($avail | Where-Object { $_.Mode -eq 'Enabled' })
+      $audit = @($avail | Where-Object { $_.Mode -eq 'AuditOnly' })
+      $unread = @($enabled | Where-Object { -not $_.Readable })
+      if ($Ran) {
+      if ($Expected -ne 'blocked') { return @{ Outcome = 'allowed_by_policy'; Reason = 'executed; the contract expects this path to be allowed' } }
+      if ($enabled.Count -gt 0) { return @{ Outcome = 'allowed_unexpectedly'; Reason = "executed although $((@($enabled | ForEach-Object { $_.Name }) -join ' and ')) is Enabled for this collection" } }
+      if ($audit.Count -gt 0) { return @{ Outcome = 'audited_only'; Reason = "executed; $((@($audit | ForEach-Object { $_.Name }) -join ' and ')) is in audit mode, which records but does not prevent" } }
+      return @{ Outcome = 'not_enforced'; Reason = 'executed; no applicable mechanism is enforcing this collection' }
+      }
+      if ($Expected -eq 'allowed') { return @{ Outcome = 'inconclusive'; Reason = 'not executed although the contract expects it allowed' } }
+      if ($Constrained -and $enabled.Count -gt 0) { return @{ Outcome = 'blocked_as_expected'; Reason = "the script ran only in ConstrainedLanguage under enforced $((@($enabled | ForEach-Object { $_.Name }) -join ' and ')) policy; full-language execution was prevented" } }
+      if ($enabled.Count -eq 0) { return @{ Outcome = 'inconclusive'; Reason = 'not executed, but no applicable mechanism is Enabled for this collection, so the absence cannot be attributed to application control' } }
+      if ($unread.Count -gt 0) { return @{ Outcome = 'inconclusive'; Reason = 'the enforcement event log is unreadable; the block cannot be attributed' } }
+      $multi = @($enabled | Where-Object { $_.Block -gt 1 })
+      if ($multi.Count -gt 0) { return @{ Outcome = 'inconclusive'; Reason = "not executed; $($multi[0].Name) logged $($multi[0].Block) matching block events (exactly 1 required for attribution)" } }
+      $by = @($enabled | Where-Object { $_.Block -eq 1 })
+      if ($by.Count -eq 0) { return @{ Outcome = 'inconclusive'; Reason = 'not executed; no matching block event from any Enabled mechanism' } }
+      return @{ Outcome = 'blocked_as_expected'; Reason = "not executed; one matching block event from $((@($by | ForEach-Object { $_.Name }) -join ' and '))" }
+      }
+      function Test-AppCtlMarker {
+      param([string]$Path)
+      $t = Get-Content -Path $Path -ErrorAction SilentlyContinue
+      return [bool](($t -join "`n") -like "*$($script:AppCtlMarker)*")
+      }
+      function Invoke-AppCtlProc {
+      param([string]$File, [string]$ArgLine, [int]$TimeoutSec = 25, [switch]$NoShell)
+      $r = @{ Started = $false; Exit = -1; TimedOut = $false }
+      try {
+      if ($NoShell) {
+      $psi = New-Object Diagnostics.ProcessStartInfo
+      $psi.FileName = $File; $psi.Arguments = $ArgLine; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+      $p = [Diagnostics.Process]::Start($psi)
+      } else {
+      $p = Start-Process -FilePath $File -ArgumentList $ArgLine -WindowStyle Hidden -PassThru -ErrorAction Stop
+      }
+      $r.Started = $true
+      if (-not $p.WaitForExit($TimeoutSec * 1000)) { $r.TimedOut = $true; try { $p.Kill() } catch {} } else { $r.Exit = $p.ExitCode }
+      } catch {}
+      return $r
+      }
+      function Get-AppCtlCompileReason {
+      $mode = [string]$ExecutionContext.SessionState.LanguageMode
+      if ($mode -ne 'FullLanguage') { return "PowerShell is running in $mode, which blocks compiling test programs; this is an effect of enforcement, so the test could not run and its result is unknown" }
+      return 'the test program could not be compiled on this host (no .NET Framework compiler)'
+      }
+      function New-AppCtlExe {
+      param([string]$Path)
+      $src = 'public class BasMain { public static void Main(string[] a) { System.IO.File.WriteAllText(a[0], "' + $script:AppCtlMarker + '"); } }'
+      try { Add-Type -TypeDefinition $src -OutputAssembly $Path -OutputType ConsoleApplication -ErrorAction Stop } catch { return $false }
+      return (Test-Path $Path)
+      }
+      function Invoke-AppCtlExeAt {
+      param([string]$Dir, [string]$Name, [switch]$MarkOfTheWeb)
+      New-Item -ItemType Directory -Path $Dir -Force | Out-Null
+      $exe = Join-Path $Dir $Name
+      if (-not (New-AppCtlExe -Path $exe)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = (Get-AppCtlCompileReason) } }
+      if ($MarkOfTheWeb) { try { Set-Content -Path "$exe`:Zone.Identifier" -Value "[ZoneTransfer]`r`nZoneId=3" -ErrorAction Stop } catch {} }
+      $mk = Join-Path $Dir "$Name.marker.txt"
+      $p = Invoke-AppCtlProc -File $exe -ArgLine "`"$mk`"" -NoShell
+      return @{ Ran = (Test-AppCtlMarker $mk); Exit = $p.Exit; Note = "started=$($p.Started) timed_out=$($p.TimedOut) location=$((Split-Path $Dir -Leaf))"; NotApplicable = '' }
+      }
+      function New-AppCtlMsi {
+      param([string]$Path, [string]$MarkerPath)
+      try {
+      $wi = New-Object -ComObject WindowsInstaller.Installer
+      $db = $wi.OpenDatabase($Path, 3)
+      $cmd = Join-Path $env:SystemRoot 'System32\cmd.exe'
+      $sql = @(
+      'CREATE TABLE `Property` (`Property` CHAR(72) NOT NULL, `Value` LONGCHAR NOT NULL LOCALIZABLE PRIMARY KEY `Property`)',
+      'CREATE TABLE `CustomAction` (`Action` CHAR(72) NOT NULL, `Type` SHORT NOT NULL, `Source` CHAR(72), `Target` CHAR(255) PRIMARY KEY `Action`)',
+      'CREATE TABLE `InstallExecuteSequence` (`Action` CHAR(72) NOT NULL, `Condition` CHAR(255), `Sequence` SHORT PRIMARY KEY `Action`)',
+      ('INSERT INTO `Property` (`Property`, `Value`) VALUES (''BASCMD'', ''' + $cmd + ''')'),
+      ('INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductCode'', ''{' + [guid]::NewGuid().ToString().ToUpper() + '}'')'),
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductName'', ''BAS SIM'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductVersion'', ''1.0.0'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductLanguage'', ''1033'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''Manufacturer'', ''BAS SIM'')',
+      ('INSERT INTO `CustomAction` (`Action`, `Type`, `Source`, `Target`) VALUES (''RunIt'', 50, ''BASCMD'', ''/c echo ' + $script:AppCtlMarker + '> "' + $MarkerPath + '"'')'),
+      'INSERT INTO `InstallExecuteSequence` (`Action`, `Condition`, `Sequence`) VALUES (''RunIt'', '''', 1)'
+      )
+      foreach ($q in $sql) { $v = $db.OpenView($q); $v.Execute(); $v.Close() }
+      $si = $db.SummaryInformation(20)
+      $si.Property(2) = 'BAS SIM'
+      $si.Property(4) = 'BAS SIM'
+      $si.Property(7) = 'Intel;1033'
+      $si.Property(9) = ('{' + [guid]::NewGuid().ToString().ToUpper() + '}')
+      $si.Property(14) = 200
+      $si.Property(15) = 2
+      $si.Persist()
+      $db.Commit()
+      foreach ($o in @($si, $v, $db, $wi)) { if ($o) { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($o) } }
+      [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+      } catch { return $false }
+      return (Test-Path $Path)
+      }
+      function Invoke-AppCtlAttempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:AppCtlExtra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:AppCtlExtra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Exit = -1; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
+      function Get-AppCtlAceSid {
+      param($Ace)
+      try { return $Ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } catch { return [string]$Ace.IdentityReference }
+      }
+      function Invoke-AppCtlTest {
+      param(
+      [Parameter(Mandatory)][string]$Family,
+      [Parameter(Mandatory)][string]$Collection,
+      [Parameter(Mandatory)][string]$Needle,
+      [Parameter(Mandatory)][scriptblock]$Attempt,
+      [string]$Expected = 'blocked',
+      [string[]]$Mechanisms = @('applocker', 'wdac'),
+      [int]$MinBuild = 17763,
+      [string]$Technique = '',
+      [string[]]$ExtraCleanup = @(),
+      [switch]$Direct
+      )
+      New-Item -ItemType Directory -Path $script:AppCtlWork -Force | Out-Null
+      $state = Get-AppCtlState
+      $mechs = @(Get-AppCtlMechanisms -State $state -Collection $Collection -Allow $Mechanisms)
+      $buildOk = ($state.Build -ge $MinBuild)
+      $script:AppCtlExtra = @()
+      $att = @{ Ran = $false; Exit = -1; Note = ''; NotApplicable = ''; Constrained = $false }
+      $start = Get-Date
+      if ($buildOk -and ($Direct -or @($mechs | Where-Object { $_.Available }).Count -gt 0)) {
+      try { $att = Invoke-AppCtlAttempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Exit = -1; Note = "attempt_error:$em"; NotApplicable = '' } }
+      Start-Sleep -Milliseconds 800
+      }
+      if ($att.NotApplicable -and -not $Direct) { $buildOk = $false }
+      foreach ($m in $mechs) {
+      if ($Direct) { $m.Block = 0; $m.Audit = 0; $m.Readable = $true; continue }
+      $ev = Get-AppCtlEvents -Mechanism $m.Name -Collection $Collection -Start $start.AddSeconds(-1) -Needle $Needle
+      $m.Block = $ev.Block; $m.Audit = $ev.Audit; $m.Readable = $ev.Readable
+      }
+      if ($Direct) {
+      $okOut = @('blocked_as_expected', 'allowed_unexpectedly', 'not_enforced', 'audited_only', 'inconclusive', 'not_applicable')
+      if (-not $buildOk) { $r = @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the test floor' } }
+      elseif ($att.NotApplicable) { $r = @{ Outcome = 'not_applicable'; Reason = [string]$att.NotApplicable } }
+      elseif ($att.Verdict -and ($okOut -contains [string]$att.Verdict.Outcome)) { $r = @{ Outcome = [string]$att.Verdict.Outcome; Reason = [string]$att.Verdict.Reason } }
+      else { $r = @{ Outcome = 'inconclusive'; Reason = 'the test did not reach a verdict' } }
+      } else {
+      $r = Resolve-AppCtlOutcome -Expected $Expected -Ran ([bool]$att.Ran) -Mechs $mechs -BuildOk $buildOk -Constrained ([bool]$att.Constrained)
+      }
+      Remove-Item -Path $script:AppCtlWork -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($x in $ExtraCleanup) { Remove-Item -Path $x -Recurse -Force -ErrorAction SilentlyContinue }
+      $cleanOk = -not (Test-Path $script:AppCtlWork)
+      foreach ($x in $ExtraCleanup) { if (Test-Path $x) { $cleanOk = $false } }
+      foreach ($x in @($script:AppCtlExtra)) { if ($x) { Write-Output $x } }
+      Write-Output "APPCTL_FAMILY: $Family"
+      Write-Output "APPCTL_HOST: os_build=$($state.Build) technique=$Technique"
+      Write-Output "APPCTL_COVERAGE: applocker_$Collection=$($state.Al[$Collection]) applocker_svc_running=$($state.AlSvc) wdac_umci=$($state.Wd) wdac_readable=$($state.WdReadable)"
+      Write-Output "APPCTL_EVIDENCE: test_id=$($script:AppCtlTid) expected=$Expected ran=$([bool]$att.Ran) exit=$($att.Exit) note=$($att.Note) block_events=[$((@($mechs | ForEach-Object { "$($_.Name)=$($_.Block)" })) -join ',')] audit_events=[$((@($mechs | ForEach-Object { "$($_.Name)=$($_.Audit)" })) -join ',')] cleanup_verified=$cleanOk capture=$((Get-Date).ToString('o'))"
+      $det = 'unknown'
+      try {
+      $sy = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-Sysmon/Operational'; Id = 1; StartTime = $start } -ErrorAction Stop)
+      $det = if (@($sy | Where-Object { $_.Message -like "*$($script:AppCtlTid)*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+      } catch {}
+      Write-Output "APPCTL_DETECTION: source=sysmon_process_create result=$det"
+      Write-Output "APPCTL_OUTCOME: $($r.Outcome)"
+      $reason = $r.Reason; if ($att.NotApplicable -and -not $Direct) { $reason = $att.NotApplicable }
+      switch ($r.Outcome) {
+      'blocked_as_expected'  { Write-Output "PASS: $reason. [BAS-SIM]" }
+      'allowed_by_policy'    { Write-Output "PASS: $reason. [BAS-SIM]" }
+      'allowed_unexpectedly' { Write-Output "FAIL: $reason. [BAS-SIM]" }
+      'not_enforced'         { Write-Output "FAIL: $reason. [BAS-SIM]" }
+      'audited_only'         { Write-Output "FAIL: $reason. [BAS-SIM]" }
+      default                { Write-Output "SKIP: $reason. [BAS-SIM]" }
+      }
+      }
+      Invoke-AppCtlTest -Family 'mshta_proxy' -Collection 'Exe' -Needle 'mshta.exe' -Technique 'T1218.005' -Attempt {
+      $mk = Join-Path $script:AppCtlWork 'mshta-marker.txt'
+      $hta = Join-Path $script:AppCtlWork 'proxy.hta'
+      $body = "<html><head><script language=`"VBScript`">Sub Window_OnLoad`r`nSet f = CreateObject(`"Scripting.FileSystemObject`").CreateTextFile(`"$mk`", True)`r`nf.Write `"$($script:AppCtlMarker)`"`r`nf.Close`r`nwindow.close`r`nEnd Sub</script></head><body></body></html>"
+      Set-Content -Path $hta -Value $body -Encoding ASCII
+      $p = Invoke-AppCtlProc -File (Join-Path $env:SystemRoot 'System32\mshta.exe') -ArgLine "`"$hta`""
+      return @{ Ran = (Test-AppCtlMarker $mk); Exit = $p.Exit; Note = "timed_out=$($p.TimedOut)"; NotApplicable = '' }
+      }
+    cleanup: |
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+
+  # -------------------------------------------------------------------------
+  - id: appctl-a10-msiexec
+    name: "Application control Trusted Binary Proxy: Msiexec package execution (T1218.007)"
+    technique_id: T1218.007
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Builds a minimal local MSI whose only action runs cmd.exe to write one marker file; it registers no product and installs nothing. The package is in a private temp directory deleted by the step."
+    telemetry:
+      - "AppLocker MSI and Script event 8007 naming the package, if AppLocker MSI rules enforced"
+      - "AppLocker MSI and Script event 8029 / Code Integrity 3077, if WDAC enforced"
+      - "Sysmon EID 1: msiexec.exe /i with a user-writable .msi"
+    detection:
+      - "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:AppCtlTid = [guid]::NewGuid().ToString('N')
+      $script:AppCtlMarker = "BAS-SIM-APPCTL-$($script:AppCtlTid)"
+      $script:AppCtlWork = Join-Path $env:TEMP "bas-appctl-$($script:AppCtlTid)"
+      function Get-AppCtlState {
+      $st = @{ Build = [Environment]::OSVersion.Version.Build; AlReadable = $false; AlSvc = $false; Al = @{}; WdReadable = $false; Wd = 'NotConfigured'; WdKernel = 'NotConfigured' }
+      try {
+      $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+      $st.AlReadable = $true
+      foreach ($rc in @($pol.RuleCollections)) { $st.Al[[string]$rc.RuleCollectionType] = [string]$rc.EnforcementMode }
+      } catch {}
+      foreach ($t in 'Exe', 'Script', 'Dll', 'Msi', 'Appx') { if (-not $st.Al.ContainsKey($t)) { $st.Al[$t] = 'NotConfigured' } }
+      $st.AlSvc = ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running')
+      try {
+      $dg = Get-CimInstance -Namespace 'root\Microsoft\Windows\DeviceGuard' -ClassName Win32_DeviceGuard -ErrorAction Stop
+      $map = @{ 0 = 'NotConfigured'; 1 = 'AuditOnly'; 2 = 'Enabled' }
+      $u = [int]@($dg)[0].UsermodeCodeIntegrityPolicyEnforcementStatus
+      $k = [int]@($dg)[0].CodeIntegrityPolicyEnforcementStatus
+      $st.WdReadable = $true
+      $st.Wd = [string]$map[$u]
+      $st.WdKernel = [string]$map[$k]
+      } catch {}
+      return $st
+      }
+      function Get-AppCtlMechanisms {
+      param($State, [string]$Collection, [string[]]$Allow)
+      $m = @()
+      if ($Allow -contains 'applocker') {
+      $m += @{ Name = 'applocker'; Available = ($State.AlSvc -and $State.AlReadable); Mode = [string]$State.Al[$Collection] }
+      }
+      if ($Allow -contains 'wdac') {
+      $m += @{ Name = 'wdac'; Available = $State.WdReadable; Mode = [string]$State.Wd }
+      }
+      return $m
+      }
+      function Get-AppCtlEvents {
+      param([string]$Mechanism, [string]$Collection, [datetime]$Start, [string]$Needle)
+      $isScript = ($Collection -eq 'Script' -or $Collection -eq 'Msi')
+      if ($Mechanism -eq 'applocker') {
+      if ($isScript) { $log = 'Microsoft-Windows-AppLocker/MSI and Script'; $blk = 8007; $aud = 8006 } else { $log = 'Microsoft-Windows-AppLocker/EXE and DLL'; $blk = 8004; $aud = 8003 }
+      } else {
+      if ($isScript) { $log = 'Microsoft-Windows-AppLocker/MSI and Script'; $blk = 8029; $aud = 8028 } else { $log = 'Microsoft-Windows-CodeIntegrity/Operational'; $blk = 3077; $aud = 3076 }
+      }
+      $r = @{ Readable = $true; Block = 0; Audit = 0 }
+      try {
+      $b = @(Get-WinEvent -FilterHashtable @{ LogName = $log; Id = $blk; StartTime = $Start } -ErrorAction Stop)
+      $r.Block = @($b | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch { if ($_.FullyQualifiedErrorId -notlike '*NoMatchingEventsFound*') { $r.Readable = $false } }
+      try {
+      $a = @(Get-WinEvent -FilterHashtable @{ LogName = $log; Id = $aud; StartTime = $Start } -ErrorAction Stop)
+      $r.Audit = @($a | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch { if ($_.FullyQualifiedErrorId -notlike '*NoMatchingEventsFound*') { $r.Readable = $false } }
+      return $r
+      }
+      function Resolve-AppCtlOutcome {
+      param([string]$Expected, [bool]$Ran, $Mechs, [bool]$BuildOk, [bool]$Constrained = $false)
+      $avail = @($Mechs | Where-Object { $_.Available })
+      if (-not $BuildOk -or $avail.Count -eq 0) { return @{ Outcome = 'not_applicable'; Reason = 'no applicable enforcement mechanism is available on this host (service stopped, not installed, not readable, or Windows build below the test floor)' } }
+      $enabled = @($avail | Where-Object { $_.Mode -eq 'Enabled' })
+      $audit = @($avail | Where-Object { $_.Mode -eq 'AuditOnly' })
+      $unread = @($enabled | Where-Object { -not $_.Readable })
+      if ($Ran) {
+      if ($Expected -ne 'blocked') { return @{ Outcome = 'allowed_by_policy'; Reason = 'executed; the contract expects this path to be allowed' } }
+      if ($enabled.Count -gt 0) { return @{ Outcome = 'allowed_unexpectedly'; Reason = "executed although $((@($enabled | ForEach-Object { $_.Name }) -join ' and ')) is Enabled for this collection" } }
+      if ($audit.Count -gt 0) { return @{ Outcome = 'audited_only'; Reason = "executed; $((@($audit | ForEach-Object { $_.Name }) -join ' and ')) is in audit mode, which records but does not prevent" } }
+      return @{ Outcome = 'not_enforced'; Reason = 'executed; no applicable mechanism is enforcing this collection' }
+      }
+      if ($Expected -eq 'allowed') { return @{ Outcome = 'inconclusive'; Reason = 'not executed although the contract expects it allowed' } }
+      if ($Constrained -and $enabled.Count -gt 0) { return @{ Outcome = 'blocked_as_expected'; Reason = "the script ran only in ConstrainedLanguage under enforced $((@($enabled | ForEach-Object { $_.Name }) -join ' and ')) policy; full-language execution was prevented" } }
+      if ($enabled.Count -eq 0) { return @{ Outcome = 'inconclusive'; Reason = 'not executed, but no applicable mechanism is Enabled for this collection, so the absence cannot be attributed to application control' } }
+      if ($unread.Count -gt 0) { return @{ Outcome = 'inconclusive'; Reason = 'the enforcement event log is unreadable; the block cannot be attributed' } }
+      $multi = @($enabled | Where-Object { $_.Block -gt 1 })
+      if ($multi.Count -gt 0) { return @{ Outcome = 'inconclusive'; Reason = "not executed; $($multi[0].Name) logged $($multi[0].Block) matching block events (exactly 1 required for attribution)" } }
+      $by = @($enabled | Where-Object { $_.Block -eq 1 })
+      if ($by.Count -eq 0) { return @{ Outcome = 'inconclusive'; Reason = 'not executed; no matching block event from any Enabled mechanism' } }
+      return @{ Outcome = 'blocked_as_expected'; Reason = "not executed; one matching block event from $((@($by | ForEach-Object { $_.Name }) -join ' and '))" }
+      }
+      function Test-AppCtlMarker {
+      param([string]$Path)
+      $t = Get-Content -Path $Path -ErrorAction SilentlyContinue
+      return [bool](($t -join "`n") -like "*$($script:AppCtlMarker)*")
+      }
+      function Invoke-AppCtlProc {
+      param([string]$File, [string]$ArgLine, [int]$TimeoutSec = 25, [switch]$NoShell)
+      $r = @{ Started = $false; Exit = -1; TimedOut = $false }
+      try {
+      if ($NoShell) {
+      $psi = New-Object Diagnostics.ProcessStartInfo
+      $psi.FileName = $File; $psi.Arguments = $ArgLine; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+      $p = [Diagnostics.Process]::Start($psi)
+      } else {
+      $p = Start-Process -FilePath $File -ArgumentList $ArgLine -WindowStyle Hidden -PassThru -ErrorAction Stop
+      }
+      $r.Started = $true
+      if (-not $p.WaitForExit($TimeoutSec * 1000)) { $r.TimedOut = $true; try { $p.Kill() } catch {} } else { $r.Exit = $p.ExitCode }
+      } catch {}
+      return $r
+      }
+      function Get-AppCtlCompileReason {
+      $mode = [string]$ExecutionContext.SessionState.LanguageMode
+      if ($mode -ne 'FullLanguage') { return "PowerShell is running in $mode, which blocks compiling test programs; this is an effect of enforcement, so the test could not run and its result is unknown" }
+      return 'the test program could not be compiled on this host (no .NET Framework compiler)'
+      }
+      function New-AppCtlExe {
+      param([string]$Path)
+      $src = 'public class BasMain { public static void Main(string[] a) { System.IO.File.WriteAllText(a[0], "' + $script:AppCtlMarker + '"); } }'
+      try { Add-Type -TypeDefinition $src -OutputAssembly $Path -OutputType ConsoleApplication -ErrorAction Stop } catch { return $false }
+      return (Test-Path $Path)
+      }
+      function Invoke-AppCtlExeAt {
+      param([string]$Dir, [string]$Name, [switch]$MarkOfTheWeb)
+      New-Item -ItemType Directory -Path $Dir -Force | Out-Null
+      $exe = Join-Path $Dir $Name
+      if (-not (New-AppCtlExe -Path $exe)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = (Get-AppCtlCompileReason) } }
+      if ($MarkOfTheWeb) { try { Set-Content -Path "$exe`:Zone.Identifier" -Value "[ZoneTransfer]`r`nZoneId=3" -ErrorAction Stop } catch {} }
+      $mk = Join-Path $Dir "$Name.marker.txt"
+      $p = Invoke-AppCtlProc -File $exe -ArgLine "`"$mk`"" -NoShell
+      return @{ Ran = (Test-AppCtlMarker $mk); Exit = $p.Exit; Note = "started=$($p.Started) timed_out=$($p.TimedOut) location=$((Split-Path $Dir -Leaf))"; NotApplicable = '' }
+      }
+      function New-AppCtlMsi {
+      param([string]$Path, [string]$MarkerPath)
+      try {
+      $wi = New-Object -ComObject WindowsInstaller.Installer
+      $db = $wi.OpenDatabase($Path, 3)
+      $cmd = Join-Path $env:SystemRoot 'System32\cmd.exe'
+      $sql = @(
+      'CREATE TABLE `Property` (`Property` CHAR(72) NOT NULL, `Value` LONGCHAR NOT NULL LOCALIZABLE PRIMARY KEY `Property`)',
+      'CREATE TABLE `CustomAction` (`Action` CHAR(72) NOT NULL, `Type` SHORT NOT NULL, `Source` CHAR(72), `Target` CHAR(255) PRIMARY KEY `Action`)',
+      'CREATE TABLE `InstallExecuteSequence` (`Action` CHAR(72) NOT NULL, `Condition` CHAR(255), `Sequence` SHORT PRIMARY KEY `Action`)',
+      ('INSERT INTO `Property` (`Property`, `Value`) VALUES (''BASCMD'', ''' + $cmd + ''')'),
+      ('INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductCode'', ''{' + [guid]::NewGuid().ToString().ToUpper() + '}'')'),
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductName'', ''BAS SIM'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductVersion'', ''1.0.0'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductLanguage'', ''1033'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''Manufacturer'', ''BAS SIM'')',
+      ('INSERT INTO `CustomAction` (`Action`, `Type`, `Source`, `Target`) VALUES (''RunIt'', 50, ''BASCMD'', ''/c echo ' + $script:AppCtlMarker + '> "' + $MarkerPath + '"'')'),
+      'INSERT INTO `InstallExecuteSequence` (`Action`, `Condition`, `Sequence`) VALUES (''RunIt'', '''', 1)'
+      )
+      foreach ($q in $sql) { $v = $db.OpenView($q); $v.Execute(); $v.Close() }
+      $si = $db.SummaryInformation(20)
+      $si.Property(2) = 'BAS SIM'
+      $si.Property(4) = 'BAS SIM'
+      $si.Property(7) = 'Intel;1033'
+      $si.Property(9) = ('{' + [guid]::NewGuid().ToString().ToUpper() + '}')
+      $si.Property(14) = 200
+      $si.Property(15) = 2
+      $si.Persist()
+      $db.Commit()
+      foreach ($o in @($si, $v, $db, $wi)) { if ($o) { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($o) } }
+      [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+      } catch { return $false }
+      return (Test-Path $Path)
+      }
+      function Invoke-AppCtlAttempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:AppCtlExtra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:AppCtlExtra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Exit = -1; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
+      function Get-AppCtlAceSid {
+      param($Ace)
+      try { return $Ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } catch { return [string]$Ace.IdentityReference }
+      }
+      function Invoke-AppCtlTest {
+      param(
+      [Parameter(Mandatory)][string]$Family,
+      [Parameter(Mandatory)][string]$Collection,
+      [Parameter(Mandatory)][string]$Needle,
+      [Parameter(Mandatory)][scriptblock]$Attempt,
+      [string]$Expected = 'blocked',
+      [string[]]$Mechanisms = @('applocker', 'wdac'),
+      [int]$MinBuild = 17763,
+      [string]$Technique = '',
+      [string[]]$ExtraCleanup = @(),
+      [switch]$Direct
+      )
+      New-Item -ItemType Directory -Path $script:AppCtlWork -Force | Out-Null
+      $state = Get-AppCtlState
+      $mechs = @(Get-AppCtlMechanisms -State $state -Collection $Collection -Allow $Mechanisms)
+      $buildOk = ($state.Build -ge $MinBuild)
+      $script:AppCtlExtra = @()
+      $att = @{ Ran = $false; Exit = -1; Note = ''; NotApplicable = ''; Constrained = $false }
+      $start = Get-Date
+      if ($buildOk -and ($Direct -or @($mechs | Where-Object { $_.Available }).Count -gt 0)) {
+      try { $att = Invoke-AppCtlAttempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Exit = -1; Note = "attempt_error:$em"; NotApplicable = '' } }
+      Start-Sleep -Milliseconds 800
+      }
+      if ($att.NotApplicable -and -not $Direct) { $buildOk = $false }
+      foreach ($m in $mechs) {
+      if ($Direct) { $m.Block = 0; $m.Audit = 0; $m.Readable = $true; continue }
+      $ev = Get-AppCtlEvents -Mechanism $m.Name -Collection $Collection -Start $start.AddSeconds(-1) -Needle $Needle
+      $m.Block = $ev.Block; $m.Audit = $ev.Audit; $m.Readable = $ev.Readable
+      }
+      if ($Direct) {
+      $okOut = @('blocked_as_expected', 'allowed_unexpectedly', 'not_enforced', 'audited_only', 'inconclusive', 'not_applicable')
+      if (-not $buildOk) { $r = @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the test floor' } }
+      elseif ($att.NotApplicable) { $r = @{ Outcome = 'not_applicable'; Reason = [string]$att.NotApplicable } }
+      elseif ($att.Verdict -and ($okOut -contains [string]$att.Verdict.Outcome)) { $r = @{ Outcome = [string]$att.Verdict.Outcome; Reason = [string]$att.Verdict.Reason } }
+      else { $r = @{ Outcome = 'inconclusive'; Reason = 'the test did not reach a verdict' } }
+      } else {
+      $r = Resolve-AppCtlOutcome -Expected $Expected -Ran ([bool]$att.Ran) -Mechs $mechs -BuildOk $buildOk -Constrained ([bool]$att.Constrained)
+      }
+      Remove-Item -Path $script:AppCtlWork -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($x in $ExtraCleanup) { Remove-Item -Path $x -Recurse -Force -ErrorAction SilentlyContinue }
+      $cleanOk = -not (Test-Path $script:AppCtlWork)
+      foreach ($x in $ExtraCleanup) { if (Test-Path $x) { $cleanOk = $false } }
+      foreach ($x in @($script:AppCtlExtra)) { if ($x) { Write-Output $x } }
+      Write-Output "APPCTL_FAMILY: $Family"
+      Write-Output "APPCTL_HOST: os_build=$($state.Build) technique=$Technique"
+      Write-Output "APPCTL_COVERAGE: applocker_$Collection=$($state.Al[$Collection]) applocker_svc_running=$($state.AlSvc) wdac_umci=$($state.Wd) wdac_readable=$($state.WdReadable)"
+      Write-Output "APPCTL_EVIDENCE: test_id=$($script:AppCtlTid) expected=$Expected ran=$([bool]$att.Ran) exit=$($att.Exit) note=$($att.Note) block_events=[$((@($mechs | ForEach-Object { "$($_.Name)=$($_.Block)" })) -join ',')] audit_events=[$((@($mechs | ForEach-Object { "$($_.Name)=$($_.Audit)" })) -join ',')] cleanup_verified=$cleanOk capture=$((Get-Date).ToString('o'))"
+      $det = 'unknown'
+      try {
+      $sy = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-Sysmon/Operational'; Id = 1; StartTime = $start } -ErrorAction Stop)
+      $det = if (@($sy | Where-Object { $_.Message -like "*$($script:AppCtlTid)*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+      } catch {}
+      Write-Output "APPCTL_DETECTION: source=sysmon_process_create result=$det"
+      Write-Output "APPCTL_OUTCOME: $($r.Outcome)"
+      $reason = $r.Reason; if ($att.NotApplicable -and -not $Direct) { $reason = $att.NotApplicable }
+      switch ($r.Outcome) {
+      'blocked_as_expected'  { Write-Output "PASS: $reason. [BAS-SIM]" }
+      'allowed_by_policy'    { Write-Output "PASS: $reason. [BAS-SIM]" }
+      'allowed_unexpectedly' { Write-Output "FAIL: $reason. [BAS-SIM]" }
+      'not_enforced'         { Write-Output "FAIL: $reason. [BAS-SIM]" }
+      'audited_only'         { Write-Output "FAIL: $reason. [BAS-SIM]" }
+      default                { Write-Output "SKIP: $reason. [BAS-SIM]" }
+      }
+      }
+      $msiName = "bas_$($script:AppCtlTid.Substring(0,8)).msi"
+      Invoke-AppCtlTest -Family 'msiexec_proxy' -Collection 'Msi' -Needle $msiName -Technique 'T1218.007' -Attempt {
+      $mk = Join-Path $script:AppCtlWork 'msiexec-marker.txt'
+      $msi = Join-Path $script:AppCtlWork $msiName
+      if (-not (New-AppCtlMsi -Path $msi -MarkerPath $mk)) { return @{ Ran = $false; Exit = -1; Note = 'msi_build_failed'; NotApplicable = 'the test package could not be built on this host' } }
+      $p = Invoke-AppCtlProc -File (Join-Path $env:SystemRoot 'System32\msiexec.exe') -ArgLine "/i `"$msi`" /qn /norestart"
+      return @{ Ran = (Test-AppCtlMarker $mk); Exit = $p.Exit; Note = "timed_out=$($p.TimedOut)"; NotApplicable = '' }
+      }
+    cleanup: |
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+
+  # -------------------------------------------------------------------------
+  - id: appctl-a11-installutil
+    name: "Application control Trusted Binary Proxy: InstallUtil assembly execution (T1218.004)"
+    technique_id: T1218.004
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Compiles a tiny unsigned .NET assembly in a private temp directory and runs InstallUtil.exe /U against it; its uninstall handler writes one marker file. Everything is deleted by the step."
+    telemetry:
+      - "AppLocker EXE and DLL event 8004 naming InstallUtil.exe, if enforced"
+      - "Code Integrity 3077 naming InstallUtil.exe or the assembly, if WDAC enforced"
+      - "Sysmon EID 1: InstallUtil.exe /U with a user-writable assembly"
+    detection:
+      - "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:AppCtlTid = [guid]::NewGuid().ToString('N')
+      $script:AppCtlMarker = "BAS-SIM-APPCTL-$($script:AppCtlTid)"
+      $script:AppCtlWork = Join-Path $env:TEMP "bas-appctl-$($script:AppCtlTid)"
+      function Get-AppCtlState {
+      $st = @{ Build = [Environment]::OSVersion.Version.Build; AlReadable = $false; AlSvc = $false; Al = @{}; WdReadable = $false; Wd = 'NotConfigured'; WdKernel = 'NotConfigured' }
+      try {
+      $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+      $st.AlReadable = $true
+      foreach ($rc in @($pol.RuleCollections)) { $st.Al[[string]$rc.RuleCollectionType] = [string]$rc.EnforcementMode }
+      } catch {}
+      foreach ($t in 'Exe', 'Script', 'Dll', 'Msi', 'Appx') { if (-not $st.Al.ContainsKey($t)) { $st.Al[$t] = 'NotConfigured' } }
+      $st.AlSvc = ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running')
+      try {
+      $dg = Get-CimInstance -Namespace 'root\Microsoft\Windows\DeviceGuard' -ClassName Win32_DeviceGuard -ErrorAction Stop
+      $map = @{ 0 = 'NotConfigured'; 1 = 'AuditOnly'; 2 = 'Enabled' }
+      $u = [int]@($dg)[0].UsermodeCodeIntegrityPolicyEnforcementStatus
+      $k = [int]@($dg)[0].CodeIntegrityPolicyEnforcementStatus
+      $st.WdReadable = $true
+      $st.Wd = [string]$map[$u]
+      $st.WdKernel = [string]$map[$k]
+      } catch {}
+      return $st
+      }
+      function Get-AppCtlMechanisms {
+      param($State, [string]$Collection, [string[]]$Allow)
+      $m = @()
+      if ($Allow -contains 'applocker') {
+      $m += @{ Name = 'applocker'; Available = ($State.AlSvc -and $State.AlReadable); Mode = [string]$State.Al[$Collection] }
+      }
+      if ($Allow -contains 'wdac') {
+      $m += @{ Name = 'wdac'; Available = $State.WdReadable; Mode = [string]$State.Wd }
+      }
+      return $m
+      }
+      function Get-AppCtlEvents {
+      param([string]$Mechanism, [string]$Collection, [datetime]$Start, [string]$Needle)
+      $isScript = ($Collection -eq 'Script' -or $Collection -eq 'Msi')
+      if ($Mechanism -eq 'applocker') {
+      if ($isScript) { $log = 'Microsoft-Windows-AppLocker/MSI and Script'; $blk = 8007; $aud = 8006 } else { $log = 'Microsoft-Windows-AppLocker/EXE and DLL'; $blk = 8004; $aud = 8003 }
+      } else {
+      if ($isScript) { $log = 'Microsoft-Windows-AppLocker/MSI and Script'; $blk = 8029; $aud = 8028 } else { $log = 'Microsoft-Windows-CodeIntegrity/Operational'; $blk = 3077; $aud = 3076 }
+      }
+      $r = @{ Readable = $true; Block = 0; Audit = 0 }
+      try {
+      $b = @(Get-WinEvent -FilterHashtable @{ LogName = $log; Id = $blk; StartTime = $Start } -ErrorAction Stop)
+      $r.Block = @($b | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch { if ($_.FullyQualifiedErrorId -notlike '*NoMatchingEventsFound*') { $r.Readable = $false } }
+      try {
+      $a = @(Get-WinEvent -FilterHashtable @{ LogName = $log; Id = $aud; StartTime = $Start } -ErrorAction Stop)
+      $r.Audit = @($a | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch { if ($_.FullyQualifiedErrorId -notlike '*NoMatchingEventsFound*') { $r.Readable = $false } }
+      return $r
+      }
+      function Resolve-AppCtlOutcome {
+      param([string]$Expected, [bool]$Ran, $Mechs, [bool]$BuildOk, [bool]$Constrained = $false)
+      $avail = @($Mechs | Where-Object { $_.Available })
+      if (-not $BuildOk -or $avail.Count -eq 0) { return @{ Outcome = 'not_applicable'; Reason = 'no applicable enforcement mechanism is available on this host (service stopped, not installed, not readable, or Windows build below the test floor)' } }
+      $enabled = @($avail | Where-Object { $_.Mode -eq 'Enabled' })
+      $audit = @($avail | Where-Object { $_.Mode -eq 'AuditOnly' })
+      $unread = @($enabled | Where-Object { -not $_.Readable })
+      if ($Ran) {
+      if ($Expected -ne 'blocked') { return @{ Outcome = 'allowed_by_policy'; Reason = 'executed; the contract expects this path to be allowed' } }
+      if ($enabled.Count -gt 0) { return @{ Outcome = 'allowed_unexpectedly'; Reason = "executed although $((@($enabled | ForEach-Object { $_.Name }) -join ' and ')) is Enabled for this collection" } }
+      if ($audit.Count -gt 0) { return @{ Outcome = 'audited_only'; Reason = "executed; $((@($audit | ForEach-Object { $_.Name }) -join ' and ')) is in audit mode, which records but does not prevent" } }
+      return @{ Outcome = 'not_enforced'; Reason = 'executed; no applicable mechanism is enforcing this collection' }
+      }
+      if ($Expected -eq 'allowed') { return @{ Outcome = 'inconclusive'; Reason = 'not executed although the contract expects it allowed' } }
+      if ($Constrained -and $enabled.Count -gt 0) { return @{ Outcome = 'blocked_as_expected'; Reason = "the script ran only in ConstrainedLanguage under enforced $((@($enabled | ForEach-Object { $_.Name }) -join ' and ')) policy; full-language execution was prevented" } }
+      if ($enabled.Count -eq 0) { return @{ Outcome = 'inconclusive'; Reason = 'not executed, but no applicable mechanism is Enabled for this collection, so the absence cannot be attributed to application control' } }
+      if ($unread.Count -gt 0) { return @{ Outcome = 'inconclusive'; Reason = 'the enforcement event log is unreadable; the block cannot be attributed' } }
+      $multi = @($enabled | Where-Object { $_.Block -gt 1 })
+      if ($multi.Count -gt 0) { return @{ Outcome = 'inconclusive'; Reason = "not executed; $($multi[0].Name) logged $($multi[0].Block) matching block events (exactly 1 required for attribution)" } }
+      $by = @($enabled | Where-Object { $_.Block -eq 1 })
+      if ($by.Count -eq 0) { return @{ Outcome = 'inconclusive'; Reason = 'not executed; no matching block event from any Enabled mechanism' } }
+      return @{ Outcome = 'blocked_as_expected'; Reason = "not executed; one matching block event from $((@($by | ForEach-Object { $_.Name }) -join ' and '))" }
+      }
+      function Test-AppCtlMarker {
+      param([string]$Path)
+      $t = Get-Content -Path $Path -ErrorAction SilentlyContinue
+      return [bool](($t -join "`n") -like "*$($script:AppCtlMarker)*")
+      }
+      function Invoke-AppCtlProc {
+      param([string]$File, [string]$ArgLine, [int]$TimeoutSec = 25, [switch]$NoShell)
+      $r = @{ Started = $false; Exit = -1; TimedOut = $false }
+      try {
+      if ($NoShell) {
+      $psi = New-Object Diagnostics.ProcessStartInfo
+      $psi.FileName = $File; $psi.Arguments = $ArgLine; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+      $p = [Diagnostics.Process]::Start($psi)
+      } else {
+      $p = Start-Process -FilePath $File -ArgumentList $ArgLine -WindowStyle Hidden -PassThru -ErrorAction Stop
+      }
+      $r.Started = $true
+      if (-not $p.WaitForExit($TimeoutSec * 1000)) { $r.TimedOut = $true; try { $p.Kill() } catch {} } else { $r.Exit = $p.ExitCode }
+      } catch {}
+      return $r
+      }
+      function Get-AppCtlCompileReason {
+      $mode = [string]$ExecutionContext.SessionState.LanguageMode
+      if ($mode -ne 'FullLanguage') { return "PowerShell is running in $mode, which blocks compiling test programs; this is an effect of enforcement, so the test could not run and its result is unknown" }
+      return 'the test program could not be compiled on this host (no .NET Framework compiler)'
+      }
+      function New-AppCtlExe {
+      param([string]$Path)
+      $src = 'public class BasMain { public static void Main(string[] a) { System.IO.File.WriteAllText(a[0], "' + $script:AppCtlMarker + '"); } }'
+      try { Add-Type -TypeDefinition $src -OutputAssembly $Path -OutputType ConsoleApplication -ErrorAction Stop } catch { return $false }
+      return (Test-Path $Path)
+      }
+      function Invoke-AppCtlExeAt {
+      param([string]$Dir, [string]$Name, [switch]$MarkOfTheWeb)
+      New-Item -ItemType Directory -Path $Dir -Force | Out-Null
+      $exe = Join-Path $Dir $Name
+      if (-not (New-AppCtlExe -Path $exe)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = (Get-AppCtlCompileReason) } }
+      if ($MarkOfTheWeb) { try { Set-Content -Path "$exe`:Zone.Identifier" -Value "[ZoneTransfer]`r`nZoneId=3" -ErrorAction Stop } catch {} }
+      $mk = Join-Path $Dir "$Name.marker.txt"
+      $p = Invoke-AppCtlProc -File $exe -ArgLine "`"$mk`"" -NoShell
+      return @{ Ran = (Test-AppCtlMarker $mk); Exit = $p.Exit; Note = "started=$($p.Started) timed_out=$($p.TimedOut) location=$((Split-Path $Dir -Leaf))"; NotApplicable = '' }
+      }
+      function New-AppCtlMsi {
+      param([string]$Path, [string]$MarkerPath)
+      try {
+      $wi = New-Object -ComObject WindowsInstaller.Installer
+      $db = $wi.OpenDatabase($Path, 3)
+      $cmd = Join-Path $env:SystemRoot 'System32\cmd.exe'
+      $sql = @(
+      'CREATE TABLE `Property` (`Property` CHAR(72) NOT NULL, `Value` LONGCHAR NOT NULL LOCALIZABLE PRIMARY KEY `Property`)',
+      'CREATE TABLE `CustomAction` (`Action` CHAR(72) NOT NULL, `Type` SHORT NOT NULL, `Source` CHAR(72), `Target` CHAR(255) PRIMARY KEY `Action`)',
+      'CREATE TABLE `InstallExecuteSequence` (`Action` CHAR(72) NOT NULL, `Condition` CHAR(255), `Sequence` SHORT PRIMARY KEY `Action`)',
+      ('INSERT INTO `Property` (`Property`, `Value`) VALUES (''BASCMD'', ''' + $cmd + ''')'),
+      ('INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductCode'', ''{' + [guid]::NewGuid().ToString().ToUpper() + '}'')'),
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductName'', ''BAS SIM'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductVersion'', ''1.0.0'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductLanguage'', ''1033'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''Manufacturer'', ''BAS SIM'')',
+      ('INSERT INTO `CustomAction` (`Action`, `Type`, `Source`, `Target`) VALUES (''RunIt'', 50, ''BASCMD'', ''/c echo ' + $script:AppCtlMarker + '> "' + $MarkerPath + '"'')'),
+      'INSERT INTO `InstallExecuteSequence` (`Action`, `Condition`, `Sequence`) VALUES (''RunIt'', '''', 1)'
+      )
+      foreach ($q in $sql) { $v = $db.OpenView($q); $v.Execute(); $v.Close() }
+      $si = $db.SummaryInformation(20)
+      $si.Property(2) = 'BAS SIM'
+      $si.Property(4) = 'BAS SIM'
+      $si.Property(7) = 'Intel;1033'
+      $si.Property(9) = ('{' + [guid]::NewGuid().ToString().ToUpper() + '}')
+      $si.Property(14) = 200
+      $si.Property(15) = 2
+      $si.Persist()
+      $db.Commit()
+      foreach ($o in @($si, $v, $db, $wi)) { if ($o) { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($o) } }
+      [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+      } catch { return $false }
+      return (Test-Path $Path)
+      }
+      function Invoke-AppCtlAttempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:AppCtlExtra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:AppCtlExtra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Exit = -1; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
+      function Get-AppCtlAceSid {
+      param($Ace)
+      try { return $Ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } catch { return [string]$Ace.IdentityReference }
+      }
+      function Invoke-AppCtlTest {
+      param(
+      [Parameter(Mandatory)][string]$Family,
+      [Parameter(Mandatory)][string]$Collection,
+      [Parameter(Mandatory)][string]$Needle,
+      [Parameter(Mandatory)][scriptblock]$Attempt,
+      [string]$Expected = 'blocked',
+      [string[]]$Mechanisms = @('applocker', 'wdac'),
+      [int]$MinBuild = 17763,
+      [string]$Technique = '',
+      [string[]]$ExtraCleanup = @(),
+      [switch]$Direct
+      )
+      New-Item -ItemType Directory -Path $script:AppCtlWork -Force | Out-Null
+      $state = Get-AppCtlState
+      $mechs = @(Get-AppCtlMechanisms -State $state -Collection $Collection -Allow $Mechanisms)
+      $buildOk = ($state.Build -ge $MinBuild)
+      $script:AppCtlExtra = @()
+      $att = @{ Ran = $false; Exit = -1; Note = ''; NotApplicable = ''; Constrained = $false }
+      $start = Get-Date
+      if ($buildOk -and ($Direct -or @($mechs | Where-Object { $_.Available }).Count -gt 0)) {
+      try { $att = Invoke-AppCtlAttempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Exit = -1; Note = "attempt_error:$em"; NotApplicable = '' } }
+      Start-Sleep -Milliseconds 800
+      }
+      if ($att.NotApplicable -and -not $Direct) { $buildOk = $false }
+      foreach ($m in $mechs) {
+      if ($Direct) { $m.Block = 0; $m.Audit = 0; $m.Readable = $true; continue }
+      $ev = Get-AppCtlEvents -Mechanism $m.Name -Collection $Collection -Start $start.AddSeconds(-1) -Needle $Needle
+      $m.Block = $ev.Block; $m.Audit = $ev.Audit; $m.Readable = $ev.Readable
+      }
+      if ($Direct) {
+      $okOut = @('blocked_as_expected', 'allowed_unexpectedly', 'not_enforced', 'audited_only', 'inconclusive', 'not_applicable')
+      if (-not $buildOk) { $r = @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the test floor' } }
+      elseif ($att.NotApplicable) { $r = @{ Outcome = 'not_applicable'; Reason = [string]$att.NotApplicable } }
+      elseif ($att.Verdict -and ($okOut -contains [string]$att.Verdict.Outcome)) { $r = @{ Outcome = [string]$att.Verdict.Outcome; Reason = [string]$att.Verdict.Reason } }
+      else { $r = @{ Outcome = 'inconclusive'; Reason = 'the test did not reach a verdict' } }
+      } else {
+      $r = Resolve-AppCtlOutcome -Expected $Expected -Ran ([bool]$att.Ran) -Mechs $mechs -BuildOk $buildOk -Constrained ([bool]$att.Constrained)
+      }
+      Remove-Item -Path $script:AppCtlWork -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($x in $ExtraCleanup) { Remove-Item -Path $x -Recurse -Force -ErrorAction SilentlyContinue }
+      $cleanOk = -not (Test-Path $script:AppCtlWork)
+      foreach ($x in $ExtraCleanup) { if (Test-Path $x) { $cleanOk = $false } }
+      foreach ($x in @($script:AppCtlExtra)) { if ($x) { Write-Output $x } }
+      Write-Output "APPCTL_FAMILY: $Family"
+      Write-Output "APPCTL_HOST: os_build=$($state.Build) technique=$Technique"
+      Write-Output "APPCTL_COVERAGE: applocker_$Collection=$($state.Al[$Collection]) applocker_svc_running=$($state.AlSvc) wdac_umci=$($state.Wd) wdac_readable=$($state.WdReadable)"
+      Write-Output "APPCTL_EVIDENCE: test_id=$($script:AppCtlTid) expected=$Expected ran=$([bool]$att.Ran) exit=$($att.Exit) note=$($att.Note) block_events=[$((@($mechs | ForEach-Object { "$($_.Name)=$($_.Block)" })) -join ',')] audit_events=[$((@($mechs | ForEach-Object { "$($_.Name)=$($_.Audit)" })) -join ',')] cleanup_verified=$cleanOk capture=$((Get-Date).ToString('o'))"
+      $det = 'unknown'
+      try {
+      $sy = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-Sysmon/Operational'; Id = 1; StartTime = $start } -ErrorAction Stop)
+      $det = if (@($sy | Where-Object { $_.Message -like "*$($script:AppCtlTid)*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+      } catch {}
+      Write-Output "APPCTL_DETECTION: source=sysmon_process_create result=$det"
+      Write-Output "APPCTL_OUTCOME: $($r.Outcome)"
+      $reason = $r.Reason; if ($att.NotApplicable -and -not $Direct) { $reason = $att.NotApplicable }
+      switch ($r.Outcome) {
+      'blocked_as_expected'  { Write-Output "PASS: $reason. [BAS-SIM]" }
+      'allowed_by_policy'    { Write-Output "PASS: $reason. [BAS-SIM]" }
+      'allowed_unexpectedly' { Write-Output "FAIL: $reason. [BAS-SIM]" }
+      'not_enforced'         { Write-Output "FAIL: $reason. [BAS-SIM]" }
+      'audited_only'         { Write-Output "FAIL: $reason. [BAS-SIM]" }
+      default                { Write-Output "SKIP: $reason. [BAS-SIM]" }
+      }
+      }
+      Invoke-AppCtlTest -Family 'installutil_proxy' -Collection 'Exe' -Needle 'installutil.exe' -Technique 'T1218.004' -Attempt {
+      $iu = Join-Path $env:SystemRoot 'Microsoft.NET\Framework64\v4.0.30319\InstallUtil.exe'
+      if (-not (Test-Path $iu)) { return @{ Ran = $false; Exit = -1; Note = 'installutil_absent'; NotApplicable = 'InstallUtil.exe is not present on this host, so the path cannot be tested' } }
+      $mk = Join-Path $script:AppCtlWork 'installutil-marker.txt'
+      $dll = Join-Path $script:AppCtlWork 'proxy.dll'
+      $src = 'using System; using System.ComponentModel; using System.Configuration.Install; [RunInstaller(true)] public class BasInst : Installer { public override void Uninstall(System.Collections.IDictionary s) { System.IO.File.WriteAllText(@"' + $mk + '", "' + $script:AppCtlMarker + '"); } }'
+      try { Add-Type -TypeDefinition $src -ReferencedAssemblies 'System.Configuration.Install' -OutputAssembly $dll -OutputType Library -ErrorAction Stop } catch {}
+      if (-not (Test-Path $dll)) { return @{ Ran = $false; Exit = -1; Note = 'assembly_build_failed'; NotApplicable = (Get-AppCtlCompileReason) } }
+      $p = Invoke-AppCtlProc -File $iu -ArgLine "/U /LogToConsole=false `"$dll`"" -TimeoutSec 40
+      return @{ Ran = (Test-AppCtlMarker $mk); Exit = $p.Exit; Note = "timed_out=$($p.TimedOut)"; NotApplicable = '' }
+      }
+    cleanup: |
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+
+  # -------------------------------------------------------------------------
+  - id: appctl-a12-cpl
+    name: "Application control Trusted Binary Proxy: Control Panel applet (CPL) loaded from a user-writable path (T1218.002)"
+    technique_id: T1218.002
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Copies a signed system Control Panel applet into a private temp directory and loads that copy once with LoadLibrary, then frees it. AppLocker does not evaluate .cpl files, so this path is tested against WDAC only."
+    telemetry:
+      - "Code Integrity 3077 naming the copied .cpl, if WDAC enforced"
+      - "Sysmon EID 7: image load of a .cpl from a user-writable path"
+    detection:
+      - "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:AppCtlTid = [guid]::NewGuid().ToString('N')
+      $script:AppCtlMarker = "BAS-SIM-APPCTL-$($script:AppCtlTid)"
+      $script:AppCtlWork = Join-Path $env:TEMP "bas-appctl-$($script:AppCtlTid)"
+      function Get-AppCtlState {
+      $st = @{ Build = [Environment]::OSVersion.Version.Build; AlReadable = $false; AlSvc = $false; Al = @{}; WdReadable = $false; Wd = 'NotConfigured'; WdKernel = 'NotConfigured' }
+      try {
+      $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+      $st.AlReadable = $true
+      foreach ($rc in @($pol.RuleCollections)) { $st.Al[[string]$rc.RuleCollectionType] = [string]$rc.EnforcementMode }
+      } catch {}
+      foreach ($t in 'Exe', 'Script', 'Dll', 'Msi', 'Appx') { if (-not $st.Al.ContainsKey($t)) { $st.Al[$t] = 'NotConfigured' } }
+      $st.AlSvc = ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running')
+      try {
+      $dg = Get-CimInstance -Namespace 'root\Microsoft\Windows\DeviceGuard' -ClassName Win32_DeviceGuard -ErrorAction Stop
+      $map = @{ 0 = 'NotConfigured'; 1 = 'AuditOnly'; 2 = 'Enabled' }
+      $u = [int]@($dg)[0].UsermodeCodeIntegrityPolicyEnforcementStatus
+      $k = [int]@($dg)[0].CodeIntegrityPolicyEnforcementStatus
+      $st.WdReadable = $true
+      $st.Wd = [string]$map[$u]
+      $st.WdKernel = [string]$map[$k]
+      } catch {}
+      return $st
+      }
+      function Get-AppCtlMechanisms {
+      param($State, [string]$Collection, [string[]]$Allow)
+      $m = @()
+      if ($Allow -contains 'applocker') {
+      $m += @{ Name = 'applocker'; Available = ($State.AlSvc -and $State.AlReadable); Mode = [string]$State.Al[$Collection] }
+      }
+      if ($Allow -contains 'wdac') {
+      $m += @{ Name = 'wdac'; Available = $State.WdReadable; Mode = [string]$State.Wd }
+      }
+      return $m
+      }
+      function Get-AppCtlEvents {
+      param([string]$Mechanism, [string]$Collection, [datetime]$Start, [string]$Needle)
+      $isScript = ($Collection -eq 'Script' -or $Collection -eq 'Msi')
+      if ($Mechanism -eq 'applocker') {
+      if ($isScript) { $log = 'Microsoft-Windows-AppLocker/MSI and Script'; $blk = 8007; $aud = 8006 } else { $log = 'Microsoft-Windows-AppLocker/EXE and DLL'; $blk = 8004; $aud = 8003 }
+      } else {
+      if ($isScript) { $log = 'Microsoft-Windows-AppLocker/MSI and Script'; $blk = 8029; $aud = 8028 } else { $log = 'Microsoft-Windows-CodeIntegrity/Operational'; $blk = 3077; $aud = 3076 }
+      }
+      $r = @{ Readable = $true; Block = 0; Audit = 0 }
+      try {
+      $b = @(Get-WinEvent -FilterHashtable @{ LogName = $log; Id = $blk; StartTime = $Start } -ErrorAction Stop)
+      $r.Block = @($b | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch { if ($_.FullyQualifiedErrorId -notlike '*NoMatchingEventsFound*') { $r.Readable = $false } }
+      try {
+      $a = @(Get-WinEvent -FilterHashtable @{ LogName = $log; Id = $aud; StartTime = $Start } -ErrorAction Stop)
+      $r.Audit = @($a | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch { if ($_.FullyQualifiedErrorId -notlike '*NoMatchingEventsFound*') { $r.Readable = $false } }
+      return $r
+      }
+      function Resolve-AppCtlOutcome {
+      param([string]$Expected, [bool]$Ran, $Mechs, [bool]$BuildOk, [bool]$Constrained = $false)
+      $avail = @($Mechs | Where-Object { $_.Available })
+      if (-not $BuildOk -or $avail.Count -eq 0) { return @{ Outcome = 'not_applicable'; Reason = 'no applicable enforcement mechanism is available on this host (service stopped, not installed, not readable, or Windows build below the test floor)' } }
+      $enabled = @($avail | Where-Object { $_.Mode -eq 'Enabled' })
+      $audit = @($avail | Where-Object { $_.Mode -eq 'AuditOnly' })
+      $unread = @($enabled | Where-Object { -not $_.Readable })
+      if ($Ran) {
+      if ($Expected -ne 'blocked') { return @{ Outcome = 'allowed_by_policy'; Reason = 'executed; the contract expects this path to be allowed' } }
+      if ($enabled.Count -gt 0) { return @{ Outcome = 'allowed_unexpectedly'; Reason = "executed although $((@($enabled | ForEach-Object { $_.Name }) -join ' and ')) is Enabled for this collection" } }
+      if ($audit.Count -gt 0) { return @{ Outcome = 'audited_only'; Reason = "executed; $((@($audit | ForEach-Object { $_.Name }) -join ' and ')) is in audit mode, which records but does not prevent" } }
+      return @{ Outcome = 'not_enforced'; Reason = 'executed; no applicable mechanism is enforcing this collection' }
+      }
+      if ($Expected -eq 'allowed') { return @{ Outcome = 'inconclusive'; Reason = 'not executed although the contract expects it allowed' } }
+      if ($Constrained -and $enabled.Count -gt 0) { return @{ Outcome = 'blocked_as_expected'; Reason = "the script ran only in ConstrainedLanguage under enforced $((@($enabled | ForEach-Object { $_.Name }) -join ' and ')) policy; full-language execution was prevented" } }
+      if ($enabled.Count -eq 0) { return @{ Outcome = 'inconclusive'; Reason = 'not executed, but no applicable mechanism is Enabled for this collection, so the absence cannot be attributed to application control' } }
+      if ($unread.Count -gt 0) { return @{ Outcome = 'inconclusive'; Reason = 'the enforcement event log is unreadable; the block cannot be attributed' } }
+      $multi = @($enabled | Where-Object { $_.Block -gt 1 })
+      if ($multi.Count -gt 0) { return @{ Outcome = 'inconclusive'; Reason = "not executed; $($multi[0].Name) logged $($multi[0].Block) matching block events (exactly 1 required for attribution)" } }
+      $by = @($enabled | Where-Object { $_.Block -eq 1 })
+      if ($by.Count -eq 0) { return @{ Outcome = 'inconclusive'; Reason = 'not executed; no matching block event from any Enabled mechanism' } }
+      return @{ Outcome = 'blocked_as_expected'; Reason = "not executed; one matching block event from $((@($by | ForEach-Object { $_.Name }) -join ' and '))" }
+      }
+      function Test-AppCtlMarker {
+      param([string]$Path)
+      $t = Get-Content -Path $Path -ErrorAction SilentlyContinue
+      return [bool](($t -join "`n") -like "*$($script:AppCtlMarker)*")
+      }
+      function Invoke-AppCtlProc {
+      param([string]$File, [string]$ArgLine, [int]$TimeoutSec = 25, [switch]$NoShell)
+      $r = @{ Started = $false; Exit = -1; TimedOut = $false }
+      try {
+      if ($NoShell) {
+      $psi = New-Object Diagnostics.ProcessStartInfo
+      $psi.FileName = $File; $psi.Arguments = $ArgLine; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+      $p = [Diagnostics.Process]::Start($psi)
+      } else {
+      $p = Start-Process -FilePath $File -ArgumentList $ArgLine -WindowStyle Hidden -PassThru -ErrorAction Stop
+      }
+      $r.Started = $true
+      if (-not $p.WaitForExit($TimeoutSec * 1000)) { $r.TimedOut = $true; try { $p.Kill() } catch {} } else { $r.Exit = $p.ExitCode }
+      } catch {}
+      return $r
+      }
+      function Get-AppCtlCompileReason {
+      $mode = [string]$ExecutionContext.SessionState.LanguageMode
+      if ($mode -ne 'FullLanguage') { return "PowerShell is running in $mode, which blocks compiling test programs; this is an effect of enforcement, so the test could not run and its result is unknown" }
+      return 'the test program could not be compiled on this host (no .NET Framework compiler)'
+      }
+      function New-AppCtlExe {
+      param([string]$Path)
+      $src = 'public class BasMain { public static void Main(string[] a) { System.IO.File.WriteAllText(a[0], "' + $script:AppCtlMarker + '"); } }'
+      try { Add-Type -TypeDefinition $src -OutputAssembly $Path -OutputType ConsoleApplication -ErrorAction Stop } catch { return $false }
+      return (Test-Path $Path)
+      }
+      function Invoke-AppCtlExeAt {
+      param([string]$Dir, [string]$Name, [switch]$MarkOfTheWeb)
+      New-Item -ItemType Directory -Path $Dir -Force | Out-Null
+      $exe = Join-Path $Dir $Name
+      if (-not (New-AppCtlExe -Path $exe)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = (Get-AppCtlCompileReason) } }
+      if ($MarkOfTheWeb) { try { Set-Content -Path "$exe`:Zone.Identifier" -Value "[ZoneTransfer]`r`nZoneId=3" -ErrorAction Stop } catch {} }
+      $mk = Join-Path $Dir "$Name.marker.txt"
+      $p = Invoke-AppCtlProc -File $exe -ArgLine "`"$mk`"" -NoShell
+      return @{ Ran = (Test-AppCtlMarker $mk); Exit = $p.Exit; Note = "started=$($p.Started) timed_out=$($p.TimedOut) location=$((Split-Path $Dir -Leaf))"; NotApplicable = '' }
+      }
+      function New-AppCtlMsi {
+      param([string]$Path, [string]$MarkerPath)
+      try {
+      $wi = New-Object -ComObject WindowsInstaller.Installer
+      $db = $wi.OpenDatabase($Path, 3)
+      $cmd = Join-Path $env:SystemRoot 'System32\cmd.exe'
+      $sql = @(
+      'CREATE TABLE `Property` (`Property` CHAR(72) NOT NULL, `Value` LONGCHAR NOT NULL LOCALIZABLE PRIMARY KEY `Property`)',
+      'CREATE TABLE `CustomAction` (`Action` CHAR(72) NOT NULL, `Type` SHORT NOT NULL, `Source` CHAR(72), `Target` CHAR(255) PRIMARY KEY `Action`)',
+      'CREATE TABLE `InstallExecuteSequence` (`Action` CHAR(72) NOT NULL, `Condition` CHAR(255), `Sequence` SHORT PRIMARY KEY `Action`)',
+      ('INSERT INTO `Property` (`Property`, `Value`) VALUES (''BASCMD'', ''' + $cmd + ''')'),
+      ('INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductCode'', ''{' + [guid]::NewGuid().ToString().ToUpper() + '}'')'),
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductName'', ''BAS SIM'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductVersion'', ''1.0.0'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductLanguage'', ''1033'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''Manufacturer'', ''BAS SIM'')',
+      ('INSERT INTO `CustomAction` (`Action`, `Type`, `Source`, `Target`) VALUES (''RunIt'', 50, ''BASCMD'', ''/c echo ' + $script:AppCtlMarker + '> "' + $MarkerPath + '"'')'),
+      'INSERT INTO `InstallExecuteSequence` (`Action`, `Condition`, `Sequence`) VALUES (''RunIt'', '''', 1)'
+      )
+      foreach ($q in $sql) { $v = $db.OpenView($q); $v.Execute(); $v.Close() }
+      $si = $db.SummaryInformation(20)
+      $si.Property(2) = 'BAS SIM'
+      $si.Property(4) = 'BAS SIM'
+      $si.Property(7) = 'Intel;1033'
+      $si.Property(9) = ('{' + [guid]::NewGuid().ToString().ToUpper() + '}')
+      $si.Property(14) = 200
+      $si.Property(15) = 2
+      $si.Persist()
+      $db.Commit()
+      foreach ($o in @($si, $v, $db, $wi)) { if ($o) { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($o) } }
+      [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+      } catch { return $false }
+      return (Test-Path $Path)
+      }
+      function Invoke-AppCtlAttempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:AppCtlExtra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:AppCtlExtra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Exit = -1; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
+      function Get-AppCtlAceSid {
+      param($Ace)
+      try { return $Ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } catch { return [string]$Ace.IdentityReference }
+      }
+      function Invoke-AppCtlTest {
+      param(
+      [Parameter(Mandatory)][string]$Family,
+      [Parameter(Mandatory)][string]$Collection,
+      [Parameter(Mandatory)][string]$Needle,
+      [Parameter(Mandatory)][scriptblock]$Attempt,
+      [string]$Expected = 'blocked',
+      [string[]]$Mechanisms = @('applocker', 'wdac'),
+      [int]$MinBuild = 17763,
+      [string]$Technique = '',
+      [string[]]$ExtraCleanup = @(),
+      [switch]$Direct
+      )
+      New-Item -ItemType Directory -Path $script:AppCtlWork -Force | Out-Null
+      $state = Get-AppCtlState
+      $mechs = @(Get-AppCtlMechanisms -State $state -Collection $Collection -Allow $Mechanisms)
+      $buildOk = ($state.Build -ge $MinBuild)
+      $script:AppCtlExtra = @()
+      $att = @{ Ran = $false; Exit = -1; Note = ''; NotApplicable = ''; Constrained = $false }
+      $start = Get-Date
+      if ($buildOk -and ($Direct -or @($mechs | Where-Object { $_.Available }).Count -gt 0)) {
+      try { $att = Invoke-AppCtlAttempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Exit = -1; Note = "attempt_error:$em"; NotApplicable = '' } }
+      Start-Sleep -Milliseconds 800
+      }
+      if ($att.NotApplicable -and -not $Direct) { $buildOk = $false }
+      foreach ($m in $mechs) {
+      if ($Direct) { $m.Block = 0; $m.Audit = 0; $m.Readable = $true; continue }
+      $ev = Get-AppCtlEvents -Mechanism $m.Name -Collection $Collection -Start $start.AddSeconds(-1) -Needle $Needle
+      $m.Block = $ev.Block; $m.Audit = $ev.Audit; $m.Readable = $ev.Readable
+      }
+      if ($Direct) {
+      $okOut = @('blocked_as_expected', 'allowed_unexpectedly', 'not_enforced', 'audited_only', 'inconclusive', 'not_applicable')
+      if (-not $buildOk) { $r = @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the test floor' } }
+      elseif ($att.NotApplicable) { $r = @{ Outcome = 'not_applicable'; Reason = [string]$att.NotApplicable } }
+      elseif ($att.Verdict -and ($okOut -contains [string]$att.Verdict.Outcome)) { $r = @{ Outcome = [string]$att.Verdict.Outcome; Reason = [string]$att.Verdict.Reason } }
+      else { $r = @{ Outcome = 'inconclusive'; Reason = 'the test did not reach a verdict' } }
+      } else {
+      $r = Resolve-AppCtlOutcome -Expected $Expected -Ran ([bool]$att.Ran) -Mechs $mechs -BuildOk $buildOk -Constrained ([bool]$att.Constrained)
+      }
+      Remove-Item -Path $script:AppCtlWork -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($x in $ExtraCleanup) { Remove-Item -Path $x -Recurse -Force -ErrorAction SilentlyContinue }
+      $cleanOk = -not (Test-Path $script:AppCtlWork)
+      foreach ($x in $ExtraCleanup) { if (Test-Path $x) { $cleanOk = $false } }
+      foreach ($x in @($script:AppCtlExtra)) { if ($x) { Write-Output $x } }
+      Write-Output "APPCTL_FAMILY: $Family"
+      Write-Output "APPCTL_HOST: os_build=$($state.Build) technique=$Technique"
+      Write-Output "APPCTL_COVERAGE: applocker_$Collection=$($state.Al[$Collection]) applocker_svc_running=$($state.AlSvc) wdac_umci=$($state.Wd) wdac_readable=$($state.WdReadable)"
+      Write-Output "APPCTL_EVIDENCE: test_id=$($script:AppCtlTid) expected=$Expected ran=$([bool]$att.Ran) exit=$($att.Exit) note=$($att.Note) block_events=[$((@($mechs | ForEach-Object { "$($_.Name)=$($_.Block)" })) -join ',')] audit_events=[$((@($mechs | ForEach-Object { "$($_.Name)=$($_.Audit)" })) -join ',')] cleanup_verified=$cleanOk capture=$((Get-Date).ToString('o'))"
+      $det = 'unknown'
+      try {
+      $sy = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-Sysmon/Operational'; Id = 1; StartTime = $start } -ErrorAction Stop)
+      $det = if (@($sy | Where-Object { $_.Message -like "*$($script:AppCtlTid)*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+      } catch {}
+      Write-Output "APPCTL_DETECTION: source=sysmon_process_create result=$det"
+      Write-Output "APPCTL_OUTCOME: $($r.Outcome)"
+      $reason = $r.Reason; if ($att.NotApplicable -and -not $Direct) { $reason = $att.NotApplicable }
+      switch ($r.Outcome) {
+      'blocked_as_expected'  { Write-Output "PASS: $reason. [BAS-SIM]" }
+      'allowed_by_policy'    { Write-Output "PASS: $reason. [BAS-SIM]" }
+      'allowed_unexpectedly' { Write-Output "FAIL: $reason. [BAS-SIM]" }
+      'not_enforced'         { Write-Output "FAIL: $reason. [BAS-SIM]" }
+      'audited_only'         { Write-Output "FAIL: $reason. [BAS-SIM]" }
+      default                { Write-Output "SKIP: $reason. [BAS-SIM]" }
+      }
+      }
+      $cplName = "bas_$($script:AppCtlTid.Substring(0,8)).cpl"
+      Invoke-AppCtlTest -Family 'control_panel_cpl' -Collection 'Dll' -Needle $cplName -Mechanisms @('wdac') -Technique 'T1218.002' -Attempt {
+      $src = Join-Path $env:SystemRoot 'System32\timedate.cpl'
+      if (-not (Test-Path $src)) { return @{ Ran = $false; Exit = -1; Note = 'cpl_absent'; NotApplicable = 'the benign signed Control Panel applet used as the artifact is not present' } }
+      $cpl = Join-Path $script:AppCtlWork $cplName
+      Copy-Item -Path $src -Destination $cpl -Force
+      if (-not ('BasNative.K' -as [type])) { try { Add-Type -Namespace BasNative -Name K -MemberDefinition '[DllImport("kernel32.dll", SetLastError=true, CharSet=CharSet.Unicode)] public static extern IntPtr LoadLibraryW(string p); [DllImport("kernel32.dll")] public static extern bool FreeLibrary(IntPtr h);' } catch {} }
+      if (-not ('BasNative.K' -as [type])) { return @{ Ran = $false; Exit = -1; Note = 'native_helper_unavailable'; NotApplicable = (Get-AppCtlCompileReason) } }
+      $h = [BasNative.K]::LoadLibraryW($cpl)
+      $err = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+      if ($h -ne [IntPtr]::Zero) { [void][BasNative.K]::FreeLibrary($h) }
+      return @{ Ran = ($h -ne [IntPtr]::Zero); Exit = $err; Note = "loadlibrary_ok=$($h -ne [IntPtr]::Zero) win32_error=$err"; NotApplicable = '' }
+      }
+    cleanup: |
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+
+  # -------------------------------------------------------------------------
+  - id: appctl-a13-cmstp
+    name: "Application control Trusted Binary Proxy: CMSTP INF execution (T1218.003)"
+    technique_id: T1218.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Writes a benign INF with a pre-setup command and runs cmstp.exe /s /ns; the command writes one marker file. Files are in a private temp directory deleted by the step."
+    telemetry:
+      - "AppLocker EXE and DLL event 8004 naming cmstp.exe, if enforced"
+      - "Code Integrity 3077 naming cmstp.exe, if WDAC enforced"
+      - "Sysmon EID 1: cmstp.exe /s /ns with an .inf"
+    detection:
+      - "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:AppCtlTid = [guid]::NewGuid().ToString('N')
+      $script:AppCtlMarker = "BAS-SIM-APPCTL-$($script:AppCtlTid)"
+      $script:AppCtlWork = Join-Path $env:TEMP "bas-appctl-$($script:AppCtlTid)"
+      function Get-AppCtlState {
+      $st = @{ Build = [Environment]::OSVersion.Version.Build; AlReadable = $false; AlSvc = $false; Al = @{}; WdReadable = $false; Wd = 'NotConfigured'; WdKernel = 'NotConfigured' }
+      try {
+      $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+      $st.AlReadable = $true
+      foreach ($rc in @($pol.RuleCollections)) { $st.Al[[string]$rc.RuleCollectionType] = [string]$rc.EnforcementMode }
+      } catch {}
+      foreach ($t in 'Exe', 'Script', 'Dll', 'Msi', 'Appx') { if (-not $st.Al.ContainsKey($t)) { $st.Al[$t] = 'NotConfigured' } }
+      $st.AlSvc = ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running')
+      try {
+      $dg = Get-CimInstance -Namespace 'root\Microsoft\Windows\DeviceGuard' -ClassName Win32_DeviceGuard -ErrorAction Stop
+      $map = @{ 0 = 'NotConfigured'; 1 = 'AuditOnly'; 2 = 'Enabled' }
+      $u = [int]@($dg)[0].UsermodeCodeIntegrityPolicyEnforcementStatus
+      $k = [int]@($dg)[0].CodeIntegrityPolicyEnforcementStatus
+      $st.WdReadable = $true
+      $st.Wd = [string]$map[$u]
+      $st.WdKernel = [string]$map[$k]
+      } catch {}
+      return $st
+      }
+      function Get-AppCtlMechanisms {
+      param($State, [string]$Collection, [string[]]$Allow)
+      $m = @()
+      if ($Allow -contains 'applocker') {
+      $m += @{ Name = 'applocker'; Available = ($State.AlSvc -and $State.AlReadable); Mode = [string]$State.Al[$Collection] }
+      }
+      if ($Allow -contains 'wdac') {
+      $m += @{ Name = 'wdac'; Available = $State.WdReadable; Mode = [string]$State.Wd }
+      }
+      return $m
+      }
+      function Get-AppCtlEvents {
+      param([string]$Mechanism, [string]$Collection, [datetime]$Start, [string]$Needle)
+      $isScript = ($Collection -eq 'Script' -or $Collection -eq 'Msi')
+      if ($Mechanism -eq 'applocker') {
+      if ($isScript) { $log = 'Microsoft-Windows-AppLocker/MSI and Script'; $blk = 8007; $aud = 8006 } else { $log = 'Microsoft-Windows-AppLocker/EXE and DLL'; $blk = 8004; $aud = 8003 }
+      } else {
+      if ($isScript) { $log = 'Microsoft-Windows-AppLocker/MSI and Script'; $blk = 8029; $aud = 8028 } else { $log = 'Microsoft-Windows-CodeIntegrity/Operational'; $blk = 3077; $aud = 3076 }
+      }
+      $r = @{ Readable = $true; Block = 0; Audit = 0 }
+      try {
+      $b = @(Get-WinEvent -FilterHashtable @{ LogName = $log; Id = $blk; StartTime = $Start } -ErrorAction Stop)
+      $r.Block = @($b | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch { if ($_.FullyQualifiedErrorId -notlike '*NoMatchingEventsFound*') { $r.Readable = $false } }
+      try {
+      $a = @(Get-WinEvent -FilterHashtable @{ LogName = $log; Id = $aud; StartTime = $Start } -ErrorAction Stop)
+      $r.Audit = @($a | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch { if ($_.FullyQualifiedErrorId -notlike '*NoMatchingEventsFound*') { $r.Readable = $false } }
+      return $r
+      }
+      function Resolve-AppCtlOutcome {
+      param([string]$Expected, [bool]$Ran, $Mechs, [bool]$BuildOk, [bool]$Constrained = $false)
+      $avail = @($Mechs | Where-Object { $_.Available })
+      if (-not $BuildOk -or $avail.Count -eq 0) { return @{ Outcome = 'not_applicable'; Reason = 'no applicable enforcement mechanism is available on this host (service stopped, not installed, not readable, or Windows build below the test floor)' } }
+      $enabled = @($avail | Where-Object { $_.Mode -eq 'Enabled' })
+      $audit = @($avail | Where-Object { $_.Mode -eq 'AuditOnly' })
+      $unread = @($enabled | Where-Object { -not $_.Readable })
+      if ($Ran) {
+      if ($Expected -ne 'blocked') { return @{ Outcome = 'allowed_by_policy'; Reason = 'executed; the contract expects this path to be allowed' } }
+      if ($enabled.Count -gt 0) { return @{ Outcome = 'allowed_unexpectedly'; Reason = "executed although $((@($enabled | ForEach-Object { $_.Name }) -join ' and ')) is Enabled for this collection" } }
+      if ($audit.Count -gt 0) { return @{ Outcome = 'audited_only'; Reason = "executed; $((@($audit | ForEach-Object { $_.Name }) -join ' and ')) is in audit mode, which records but does not prevent" } }
+      return @{ Outcome = 'not_enforced'; Reason = 'executed; no applicable mechanism is enforcing this collection' }
+      }
+      if ($Expected -eq 'allowed') { return @{ Outcome = 'inconclusive'; Reason = 'not executed although the contract expects it allowed' } }
+      if ($Constrained -and $enabled.Count -gt 0) { return @{ Outcome = 'blocked_as_expected'; Reason = "the script ran only in ConstrainedLanguage under enforced $((@($enabled | ForEach-Object { $_.Name }) -join ' and ')) policy; full-language execution was prevented" } }
+      if ($enabled.Count -eq 0) { return @{ Outcome = 'inconclusive'; Reason = 'not executed, but no applicable mechanism is Enabled for this collection, so the absence cannot be attributed to application control' } }
+      if ($unread.Count -gt 0) { return @{ Outcome = 'inconclusive'; Reason = 'the enforcement event log is unreadable; the block cannot be attributed' } }
+      $multi = @($enabled | Where-Object { $_.Block -gt 1 })
+      if ($multi.Count -gt 0) { return @{ Outcome = 'inconclusive'; Reason = "not executed; $($multi[0].Name) logged $($multi[0].Block) matching block events (exactly 1 required for attribution)" } }
+      $by = @($enabled | Where-Object { $_.Block -eq 1 })
+      if ($by.Count -eq 0) { return @{ Outcome = 'inconclusive'; Reason = 'not executed; no matching block event from any Enabled mechanism' } }
+      return @{ Outcome = 'blocked_as_expected'; Reason = "not executed; one matching block event from $((@($by | ForEach-Object { $_.Name }) -join ' and '))" }
+      }
+      function Test-AppCtlMarker {
+      param([string]$Path)
+      $t = Get-Content -Path $Path -ErrorAction SilentlyContinue
+      return [bool](($t -join "`n") -like "*$($script:AppCtlMarker)*")
+      }
+      function Invoke-AppCtlProc {
+      param([string]$File, [string]$ArgLine, [int]$TimeoutSec = 25, [switch]$NoShell)
+      $r = @{ Started = $false; Exit = -1; TimedOut = $false }
+      try {
+      if ($NoShell) {
+      $psi = New-Object Diagnostics.ProcessStartInfo
+      $psi.FileName = $File; $psi.Arguments = $ArgLine; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+      $p = [Diagnostics.Process]::Start($psi)
+      } else {
+      $p = Start-Process -FilePath $File -ArgumentList $ArgLine -WindowStyle Hidden -PassThru -ErrorAction Stop
+      }
+      $r.Started = $true
+      if (-not $p.WaitForExit($TimeoutSec * 1000)) { $r.TimedOut = $true; try { $p.Kill() } catch {} } else { $r.Exit = $p.ExitCode }
+      } catch {}
+      return $r
+      }
+      function Get-AppCtlCompileReason {
+      $mode = [string]$ExecutionContext.SessionState.LanguageMode
+      if ($mode -ne 'FullLanguage') { return "PowerShell is running in $mode, which blocks compiling test programs; this is an effect of enforcement, so the test could not run and its result is unknown" }
+      return 'the test program could not be compiled on this host (no .NET Framework compiler)'
+      }
+      function New-AppCtlExe {
+      param([string]$Path)
+      $src = 'public class BasMain { public static void Main(string[] a) { System.IO.File.WriteAllText(a[0], "' + $script:AppCtlMarker + '"); } }'
+      try { Add-Type -TypeDefinition $src -OutputAssembly $Path -OutputType ConsoleApplication -ErrorAction Stop } catch { return $false }
+      return (Test-Path $Path)
+      }
+      function Invoke-AppCtlExeAt {
+      param([string]$Dir, [string]$Name, [switch]$MarkOfTheWeb)
+      New-Item -ItemType Directory -Path $Dir -Force | Out-Null
+      $exe = Join-Path $Dir $Name
+      if (-not (New-AppCtlExe -Path $exe)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = (Get-AppCtlCompileReason) } }
+      if ($MarkOfTheWeb) { try { Set-Content -Path "$exe`:Zone.Identifier" -Value "[ZoneTransfer]`r`nZoneId=3" -ErrorAction Stop } catch {} }
+      $mk = Join-Path $Dir "$Name.marker.txt"
+      $p = Invoke-AppCtlProc -File $exe -ArgLine "`"$mk`"" -NoShell
+      return @{ Ran = (Test-AppCtlMarker $mk); Exit = $p.Exit; Note = "started=$($p.Started) timed_out=$($p.TimedOut) location=$((Split-Path $Dir -Leaf))"; NotApplicable = '' }
+      }
+      function New-AppCtlMsi {
+      param([string]$Path, [string]$MarkerPath)
+      try {
+      $wi = New-Object -ComObject WindowsInstaller.Installer
+      $db = $wi.OpenDatabase($Path, 3)
+      $cmd = Join-Path $env:SystemRoot 'System32\cmd.exe'
+      $sql = @(
+      'CREATE TABLE `Property` (`Property` CHAR(72) NOT NULL, `Value` LONGCHAR NOT NULL LOCALIZABLE PRIMARY KEY `Property`)',
+      'CREATE TABLE `CustomAction` (`Action` CHAR(72) NOT NULL, `Type` SHORT NOT NULL, `Source` CHAR(72), `Target` CHAR(255) PRIMARY KEY `Action`)',
+      'CREATE TABLE `InstallExecuteSequence` (`Action` CHAR(72) NOT NULL, `Condition` CHAR(255), `Sequence` SHORT PRIMARY KEY `Action`)',
+      ('INSERT INTO `Property` (`Property`, `Value`) VALUES (''BASCMD'', ''' + $cmd + ''')'),
+      ('INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductCode'', ''{' + [guid]::NewGuid().ToString().ToUpper() + '}'')'),
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductName'', ''BAS SIM'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductVersion'', ''1.0.0'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductLanguage'', ''1033'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''Manufacturer'', ''BAS SIM'')',
+      ('INSERT INTO `CustomAction` (`Action`, `Type`, `Source`, `Target`) VALUES (''RunIt'', 50, ''BASCMD'', ''/c echo ' + $script:AppCtlMarker + '> "' + $MarkerPath + '"'')'),
+      'INSERT INTO `InstallExecuteSequence` (`Action`, `Condition`, `Sequence`) VALUES (''RunIt'', '''', 1)'
+      )
+      foreach ($q in $sql) { $v = $db.OpenView($q); $v.Execute(); $v.Close() }
+      $si = $db.SummaryInformation(20)
+      $si.Property(2) = 'BAS SIM'
+      $si.Property(4) = 'BAS SIM'
+      $si.Property(7) = 'Intel;1033'
+      $si.Property(9) = ('{' + [guid]::NewGuid().ToString().ToUpper() + '}')
+      $si.Property(14) = 200
+      $si.Property(15) = 2
+      $si.Persist()
+      $db.Commit()
+      foreach ($o in @($si, $v, $db, $wi)) { if ($o) { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($o) } }
+      [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+      } catch { return $false }
+      return (Test-Path $Path)
+      }
+      function Invoke-AppCtlAttempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:AppCtlExtra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:AppCtlExtra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Exit = -1; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
+      function Get-AppCtlAceSid {
+      param($Ace)
+      try { return $Ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } catch { return [string]$Ace.IdentityReference }
+      }
+      function Invoke-AppCtlTest {
+      param(
+      [Parameter(Mandatory)][string]$Family,
+      [Parameter(Mandatory)][string]$Collection,
+      [Parameter(Mandatory)][string]$Needle,
+      [Parameter(Mandatory)][scriptblock]$Attempt,
+      [string]$Expected = 'blocked',
+      [string[]]$Mechanisms = @('applocker', 'wdac'),
+      [int]$MinBuild = 17763,
+      [string]$Technique = '',
+      [string[]]$ExtraCleanup = @(),
+      [switch]$Direct
+      )
+      New-Item -ItemType Directory -Path $script:AppCtlWork -Force | Out-Null
+      $state = Get-AppCtlState
+      $mechs = @(Get-AppCtlMechanisms -State $state -Collection $Collection -Allow $Mechanisms)
+      $buildOk = ($state.Build -ge $MinBuild)
+      $script:AppCtlExtra = @()
+      $att = @{ Ran = $false; Exit = -1; Note = ''; NotApplicable = ''; Constrained = $false }
+      $start = Get-Date
+      if ($buildOk -and ($Direct -or @($mechs | Where-Object { $_.Available }).Count -gt 0)) {
+      try { $att = Invoke-AppCtlAttempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Exit = -1; Note = "attempt_error:$em"; NotApplicable = '' } }
+      Start-Sleep -Milliseconds 800
+      }
+      if ($att.NotApplicable -and -not $Direct) { $buildOk = $false }
+      foreach ($m in $mechs) {
+      if ($Direct) { $m.Block = 0; $m.Audit = 0; $m.Readable = $true; continue }
+      $ev = Get-AppCtlEvents -Mechanism $m.Name -Collection $Collection -Start $start.AddSeconds(-1) -Needle $Needle
+      $m.Block = $ev.Block; $m.Audit = $ev.Audit; $m.Readable = $ev.Readable
+      }
+      if ($Direct) {
+      $okOut = @('blocked_as_expected', 'allowed_unexpectedly', 'not_enforced', 'audited_only', 'inconclusive', 'not_applicable')
+      if (-not $buildOk) { $r = @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the test floor' } }
+      elseif ($att.NotApplicable) { $r = @{ Outcome = 'not_applicable'; Reason = [string]$att.NotApplicable } }
+      elseif ($att.Verdict -and ($okOut -contains [string]$att.Verdict.Outcome)) { $r = @{ Outcome = [string]$att.Verdict.Outcome; Reason = [string]$att.Verdict.Reason } }
+      else { $r = @{ Outcome = 'inconclusive'; Reason = 'the test did not reach a verdict' } }
+      } else {
+      $r = Resolve-AppCtlOutcome -Expected $Expected -Ran ([bool]$att.Ran) -Mechs $mechs -BuildOk $buildOk -Constrained ([bool]$att.Constrained)
+      }
+      Remove-Item -Path $script:AppCtlWork -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($x in $ExtraCleanup) { Remove-Item -Path $x -Recurse -Force -ErrorAction SilentlyContinue }
+      $cleanOk = -not (Test-Path $script:AppCtlWork)
+      foreach ($x in $ExtraCleanup) { if (Test-Path $x) { $cleanOk = $false } }
+      foreach ($x in @($script:AppCtlExtra)) { if ($x) { Write-Output $x } }
+      Write-Output "APPCTL_FAMILY: $Family"
+      Write-Output "APPCTL_HOST: os_build=$($state.Build) technique=$Technique"
+      Write-Output "APPCTL_COVERAGE: applocker_$Collection=$($state.Al[$Collection]) applocker_svc_running=$($state.AlSvc) wdac_umci=$($state.Wd) wdac_readable=$($state.WdReadable)"
+      Write-Output "APPCTL_EVIDENCE: test_id=$($script:AppCtlTid) expected=$Expected ran=$([bool]$att.Ran) exit=$($att.Exit) note=$($att.Note) block_events=[$((@($mechs | ForEach-Object { "$($_.Name)=$($_.Block)" })) -join ',')] audit_events=[$((@($mechs | ForEach-Object { "$($_.Name)=$($_.Audit)" })) -join ',')] cleanup_verified=$cleanOk capture=$((Get-Date).ToString('o'))"
+      $det = 'unknown'
+      try {
+      $sy = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-Sysmon/Operational'; Id = 1; StartTime = $start } -ErrorAction Stop)
+      $det = if (@($sy | Where-Object { $_.Message -like "*$($script:AppCtlTid)*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+      } catch {}
+      Write-Output "APPCTL_DETECTION: source=sysmon_process_create result=$det"
+      Write-Output "APPCTL_OUTCOME: $($r.Outcome)"
+      $reason = $r.Reason; if ($att.NotApplicable -and -not $Direct) { $reason = $att.NotApplicable }
+      switch ($r.Outcome) {
+      'blocked_as_expected'  { Write-Output "PASS: $reason. [BAS-SIM]" }
+      'allowed_by_policy'    { Write-Output "PASS: $reason. [BAS-SIM]" }
+      'allowed_unexpectedly' { Write-Output "FAIL: $reason. [BAS-SIM]" }
+      'not_enforced'         { Write-Output "FAIL: $reason. [BAS-SIM]" }
+      'audited_only'         { Write-Output "FAIL: $reason. [BAS-SIM]" }
+      default                { Write-Output "SKIP: $reason. [BAS-SIM]" }
+      }
+      }
+      Invoke-AppCtlTest -Family 'cmstp_proxy' -Collection 'Exe' -Needle 'cmstp.exe' -Technique 'T1218.003' -Attempt {
+      $mk = Join-Path $script:AppCtlWork 'cmstp-marker.txt'
+      $inf = Join-Path $script:AppCtlWork 'proxy.inf'
+      $body = "[version]`r`nSignature=`"`$chicago`$`"`r`nAdvancedINF=2.5`r`n[DefaultInstall_SingleUser]`r`nRunPreSetupCommands=RunIt:2`r`n[RunIt]`r`ncmd.exe /c echo $($script:AppCtlMarker)> `"$mk`"`r`n[Strings]`r`nServiceName=`"BasSim`"`r`nShortSvcName=`"BasSim`"`r`n"
+      Set-Content -Path $inf -Value $body -Encoding ASCII
+      $p = Invoke-AppCtlProc -File (Join-Path $env:SystemRoot 'System32\cmstp.exe') -ArgLine "/s /ns `"$inf`"" -TimeoutSec 15
+      for ($i = 0; $i -lt 12 -and -not (Test-AppCtlMarker $mk); $i++) { Start-Sleep -Milliseconds 500 }
+      Get-Process -Name cmstp -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+      return @{ Ran = (Test-AppCtlMarker $mk); Exit = $p.Exit; Note = "timed_out=$($p.TimedOut)"; NotApplicable = '' }
+      }
+    cleanup: |
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+
+  # -------------------------------------------------------------------------
+  - id: appctl-a14-xsl
+    name: "Application control Trusted Binary Proxy: XSL script processing through WMIC (T1220)"
+    technique_id: T1220
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Writes a benign XSL stylesheet with an inline script that writes one marker file and runs wmic.exe os get /format against it. Reports not applicable where WMIC is absent. Files are in a private temp directory deleted by the step."
+    telemetry:
+      - "AppLocker EXE and DLL event 8004 naming wmic.exe, if enforced"
+      - "Code Integrity 3077 naming wmic.exe, if WDAC enforced"
+      - "Sysmon EID 1: wmic.exe with /format: pointing to a user-writable .xsl"
+    detection:
+      - "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:AppCtlTid = [guid]::NewGuid().ToString('N')
+      $script:AppCtlMarker = "BAS-SIM-APPCTL-$($script:AppCtlTid)"
+      $script:AppCtlWork = Join-Path $env:TEMP "bas-appctl-$($script:AppCtlTid)"
+      function Get-AppCtlState {
+      $st = @{ Build = [Environment]::OSVersion.Version.Build; AlReadable = $false; AlSvc = $false; Al = @{}; WdReadable = $false; Wd = 'NotConfigured'; WdKernel = 'NotConfigured' }
+      try {
+      $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+      $st.AlReadable = $true
+      foreach ($rc in @($pol.RuleCollections)) { $st.Al[[string]$rc.RuleCollectionType] = [string]$rc.EnforcementMode }
+      } catch {}
+      foreach ($t in 'Exe', 'Script', 'Dll', 'Msi', 'Appx') { if (-not $st.Al.ContainsKey($t)) { $st.Al[$t] = 'NotConfigured' } }
+      $st.AlSvc = ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running')
+      try {
+      $dg = Get-CimInstance -Namespace 'root\Microsoft\Windows\DeviceGuard' -ClassName Win32_DeviceGuard -ErrorAction Stop
+      $map = @{ 0 = 'NotConfigured'; 1 = 'AuditOnly'; 2 = 'Enabled' }
+      $u = [int]@($dg)[0].UsermodeCodeIntegrityPolicyEnforcementStatus
+      $k = [int]@($dg)[0].CodeIntegrityPolicyEnforcementStatus
+      $st.WdReadable = $true
+      $st.Wd = [string]$map[$u]
+      $st.WdKernel = [string]$map[$k]
+      } catch {}
+      return $st
+      }
+      function Get-AppCtlMechanisms {
+      param($State, [string]$Collection, [string[]]$Allow)
+      $m = @()
+      if ($Allow -contains 'applocker') {
+      $m += @{ Name = 'applocker'; Available = ($State.AlSvc -and $State.AlReadable); Mode = [string]$State.Al[$Collection] }
+      }
+      if ($Allow -contains 'wdac') {
+      $m += @{ Name = 'wdac'; Available = $State.WdReadable; Mode = [string]$State.Wd }
+      }
+      return $m
+      }
+      function Get-AppCtlEvents {
+      param([string]$Mechanism, [string]$Collection, [datetime]$Start, [string]$Needle)
+      $isScript = ($Collection -eq 'Script' -or $Collection -eq 'Msi')
+      if ($Mechanism -eq 'applocker') {
+      if ($isScript) { $log = 'Microsoft-Windows-AppLocker/MSI and Script'; $blk = 8007; $aud = 8006 } else { $log = 'Microsoft-Windows-AppLocker/EXE and DLL'; $blk = 8004; $aud = 8003 }
+      } else {
+      if ($isScript) { $log = 'Microsoft-Windows-AppLocker/MSI and Script'; $blk = 8029; $aud = 8028 } else { $log = 'Microsoft-Windows-CodeIntegrity/Operational'; $blk = 3077; $aud = 3076 }
+      }
+      $r = @{ Readable = $true; Block = 0; Audit = 0 }
+      try {
+      $b = @(Get-WinEvent -FilterHashtable @{ LogName = $log; Id = $blk; StartTime = $Start } -ErrorAction Stop)
+      $r.Block = @($b | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch { if ($_.FullyQualifiedErrorId -notlike '*NoMatchingEventsFound*') { $r.Readable = $false } }
+      try {
+      $a = @(Get-WinEvent -FilterHashtable @{ LogName = $log; Id = $aud; StartTime = $Start } -ErrorAction Stop)
+      $r.Audit = @($a | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch { if ($_.FullyQualifiedErrorId -notlike '*NoMatchingEventsFound*') { $r.Readable = $false } }
+      return $r
+      }
+      function Resolve-AppCtlOutcome {
+      param([string]$Expected, [bool]$Ran, $Mechs, [bool]$BuildOk, [bool]$Constrained = $false)
+      $avail = @($Mechs | Where-Object { $_.Available })
+      if (-not $BuildOk -or $avail.Count -eq 0) { return @{ Outcome = 'not_applicable'; Reason = 'no applicable enforcement mechanism is available on this host (service stopped, not installed, not readable, or Windows build below the test floor)' } }
+      $enabled = @($avail | Where-Object { $_.Mode -eq 'Enabled' })
+      $audit = @($avail | Where-Object { $_.Mode -eq 'AuditOnly' })
+      $unread = @($enabled | Where-Object { -not $_.Readable })
+      if ($Ran) {
+      if ($Expected -ne 'blocked') { return @{ Outcome = 'allowed_by_policy'; Reason = 'executed; the contract expects this path to be allowed' } }
+      if ($enabled.Count -gt 0) { return @{ Outcome = 'allowed_unexpectedly'; Reason = "executed although $((@($enabled | ForEach-Object { $_.Name }) -join ' and ')) is Enabled for this collection" } }
+      if ($audit.Count -gt 0) { return @{ Outcome = 'audited_only'; Reason = "executed; $((@($audit | ForEach-Object { $_.Name }) -join ' and ')) is in audit mode, which records but does not prevent" } }
+      return @{ Outcome = 'not_enforced'; Reason = 'executed; no applicable mechanism is enforcing this collection' }
+      }
+      if ($Expected -eq 'allowed') { return @{ Outcome = 'inconclusive'; Reason = 'not executed although the contract expects it allowed' } }
+      if ($Constrained -and $enabled.Count -gt 0) { return @{ Outcome = 'blocked_as_expected'; Reason = "the script ran only in ConstrainedLanguage under enforced $((@($enabled | ForEach-Object { $_.Name }) -join ' and ')) policy; full-language execution was prevented" } }
+      if ($enabled.Count -eq 0) { return @{ Outcome = 'inconclusive'; Reason = 'not executed, but no applicable mechanism is Enabled for this collection, so the absence cannot be attributed to application control' } }
+      if ($unread.Count -gt 0) { return @{ Outcome = 'inconclusive'; Reason = 'the enforcement event log is unreadable; the block cannot be attributed' } }
+      $multi = @($enabled | Where-Object { $_.Block -gt 1 })
+      if ($multi.Count -gt 0) { return @{ Outcome = 'inconclusive'; Reason = "not executed; $($multi[0].Name) logged $($multi[0].Block) matching block events (exactly 1 required for attribution)" } }
+      $by = @($enabled | Where-Object { $_.Block -eq 1 })
+      if ($by.Count -eq 0) { return @{ Outcome = 'inconclusive'; Reason = 'not executed; no matching block event from any Enabled mechanism' } }
+      return @{ Outcome = 'blocked_as_expected'; Reason = "not executed; one matching block event from $((@($by | ForEach-Object { $_.Name }) -join ' and '))" }
+      }
+      function Test-AppCtlMarker {
+      param([string]$Path)
+      $t = Get-Content -Path $Path -ErrorAction SilentlyContinue
+      return [bool](($t -join "`n") -like "*$($script:AppCtlMarker)*")
+      }
+      function Invoke-AppCtlProc {
+      param([string]$File, [string]$ArgLine, [int]$TimeoutSec = 25, [switch]$NoShell)
+      $r = @{ Started = $false; Exit = -1; TimedOut = $false }
+      try {
+      if ($NoShell) {
+      $psi = New-Object Diagnostics.ProcessStartInfo
+      $psi.FileName = $File; $psi.Arguments = $ArgLine; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+      $p = [Diagnostics.Process]::Start($psi)
+      } else {
+      $p = Start-Process -FilePath $File -ArgumentList $ArgLine -WindowStyle Hidden -PassThru -ErrorAction Stop
+      }
+      $r.Started = $true
+      if (-not $p.WaitForExit($TimeoutSec * 1000)) { $r.TimedOut = $true; try { $p.Kill() } catch {} } else { $r.Exit = $p.ExitCode }
+      } catch {}
+      return $r
+      }
+      function Get-AppCtlCompileReason {
+      $mode = [string]$ExecutionContext.SessionState.LanguageMode
+      if ($mode -ne 'FullLanguage') { return "PowerShell is running in $mode, which blocks compiling test programs; this is an effect of enforcement, so the test could not run and its result is unknown" }
+      return 'the test program could not be compiled on this host (no .NET Framework compiler)'
+      }
+      function New-AppCtlExe {
+      param([string]$Path)
+      $src = 'public class BasMain { public static void Main(string[] a) { System.IO.File.WriteAllText(a[0], "' + $script:AppCtlMarker + '"); } }'
+      try { Add-Type -TypeDefinition $src -OutputAssembly $Path -OutputType ConsoleApplication -ErrorAction Stop } catch { return $false }
+      return (Test-Path $Path)
+      }
+      function Invoke-AppCtlExeAt {
+      param([string]$Dir, [string]$Name, [switch]$MarkOfTheWeb)
+      New-Item -ItemType Directory -Path $Dir -Force | Out-Null
+      $exe = Join-Path $Dir $Name
+      if (-not (New-AppCtlExe -Path $exe)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = (Get-AppCtlCompileReason) } }
+      if ($MarkOfTheWeb) { try { Set-Content -Path "$exe`:Zone.Identifier" -Value "[ZoneTransfer]`r`nZoneId=3" -ErrorAction Stop } catch {} }
+      $mk = Join-Path $Dir "$Name.marker.txt"
+      $p = Invoke-AppCtlProc -File $exe -ArgLine "`"$mk`"" -NoShell
+      return @{ Ran = (Test-AppCtlMarker $mk); Exit = $p.Exit; Note = "started=$($p.Started) timed_out=$($p.TimedOut) location=$((Split-Path $Dir -Leaf))"; NotApplicable = '' }
+      }
+      function New-AppCtlMsi {
+      param([string]$Path, [string]$MarkerPath)
+      try {
+      $wi = New-Object -ComObject WindowsInstaller.Installer
+      $db = $wi.OpenDatabase($Path, 3)
+      $cmd = Join-Path $env:SystemRoot 'System32\cmd.exe'
+      $sql = @(
+      'CREATE TABLE `Property` (`Property` CHAR(72) NOT NULL, `Value` LONGCHAR NOT NULL LOCALIZABLE PRIMARY KEY `Property`)',
+      'CREATE TABLE `CustomAction` (`Action` CHAR(72) NOT NULL, `Type` SHORT NOT NULL, `Source` CHAR(72), `Target` CHAR(255) PRIMARY KEY `Action`)',
+      'CREATE TABLE `InstallExecuteSequence` (`Action` CHAR(72) NOT NULL, `Condition` CHAR(255), `Sequence` SHORT PRIMARY KEY `Action`)',
+      ('INSERT INTO `Property` (`Property`, `Value`) VALUES (''BASCMD'', ''' + $cmd + ''')'),
+      ('INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductCode'', ''{' + [guid]::NewGuid().ToString().ToUpper() + '}'')'),
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductName'', ''BAS SIM'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductVersion'', ''1.0.0'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductLanguage'', ''1033'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''Manufacturer'', ''BAS SIM'')',
+      ('INSERT INTO `CustomAction` (`Action`, `Type`, `Source`, `Target`) VALUES (''RunIt'', 50, ''BASCMD'', ''/c echo ' + $script:AppCtlMarker + '> "' + $MarkerPath + '"'')'),
+      'INSERT INTO `InstallExecuteSequence` (`Action`, `Condition`, `Sequence`) VALUES (''RunIt'', '''', 1)'
+      )
+      foreach ($q in $sql) { $v = $db.OpenView($q); $v.Execute(); $v.Close() }
+      $si = $db.SummaryInformation(20)
+      $si.Property(2) = 'BAS SIM'
+      $si.Property(4) = 'BAS SIM'
+      $si.Property(7) = 'Intel;1033'
+      $si.Property(9) = ('{' + [guid]::NewGuid().ToString().ToUpper() + '}')
+      $si.Property(14) = 200
+      $si.Property(15) = 2
+      $si.Persist()
+      $db.Commit()
+      foreach ($o in @($si, $v, $db, $wi)) { if ($o) { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($o) } }
+      [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+      } catch { return $false }
+      return (Test-Path $Path)
+      }
+      function Invoke-AppCtlAttempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:AppCtlExtra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:AppCtlExtra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Exit = -1; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
+      function Get-AppCtlAceSid {
+      param($Ace)
+      try { return $Ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } catch { return [string]$Ace.IdentityReference }
+      }
+      function Invoke-AppCtlTest {
+      param(
+      [Parameter(Mandatory)][string]$Family,
+      [Parameter(Mandatory)][string]$Collection,
+      [Parameter(Mandatory)][string]$Needle,
+      [Parameter(Mandatory)][scriptblock]$Attempt,
+      [string]$Expected = 'blocked',
+      [string[]]$Mechanisms = @('applocker', 'wdac'),
+      [int]$MinBuild = 17763,
+      [string]$Technique = '',
+      [string[]]$ExtraCleanup = @(),
+      [switch]$Direct
+      )
+      New-Item -ItemType Directory -Path $script:AppCtlWork -Force | Out-Null
+      $state = Get-AppCtlState
+      $mechs = @(Get-AppCtlMechanisms -State $state -Collection $Collection -Allow $Mechanisms)
+      $buildOk = ($state.Build -ge $MinBuild)
+      $script:AppCtlExtra = @()
+      $att = @{ Ran = $false; Exit = -1; Note = ''; NotApplicable = ''; Constrained = $false }
+      $start = Get-Date
+      if ($buildOk -and ($Direct -or @($mechs | Where-Object { $_.Available }).Count -gt 0)) {
+      try { $att = Invoke-AppCtlAttempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Exit = -1; Note = "attempt_error:$em"; NotApplicable = '' } }
+      Start-Sleep -Milliseconds 800
+      }
+      if ($att.NotApplicable -and -not $Direct) { $buildOk = $false }
+      foreach ($m in $mechs) {
+      if ($Direct) { $m.Block = 0; $m.Audit = 0; $m.Readable = $true; continue }
+      $ev = Get-AppCtlEvents -Mechanism $m.Name -Collection $Collection -Start $start.AddSeconds(-1) -Needle $Needle
+      $m.Block = $ev.Block; $m.Audit = $ev.Audit; $m.Readable = $ev.Readable
+      }
+      if ($Direct) {
+      $okOut = @('blocked_as_expected', 'allowed_unexpectedly', 'not_enforced', 'audited_only', 'inconclusive', 'not_applicable')
+      if (-not $buildOk) { $r = @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the test floor' } }
+      elseif ($att.NotApplicable) { $r = @{ Outcome = 'not_applicable'; Reason = [string]$att.NotApplicable } }
+      elseif ($att.Verdict -and ($okOut -contains [string]$att.Verdict.Outcome)) { $r = @{ Outcome = [string]$att.Verdict.Outcome; Reason = [string]$att.Verdict.Reason } }
+      else { $r = @{ Outcome = 'inconclusive'; Reason = 'the test did not reach a verdict' } }
+      } else {
+      $r = Resolve-AppCtlOutcome -Expected $Expected -Ran ([bool]$att.Ran) -Mechs $mechs -BuildOk $buildOk -Constrained ([bool]$att.Constrained)
+      }
+      Remove-Item -Path $script:AppCtlWork -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($x in $ExtraCleanup) { Remove-Item -Path $x -Recurse -Force -ErrorAction SilentlyContinue }
+      $cleanOk = -not (Test-Path $script:AppCtlWork)
+      foreach ($x in $ExtraCleanup) { if (Test-Path $x) { $cleanOk = $false } }
+      foreach ($x in @($script:AppCtlExtra)) { if ($x) { Write-Output $x } }
+      Write-Output "APPCTL_FAMILY: $Family"
+      Write-Output "APPCTL_HOST: os_build=$($state.Build) technique=$Technique"
+      Write-Output "APPCTL_COVERAGE: applocker_$Collection=$($state.Al[$Collection]) applocker_svc_running=$($state.AlSvc) wdac_umci=$($state.Wd) wdac_readable=$($state.WdReadable)"
+      Write-Output "APPCTL_EVIDENCE: test_id=$($script:AppCtlTid) expected=$Expected ran=$([bool]$att.Ran) exit=$($att.Exit) note=$($att.Note) block_events=[$((@($mechs | ForEach-Object { "$($_.Name)=$($_.Block)" })) -join ',')] audit_events=[$((@($mechs | ForEach-Object { "$($_.Name)=$($_.Audit)" })) -join ',')] cleanup_verified=$cleanOk capture=$((Get-Date).ToString('o'))"
+      $det = 'unknown'
+      try {
+      $sy = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-Sysmon/Operational'; Id = 1; StartTime = $start } -ErrorAction Stop)
+      $det = if (@($sy | Where-Object { $_.Message -like "*$($script:AppCtlTid)*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+      } catch {}
+      Write-Output "APPCTL_DETECTION: source=sysmon_process_create result=$det"
+      Write-Output "APPCTL_OUTCOME: $($r.Outcome)"
+      $reason = $r.Reason; if ($att.NotApplicable -and -not $Direct) { $reason = $att.NotApplicable }
+      switch ($r.Outcome) {
+      'blocked_as_expected'  { Write-Output "PASS: $reason. [BAS-SIM]" }
+      'allowed_by_policy'    { Write-Output "PASS: $reason. [BAS-SIM]" }
+      'allowed_unexpectedly' { Write-Output "FAIL: $reason. [BAS-SIM]" }
+      'not_enforced'         { Write-Output "FAIL: $reason. [BAS-SIM]" }
+      'audited_only'         { Write-Output "FAIL: $reason. [BAS-SIM]" }
+      default                { Write-Output "SKIP: $reason. [BAS-SIM]" }
+      }
+      }
+      Invoke-AppCtlTest -Family 'xsl_script_processing' -Collection 'Exe' -Needle 'wmic.exe' -Technique 'T1220' -Attempt {
+      $w = Join-Path $env:SystemRoot 'System32\wbem\WMIC.exe'
+      if (-not (Test-Path $w)) { return @{ Ran = $false; Exit = -1; Note = 'wmic_absent'; NotApplicable = 'WMIC.exe is not present on this host (removed from newer Windows builds), so XSL processing through it cannot be tested' } }
+      $mk = Join-Path $script:AppCtlWork 'xsl-marker.txt'
+      $xsl = Join-Path $script:AppCtlWork 'proxy.xsl'
+      $mkj = $mk.Replace([string][char]92, '/')
+      $body = "<?xml version=`"1.0`"?><stylesheet xmlns=`"http://www.w3.org/1999/XSL/Transform`" xmlns:ms=`"urn:schemas-microsoft-com:xslt`" xmlns:user=`"urn:bas`" version=`"1.0`"><output method=`"text`"/><ms:script implements-prefix=`"user`" language=`"JScript`"><![CDATA[var f=new ActiveXObject('Scripting.FileSystemObject').CreateTextFile('$mkj',true);f.Write('$($script:AppCtlMarker)');f.Close();]]></ms:script><template match=`"/`"><value-of select=`"user:x()`"/></template></stylesheet>"
+      Set-Content -Path $xsl -Value $body -Encoding ASCII
+      $p = Invoke-AppCtlProc -File $w -ArgLine "os get Caption /format:`"$xsl`"" -TimeoutSec 30
+      return @{ Ran = (Test-AppCtlMarker $mk); Exit = $p.Exit; Note = "timed_out=$($p.TimedOut)"; NotApplicable = '' }
+      }
+    cleanup: |
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue
+
+  # -------------------------------------------------------------------------
+  - id: appctl-a15-msbuild
+    name: "Application control Trusted Developer Utility: MSBuild inline task execution (T1127.001)"
+    technique_id: T1127.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Writes a benign project file with an inline C# task that writes one marker file and runs MSBuild.exe against it. Files are in a private temp directory deleted by the step."
+    telemetry:
+      - "AppLocker EXE and DLL event 8004 naming MSBuild.exe, if enforced"
+      - "Code Integrity 3077 naming MSBuild.exe, if WDAC enforced"
+      - "Sysmon EID 1: MSBuild.exe with a user-writable .proj"
+    detection:
+      - "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:AppCtlTid = [guid]::NewGuid().ToString('N')
+      $script:AppCtlMarker = "BAS-SIM-APPCTL-$($script:AppCtlTid)"
+      $script:AppCtlWork = Join-Path $env:TEMP "bas-appctl-$($script:AppCtlTid)"
+      function Get-AppCtlState {
+      $st = @{ Build = [Environment]::OSVersion.Version.Build; AlReadable = $false; AlSvc = $false; Al = @{}; WdReadable = $false; Wd = 'NotConfigured'; WdKernel = 'NotConfigured' }
+      try {
+      $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+      $st.AlReadable = $true
+      foreach ($rc in @($pol.RuleCollections)) { $st.Al[[string]$rc.RuleCollectionType] = [string]$rc.EnforcementMode }
+      } catch {}
+      foreach ($t in 'Exe', 'Script', 'Dll', 'Msi', 'Appx') { if (-not $st.Al.ContainsKey($t)) { $st.Al[$t] = 'NotConfigured' } }
+      $st.AlSvc = ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running')
+      try {
+      $dg = Get-CimInstance -Namespace 'root\Microsoft\Windows\DeviceGuard' -ClassName Win32_DeviceGuard -ErrorAction Stop
+      $map = @{ 0 = 'NotConfigured'; 1 = 'AuditOnly'; 2 = 'Enabled' }
+      $u = [int]@($dg)[0].UsermodeCodeIntegrityPolicyEnforcementStatus
+      $k = [int]@($dg)[0].CodeIntegrityPolicyEnforcementStatus
+      $st.WdReadable = $true
+      $st.Wd = [string]$map[$u]
+      $st.WdKernel = [string]$map[$k]
+      } catch {}
+      return $st
+      }
+      function Get-AppCtlMechanisms {
+      param($State, [string]$Collection, [string[]]$Allow)
+      $m = @()
+      if ($Allow -contains 'applocker') {
+      $m += @{ Name = 'applocker'; Available = ($State.AlSvc -and $State.AlReadable); Mode = [string]$State.Al[$Collection] }
+      }
+      if ($Allow -contains 'wdac') {
+      $m += @{ Name = 'wdac'; Available = $State.WdReadable; Mode = [string]$State.Wd }
+      }
+      return $m
+      }
+      function Get-AppCtlEvents {
+      param([string]$Mechanism, [string]$Collection, [datetime]$Start, [string]$Needle)
+      $isScript = ($Collection -eq 'Script' -or $Collection -eq 'Msi')
+      if ($Mechanism -eq 'applocker') {
+      if ($isScript) { $log = 'Microsoft-Windows-AppLocker/MSI and Script'; $blk = 8007; $aud = 8006 } else { $log = 'Microsoft-Windows-AppLocker/EXE and DLL'; $blk = 8004; $aud = 8003 }
+      } else {
+      if ($isScript) { $log = 'Microsoft-Windows-AppLocker/MSI and Script'; $blk = 8029; $aud = 8028 } else { $log = 'Microsoft-Windows-CodeIntegrity/Operational'; $blk = 3077; $aud = 3076 }
+      }
+      $r = @{ Readable = $true; Block = 0; Audit = 0 }
+      try {
+      $b = @(Get-WinEvent -FilterHashtable @{ LogName = $log; Id = $blk; StartTime = $Start } -ErrorAction Stop)
+      $r.Block = @($b | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch { if ($_.FullyQualifiedErrorId -notlike '*NoMatchingEventsFound*') { $r.Readable = $false } }
+      try {
+      $a = @(Get-WinEvent -FilterHashtable @{ LogName = $log; Id = $aud; StartTime = $Start } -ErrorAction Stop)
+      $r.Audit = @($a | Where-Object { $_.Message -like "*$Needle*" }).Count
+      } catch { if ($_.FullyQualifiedErrorId -notlike '*NoMatchingEventsFound*') { $r.Readable = $false } }
+      return $r
+      }
+      function Resolve-AppCtlOutcome {
+      param([string]$Expected, [bool]$Ran, $Mechs, [bool]$BuildOk, [bool]$Constrained = $false)
+      $avail = @($Mechs | Where-Object { $_.Available })
+      if (-not $BuildOk -or $avail.Count -eq 0) { return @{ Outcome = 'not_applicable'; Reason = 'no applicable enforcement mechanism is available on this host (service stopped, not installed, not readable, or Windows build below the test floor)' } }
+      $enabled = @($avail | Where-Object { $_.Mode -eq 'Enabled' })
+      $audit = @($avail | Where-Object { $_.Mode -eq 'AuditOnly' })
+      $unread = @($enabled | Where-Object { -not $_.Readable })
+      if ($Ran) {
+      if ($Expected -ne 'blocked') { return @{ Outcome = 'allowed_by_policy'; Reason = 'executed; the contract expects this path to be allowed' } }
+      if ($enabled.Count -gt 0) { return @{ Outcome = 'allowed_unexpectedly'; Reason = "executed although $((@($enabled | ForEach-Object { $_.Name }) -join ' and ')) is Enabled for this collection" } }
+      if ($audit.Count -gt 0) { return @{ Outcome = 'audited_only'; Reason = "executed; $((@($audit | ForEach-Object { $_.Name }) -join ' and ')) is in audit mode, which records but does not prevent" } }
+      return @{ Outcome = 'not_enforced'; Reason = 'executed; no applicable mechanism is enforcing this collection' }
+      }
+      if ($Expected -eq 'allowed') { return @{ Outcome = 'inconclusive'; Reason = 'not executed although the contract expects it allowed' } }
+      if ($Constrained -and $enabled.Count -gt 0) { return @{ Outcome = 'blocked_as_expected'; Reason = "the script ran only in ConstrainedLanguage under enforced $((@($enabled | ForEach-Object { $_.Name }) -join ' and ')) policy; full-language execution was prevented" } }
+      if ($enabled.Count -eq 0) { return @{ Outcome = 'inconclusive'; Reason = 'not executed, but no applicable mechanism is Enabled for this collection, so the absence cannot be attributed to application control' } }
+      if ($unread.Count -gt 0) { return @{ Outcome = 'inconclusive'; Reason = 'the enforcement event log is unreadable; the block cannot be attributed' } }
+      $multi = @($enabled | Where-Object { $_.Block -gt 1 })
+      if ($multi.Count -gt 0) { return @{ Outcome = 'inconclusive'; Reason = "not executed; $($multi[0].Name) logged $($multi[0].Block) matching block events (exactly 1 required for attribution)" } }
+      $by = @($enabled | Where-Object { $_.Block -eq 1 })
+      if ($by.Count -eq 0) { return @{ Outcome = 'inconclusive'; Reason = 'not executed; no matching block event from any Enabled mechanism' } }
+      return @{ Outcome = 'blocked_as_expected'; Reason = "not executed; one matching block event from $((@($by | ForEach-Object { $_.Name }) -join ' and '))" }
+      }
+      function Test-AppCtlMarker {
+      param([string]$Path)
+      $t = Get-Content -Path $Path -ErrorAction SilentlyContinue
+      return [bool](($t -join "`n") -like "*$($script:AppCtlMarker)*")
+      }
+      function Invoke-AppCtlProc {
+      param([string]$File, [string]$ArgLine, [int]$TimeoutSec = 25, [switch]$NoShell)
+      $r = @{ Started = $false; Exit = -1; TimedOut = $false }
+      try {
+      if ($NoShell) {
+      $psi = New-Object Diagnostics.ProcessStartInfo
+      $psi.FileName = $File; $psi.Arguments = $ArgLine; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+      $p = [Diagnostics.Process]::Start($psi)
+      } else {
+      $p = Start-Process -FilePath $File -ArgumentList $ArgLine -WindowStyle Hidden -PassThru -ErrorAction Stop
+      }
+      $r.Started = $true
+      if (-not $p.WaitForExit($TimeoutSec * 1000)) { $r.TimedOut = $true; try { $p.Kill() } catch {} } else { $r.Exit = $p.ExitCode }
+      } catch {}
+      return $r
+      }
+      function Get-AppCtlCompileReason {
+      $mode = [string]$ExecutionContext.SessionState.LanguageMode
+      if ($mode -ne 'FullLanguage') { return "PowerShell is running in $mode, which blocks compiling test programs; this is an effect of enforcement, so the test could not run and its result is unknown" }
+      return 'the test program could not be compiled on this host (no .NET Framework compiler)'
+      }
+      function New-AppCtlExe {
+      param([string]$Path)
+      $src = 'public class BasMain { public static void Main(string[] a) { System.IO.File.WriteAllText(a[0], "' + $script:AppCtlMarker + '"); } }'
+      try { Add-Type -TypeDefinition $src -OutputAssembly $Path -OutputType ConsoleApplication -ErrorAction Stop } catch { return $false }
+      return (Test-Path $Path)
+      }
+      function Invoke-AppCtlExeAt {
+      param([string]$Dir, [string]$Name, [switch]$MarkOfTheWeb)
+      New-Item -ItemType Directory -Path $Dir -Force | Out-Null
+      $exe = Join-Path $Dir $Name
+      if (-not (New-AppCtlExe -Path $exe)) { return @{ Ran = $false; Exit = -1; Note = 'compile_failed'; NotApplicable = (Get-AppCtlCompileReason) } }
+      if ($MarkOfTheWeb) { try { Set-Content -Path "$exe`:Zone.Identifier" -Value "[ZoneTransfer]`r`nZoneId=3" -ErrorAction Stop } catch {} }
+      $mk = Join-Path $Dir "$Name.marker.txt"
+      $p = Invoke-AppCtlProc -File $exe -ArgLine "`"$mk`"" -NoShell
+      return @{ Ran = (Test-AppCtlMarker $mk); Exit = $p.Exit; Note = "started=$($p.Started) timed_out=$($p.TimedOut) location=$((Split-Path $Dir -Leaf))"; NotApplicable = '' }
+      }
+      function New-AppCtlMsi {
+      param([string]$Path, [string]$MarkerPath)
+      try {
+      $wi = New-Object -ComObject WindowsInstaller.Installer
+      $db = $wi.OpenDatabase($Path, 3)
+      $cmd = Join-Path $env:SystemRoot 'System32\cmd.exe'
+      $sql = @(
+      'CREATE TABLE `Property` (`Property` CHAR(72) NOT NULL, `Value` LONGCHAR NOT NULL LOCALIZABLE PRIMARY KEY `Property`)',
+      'CREATE TABLE `CustomAction` (`Action` CHAR(72) NOT NULL, `Type` SHORT NOT NULL, `Source` CHAR(72), `Target` CHAR(255) PRIMARY KEY `Action`)',
+      'CREATE TABLE `InstallExecuteSequence` (`Action` CHAR(72) NOT NULL, `Condition` CHAR(255), `Sequence` SHORT PRIMARY KEY `Action`)',
+      ('INSERT INTO `Property` (`Property`, `Value`) VALUES (''BASCMD'', ''' + $cmd + ''')'),
+      ('INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductCode'', ''{' + [guid]::NewGuid().ToString().ToUpper() + '}'')'),
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductName'', ''BAS SIM'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductVersion'', ''1.0.0'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''ProductLanguage'', ''1033'')',
+      'INSERT INTO `Property` (`Property`, `Value`) VALUES (''Manufacturer'', ''BAS SIM'')',
+      ('INSERT INTO `CustomAction` (`Action`, `Type`, `Source`, `Target`) VALUES (''RunIt'', 50, ''BASCMD'', ''/c echo ' + $script:AppCtlMarker + '> "' + $MarkerPath + '"'')'),
+      'INSERT INTO `InstallExecuteSequence` (`Action`, `Condition`, `Sequence`) VALUES (''RunIt'', '''', 1)'
+      )
+      foreach ($q in $sql) { $v = $db.OpenView($q); $v.Execute(); $v.Close() }
+      $si = $db.SummaryInformation(20)
+      $si.Property(2) = 'BAS SIM'
+      $si.Property(4) = 'BAS SIM'
+      $si.Property(7) = 'Intel;1033'
+      $si.Property(9) = ('{' + [guid]::NewGuid().ToString().ToUpper() + '}')
+      $si.Property(14) = 200
+      $si.Property(15) = 2
+      $si.Persist()
+      $db.Commit()
+      foreach ($o in @($si, $v, $db, $wi)) { if ($o) { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($o) } }
+      [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+      } catch { return $false }
+      return (Test-Path $Path)
+      }
+      function Invoke-AppCtlAttempt {
+      param([scriptblock]$Attempt)
+      $out = @(& $Attempt)
+      $res = $null
+      $script:AppCtlExtra = @()
+      foreach ($o in $out) { if ($o -is [hashtable]) { $res = $o } else { $script:AppCtlExtra += [string]$o } }
+      if (-not $res) { $res = @{ Ran = $false; Exit = -1; Note = 'attempt_returned_no_result'; NotApplicable = '' } }
+      return $res
+      }
+      function Get-AppCtlAceSid {
+      param($Ace)
+      try { return $Ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } catch { return [string]$Ace.IdentityReference }
+      }
+      function Invoke-AppCtlTest {
+      param(
+      [Parameter(Mandatory)][string]$Family,
+      [Parameter(Mandatory)][string]$Collection,
+      [Parameter(Mandatory)][string]$Needle,
+      [Parameter(Mandatory)][scriptblock]$Attempt,
+      [string]$Expected = 'blocked',
+      [string[]]$Mechanisms = @('applocker', 'wdac'),
+      [int]$MinBuild = 17763,
+      [string]$Technique = '',
+      [string[]]$ExtraCleanup = @(),
+      [switch]$Direct
+      )
+      New-Item -ItemType Directory -Path $script:AppCtlWork -Force | Out-Null
+      $state = Get-AppCtlState
+      $mechs = @(Get-AppCtlMechanisms -State $state -Collection $Collection -Allow $Mechanisms)
+      $buildOk = ($state.Build -ge $MinBuild)
+      $script:AppCtlExtra = @()
+      $att = @{ Ran = $false; Exit = -1; Note = ''; NotApplicable = ''; Constrained = $false }
+      $start = Get-Date
+      if ($buildOk -and ($Direct -or @($mechs | Where-Object { $_.Available }).Count -gt 0)) {
+      try { $att = Invoke-AppCtlAttempt -Attempt $Attempt } catch { $em = ([string]$_.Exception.Message) -replace '[^A-Za-z0-9 :._-]', ''; if ($em.Length -gt 80) { $em = $em.Substring(0, 80) }; $att = @{ Ran = $false; Exit = -1; Note = "attempt_error:$em"; NotApplicable = '' } }
+      Start-Sleep -Milliseconds 800
+      }
+      if ($att.NotApplicable -and -not $Direct) { $buildOk = $false }
+      foreach ($m in $mechs) {
+      if ($Direct) { $m.Block = 0; $m.Audit = 0; $m.Readable = $true; continue }
+      $ev = Get-AppCtlEvents -Mechanism $m.Name -Collection $Collection -Start $start.AddSeconds(-1) -Needle $Needle
+      $m.Block = $ev.Block; $m.Audit = $ev.Audit; $m.Readable = $ev.Readable
+      }
+      if ($Direct) {
+      $okOut = @('blocked_as_expected', 'allowed_unexpectedly', 'not_enforced', 'audited_only', 'inconclusive', 'not_applicable')
+      if (-not $buildOk) { $r = @{ Outcome = 'not_applicable'; Reason = 'the Windows build is below the test floor' } }
+      elseif ($att.NotApplicable) { $r = @{ Outcome = 'not_applicable'; Reason = [string]$att.NotApplicable } }
+      elseif ($att.Verdict -and ($okOut -contains [string]$att.Verdict.Outcome)) { $r = @{ Outcome = [string]$att.Verdict.Outcome; Reason = [string]$att.Verdict.Reason } }
+      else { $r = @{ Outcome = 'inconclusive'; Reason = 'the test did not reach a verdict' } }
+      } else {
+      $r = Resolve-AppCtlOutcome -Expected $Expected -Ran ([bool]$att.Ran) -Mechs $mechs -BuildOk $buildOk -Constrained ([bool]$att.Constrained)
+      }
+      Remove-Item -Path $script:AppCtlWork -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($x in $ExtraCleanup) { Remove-Item -Path $x -Recurse -Force -ErrorAction SilentlyContinue }
+      $cleanOk = -not (Test-Path $script:AppCtlWork)
+      foreach ($x in $ExtraCleanup) { if (Test-Path $x) { $cleanOk = $false } }
+      foreach ($x in @($script:AppCtlExtra)) { if ($x) { Write-Output $x } }
+      Write-Output "APPCTL_FAMILY: $Family"
+      Write-Output "APPCTL_HOST: os_build=$($state.Build) technique=$Technique"
+      Write-Output "APPCTL_COVERAGE: applocker_$Collection=$($state.Al[$Collection]) applocker_svc_running=$($state.AlSvc) wdac_umci=$($state.Wd) wdac_readable=$($state.WdReadable)"
+      Write-Output "APPCTL_EVIDENCE: test_id=$($script:AppCtlTid) expected=$Expected ran=$([bool]$att.Ran) exit=$($att.Exit) note=$($att.Note) block_events=[$((@($mechs | ForEach-Object { "$($_.Name)=$($_.Block)" })) -join ',')] audit_events=[$((@($mechs | ForEach-Object { "$($_.Name)=$($_.Audit)" })) -join ',')] cleanup_verified=$cleanOk capture=$((Get-Date).ToString('o'))"
+      $det = 'unknown'
+      try {
+      $sy = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-Sysmon/Operational'; Id = 1; StartTime = $start } -ErrorAction Stop)
+      $det = if (@($sy | Where-Object { $_.Message -like "*$($script:AppCtlTid)*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+      } catch {}
+      Write-Output "APPCTL_DETECTION: source=sysmon_process_create result=$det"
+      Write-Output "APPCTL_OUTCOME: $($r.Outcome)"
+      $reason = $r.Reason; if ($att.NotApplicable -and -not $Direct) { $reason = $att.NotApplicable }
+      switch ($r.Outcome) {
+      'blocked_as_expected'  { Write-Output "PASS: $reason. [BAS-SIM]" }
+      'allowed_by_policy'    { Write-Output "PASS: $reason. [BAS-SIM]" }
+      'allowed_unexpectedly' { Write-Output "FAIL: $reason. [BAS-SIM]" }
+      'not_enforced'         { Write-Output "FAIL: $reason. [BAS-SIM]" }
+      'audited_only'         { Write-Output "FAIL: $reason. [BAS-SIM]" }
+      default                { Write-Output "SKIP: $reason. [BAS-SIM]" }
+      }
+      }
+      Invoke-AppCtlTest -Family 'msbuild_proxy' -Collection 'Exe' -Needle 'msbuild.exe' -Technique 'T1127.001' -Attempt {
+      $msb = Join-Path $env:SystemRoot 'Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe'
+      if (-not (Test-Path $msb)) { return @{ Ran = $false; Exit = -1; Note = 'msbuild_absent'; NotApplicable = 'MSBuild.exe is not present on this host, so the path cannot be tested' } }
+      $mk = Join-Path $script:AppCtlWork 'msbuild-marker.txt'
+      $proj = Join-Path $script:AppCtlWork 'proxy.proj'
+      $body = "<Project ToolsVersion=`"4.0`" xmlns=`"http://schemas.microsoft.com/developer/msbuild/2003`"><Target Name=`"Go`"><BasTask/></Target><UsingTask TaskName=`"BasTask`" TaskFactory=`"CodeTaskFactory`" AssemblyFile=`"`$(MSBuildToolsPath)\Microsoft.Build.Tasks.v4.0.dll`"><Task><Code Type=`"Fragment`" Language=`"cs`"><![CDATA[System.IO.File.WriteAllText(@`"$mk`", `"$($script:AppCtlMarker)`");]]></Code></Task></UsingTask></Project>"
+      Set-Content -Path $proj -Value $body -Encoding ASCII
+      $p = Invoke-AppCtlProc -File $msb -ArgLine "/nologo `"$proj`"" -TimeoutSec 60
+      return @{ Ran = (Test-AppCtlMarker $mk); Exit = $p.Exit; Note = "timed_out=$($p.TimedOut)"; NotApplicable = '' }
+      }
+    cleanup: |
+      foreach ($root in @($env:TEMP, $env:APPDATA, (Join-Path $env:USERPROFILE 'Downloads'))) {
+        Get-ChildItem -Path $root -Filter 'bas-appctl-*' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_????????.exe*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+      Get-ChildItem Cert:\CurrentUser\My -ErrorAction SilentlyContinue | Where-Object { $_.Subject -like 'CN=BAS-SIM-UNTRUSTED-*' } | Remove-Item -Force -ErrorAction SilentlyContinue

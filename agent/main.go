@@ -4,19 +4,24 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"audspect/agent/preflight"
 )
 
-const (
-	version           = "2.1.0"
-	heartbeatInterval = 30 * time.Second
-)
+// version is the release version, stamped at link time (-X main.version=...) by the
+// build scripts. An unstamped build reports "dev", never a release number.
+var version = "dev"
+
+const heartbeatInterval = 30 * time.Second
 
 func main() {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmsgprefix)
@@ -29,18 +34,61 @@ func main() {
 	flagServer := flag.String("server", "", "Override BAS_SERVER_URL")
 	flagEnv := flag.String("env", "Production", "Override BAS_ENV_LABEL")
 	flagSecret := flag.String("secret", "", "Agent shared secret (encrypted at rest via DPAPI on Windows)")
+	flagSecretStdin := flag.Bool("secret-stdin", false, "Read the agent secret from stdin (one line) instead of --secret, so it never appears in process arguments")
+	flagTokenFile := flag.String("enrollment-token-file", "", "Path to a file holding a single-use enrolment token (one line); the file is deleted once read. The token is never accepted as a command-line value")
+	flagTokenStdin := flag.Bool("enrollment-token-stdin", false, "Read a single-use enrolment token from stdin (one line); cannot be combined with --secret-stdin")
+	flagPreflight := flag.Bool("preflight", false, "Check connectivity, CA trust and the agent secret without installing anything; the secret is read from stdin (--secret-stdin). Exit codes: 0 ok, 20 invalid input, 21 unreachable, 22 secret rejected, 23 trust failure, 24 invalid CA")
 	flagCARoot := flag.String("ca-root", "", "Path to the deployment CA root PEM (required for mTLS enrollment; fetch via GET /api/config/connection)")
 	flagEnrollPort := flag.String("enroll-port", "", "Host port of the orchestrator enrollment listener, if the published port was remapped from the 9444 default (persisted as BAS_ENROLL_PORT)")
 
+	flagConfig := flag.String("config", "", "Path to the signed deployment.json; replaces --server, --enroll-port and --ca-root. Requires --config-fingerprint")
+	flagConfigFingerprint := flag.String("config-fingerprint", "", "SHA-256 fingerprint of the deployment signing certificate, obtained from the dashboard (not from the downloaded files)")
+	flagIdentityStatus := flag.Bool("identity-status", false, "Report, without changing anything, whether the installed agent identity belongs to the CA in --config; exit 29 if it is stale. Installers use it to decide to re-enrol")
+	flagResetIdentity := flag.Bool("reset-identity", false, "Re-enrol an installed agent whose identity belongs to a different CA than --config: moves the old identity aside, stores the new CA and spends the enrolment token. Leaves the service and files alone; exit 0 if nothing needed doing")
+	flagVerifyConfig := flag.Bool("verify-config", false, "Verify --config against --config-fingerprint and print the verified target; exit 25 if rejected")
+
 	registerPlatformFlags()
 	flag.Parse()
+
+	if *flagVerifyConfig {
+		os.Exit(runVerifyConfigCLI(deployFlags{ConfigPath: *flagConfig, Fingerprint: *flagConfigFingerprint}, time.Now(), os.Stdout))
+	}
+
+	if *flagIdentityStatus {
+		os.Exit(runIdentityStatusCLI(deployFlags{ConfigPath: *flagConfig, Fingerprint: *flagConfigFingerprint}, time.Now(), os.Stdout))
+	}
+
+	if *flagResetIdentity {
+		os.Exit(runResetIdentityCLI(deployFlags{ConfigPath: *flagConfig, Fingerprint: *flagConfigFingerprint},
+			*flagSecret, *flagSecretStdin, *flagTokenFile, *flagTokenStdin, *flagEnv))
+	}
+
+	if *flagPreflight {
+		os.Exit(runPreflightCLI(preflightCLIArgs{
+			Server: *flagServer, EnrollPort: *flagEnrollPort, CARootPath: *flagCARoot,
+			SecretArg: *flagSecret, SecretStdin: *flagSecretStdin,
+			ConfigPath: *flagConfig, ConfigFingerprint: *flagConfigFingerprint,
+		}, os.Stdin, os.Stdout))
+	}
 
 	if platformHandleFlags() {
 		return
 	}
 
 	if *flagInstall {
-		serverURL := *flagServer
+		dep, depErr := resolveDeployment(deployFlags{
+			ConfigPath: *flagConfig, Fingerprint: *flagConfigFingerprint,
+			Server: *flagServer, EnrollPort: *flagEnrollPort, CARootPath: *flagCARoot,
+		}, time.Now())
+		if depErr != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", depErr)
+			var ce *caFileError
+			if errors.As(depErr, &ce) {
+				os.Exit(1)
+			}
+			os.Exit(preflight.CodeConfigRejected)
+		}
+		serverURL := dep.Server
 		if serverURL == "" {
 			serverURL = os.Getenv("BAS_SERVER_URL")
 		}
@@ -48,8 +96,12 @@ func main() {
 			fmt.Fprintln(os.Stderr, "error: provide --server <url> or set BAS_SERVER_URL")
 			os.Exit(1)
 		}
-		secret := *flagSecret
-		if secret == "" {
+		secret, secretFromStdin, secretErr := secretFromFlags(*flagSecret, *flagSecretStdin, os.Stdin)
+		if secretErr != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", secretErr)
+			os.Exit(1)
+		}
+		if secret == "" && !secretFromStdin {
 			secret = os.Getenv("BAS_AGENT_SECRET")
 		}
 		if secret == "" {
@@ -57,19 +109,18 @@ func main() {
 				fmt.Fprintln(os.Stderr, "error: provide --secret <secret> or set BAS_AGENT_SECRET")
 				os.Exit(1)
 			}
-			s, err := promptSecret(os.Stdin, os.Stdout)
+			s, err := promptHidden("Agent Secret: ", os.Stdin, os.Stdout)
+			if err == nil && s == "" {
+				err = errors.New("agent secret must not be empty")
+			}
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
 			}
 			secret = s
 		}
-		if *flagCARoot != "" {
-			pemBytes, err := os.ReadFile(*flagCARoot)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "error: read --ca-root file: %v\n", err)
-				os.Exit(1)
-			}
+		if len(dep.CARootPEM) > 0 {
+			pemBytes := dep.CARootPEM
 			// A stale identity (issued by another CA) can never enroll; move it aside first.
 			if moved, err := clearStaleIdentity(pemBytes); err != nil {
 				fmt.Fprintf(os.Stderr, "error: reset old agent identity: %v\n", err)
@@ -80,12 +131,63 @@ func main() {
 			// saveDeploymentCARoot validates that pemBytes parses as an
 			// X.509 certificate before writing anything.
 			if err := saveDeploymentCARoot(pemBytes); err != nil {
-				fmt.Fprintf(os.Stderr, "error: --ca-root %s: %v\n", *flagCARoot, err)
+				fmt.Fprintf(os.Stderr, "error: deployment CA root: %v\n", err)
 				os.Exit(1)
 			}
 			fmt.Println("[+] deployment CA root installed")
+		} else {
+			// No --ca-root supplied: fetch the public deployment CA root from
+			// the server automatically so a bare `--install --server ...
+			// --secret ...` is self-sufficient -- no hand curl, no manual
+			// file. The agent cannot complete mTLS enrollment without this
+			// trust anchor on disk (bootstrapHTTPClient aborts if it is
+			// absent), which is the single most common "agent stuck on legacy
+			// transport / unknown authority / never shows in console" cause.
+			// A fetch failure is a warning, not fatal: the operator can still
+			// place the file and the agent retries bootstrap on every start.
+			if pemBytes, err := fetchDeploymentCARoot(serverURL); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: could not auto-fetch deployment CA root (%v)\n", err)
+				fmt.Fprintln(os.Stderr, "         the agent will start on legacy transport and retry; re-run with --ca-root <file> to place it explicitly.")
+			} else if err := saveDeploymentCARoot(pemBytes); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: fetched deployment CA root but could not store it: %v\n", err)
+			} else {
+				fmt.Println("[+] deployment CA root fetched from server and installed")
+			}
 		}
-		if err := svcInstall(serverURL, *flagEnv, secret, *flagEnrollPort); err != nil {
+		// An install is an explicit operator action, so it re-pins the server's CURRENT command-signing
+		// certificate. A pin kept from an earlier install would otherwise survive (the identity is kept when
+		// the CA is unchanged) and reject every scenario command if the server's signing key has changed.
+		// Routine renewal still refuses a different certificate; only this path clears the pin.
+		if cleared, cerr := clearCommandSigningPin(); cerr != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not clear the old command-signing trust: %v\n", cerr)
+		} else if cleared {
+			fmt.Println("[*] previous command-signing trust cleared; the agent will pin the server's current one")
+		}
+		// A single-use enrolment token (BAS_ENROLLMENT_TOKEN, installer environment only) is spent right
+		// here, so it never has to be stored: the service then starts already enrolled.
+		tok, tokErr := resolveEnrollmentToken(*flagTokenFile, *flagTokenStdin, secretFromStdin, os.Stdin)
+		if tokErr != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", tokErr)
+			os.Exit(1)
+		}
+		if tok == "" && stdinIsTerminal() {
+			// Optional: servers that issue per-host tokens need one; servers using only the shared secret do not.
+			t, perr := promptHidden("Enrollment token (press Enter to skip if this server uses the shared secret only): ", os.Stdin, os.Stdout)
+			if perr != nil {
+				fmt.Fprintln(os.Stderr, "error: could not read the enrollment token")
+				os.Exit(1)
+			}
+			tok = strings.TrimSpace(t)
+		}
+		if tok != "" {
+			icfg := Config{ServerURL: serverURL, AgentSecret: secret, EnrollmentToken: tok}
+			if err := enrollAtInstall(context.Background(), icfg, dep.EnrollPort, collectIdentity().AgentID); err != nil {
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+				os.Exit(installExitCode(err))
+			}
+			fmt.Println("[+] agent enrolled with the supplied token")
+		}
+		if err := svcInstall(serverURL, *flagEnv, secret, dep.EnrollPort); err != nil {
 			fmt.Fprintf(os.Stderr, "install failed: %v\n", err)
 			os.Exit(1)
 		}
@@ -161,6 +263,7 @@ func main() {
 	go agent.runSpoolDrainer()
 	go agent.runDisconnectWatchdog()
 	go agent.runPressureLoop()
+	go agent.runCertRenewal(context.Background())
 	agent.sendHeartbeat("idle")
 
 	quit := make(chan os.Signal, 1)

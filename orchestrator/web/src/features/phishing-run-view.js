@@ -66,6 +66,10 @@ const CONTROL_DIMENSIONS = [
   ['Response', 'Response'],
 ];
 
+// Scenarios whose results are best-effort heuristics, not confirmed control verdicts.
+// Keep this in step with the experimental scenarios in the server catalog.
+export const EXPERIMENTAL_RESULT_SCENARIOS = new Set(['PH-ID-004']);
+
 // describePhishingRun turns one run from GET /api/phishing-runs into display rows.
 export function describePhishingRun(run) {
   const status = run.status || 'unknown';
@@ -97,6 +101,13 @@ export function describePhishingRun(run) {
     return out;
   }
 
+  if (EXPERIMENTAL_RESULT_SCENARIOS.has(run.scenarioId)) {
+    out.rows.push({
+      label: 'Best-effort heuristic',
+      text: 'Observation only, not a confirmed control verdict. Promotion needs test-tenant validation.',
+      tone: TONE_BEHAVIOR,
+    });
+  }
   const ui = userInteractionRow(parsed);
   if (ui) out.rows.push(ui);
   for (const [key, label] of CONTROL_DIMENSIONS) {

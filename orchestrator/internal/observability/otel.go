@@ -1,7 +1,7 @@
 package observability
 
 import (
-	"io"
+	"os"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
@@ -34,11 +34,11 @@ type ExporterConfig struct {
 	// (Implemented in exporters.go)
 	PrometheusRemoteWrite bool
 
-	// TempoEndpoint exports traces to a Tempo OTLP HTTP receiver (e.g., http://localhost:4318).
+	// TempoEndpoint exports traces to a Tempo OTLP HTTP receiver (e.g., http://localhost:4318). Must be a full URL.
 	// (Implemented in exporters.go)
 	TempoEndpoint string
 
-	// JaegerEndpoint exports traces to a Jaeger OTLP HTTP receiver (e.g., http://localhost:4317).
+	// JaegerEndpoint exports traces to a Jaeger OTLP HTTP receiver (e.g., http://localhost:4318). Port 4317 is refused.
 	// (Implemented in exporters.go)
 	JaegerEndpoint string
 }
@@ -81,9 +81,9 @@ func NewTracerProviderWithConfig(config *OTelConfig) *trace.TracerProvider {
 	// Build the list of span exporters based on config
 	var exporters []trace.SpanExporter
 
-	// Console exporter for development
+	// Console exporter: prints spans to stdout. Intended for the test machine only.
 	if config.Exporters.Console {
-		exporter, err := stdouttrace.New(stdouttrace.WithWriter(io.Discard))
+		exporter, err := stdouttrace.New(stdouttrace.WithWriter(os.Stdout))
 		if err == nil {
 			exporters = append(exporters, exporter)
 		}

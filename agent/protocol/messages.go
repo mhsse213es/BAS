@@ -30,6 +30,9 @@ type PolicyConf struct {
 	ExecutionWindow   string   `json:"executionWindow"`
 	MaxConcurrentRuns int      `json:"maxConcurrentRuns"`
 	HeartbeatInterval int      `json:"heartbeatIntervalS"`
+	// HideTrayIcon is the server's resolved tray-icon visibility for this agent (per-agent override, else the
+	// fleet default). Windows only; other platforms have no tray and ignore it.
+	HideTrayIcon bool `json:"hideTrayIcon"`
 }
 
 // LivePolicy mirrors the server-side guardrails the agent must honour for live runs.
@@ -39,6 +42,10 @@ type LivePolicy struct {
 	MaxSprayAttempts        int      `json:"maxSprayAttempts,omitempty"`
 	SprayAccountAllowlist   []string `json:"sprayAccountAllowlist,omitempty"`
 	ExecutionWindow         string   `json:"executionWindow,omitempty"`
+	// LabException is set by the server only for the designated spray-lab agent
+	// running the lab spray scenario. It lifts the signed destructive veto for the
+	// spray action key only. See agent sprayLabExempt.
+	LabException bool `json:"labException,omitempty"`
 }
 
 type WSMessage struct {

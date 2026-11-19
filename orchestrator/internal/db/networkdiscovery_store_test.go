@@ -92,12 +92,12 @@ func TestInsertNetworkObservations_RoundTripsThroughListNetworkObservationsByRun
 
 		obs := []networkgraph.NetworkObservation{
 			{
-				Target: networkgraph.Target{Host: "10.0.0.1", Port: 443, Label: "web"},
+				Target:         networkgraph.Target{Host: "10.0.0.1", Port: 443, Label: "web"},
 				VantagePointID: "vp-1", State: cloudgraph.Observed,
 				Provenance: cloudgraph.Provenance{Source: "test-position", Confidence: "high"},
 			},
 			{
-				Target: networkgraph.Target{Host: "10.0.0.2", Port: 22},
+				Target:         networkgraph.Target{Host: "10.0.0.2", Port: 22},
 				VantagePointID: "vp-1", State: cloudgraph.Blocked, ErrorDetail: "connection refused",
 				Provenance: cloudgraph.Provenance{Source: "test-position", Confidence: "high"},
 			},

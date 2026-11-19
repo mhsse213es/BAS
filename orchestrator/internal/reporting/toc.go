@@ -103,7 +103,7 @@ func renderTOCPage(entries []tocEntry) []byte {
 <div class="toc-list">
 `)
 	for _, e := range entries {
-		b.WriteString(`<a class="toc-item" href="#` + e.ID + `"><span class="toc-num">` + e.Number + `</span><span class="toc-title">` + e.Title + `</span></a>` + "\n")
+		b.WriteString(`<a class="toc-item" href="#` + e.ID + `"><span class="toc-num">` + e.Number + `</span><span class="toc-title">` + e.Title + `</span><span class="toc-pg"></span></a>` + "\n")
 	}
 	b.WriteString(`</div>
 </div>

@@ -34,7 +34,7 @@ func appControlPrevention(outcome string) avval.PreventionOutcome {
 	switch outcome {
 	case AppCtlBlockedAsExpected:
 		return avval.PreventionBlocked
-	case AppCtlAllowedUnexpected, AppCtlNotEnforced, AppCtlAllowedByPolicy:
+	case AppCtlAllowedUnexpected, AppCtlNotEnforced, AppCtlAuditedOnly, AppCtlAllowedByPolicy:
 		return avval.PreventionAllowed
 	}
 	return avval.PreventionUnknown
@@ -45,7 +45,7 @@ func appControlExecution(outcome string) avval.ExecutionObservation {
 	case AppCtlBlockedAsExpected:
 		// The launch was prevented, so the payload process was not observed.
 		return avval.ExecutionNotObserved
-	case AppCtlAllowedUnexpected, AppCtlNotEnforced, AppCtlAllowedByPolicy:
+	case AppCtlAllowedUnexpected, AppCtlNotEnforced, AppCtlAuditedOnly, AppCtlAllowedByPolicy:
 		return avval.ExecutionExecuted
 	}
 	return avval.ExecutionUnknown

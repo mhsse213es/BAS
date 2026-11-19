@@ -1,0 +1,35 @@
+# Detection Validation Profile — Windows lateral-movement activity
+# exercised by APT29 Kill Chain Phase 7 (stages 24-26: SMB admin-share
+# access, WinRM remote execution, remote service execution). All three
+# stages SKIP without a configured second host; this profile only applies
+# to runs where BAS_APT29_TARGET_HOST was set.
+profile: windows_apt29_lateral_movement
+version: 1
+technique_ids: [T1021.002, T1021.006, T1569.002]
+expected_detection:
+  - id: apt29-lm-siem-correlation
+    provider: microsoft_sentinel
+    type: siem
+    confidence: required
+    finding:
+      severity: High
+      title: "Lateral-movement admin-share/WinRM/remote-service activity not correlated"
+      remediation: >-
+        Correlate Security EID 5140/5145 (admin-share access), EID 4624
+        Logon Type 3 plus WinRM Operational EID 91 (WinRM session), and
+        EID 4697 on the target (remote service installation) against a
+        known-change allowlist; flag when the source account is not a
+        designated admin workstation.
+      reference: "MITRE ATT&CK TA0008 — Lateral Movement"
+  - id: apt29-lm-edr-endpoint
+    provider: microsoft_defender
+    type: endpoint
+    confidence: recommended
+    finding:
+      severity: Medium
+      title: "Remote execution not flagged on the target endpoint"
+      remediation: >-
+        Flag sc.exe service creation targeting a remote host, and WinRM
+        sessions established from a non-admin source, on the target
+        endpoint itself.
+      reference: "MITRE ATT&CK TA0008 — Lateral Movement"

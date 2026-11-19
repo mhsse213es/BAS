@@ -15,7 +15,9 @@ func TestUninstallSelf_SuccessReportsThenDisablesThenExits(t *testing.T) {
 	origDisable := platformDisableAutoStartFn
 	origExit := platformExitAfterStopFn
 	origReport := reportUninstallResultFn
+	origPurge := platformPurgeLocalDataFn
 	defer func() {
+		platformPurgeLocalDataFn = origPurge
 		platformSelfUninstallFn = origSelfUninstall
 		platformDisableAutoStartFn = origDisable
 		platformExitAfterStopFn = origExit
@@ -24,6 +26,7 @@ func TestUninstallSelf_SuccessReportsThenDisablesThenExits(t *testing.T) {
 	platformSelfUninstallFn = func() error { calls = append(calls, "selfUninstall"); return nil }
 	platformDisableAutoStartFn = func() error { calls = append(calls, "disable"); return nil }
 	platformExitAfterStopFn = func() { calls = append(calls, "exit") }
+	platformPurgeLocalDataFn = func() { calls = append(calls, "purge") }
 	reportUninstallResultFn = func(a *Agent, err error) {
 		calls = append(calls, "report:"+boolToOutcome(err == nil))
 	}
@@ -33,9 +36,9 @@ func TestUninstallSelf_SuccessReportsThenDisablesThenExits(t *testing.T) {
 
 	a.uninstallSelf("decommissioning host")
 
-	want := []string{"selfUninstall", "report:success", "disable", "exit"}
+	want := []string{"selfUninstall", "report:success", "purge", "disable", "exit"}
 	if !reflect.DeepEqual(calls, want) {
-		t.Fatalf("calls = %v, want %v", calls, want)
+		t.Fatalf("calls = %v, want %v (local data is purged only after the success was reported)", calls, want)
 	}
 }
 
@@ -46,7 +49,9 @@ func TestUninstallSelf_CleanupFailureStillReportsThenDisablesThenExits(t *testin
 	origDisable := platformDisableAutoStartFn
 	origExit := platformExitAfterStopFn
 	origReport := reportUninstallResultFn
+	origPurge := platformPurgeLocalDataFn
 	defer func() {
+		platformPurgeLocalDataFn = origPurge
 		platformSelfUninstallFn = origSelfUninstall
 		platformDisableAutoStartFn = origDisable
 		platformExitAfterStopFn = origExit
@@ -55,6 +60,7 @@ func TestUninstallSelf_CleanupFailureStillReportsThenDisablesThenExits(t *testin
 	platformSelfUninstallFn = func() error { calls = append(calls, "selfUninstall"); return errSelfUninstallFailedForTest }
 	platformDisableAutoStartFn = func() error { calls = append(calls, "disable"); return nil }
 	platformExitAfterStopFn = func() { calls = append(calls, "exit") }
+	platformPurgeLocalDataFn = func() { calls = append(calls, "purge") }
 	reportUninstallResultFn = func(a *Agent, err error) {
 		calls = append(calls, "report:"+boolToOutcome(err == nil))
 	}
@@ -66,7 +72,7 @@ func TestUninstallSelf_CleanupFailureStillReportsThenDisablesThenExits(t *testin
 
 	want := []string{"selfUninstall", "report:failure", "disable", "exit"}
 	if !reflect.DeepEqual(calls, want) {
-		t.Fatalf("calls = %v, want %v (a cleanup failure must still be reported, then still disable+exit)", calls, want)
+		t.Fatalf("calls = %v, want %v (a cleanup failure must still be reported, then still disable+exit, and must NOT purge: the agent will come back and still needs its certificates)", calls, want)
 	}
 }
 

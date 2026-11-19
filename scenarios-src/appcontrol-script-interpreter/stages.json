@@ -1,0 +1,129 @@
+[
+  {
+    "id": "appctl-b01-wscript",
+    "n": 1,
+    "name": "Application control Script Host: wscript.exe VBScript from a user-writable path (T1059.005)",
+    "technique_id": "T1059.005",
+    "timeout_sec": 90,
+    "blast_radius": "Writes a benign .vbs that writes one marker file and runs it through wscript.exe //B. Files are in a private temp directory deleted by the step.",
+    "telemetry": [
+      "AppLocker MSI and Script event 8007 naming the file, if AppLocker Script rules enforced",
+      "AppLocker MSI and Script event 8029 naming the file, if WDAC script enforcement is on",
+      "Sysmon EID 1: wscript.exe with a user-writable .vbs"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ]
+  },
+  {
+    "id": "appctl-b02-batch",
+    "n": 2,
+    "name": "Application control Script Host: cmd.exe batch file from a user-writable path (T1059.003)",
+    "technique_id": "T1059.003",
+    "timeout_sec": 90,
+    "blast_radius": "Writes a benign .bat that writes one marker file and runs it through cmd.exe /c. Files are in a private temp directory deleted by the step.",
+    "telemetry": [
+      "AppLocker MSI and Script event 8007 naming the file, if AppLocker Script rules enforced",
+      "Sysmon EID 1: cmd.exe /c with a user-writable .bat"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ]
+  },
+  {
+    "id": "appctl-b03-wsf",
+    "n": 3,
+    "name": "Application control Script Host: Windows Script File (.wsf) through cscript.exe (T1059.005)",
+    "technique_id": "T1059.005",
+    "timeout_sec": 90,
+    "blast_radius": "Writes a benign .wsf job that writes one marker file and runs it through cscript.exe //B. Files are in a private temp directory deleted by the step.",
+    "telemetry": [
+      "AppLocker MSI and Script event 8007 naming the file, if AppLocker Script rules enforced",
+      "AppLocker MSI and Script event 8029 naming the file, if WDAC script enforcement is on",
+      "Sysmon EID 1: cscript.exe with a user-writable .wsf"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ]
+  },
+  {
+    "id": "appctl-b04-jscript",
+    "n": 4,
+    "name": "Application control Script Host: JScript from a user-writable path (T1059.007)",
+    "technique_id": "T1059.007",
+    "timeout_sec": 90,
+    "blast_radius": "Writes a benign .js that writes one marker file and runs it through wscript.exe //B. Files are in a private temp directory deleted by the step.",
+    "telemetry": [
+      "AppLocker MSI and Script event 8007 naming the file, if AppLocker Script rules enforced",
+      "AppLocker MSI and Script event 8029 naming the file, if WDAC script enforcement is on",
+      "Sysmon EID 1: wscript.exe with a user-writable .js"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ]
+  },
+  {
+    "id": "appctl-b05-ps-signing",
+    "n": 5,
+    "name": "Application control PowerShell: unsigned script from a user-writable path (T1059.001)",
+    "technique_id": "T1059.001",
+    "timeout_sec": 90,
+    "blast_radius": "Writes a benign unsigned .ps1 that writes one marker file and runs it with powershell.exe -File. Records the script signature status and the effective execution policy, which is not a security boundary and is reported only as context. Files are deleted by the step.",
+    "telemetry": [
+      "AppLocker MSI and Script event 8007 naming the file, if AppLocker Script rules enforced",
+      "Sysmon EID 1: powershell.exe -File with a user-writable .ps1",
+      "PowerShell 4104 ScriptBlock log, if enabled"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ]
+  },
+  {
+    "id": "appctl-b06-ps-language-mode",
+    "n": 6,
+    "name": "Application control PowerShell: language mode of a script from a user-writable path (T1059.001)",
+    "technique_id": "T1059.001",
+    "timeout_sec": 90,
+    "blast_radius": "Writes a benign .ps1 that reports its language mode and attempts a trivial Add-Type, and runs it with powershell.exe -File. ConstrainedLanguage under an Enabled policy counts as full-language execution being prevented; FullLanguage counts as allowed. Files are deleted by the step.",
+    "telemetry": [
+      "AppLocker MSI and Script event 8007 naming the file, if AppLocker Script rules enforced",
+      "AppLocker MSI and Script event 8029 naming the file, if WDAC script enforcement is on",
+      "PowerShell 4104 ScriptBlock log, if enabled"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ]
+  },
+  {
+    "id": "appctl-b07-wmi",
+    "n": 7,
+    "name": "Application control WMI: Win32_Process.Create launching a benign command (T1047)",
+    "technique_id": "T1047",
+    "timeout_sec": 90,
+    "blast_radius": "Calls Win32_Process.Create to run one benign cmd.exe that writes a marker file. Records the state of the ASR rule that blocks process creation from PSExec and WMI as context. Files are in a private temp directory deleted by the step.",
+    "telemetry": [
+      "AppLocker MSI and Script event 8007 naming the file, if AppLocker Script rules enforced",
+      "Sysmon EID 1: cmd.exe with parent WmiPrvSE.exe",
+      "Defender ASR event 1121/1122 for the PSExec and WMI rule, if configured"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ]
+  },
+  {
+    "id": "appctl-b08-interpreters",
+    "n": 8,
+    "name": "Application control Interpreters: an already-installed alternate interpreter (T1059)",
+    "technique_id": "T1059",
+    "timeout_sec": 90,
+    "blast_radius": "Finds one alternate interpreter (Python, Node, Perl, Ruby, PHP, Java or Lua) that is already installed outside the Microsoft Store and runs its version command. Nothing is installed; where none is present the step is not applicable. A private temp directory is deleted by the step.",
+    "telemetry": [
+      "AppLocker MSI and Script event 8007 naming the file, if AppLocker Script rules enforced",
+      "Code Integrity 3077 naming the interpreter, if WDAC enforced",
+      "Sysmon EID 1: the interpreter binary"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ]
+  }
+]

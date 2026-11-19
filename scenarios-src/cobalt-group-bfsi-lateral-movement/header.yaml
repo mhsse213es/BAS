@@ -1,0 +1,27 @@
+id: "cobalt-group-bfsi-lateral-movement"
+product_line: killchain
+name: "Cobalt Group BFSI - Lateral Movement (P0)"
+description: >
+  Enterprise lateral-movement detection validation for BFSI environments. Six scenarios covering
+  RDP connectivity, SMB/Admin share enumeration, WinRM remote sessions, remote service execution,
+  system discovery, and lateral tool transfer. All scenarios use authorized test accounts and perform
+  read-only checks or sandbox-safe transfers; no actual credential usage or privilege escalation.
+  Each scenario includes verified cleanup and undo-record rollback.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cobalt-group
+  - bfsi
+  - lateral-movement
+  - p0
+  - t1021
+  - t1569
+  - t1018
+  - t1570
+mitre_phases:
+  - lateral-movement
+
+steps:
+

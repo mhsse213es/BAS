@@ -159,7 +159,8 @@ func TestContentVersions_AppRoleCannotRewriteOrDelete(t *testing.T) { // A3 (DB 
 			`DELETE FROM scenarios WHERE scenario_id='imm'`,
 			`UPDATE content_version_events SET actor='x'`,
 			`DELETE FROM content_version_events`,
-			`UPDATE content_validations SET outcome='FAIL'`,
+			// outcome, run_id and detail are column-granted for the validation lab (see app_role.go); other columns stay read-only.
+			`UPDATE content_validations SET content_version_id='x'`,
 			`DELETE FROM content_validations`,
 			`UPDATE content_registry_state SET inventory='{}'`,
 			`DELETE FROM content_registry_state`,
@@ -193,8 +194,14 @@ func TestContentVersionEvents_ApprovalRequiresHumanActor(t *testing.T) { // A17 
 		}
 		var vid string
 		_ = pool.QueryRow(ctx, `SELECT id FROM content_versions WHERE content_id='ev'`).Scan(&vid)
+		// REJECTED rows must carry an exclusion reason (Gap 3). The actor rule
+		// is what this test checks, so supply a valid code for REJECTED.
 		ins := func(to, actor string) error {
-			_, err := pool.Exec(ctx, `INSERT INTO content_version_events (content_version_id, to_lifecycle, to_trust, actor) VALUES ($1,$2,'UNTRUSTED',$3)`, vid, to, actor)
+			var code any
+			if to == "REJECTED" {
+				code = "relevance"
+			}
+			_, err := pool.Exec(ctx, `INSERT INTO content_version_events (content_version_id, to_lifecycle, to_trust, actor, reason_code) VALUES ($1,$2,'UNTRUSTED',$3,$4)`, vid, to, actor, code)
 			return err
 		}
 		for _, to := range []string{"APPROVED", "PUBLISHED_LOCAL", "REJECTED"} {

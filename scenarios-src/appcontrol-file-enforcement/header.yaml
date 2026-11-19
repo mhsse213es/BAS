@@ -1,0 +1,30 @@
+id: appcontrol-file-enforcement
+product_line: av
+name: "Application Control Mastery - File, Signature and Location Enforcement"
+description: >
+  Ten controlled, benign tests of what application control keys on: signature, publisher,
+  location, file identity and module type. They cover an unsigned executable, a signed binary
+  with a corrupted signature, an executable from an untrusted self-signed publisher, unsigned
+  executables run from %TEMP%, %APPDATA% and Downloads (with a Mark-of-the-Web stream), an
+  executable renamed to a non-executable extension, an unsigned DLL, an .ocx module and an MSI
+  installed through the Windows Installer API (ATT&CK T1204.002, T1553.002, T1036.008, T1129,
+  T1218.007). Test programs are compiled on the host from a few lines of source, so nothing is
+  shipped as a binary. Each step is resolved against both AppLocker and WDAC with the same rules
+  as the other Application Control Mastery scenarios: an audit-mode event is audited_only and never
+  prevention, unreadable logs and unattributable results are inconclusive, missing mechanisms are
+  not_applicable. Every artifact, including the temporary certificate, is deleted by the step and
+  removal is verified. RLL modules are not tested. Block outcomes are verified only against
+  stubbed fixtures; the executed path was run on a host with no enforcement.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - application-control
+  - appcontrol-mastery
+  - file-enforcement
+  - behavioral
+mitre_phases:
+  - execution
+  - defense-evasion
+
+steps:

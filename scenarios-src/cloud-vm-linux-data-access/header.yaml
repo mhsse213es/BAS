@@ -1,0 +1,31 @@
+id: "cloud-vm-linux-data-access"
+product_line: cloud
+name: "Cloud VM Mastery - Cloud Data Access and Exfiltration (Linux, gated)"
+description: >
+  Cloud data access and egress from a workload VM: Azure Blob container listing, S3 object metadata, cloud
+  database inventory, synthetic secret retrieval, and a gated upload of a synthetic object with verified
+  deletion. Only operator-designated synthetic test resources are touched; no blob or object body is read, and
+  the exfiltration step is gated and defaults to SKIP. Egress is FAIL when an upload to cloud storage succeeds
+  from a workload VM.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [linux]
+tags:
+  - cloud
+  - data-access
+  - exfiltration
+  - storage
+  - cloud-vm-mastery
+  - t1530
+  - t1526
+  - t1555
+  - t1567.002
+mitre_phases:
+  - collection
+  - exfiltration
+  - credential-access
+  - discovery
+
+steps:
+

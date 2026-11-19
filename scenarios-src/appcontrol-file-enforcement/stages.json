@@ -1,0 +1,165 @@
+[
+  {
+    "id": "appctl-c01-unsigned",
+    "n": 1,
+    "name": "Application control File Enforcement: unsigned executable (T1204.002)",
+    "technique_id": "T1204.002",
+    "timeout_sec": 120,
+    "blast_radius": "Compiles a tiny unsigned console program (writes one marker file) in a private temp directory and runs it once. Everything is deleted by the step.",
+    "telemetry": [
+      "AppLocker EXE and DLL event 8004 naming the file, if AppLocker Exe rules enforced",
+      "Code Integrity 3077 naming the file, if WDAC enforced",
+      "Sysmon EID 1: a binary executed from a user-writable path"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ]
+  },
+  {
+    "id": "appctl-c02-tampered-signature",
+    "n": 2,
+    "name": "Application control File Enforcement: signed binary with a corrupted signature (T1553.002)",
+    "technique_id": "T1553.002",
+    "timeout_sec": 90,
+    "blast_radius": "Copies a signed system binary (hostname.exe) into a private temp directory, corrupts one byte so its Authenticode signature is no longer valid, and runs the copy once. The original is never modified. Deleted by the step.",
+    "telemetry": [
+      "AppLocker EXE and DLL event 8004 naming the file, if AppLocker Exe rules enforced",
+      "Code Integrity 3077 naming the file, if WDAC enforced",
+      "Sysmon EID 1: a binary executed from a user-writable path"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ]
+  },
+  {
+    "id": "appctl-c03-untrusted-publisher",
+    "n": 3,
+    "name": "Application control File Enforcement: executable signed by an untrusted self-signed publisher (T1553.002)",
+    "technique_id": "T1553.002",
+    "timeout_sec": 150,
+    "blast_radius": "Creates a self-signed code-signing certificate in the current user store, signs a compiled test program with it, and runs it once; also runs a copy of a Microsoft-signed binary and records whether it ran as context. The certificate is removed from the store and everything else is deleted by the step.",
+    "telemetry": [
+      "AppLocker EXE and DLL event 8004 naming the file, if AppLocker Exe rules enforced",
+      "Code Integrity 3077 naming the file, if WDAC enforced",
+      "Sysmon EID 1: a binary executed from a user-writable path",
+      "Certificate store change: a self-signed code-signing certificate created and removed in CurrentUser\\My"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ],
+    "requires_priv": "user"
+  },
+  {
+    "id": "appctl-c04-temp",
+    "n": 4,
+    "name": "Application control Location Enforcement: unsigned executable run from %TEMP% (T1204.002)",
+    "technique_id": "T1204.002",
+    "timeout_sec": 120,
+    "blast_radius": "Compiles an unsigned test program directly in %TEMP% and runs it once; the program and its marker file are deleted and removal is verified.",
+    "telemetry": [
+      "AppLocker EXE and DLL event 8004 naming the file, if AppLocker Exe rules enforced",
+      "Code Integrity 3077 naming the file, if WDAC enforced",
+      "Sysmon EID 1: a binary executed from a user-writable path"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ]
+  },
+  {
+    "id": "appctl-c05-appdata",
+    "n": 5,
+    "name": "Application control Location Enforcement: unsigned executable run from %APPDATA% (T1204.002)",
+    "technique_id": "T1204.002",
+    "timeout_sec": 120,
+    "blast_radius": "Compiles an unsigned test program in a new directory under %APPDATA% and runs it once; the directory is deleted and removal is verified.",
+    "telemetry": [
+      "AppLocker EXE and DLL event 8004 naming the file, if AppLocker Exe rules enforced",
+      "Code Integrity 3077 naming the file, if WDAC enforced",
+      "Sysmon EID 1: a binary executed from a user-writable path"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ]
+  },
+  {
+    "id": "appctl-c06-downloads",
+    "n": 6,
+    "name": "Application control Location Enforcement: downloaded unsigned executable run from Downloads (T1204.002)",
+    "technique_id": "T1204.002",
+    "timeout_sec": 120,
+    "blast_radius": "Compiles an unsigned test program in a new directory under Downloads, marks it as downloaded from the internet (Zone.Identifier), and runs it once through CreateProcess; the directory is deleted and removal is verified.",
+    "telemetry": [
+      "AppLocker EXE and DLL event 8004 naming the file, if AppLocker Exe rules enforced",
+      "Code Integrity 3077 naming the file, if WDAC enforced",
+      "Sysmon EID 1: a binary executed from a user-writable path",
+      "Zone.Identifier stream on a file in Downloads"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ]
+  },
+  {
+    "id": "appctl-c07-renamed-extension",
+    "n": 7,
+    "name": "Application control File Identity: executable renamed to a non-executable extension (T1036.008)",
+    "technique_id": "T1036.008",
+    "timeout_sec": 120,
+    "blast_radius": "Compiles a test program, renames it to a .tmp file, and runs it through CreateProcess to show whether file identity or only extension is evaluated. Deleted by the step.",
+    "telemetry": [
+      "AppLocker EXE and DLL event 8004 naming the file, if AppLocker Exe rules enforced",
+      "Code Integrity 3077 naming the file, if WDAC enforced",
+      "Sysmon EID 1: a binary executed from a user-writable path"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ]
+  },
+  {
+    "id": "appctl-c08-dll-load",
+    "n": 8,
+    "name": "Application control Module Enforcement: unsigned DLL loaded from a user-writable path (T1129)",
+    "technique_id": "T1129",
+    "timeout_sec": 150,
+    "blast_radius": "Compiles a tiny unsigned managed library in a private temp directory and loads it from a child PowerShell process (so no file lock outlives the step). Deleted by the step.",
+    "telemetry": [
+      "AppLocker EXE and DLL event 8004 naming the DLL, if AppLocker DLL rules enforced",
+      "Code Integrity 3077/3033/3034 naming the DLL, if WDAC enforced",
+      "Sysmon EID 7: image load from a user-writable path"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ]
+  },
+  {
+    "id": "appctl-c09-ocx-load",
+    "n": 9,
+    "name": "Application control Module Enforcement: module with an .ocx extension loaded from a user-writable path (T1129)",
+    "technique_id": "T1129",
+    "timeout_sec": 90,
+    "blast_radius": "Copies a signed system DLL to a private temp directory under an .ocx name and loads that copy once with LoadLibrary, then frees it. RLL files are not tested. Deleted by the step.",
+    "telemetry": [
+      "AppLocker EXE and DLL event 8004 naming the .ocx, if AppLocker DLL rules enforced",
+      "Code Integrity 3077 naming the .ocx, if WDAC enforced",
+      "Sysmon EID 7: image load of an .ocx from a user-writable path"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ]
+  },
+  {
+    "id": "appctl-c10-msi-install",
+    "n": 10,
+    "name": "Application control Installer Enforcement: MSI installed through the Windows Installer API (T1218.007)",
+    "technique_id": "T1218.007",
+    "timeout_sec": 120,
+    "blast_radius": "Builds a minimal local MSI (no product is registered) and installs it with the Windows Installer COM API rather than msiexec.exe; its only action writes one marker file. Deleted by the step.",
+    "telemetry": [
+      "AppLocker MSI and Script event 8007 naming the package, if AppLocker MSI rules enforced",
+      "AppLocker MSI and Script event 8029 / Code Integrity 3077, if WDAC enforced",
+      "Windows Installer events 1033/11707 in the Application log"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ]
+  }
+]

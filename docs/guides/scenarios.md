@@ -33,13 +33,23 @@ Audspect BAS ships with 107 signed built-in scenarios. Every one is signature-ch
 
 ## Kill Chain Library
 
-The library contains 16 kill chain scenarios. Each emulates the post-access tradecraft of a named threat actor or ransomware family, in ordered stages. Each stage maps to one or more MITRE ATT&CK tactics. The scenarios are telemetry-safe: they are built to show whether your controls detect and block the behaviour, and they do not deliver real malware.
+The library contains 26 kill chain scenarios. Each emulates the post-access tradecraft of a named threat actor or ransomware family, in ordered stages. Each stage maps to one or more MITRE ATT&CK tactics. The scenarios are telemetry-safe: they are built to show whether your controls detect and block the behaviour, and they do not deliver real malware.
 
 | Scenario ID | Threat | Stages |
 |---|---|---|
 | `akira-kill-chain` | Akira ransomware | 9 |
-| `apt29-kill-chain` | APT29 (Cozy Bear / NOBELIUM) | 5 |
+| `apt29-kill-chain` | APT29 (Cozy Bear / NOBELIUM) | 6 |
+| `apt29-execution-evasion` | APT29 mastery: execution and defense evasion | 9 |
+| `apt29-persistence` | APT29 mastery: persistence | 4 |
+| `apt29-credential-access` | APT29 mastery: credential access | 3 |
+| `apt29-command-control` | APT29 mastery: command and control | 3 |
+| `apt29-collection-staging` | APT29 mastery: collection and staging | 3 |
 | `apt36-kill-chain` | APT36 (Transparent Tribe) | 10 |
+| `apt36-initial-execution` | APT36 mastery: initial access and execution | 5 |
+| `apt36-discovery` | APT36 mastery: discovery | 5 |
+| `apt36-collection-credential` | APT36 mastery: credential access and collection | 5 |
+| `apt36-persistence-evasion` | APT36 mastery: persistence and defense evasion | 5 |
+| `apt36-command-control` | APT36 mastery: command, control and lateral movement | 4 |
 | `black-basta-kill-chain` | Black Basta ransomware | 10 |
 | `blackcat-kill-chain` | BlackCat / ALPHV ransomware | 8 |
 | `clop-kill-chain` | Cl0p ransomware | 5 |

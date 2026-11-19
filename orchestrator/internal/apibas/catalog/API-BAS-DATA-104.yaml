@@ -42,9 +42,12 @@ additional_detections:
   - source: elastic-security
     expect_rule: APIBAS-REL-004
     min_severity: high
+  - source: elastic-security
+    expect_rule: APIBAS-REL-020
+    min_severity: high
 detection_assertion:
   status: fixture_validated
-  reason: "The statement read is graded against the access event: a sensitive projection of another owner's object (REL-008), and the cross-owner object (REL-004). Fixture-validated, not live-SIEM-validated."
+  reason: "The statement read is graded against the access event: a sensitive projection of another owner's object (REL-008), the cross-owner object (REL-004), and the disbursement account the vulnerable statement emits outside the disclosure policy (REL-020). Fixture-validated, not live-SIEM-validated."
 side_effect_class: READ_ONLY
 evidence:
   - sanitized_request

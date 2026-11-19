@@ -1,0 +1,202 @@
+id: "cscrf-mii-filecopy-recovery"
+product_line: common
+name: "CSCRF-MII File-Copy Recoverability Checks (P1, separate from Windows backup)"
+description: >
+  Internal control-validation checks for an off-host file copy. Verdicts are internal control references
+  (CSCRF-FC-*), not SEBI clause identifiers. This pack does not test Windows image backup; that is covered by
+  the backup and DR pack (CSCRF-BDR-*). fc-01 is read only: it checks an existing copy at BAS_FC_TARGET
+  against its SHA256SUMS manifest and SKIPs when unset. fc-02 is gated by BAS_CONFIRM_FC_TEST=true: it copies
+  synthetic files (no real data) from a per-run temp source to a target, verifies them, and removes them in
+  undo. A PASS shows that files can be copied and verified; it does not show that the business can recover
+  within its targets.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cscrf-mii
+  - recoverability
+  - file-copy
+  - p1
+mitre_phases:
+  - exfiltration
+
+steps:
+
+  # -------------------------------------------------------------------------
+  - id: fc-01
+    name: "Existing Off-Host Copy Matches Manifest (T1005, internal ref CSCRF-FC-01)"
+    technique_id: T1005
+    action_key: cscrf_fc_copy_manifest
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only hashing of files listed in SHA256SUMS under BAS_FC_TARGET; skipped when unset."
+    telemetry:
+      - "File read"
+    detection:
+      - "Copy integrity review"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-FC-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgFcGate { return ($env:BAS_CONFIRM_FC_TEST -eq 'true') }
+      function Get-CgSha256 { param([string]$Path) return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      $dir = $env:BAS_FC_TARGET
+      if (-not $dir) { Complete-CgStep @{ Outcome = 'skip'; Reason = 'BAS_FC_TARGET not set; no off-host copy checked [CSCRF-FC-01]' } 'fc-01' }
+      $sums = Join-Path $dir 'SHA256SUMS'
+      if (-not (Test-Path -LiteralPath $sums)) { Complete-CgStep @{ Outcome = 'fail'; Reason = 'no SHA256SUMS manifest in the copy target [CSCRF-FC-01]' } 'fc-01' }
+      $bad = @(); $n = 0
+      foreach ($line in (Get-Content -LiteralPath $sums)) {
+      if (-not $line.Trim()) { continue }
+      $parts = $line.Trim() -split '\s+', 2
+      if ($parts.Count -ne 2) { $bad += 'malformed manifest line'; continue }
+      $p = Join-Path $dir $parts[1]; $n++
+      if (-not (Test-Path -LiteralPath $p)) { $bad += "$($parts[1]): missing"; continue }
+      if ((Get-CgSha256 $p) -ne $parts[0].ToLowerInvariant()) { $bad += "$($parts[1]): hash differs from manifest" }
+      }
+      if ($n -eq 0) { Complete-CgStep @{ Outcome = 'fail'; Reason = 'SHA256SUMS lists no files [CSCRF-FC-01]' } 'fc-01' }
+      if ($bad.Count -gt 0) { Complete-CgStep @{ Outcome = 'fail'; Reason = (($bad -join '; ') + ' [CSCRF-FC-01]') } 'fc-01' }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = "$n file(s) in the off-host copy match the manifest [CSCRF-FC-01]" } 'fc-01'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-FC-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgFcGate { return ($env:BAS_CONFIRM_FC_TEST -eq 'true') }
+      function Get-CgSha256 { param([string]$Path) return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: fc-02
+    name: "Synthetic File Copy and Verify (T1074.001, internal ref CSCRF-FC-02)"
+    technique_id: T1074.001
+    action_key: cscrf_fc_synthetic_copy
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: low
+    reversible: true
+    blast_radius: "Writes synthetic files (no real data) to a per-run temp source and copies them to BAS_FC_TARGET; removes both in undo. Requires BAS_CONFIRM_FC_TEST=true."
+    telemetry:
+      - "File copy"
+    detection:
+      - "Copy event review"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-FC-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgFcGate { return ($env:BAS_CONFIRM_FC_TEST -eq 'true') }
+      function Get-CgSha256 { param([string]$Path) return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      if (-not (Test-CgFcGate)) { Complete-CgStep @{ Outcome = 'skip'; Reason = 'BAS_CONFIRM_FC_TEST not true; no file copied [CSCRF-FC-02]' } 'fc-02' }
+      $target = $env:BAS_FC_TARGET
+      if (-not $target) { Complete-CgStep @{ Outcome = 'skip'; Reason = 'BAS_FC_TARGET not set; no copy made [CSCRF-FC-02]' } 'fc-02' }
+      $src = Join-Path $env:TEMP ('bas-fc-src-' + $script:CgRun)
+      $dst = Join-Path $target ('bas-fc-' + $script:CgRun)
+      New-CgUndoRecord 'fc-02' @{ scenario = 'fc-02'; src = $src; dst = $dst }
+      New-Item -ItemType Directory -Force -Path $src | Out-Null
+      $marker = "BAS-SYNTHETIC-FC-$($script:CgRun) (no real data)"
+      1..3 | ForEach-Object { Set-Content -LiteralPath (Join-Path $src "synthetic-$_.txt") -Value "$marker $_" -Encoding ASCII }
+      try { Copy-Item -LiteralPath $src -Destination $dst -Recurse -ErrorAction Stop } catch { Complete-CgStep @{ Outcome = 'fail'; Reason = 'synthetic copy to BAS_FC_TARGET failed [CSCRF-FC-02]' } 'fc-02' }
+      $bad = @()
+      foreach ($f in Get-ChildItem -LiteralPath $src -File) {
+      $c = Join-Path $dst $f.Name
+      if (-not (Test-Path -LiteralPath $c)) { $bad += "$($f.Name): missing in copy"; continue }
+      if ((Get-CgSha256 $f.FullName) -ne (Get-CgSha256 $c)) { $bad += "$($f.Name): hash differs after copy" }
+      }
+      if ($bad.Count -gt 0) { Complete-CgStep @{ Outcome = 'fail'; Reason = (($bad -join '; ') + ' [CSCRF-FC-02]') } 'fc-02' }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = 'synthetic files copied to the target and verified by SHA256 [CSCRF-FC-02]' } 'fc-02'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-FC-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgFcGate { return ($env:BAS_CONFIRM_FC_TEST -eq 'true') }
+      function Get-CgSha256 { param([string]$Path) return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      $rec = Read-CgUndoRecord 'fc-02'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'PASS: Cleanup complete (no record)'; exit 0 }
+      Remove-Item -LiteralPath $rec.src -Recurse -Force -ErrorAction SilentlyContinue
+      Remove-Item -LiteralPath $rec.dst -Recurse -Force -ErrorAction SilentlyContinue
+      if ((Test-Path -LiteralPath $rec.src) -or (Test-Path -LiteralPath $rec.dst)) { Write-Output 'FAIL: synthetic files survived undo'; exit 0 }
+      Remove-CgUndoRecord 'fc-02'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0

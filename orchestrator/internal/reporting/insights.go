@@ -161,12 +161,11 @@ func buildInsights(heatmap []TacticEntry, det DetectionSummary) Insights {
 		}
 	}
 	ins.Most = &TacticInsight{Tactic: most.Tactic, PassPct: most.PassPct, Tested: most.Total}
-	// A "least protected" callout implies something is comparatively weak.
-	// When the worst tactic is still at 100% (nothing failed anywhere,
-	// whether because only one tactic had data or every tactic tied at
-	// 100%), there is no legitimate "least protected" story -- showing it
-	// anyway previously duplicated the Most Protected card verbatim.
-	if least.PassPct < 100 {
+	// A "least protected" callout only means something when it names a
+	// different tactic that is measurably weaker than the most protected one.
+	// With a single tested tactic, or every tactic tied, the two callouts
+	// would repeat each other, so the Least card is omitted.
+	if least.Tactic != most.Tactic && least.PassPct < most.PassPct {
 		ins.Least = &TacticInsight{Tactic: least.Tactic, PassPct: least.PassPct, Tested: least.Total}
 	}
 	if !det.TelemetryObserved {
@@ -305,6 +304,9 @@ func buildReliability(s ExecutiveSummary) Reliability {
 	switch {
 	case r.Attempted == 0:
 		r.Confidence = "No Data"
+	case r.Valid == 0:
+		// Nothing was scored, so the result cannot be called reliable or unreliable.
+		r.Confidence = "Not assessed"
 	case r.Errored*100/r.Attempted < 10:
 		r.Confidence = "High"
 	case r.Errored*100/r.Attempted < 30:
@@ -425,13 +427,15 @@ func buildGlossary(results []models.SimulationResult) []GlossaryEntry {
 			if enr.Name != "" {
 				e.Name = enr.Name
 			}
-			e.Description = enr.Description
-			e.Detection = enr.Detection
-			e.DataSources = enr.DataSources
+			e.Description = cleanATTCKText(enr.Description)
+			e.Detection = cleanATTCKText(enr.Detection)
+			for _, ds := range enr.DataSources {
+				e.DataSources = append(e.DataSources, cleanATTCKText(ds))
+			}
 			e.URL = enr.URL
 			for _, m := range enr.Mitigations {
 				if m.Name != "" {
-					e.Mitigations = append(e.Mitigations, m.Name)
+					e.Mitigations = append(e.Mitigations, cleanATTCKText(m.Name))
 				}
 			}
 		}
@@ -513,14 +517,9 @@ func buildDetectionSources(results []models.SimulationResult) []DetectionSource 
 		})
 	}
 
-	// Fallback/demo data if none were detected or no telemetry exists
-	if len(sources) == 0 {
-		sources = []DetectionSource{
-			{Product: "Trellix", Detections: 18, MinMTTDMs: 4500, AvgMTTDMs: 8200},
-			{Product: "Defender", Detections: 14, MinMTTDMs: 2100, AvgMTTDMs: 4900},
-			{Product: "SIEM", Detections: 5, MinMTTDMs: 12000, AvgMTTDMs: 25400},
-		}
-	}
+	// No detection from a named product means an empty ranking, and the report says so. This used to substitute
+	// invented figures (Trellix 18, Defender 14, SIEM 5) when nothing was detected, so a report on an endpoint with no
+	// connected detection product still ranked products that were never there.
 
 	sort.SliceStable(sources, func(i, j int) bool {
 		if sources[i].Detections != sources[j].Detections {

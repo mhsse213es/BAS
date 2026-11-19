@@ -1,0 +1,29 @@
+id: appcontrol-proxy-execution
+product_line: av
+name: "Application Control Mastery - Trusted Binary Proxy Execution"
+description: >
+  Nine controlled, benign tests of whether application control stops signed Windows
+  utilities from being used as execution proxies: regsvr32, rundll32, mshta, msiexec,
+  InstallUtil, a Control Panel applet, CMSTP, WMIC XSL processing and MSBuild inline tasks
+  (ATT&CK T1218.x, T1220, T1127.001). Each step runs one benign artifact that writes a single
+  marker file, then resolves the result against both AppLocker and WDAC (App Control for
+  Business): blocked_as_expected needs the marker absent, exactly one matching block event from
+  an enforcing mechanism, and that mechanism Enabled. An audit-mode event is reported as
+  audited_only and never counts as prevention. Missing mechanisms, unreadable logs and
+  unattributable results are inconclusive or not_applicable, never a pass. Companion to
+  appcontrol-efficacy; it does not change policy, and every artifact is deleted by the step.
+  Block outcomes are verified only against stubbed fixtures; the executed path was run on a
+  host with no enforcement.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - application-control
+  - appcontrol-mastery
+  - proxy-execution
+  - behavioral
+mitre_phases:
+  - execution
+  - defense-evasion
+
+steps:

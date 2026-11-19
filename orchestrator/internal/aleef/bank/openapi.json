@@ -1,0 +1,48 @@
+{
+  "openapi": "3.0.3",
+  "info": {"title": "Synthetic Bank API", "version": "2.0"},
+  "servers": [{"url": "/"}],
+  "security": [{"bearerAuth": []}],
+  "components": {
+    "securitySchemes": {"bearerAuth": {"type": "http", "scheme": "bearer"}},
+    "schemas": {
+      "Account": {"type": "object", "properties": {"id": {"type": "string"}, "owner_id": {"type": "string"}, "balance": {"type": "integer"}}},
+      "Transaction": {"type": "object", "properties": {"id": {"type": "string"}, "account_id": {"type": "string"}, "owner_id": {"type": "string"}, "amount": {"type": "integer"}, "description": {"type": "string"}}},
+      "TransactionInput": {"type": "object", "required": ["account_id", "amount"], "properties": {"account_id": {"type": "string"}, "amount": {"type": "integer"}, "description": {"type": "string"}}},
+      "Beneficiary": {"type": "object", "properties": {"id": {"type": "string"}, "owner_id": {"type": "string"}, "name": {"type": "string"}, "account_number": {"type": "string"}}},
+      "BeneficiaryInput": {"type": "object", "properties": {"name": {"type": "string"}, "account_number": {"type": "string"}}},
+      "Payment": {"type": "object", "properties": {"id": {"type": "string"}, "owner_id": {"type": "string"}, "account_id": {"type": "string"}, "beneficiary_id": {"type": "string"}, "amount": {"type": "integer"}, "state": {"type": "string", "enum": ["initiated", "approved", "settled"]}, "dual_control": {"type": "boolean"}, "required_approvals": {"type": "integer"}, "approvals": {"type": "array", "items": {"type": "string"}}}},
+      "PaymentInput": {"type": "object", "required": ["account_id", "beneficiary_id", "amount"], "properties": {"account_id": {"type": "string"}, "beneficiary_id": {"type": "string"}, "amount": {"type": "integer"}, "dual_control": {"type": "boolean"}}},
+      "PaymentPatch": {"type": "object", "properties": {"amount": {"type": "integer"}, "beneficiary_id": {"type": "string"}}},
+      "Document": {"type": "object", "properties": {"id": {"type": "string"}, "owner_id": {"type": "string"}, "name": {"type": "string"}}}
+    }
+  },
+  "paths": {
+    "/v1/accounts/{id}": {"get": {"summary": "Get account (v1)", "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Account", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Account"}}}}}}},
+    "/v1/transactions/{id}": {"get": {"summary": "Get transaction (v1)", "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Transaction", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Transaction"}}}}}}},
+    "/v1/kyc/documents/{id}": {"get": {"summary": "Get KYC document (v1)", "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Document", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Document"}}}}}}},
+    "/v1/customers/{cid}/documents/{id}": {"get": {"summary": "Get KYC document through customer (v1)", "parameters": [{"name": "cid", "in": "path", "required": true, "schema": {"type": "string"}}, {"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Document", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Document"}}}}}}},
+    "/v2/accounts/{id}": {"get": {"summary": "Get account", "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Account", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Account"}}}}}}},
+    "/v2/transactions": {"post": {"summary": "Create transaction", "parameters": [{"name": "Idempotency-Key", "in": "header", "required": false, "schema": {"type": "string"}}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/TransactionInput"}}}}, "responses": {"200": {"description": "Existing transaction for the key"}, "201": {"description": "Created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Transaction"}}}}}}},
+    "/v2/transactions/{id}": {
+      "get": {"summary": "Get transaction", "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Transaction", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Transaction"}}}}}},
+      "delete": {"summary": "Delete transaction", "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"204": {"description": "Deleted"}}}
+    },
+    "/v2/kyc/documents/{id}": {"get": {"summary": "Get KYC document", "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Document", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Document"}}}}}}},
+    "/v2/customers/{cid}/documents/{id}": {"get": {"summary": "Get KYC document through customer", "parameters": [{"name": "cid", "in": "path", "required": true, "schema": {"type": "string"}}, {"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Document", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Document"}}}}}}},
+    "/v2/beneficiaries": {"post": {"summary": "Create beneficiary", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/BeneficiaryInput"}}}}, "responses": {"201": {"description": "Created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Beneficiary"}}}}}}},
+    "/v2/beneficiaries/{id}": {
+      "get": {"summary": "Get beneficiary", "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Beneficiary", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Beneficiary"}}}}}},
+      "patch": {"summary": "Update beneficiary", "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/BeneficiaryInput"}}}}, "responses": {"200": {"description": "Beneficiary", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Beneficiary"}}}}}},
+      "delete": {"summary": "Delete beneficiary", "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"204": {"description": "Deleted"}}}
+    },
+    "/v2/payments": {"post": {"summary": "Initiate payment", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/PaymentInput"}}}}, "responses": {"201": {"description": "Created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Payment"}}}}}}},
+    "/v2/payments/{id}": {
+      "get": {"summary": "Get payment", "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Payment", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Payment"}}}}}},
+      "patch": {"summary": "Update payment", "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/PaymentPatch"}}}}, "responses": {"200": {"description": "Payment", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Payment"}}}}, "409": {"description": "Conflict"}}},
+      "delete": {"summary": "Delete payment", "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"204": {"description": "Deleted"}}}
+    },
+    "/v2/payments/{id}/approve": {"post": {"summary": "Approve payment", "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Payment", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Payment"}}}}}}},
+    "/v2/payments/{id}/settle": {"post": {"summary": "Settle payment", "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Payment", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Payment"}}}}, "409": {"description": "Conflict"}}}}
+  }
+}

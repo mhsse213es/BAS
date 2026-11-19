@@ -1,0 +1,34 @@
+id: "cloud-vm-linux-azure-identity"
+product_line: cloud
+name: "Cloud VM Mastery - Azure Identity Abuse (Linux)"
+description: >
+  Azure VM identity exposure and what the managed identity can reach after a workload obtains it: IMDS access
+  from an unexpected process, token issuance for resources outside the expected list, subscription and role-
+  assignment enumeration, VM extension and storage inventory, Key Vault listing, and token use outside the VM's
+  own resource group. Every step is read-only against Azure, returns SKIP when this host is not an Azure VM or
+  has no identity attached, and never prints, stores or records a token. Verdicts follow the cloud control's
+  answer: an HTTP 401/403 is PASS, a successful call for an identity the operator did not expect is FAIL, and
+  anything unclassifiable is ERROR. Cloud-side evidence (Entra sign-in, Azure Activity Log) must be collected
+  separately; the endpoint result is not proof of cloud detection. Unverified until run against a dedicated
+  Azure test subscription.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [linux]
+tags:
+  - cloud
+  - azure
+  - managed-identity
+  - imds
+  - iam
+  - cloud-vm-mastery
+  - t1552
+  - t1528
+  - t1580
+  - t1069
+mitre_phases:
+  - credential-access
+  - discovery
+
+steps:
+

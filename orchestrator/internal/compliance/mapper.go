@@ -113,6 +113,13 @@ func (m *Mapper) AllControls() []ControlWithFramework {
 }
 
 // GenerateReport maps BAS simulation results onto a framework's controls.
+//
+// Control status is derived from technique-level evidence and the raw results are left as they are. A mapped
+// technique is TESTED when a result for it gave a verdict (pass, blocked or fail). It has FAILED when any such result
+// is a fail, and is INCONCLUSIVE when it only errored or was vetoed. SKIPPED results are not evidence at all.
+// A base technique (T1003) is covered by a result for any of its sub-techniques; a sub-technique (T1003.001) only by
+// itself. Control status, strongest first: failed (any executed technique succeeded), resisted (every mapped technique
+// ran), partial (some ran), inconclusive (none ran cleanly, some errored or were vetoed), untested.
 func (m *Mapper) GenerateReport(
 	results []models.SimulationResult,
 	frameworkID, agentID, runID, scenarioName string,
@@ -129,30 +136,38 @@ func (m *Mapper) GenerateReport(
 	controlResults := make([]ControlResult, 0, len(fw.Controls))
 
 	var totalControls, testableControls, manualControls int
-	var testedControls, passingControls, failingControls int
+	var resisted, partial, failed, inconclusive int
+	var techMapped, techTested int
 
 	for _, ctrl := range fw.Controls {
 		testable := ctrl.IsTestable()
 		cr := ControlResult{
-			ID:       ctrl.ID,
-			Name:     ctrl.Name,
-			Domain:   ctrl.Domain,
-			Category: ctrl.Category,
-			Testable: testable,
-			Status:   "untested",
+			ID:                ctrl.ID,
+			Name:              ctrl.Name,
+			Domain:            ctrl.Domain,
+			Category:          ctrl.Category,
+			Testable:          testable,
+			Reference:         ctrl.Reference,
+			Status:            "untested",
+			TechniqueCoverage: []TechniqueCoverage{},
 		}
 
 		// Manual controls (governance/process/policy) cannot be validated by
 		// running attack techniques — mark them and skip technique matching so
-		// they are never scored as pass/fail by unrelated simulations.
+		// they are never scored by unrelated simulations.
 		if !testable {
 			cr.Status = "manual"
 		} else {
-			seen := make(map[string]bool) // deduplicate by result.ID
-			for _, tech := range ctrl.Techniques {
-				tech = strings.ToUpper(tech)
-				var matched []models.SimulationResult
+			seenTech := make(map[string]bool)
+			seen := make(map[string]bool) // deduplicate evidence by result.ID
+			for _, raw := range ctrl.Techniques {
+				tech := strings.ToUpper(strings.TrimSpace(raw))
+				if tech == "" || seenTech[tech] {
+					continue
+				}
+				seenTech[tech] = true
 
+				var matched []models.SimulationResult
 				if strings.Contains(tech, ".") {
 					// Sub-technique: exact match only
 					matched = exactIdx[tech]
@@ -161,46 +176,68 @@ func (m *Mapper) GenerateReport(
 					matched = baseIdx[tech]
 				}
 
+				var tested, techFailed, errored bool
 				for _, r := range matched {
-					if seen[r.ID] {
-						continue
+					eff := models.EffectiveResult(r)
+					if !seen[r.ID] {
+						seen[r.ID] = true
+						cr.Evidence = append(cr.Evidence, TechniqueEvidence{
+							TechniqueID:   r.Technique.ID,
+							TechniqueName: r.Technique.Name,
+							Result:        string(eff),
+							Details:       r.Details,
+							Remediation:   r.Remediation,
+						})
+						// VETOED and ERROR stay in Evidence (we attempted the step) but are not evidence the control
+						// was verified, so they never count as tested. A fraud-control SKIPPED also stays out of the
+						// tested count: the endpoint result alone is not evidence the step was verified.
+						if eff != models.ResultVetoed && eff != models.ResultError && eff != models.ResultSkipped {
+							cr.Tested++
+							switch eff {
+							case models.ResultPass, models.ResultBlocked:
+								cr.Passed++
+							case models.ResultFail:
+								cr.Failed++
+							}
+						}
 					}
-					seen[r.ID] = true
-					ev := TechniqueEvidence{
-						TechniqueID:   r.Technique.ID,
-						TechniqueName: r.Technique.Name,
-						Result:        string(r.Result),
-						Details:       r.Details,
-						Remediation:   r.Remediation,
-					}
-					cr.Evidence = append(cr.Evidence, ev)
-					// VETOED is excluded from Tested: Audspect's own agent
-					// refused to attempt this step under B5's
-					// destructive-action policy, so it is not evidence the
-					// control was tested at all. Counting it toward Tested
-					// while Passed/Failed both stay at zero would fall
-					// through the Tested>0/Failed==0 branch below and
-					// silently report the control "pass" when nothing was
-					// actually verified.
-					if r.Result == models.ResultVetoed {
-						continue
-					}
-					cr.Tested++
 					switch r.Result {
-					case models.ResultPass, models.ResultBlocked:
-						cr.Passed++
+					case models.ResultVetoed, models.ResultError:
+						errored = true
 					case models.ResultFail:
-						cr.Failed++
+						tested, techFailed = true, true
+					case models.ResultPass, models.ResultBlocked:
+						tested = true
 					}
 				}
+
+				state := "untested"
+				switch {
+				case tested && techFailed:
+					state = "failed"
+					cr.TechniquesFailed++
+				case tested:
+					state = "resisted"
+				case errored:
+					state = "inconclusive"
+					cr.TechniquesInconclusive++
+				}
+				if tested {
+					cr.TechniquesTested++
+				}
+				cr.TechniquesMapped++
+				cr.TechniqueCoverage = append(cr.TechniqueCoverage, TechniqueCoverage{ID: tech, State: state})
 			}
 
-			if cr.Tested > 0 {
-				if cr.Failed > 0 {
-					cr.Status = "fail"
-				} else {
-					cr.Status = "pass"
-				}
+			switch {
+			case cr.TechniquesFailed > 0:
+				cr.Status = "failed"
+			case cr.TechniquesMapped > 0 && cr.TechniquesTested == cr.TechniquesMapped:
+				cr.Status = "resisted"
+			case cr.TechniquesTested > 0:
+				cr.Status = "partial"
+			case cr.TechniquesInconclusive > 0:
+				cr.Status = "inconclusive"
 			}
 		}
 
@@ -213,22 +250,35 @@ func (m *Mapper) GenerateReport(
 		totalControls++
 
 		switch cr.Status {
-		case "pass":
+		case "resisted":
 			testableControls++
-			testedControls++
-			passingControls++
+			resisted++
 			d.Passing++
-		case "fail":
+			d.Resisted++
+		case "partial":
 			testableControls++
-			testedControls++
-			failingControls++
+			partial++
+			d.Passing++
+			d.Partial++
+		case "failed":
+			testableControls++
+			failed++
 			d.Failing++
+		case "inconclusive":
+			testableControls++
+			inconclusive++
+			d.Untested++
+			d.Inconclusive++
 		case "manual":
 			manualControls++
 			d.Manual++
 		default: // untested (testable, but no BAS evidence yet)
 			testableControls++
 			d.Untested++
+		}
+		if testable {
+			techMapped += cr.TechniquesMapped
+			techTested += cr.TechniquesTested
 		}
 
 		controlResults = append(controlResults, cr)
@@ -244,15 +294,27 @@ func (m *Mapper) GenerateReport(
 	}
 	sort.Slice(domains, func(i, j int) bool { return domains[i].Name < domains[j].Name })
 
-	// Coverage and compliance are measured over the BAS-testable subset only —
-	// manual-attestation controls are excluded from both denominators.
+	testedControls := resisted + partial + failed
+	passingControls := resisted + partial
+
+	// Coverage and the resistance rate are measured over the BAS-testable subset only — manual-attestation controls
+	// are excluded from both denominators.
 	coveragePct := 0.0
 	if testableControls > 0 {
 		coveragePct = round2(float64(testedControls) / float64(testableControls) * 100)
 	}
-	compliancePct := 0.0
+	resistancePct := 0.0
 	if testedControls > 0 {
-		compliancePct = round2(float64(passingControls) / float64(testedControls) * 100)
+		resistancePct = round2(float64(passingControls) / float64(testedControls) * 100)
+	}
+	techCoveragePct := 0.0
+	if techMapped > 0 {
+		techCoveragePct = round2(float64(techTested) / float64(techMapped) * 100)
+	}
+	sufficient := testedControls > 0 && coveragePct >= MinConclusiveCoveragePercent
+	note := ""
+	if !sufficient {
+		note = InsufficientCoverageNote
 	}
 
 	meta := fw.FrameworkMeta
@@ -263,10 +325,21 @@ func (m *Mapper) GenerateReport(
 		ManualControls:    manualControls,
 		TestedControls:    testedControls,
 		PassingControls:   passingControls,
-		FailingControls:   failingControls,
+		FailingControls:   failed,
 		UntestedControls:  testableControls - testedControls,
 		CoveragePercent:   coveragePct,
-		CompliancePercent: compliancePct,
+		CompliancePercent: resistancePct,
+
+		ResistedControls:     resisted,
+		PartialControls:      partial,
+		InconclusiveControls: inconclusive,
+
+		TechniquesMapped:         techMapped,
+		TechniquesTested:         techTested,
+		TechniqueCoveragePercent: techCoveragePct,
+
+		SufficientCoverage: sufficient,
+		CoverageNote:       note,
 	}
 
 	return &ComplianceReport{
@@ -291,9 +364,18 @@ func buildNarrative(s ComplianceSummary, domains []DomainResult, controls []Cont
 		return "No controls have been tested yet — run a scenario to generate compliance evidence."
 	}
 
+	// The resistance rate is always followed by coverage: a rate over a handful of tested controls says little.
 	var b strings.Builder
-	fmt.Fprintf(&b, "%.0f%% compliant — %d of %d tested controls are passing.",
+	fmt.Fprintf(&b, "Resistance rate %.0f%%: %d of %d tested controls resisted the techniques executed.",
 		s.CompliancePercent, s.PassingControls, s.TestedControls)
+	if s.PartialControls > 0 {
+		fmt.Fprintf(&b, " %d of them only partially (not every mapped technique ran).", s.PartialControls)
+	}
+	fmt.Fprintf(&b, " Control coverage %d of %d testable controls (%.1f%%).",
+		s.TestedControls, s.TestableControls, s.CoveragePercent)
+	if !s.SufficientCoverage {
+		fmt.Fprintf(&b, " %s.", InsufficientCoverageNote)
+	}
 
 	if s.FailingControls > 0 {
 		// domains is already sorted alphabetically by GenerateReport, so a
@@ -368,6 +450,7 @@ func WriteCSV(w io.Writer, r *ComplianceReport) {
 	_ = cw.Write([]string{
 		"Framework", "Version", "Control ID", "Control Name",
 		"Domain", "Category", "Validation", "Status", "Tested", "Passed", "Failed", "Failing Techniques",
+		"Techniques Tested", "Techniques Mapped", "Reference",
 	})
 	for _, ctrl := range r.Controls {
 		var failing []string
@@ -393,6 +476,9 @@ func WriteCSV(w io.Writer, r *ComplianceReport) {
 			strconv.Itoa(ctrl.Passed),
 			strconv.Itoa(ctrl.Failed),
 			strings.Join(failing, "; "),
+			strconv.Itoa(ctrl.TechniquesTested),
+			strconv.Itoa(ctrl.TechniquesMapped),
+			ctrl.Reference,
 		})
 	}
 	cw.Flush()

@@ -34,6 +34,12 @@ func (h *Handler) ReceiveEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	for _, e := range body.Events {
+		if e.AgentID != "" && !agentMatchesCertificate(w, r, e.AgentID) {
+			return // the whole batch is refused before anything is stored
+		}
+	}
+
 	accepted := 0
 	for _, e := range body.Events {
 		if e.AgentID == "" || e.EventType == "" {

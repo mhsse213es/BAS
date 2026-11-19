@@ -1,0 +1,55 @@
+id: "API-BAS-DATA-303"
+name: "HC-008: records export includes other patients' diagnoses"
+category: DATA
+claim: cross_identity
+attack_objective: "Patient A runs the records export and receives other patients' records with their diagnoses."
+threat_model:
+  attacker: "authenticated patient A"
+  identity: patient-a
+  access_level: "patient, valid token, owns REC-A-001 only"
+  objective: "Patient A runs the records export and receives other patients' records with their diagnoses."
+preconditions:
+  fixture: healthcare-two-patient
+  identities: [patient-a, patient-b]
+  object: REC-B-001
+steps:
+  - id: "baseline-owner"
+    role: baseline
+    identity: patient-b
+    auth: valid
+    method: GET
+    path: "/api/health/export"
+    hypothesis: "Patient B, the owner, runs the export. If this fails, the scenario is not testable."
+  - id: "attack-data-303"
+    role: attack
+    identity: patient-a
+    auth: valid
+    method: GET
+    path: "/api/health/export"
+    hypothesis: "The export returns only patient A's own record, so REC-B-001 and its diagnosis are not included."
+denied_statuses: []
+forbidden_values: ["REC-B-001", "BAS-SIM-DX-B"]
+clean_is_enforcement: true
+expected_control: "The export contains only records the caller owns or treats. An export that includes another patient's record or diagnosis fails."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The export response carries no identifier or diagnosis of another patient's record.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The export names the owner of every record it returns, so an export that discloses patient B records fires REL-004. Graded against the access event by APIBAS-REL-004. Fixture-validated, not live-SIEM-validated."
+side_effect_class: READ_ONLY
+evidence:
+  - sanitized_request
+  - sanitized_response
+industry_mapping:
+  - "Healthcare: health-data exposure in exports"
+regulatory_mapping:
+  - IN-DPDP-S8-5
+negative_tests:
+  - "API-BAS-DATA-303 against the fixed build must PASS"
+  - "API-BAS-DATA-303 against the vulnerable build must FAIL (exploited)"

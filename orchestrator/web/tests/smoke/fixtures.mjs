@@ -264,6 +264,11 @@ export const FIXTURES = {
   'GET /api/scenarios/runs/run-smoke-1/events': runEvents,
   'GET /api/findings/finding-smoke-1': finding,
   'GET /api/campaigns/campaign-smoke-1': campaign,
+  // Detection Verification: the connectors card shows only for a caller who may list them.
+  'GET /api/me/permissions': { permissions: ['detectverify:configs:list', 'detectverify:run'] },
+  'GET /api/detectverify/configs': [{ id: 'dc-smoke-1', name: `Connector ${PAYLOAD}`, provider: 'splunk', enabled: true, autoVerify: true,
+    baseUrl: `https://splunk.example:8089/${PAYLOAD}`, tenantId: '', workspaceId: '', clientId: '', insecureTls: false, verifyDelaySeconds: 120,
+    hasClientSecret: false, hasApiToken: true, createdAt: NOW, updatedAt: NOW }],
 };
 
 // Text each tab must show once its fixture renders (payloads appear as
@@ -273,6 +278,7 @@ export const RENDER_MARKERS = {
   runs: 'Run "><img',
   findings: '"><img src=x',
   campaigns: 'Campaign "><img',
+  verification: 'Connector "><img',
 };
 
 export function fixtureFor(method, url) {

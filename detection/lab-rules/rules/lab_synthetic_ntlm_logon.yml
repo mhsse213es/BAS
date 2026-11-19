@@ -1,0 +1,26 @@
+title: NTLM Network Logon As Lab Synthetic Account
+id: 6f1c2a10-5b7e-4d2a-9a51-0b1d7e3c2002
+status: experimental
+description: Successful NTLM network logon (4624, LogonType 3) for a lab synthetic account. Signal for the pass-the-hash scenario, which produces this logon when it runs. Logging only in the lab; not a claim that a hash was reused.
+author: Audspect BAS lab
+date: 2026-11-18
+tags:
+    - attack.lateral_movement
+    - attack.t1550.002
+logsource:
+    product: windows
+    service: security
+detection:
+    selection_event:
+        EventID: 4624
+        LogonType: 3
+        AuthenticationPackageName: NTLM
+    selection_accounts:
+        TargetUserName:
+            - bassim1
+            - bassim2
+            - bassim3
+    condition: selection_event and selection_accounts
+falsepositives:
+    - None expected in the lab
+level: medium

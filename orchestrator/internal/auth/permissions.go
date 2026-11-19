@@ -77,6 +77,26 @@ const (
 	CanViewVariantCoverage Permission = "variants:coverage:view"
 	CanViewVariantStats    Permission = "variants:stats:view"
 	CanViewAPIBASRuns      Permission = "apibas:runs:view"
+	// CanRunAPIBAS starts an API BAS assessment job against a registered lab or staging target.
+	CanRunAPIBAS Permission = "apibas:jobs:run"
+	// CanViewSegmentation reads segmentation lab runs and per-probe verdicts.
+	CanViewSegmentation Permission = "segmentation:runs:view"
+	// CanRunSegmentation starts a segmentation scenario. It sends real traffic
+	// between lab zones, so it is admin only.
+	CanRunSegmentation Permission = "segmentation:runs:run"
+	// CanManageAPIBASTargets registers and changes API BAS targets (scope and credential references). Admin only.
+	CanManageAPIBASTargets Permission = "apibas:targets:manage"
+	// CanApproveAPIBASProduction approves a production assessment. Admin only. Production execution is not enabled
+	// in this release; the permission and the approval binding exist so enabling it later needs no new model.
+	CanApproveAPIBASProduction Permission = "apibas:production:approve"
+
+	// Aleef API discovery (separate licence add-on). View reads runs, findings and regressions; run creates
+	// engagements, starts and stops runs and records prior-knowledge reviews. Viewer holds neither.
+	CanViewAleef Permission = "aleef:view"
+	CanRunAleef  Permission = "aleef:run"
+	// CanAuthorizeAleef creates engagements: the approval that lets runs touch a target. Admin only, and the
+	// approver recorded is always the authenticated user, so an operator cannot approve their own scope.
+	CanAuthorizeAleef Permission = "aleef:authorize"
 
 	// Payload families — read is Analyst+Admin (write is Admin only, below).
 	CanListPayloadFamilies Permission = "payload-families:list"
@@ -92,8 +112,8 @@ const (
 	CanApproveK8sScenario Permission = "k8s-scenarios:approve"
 	CanExecuteK8sScenario Permission = "k8s-scenarios:execute"
 	// CanViewK8sDiscovery lets an analyst or admin read the read-only Kubernetes analysis of the lab cluster.
-	CanViewK8sDiscovery Permission = "k8s-discovery:view"
-	CanInjectExerciseEvidence  Permission = "exercises:executions:inject-evidence"
+	CanViewK8sDiscovery       Permission = "k8s-discovery:view"
+	CanInjectExerciseEvidence Permission = "exercises:executions:inject-evidence"
 
 	// Admin-only: agent state, license, connection config.
 	CanSetAgentState        Permission = "agents:set-state"
@@ -127,7 +147,11 @@ const (
 	// policies that have no safe built-in value, such as the in-process host
 	// language-mode requirement. Admin only: the default changes what every
 	// later run is judged against.
-	CanManageExecutionPolicy   Permission = "execution-policy:manage"
+	CanManageExecutionPolicy Permission = "execution-policy:manage"
+	// CanManageRiskInputs sets the customer-entered frequency and loss-per-event inputs behind the
+	// estimated annual loss figure, and the deployment currency. Admin only by default: these estimates
+	// feed a figure that goes to the board.
+	CanManageRiskInputs        Permission = "risk-inputs:manage"
 	CanDeleteConnectorScenario Permission = "connector:scenarios:delete"
 
 	// Admin-only: attack-path schedule, ART content management.
@@ -237,6 +261,9 @@ const (
 	// backup for restore intent (an audit marker, not an execution trigger).
 	CanManageBackups Permission = "backups:manage"
 
+	// CanManageCITokens issues and revokes the dedicated tokens a CI pipeline uses to start validation runs (REQ-057).
+	CanManageCITokens Permission = "ci:tokens:manage"
+
 	// TCF Phase 2A: link/new/dismiss unresolved actor identities (Admin only).
 	CanResolveActorIdentity Permission = "intel:resolve-actor"
 
@@ -296,6 +323,9 @@ const (
 	// placement as CanImportOTSafetyConfig, for the same reason.
 	CanImportTargetScope Permission = "target-scope:import"
 
+	// REQ-018 Gap 2: record a relevant/excluded decision on an advisory.
+	CanDecideAdvisoryRelevance Permission = "advisory:relevance:decide"
+
 	// Database security simulation (dbsim). CanViewDBSim (targets, settings, runs
 	// -- read only) is Analyst+Admin. Registering/deleting targets and running the
 	// read-only identity check (CanManageDBSimTargets) and switching DB client mode
@@ -311,6 +341,7 @@ const (
 var rolePermissions = map[Role]map[Permission]bool{
 	RoleAdmin: {
 		CanManageExecutionPolicy: true,
+		CanManageRiskInputs:      true,
 
 		CanVerify:            true,
 		CanUploadEvidence:    true,
@@ -333,7 +364,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 
 		CanViewContentArtifact: true, CanTransitionContent: true, CanViewContentMigrationReport: true, CanManageComponents: true,
 
-		CanRunVariants: true, CanViewVariantRun: true, CanViewVariantCoverage: true, CanViewAPIBASRuns: true,
+		CanRunVariants: true, CanViewVariantRun: true, CanViewVariantCoverage: true, CanViewAPIBASRuns: true, CanRunAPIBAS: true, CanManageAPIBASTargets: true, CanApproveAPIBASProduction: true, CanViewAleef: true, CanRunAleef: true, CanAuthorizeAleef: true, CanViewSegmentation: true, CanRunSegmentation: true,
 		CanViewVariantStats: true, CanListPayloadFamilies: true, CanViewPayloadFamily: true,
 		CanLaunchExerciseExecution: true, CanAbortExerciseExecution: true,
 		CanApproveExerciseStep: true, CanInjectExerciseEvidence: true, CanLookupIOC: true,
@@ -368,6 +399,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanManageDBSimTargets:              true,
 		CanSetDBSimClientMode:              true,
 		CanManageBackups:                   true,
+		CanManageCITokens:                  true,
 		CanResolveActorIdentity:            true,
 		CanManageSourceTrust:               true,
 		CanLinkContentThreat:               true,
@@ -380,13 +412,15 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanImportZoneIsolationConfig:       true,
 		CanManageRegulatoryObligations:     true,
 		CanImportTargetScope:               true,
+		CanDecideAdvisoryRelevance:         true,
 	},
 	RoleAnalyst: {
-		CanVerify:            true,
-		CanUploadEvidence:    true,
-		CanReview:            true,
-		CanExport:            true,
-		CanCurateThreatIntel: true,
+		CanDecideAdvisoryRelevance: true,
+		CanVerify:                  true,
+		CanUploadEvidence:          true,
+		CanReview:                  true,
+		CanExport:                  true,
+		CanCurateThreatIntel:       true,
 		// CanDeleteEvidence and CanReviewThreatIntel intentionally withheld —
 		// deletion and confidence review are admin-only so a single analyst
 		// cannot quietly remove audit material or self-approve their own claim.
@@ -404,7 +438,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 
 		CanViewContentArtifact: true,
 
-		CanRunVariants: true, CanViewVariantRun: true, CanViewVariantCoverage: true, CanViewAPIBASRuns: true,
+		CanRunVariants: true, CanViewVariantRun: true, CanViewVariantCoverage: true, CanViewAPIBASRuns: true, CanRunAPIBAS: true, CanViewAleef: true, CanRunAleef: true, CanViewSegmentation: true,
 		CanViewVariantStats: true, CanListPayloadFamilies: true, CanViewPayloadFamily: true,
 		CanLaunchExerciseExecution: true, CanAbortExerciseExecution: true,
 		CanApproveExerciseStep: true, CanInjectExerciseEvidence: true, CanLookupIOC: true,
@@ -467,6 +501,7 @@ func Permissions(role Role) []Permission {
 
 		CanExecuteRemediation, CanApproveRemediation,
 		CanManageBackups,
+		CanManageCITokens,
 		CanResolveActorIdentity,
 		CanManageSourceTrust,
 		CanLinkContentThreat,

@@ -211,6 +211,21 @@ func saveCommandSigningCert(pemBytes []byte) error {
 	return os.WriteFile(commandSigningCertPath(), pemBytes, 0644)
 }
 
+// clearCommandSigningPin drops the pinned command-signing certificate so the next enrollment or renewal
+// pins whatever the server presents now. It reports whether a pin existed. Only an explicit install may
+// call this (the operator is present and has just supplied the agent secret); routine renewal must keep
+// refusing a different certificate, which is what saveCommandSigningCert enforces.
+func clearCommandSigningPin() (bool, error) {
+	err := os.Remove(commandSigningCertPath())
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
+}
+
 // loadCommandSigningCert returns the persisted command-signing
 // certificate, or an error wrapping os.ErrNotExist if enrollment never
 // completed (or completed against an orchestrator version that predates
@@ -296,7 +311,19 @@ func mtlsTLSConfig(cfg Config) (*tls.Config, error) {
 		},
 		RootCAs:               pool,
 		InsecureSkipVerify:    true, // see agent/bootstrap.go's verifyServerCertChain doc comment: chain-only verification, hostname check is meaningless for this single-appliance deployment model
-		VerifyPeerCertificate: verifyServerCertChain(pool),
+		// The trusted roots are re-read at verification time, so a root added by a planned CA rotation
+		// (acceptCARoot) is trusted by connections that are already configured, with no restart. If the
+		// file cannot be read the roots loaded at startup are used.
+		VerifyPeerCertificate: func(raw [][]byte, chains [][]*x509.Certificate) error {
+			current := pool
+			if b, err := os.ReadFile(caPath); err == nil {
+				fresh := x509.NewCertPool()
+				if fresh.AppendCertsFromPEM(b) {
+					current = fresh
+				}
+			}
+			return verifyServerCertChain(current)(raw, chains)
+		},
 	}, nil
 }
 

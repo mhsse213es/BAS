@@ -23,6 +23,10 @@ type OriginResilienceFixture struct {
 	BypassEvidence   []wafval.CollectionResult
 	ProtocolEvidence []wafval.CollectionResult
 	NodeEvidence     []waforigin.NodeEvidence
+	// EvidenceSource overrides the assertion's reported source; the
+	// zero value defaults to EvidenceSourceFixture, same as every other
+	// evaluator in this package.
+	EvidenceSource EvidenceSource
 }
 
 type originCatalogs struct {
@@ -122,6 +126,10 @@ func originOutcomeClass(verdict string) (failing, inconclusive bool) {
 // the real ConsistencyVerdict string, classified separately by
 // originOutcomeClass.
 func evaluateContributingOriginVector(c originCatalogs, vectorID string, policyBasis string, fixture OriginResilienceFixture) (VectorAssertion, error) {
+	src := fixture.EvidenceSource
+	if src == "" {
+		src = EvidenceSourceFixture
+	}
 	if scenario, ok := c.bypassByID[vectorID]; ok {
 		vector, ok := c.attackByID[scenario.AttackVectorID]
 		if !ok {
@@ -133,13 +141,13 @@ func evaluateContributingOriginVector(c originCatalogs, vectorID string, policyB
 		if err != nil {
 			return VectorAssertion{}, err
 		}
-		return VectorAssertion{VectorID: vectorID, Severity: vector.Severity, Verdict: verdict, EvidenceSource: EvidenceSourceFixture, Reason: reason}, nil
+		return VectorAssertion{VectorID: vectorID, Severity: vector.Severity, Verdict: verdict, EvidenceSource: src, Reason: reason}, nil
 	}
 	if vector, ok := c.protocolByID[vectorID]; ok {
 		maliciousExpectation := vector.Expectations(policyBasis)[0].Expectation
 		key := wafval.CorrelationKey{TestExecutionID: vectorID, RequestID: vectorID}
 		result := wafval.EvaluateClaim(maliciousExpectation, fixture.ProtocolEvidence, key)
-		return VectorAssertion{VectorID: vectorID, Severity: wafcatalog.Severity(""), Verdict: result.Verdict, EvidenceSource: EvidenceSourceFixture, Reason: result.Reason}, nil
+		return VectorAssertion{VectorID: vectorID, Severity: wafcatalog.Severity(""), Verdict: result.Verdict, EvidenceSource: src, Reason: result.Reason}, nil
 	}
 	if scenario, ok := c.consistencyByID[vectorID]; ok {
 		vector, ok := c.attackByID[scenario.AttackVectorID]
@@ -150,7 +158,7 @@ func evaluateContributingOriginVector(c originCatalogs, vectorID string, policyB
 		if err != nil {
 			return VectorAssertion{}, err
 		}
-		return VectorAssertion{VectorID: vectorID, Severity: vector.Severity, Verdict: wafval.Verdict(verdict), EvidenceSource: EvidenceSourceFixture, Reason: reason}, nil
+		return VectorAssertion{VectorID: vectorID, Severity: vector.Severity, Verdict: wafval.Verdict(verdict), EvidenceSource: src, Reason: reason}, nil
 	}
 	return VectorAssertion{}, fmt.Errorf("vector ID %q not found in any origin-resilience catalog", vectorID)
 }

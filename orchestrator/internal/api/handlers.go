@@ -1,7 +1,6 @@
 package api
 
 import (
-	"github.com/audspect/bas/internal/injectionapproval"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -11,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/audspect/bas/internal/injectionapproval"
 	"io"
 	"log"
 	"net/http"
@@ -28,9 +28,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/actions"
+	"github.com/audspect/bas/internal/admatrix"
+	"github.com/audspect/bas/internal/advisory"
 	"github.com/audspect/bas/internal/analytics"
+	apibasjobs "github.com/audspect/bas/internal/apibas/jobs"
 	"github.com/audspect/bas/internal/artifactgen"
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/cigate"
 	"github.com/audspect/bas/internal/cloudgraph"
 	"github.com/audspect/bas/internal/cmdsigning"
 	"github.com/audspect/bas/internal/compliance"
@@ -39,8 +43,9 @@ import (
 	"github.com/audspect/bas/internal/controlhealth"
 	"github.com/audspect/bas/internal/correlation"
 	"github.com/audspect/bas/internal/db"
-	"github.com/audspect/bas/internal/detectverify"
 	"github.com/audspect/bas/internal/dbsim/dbadmin"
+	"github.com/audspect/bas/internal/deployconfig"
+	"github.com/audspect/bas/internal/detectverify"
 	"github.com/audspect/bas/internal/emailgwefficacy"
 	"github.com/audspect/bas/internal/emailgwrun"
 	"github.com/audspect/bas/internal/emsweep"
@@ -64,7 +69,12 @@ import (
 	"github.com/audspect/bas/internal/reporting"
 	"github.com/audspect/bas/internal/reporting/attackdata"
 	"github.com/audspect/bas/internal/rulelib"
+	"github.com/audspect/bas/internal/rwcontain"
+	"github.com/audspect/bas/internal/rwprevent"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/secretstore"
+	"github.com/audspect/bas/internal/segprobe"
+	"github.com/audspect/bas/internal/segprobe/runstore"
 	"github.com/audspect/bas/internal/taxii"
 	"github.com/audspect/bas/internal/threatcontent"
 	"github.com/audspect/bas/internal/threatpriority"
@@ -90,16 +100,31 @@ type Handler struct {
 	// approvalClass is the deployment class for pipeline approvals, set once from startup
 	// configuration. Empty means customer.
 	approvalClass injectionapproval.Classification
+	// ci is the CI validation gate (REQ-057). nil until wired at startup; the CI routes answer 503 until then.
+	ci *cigate.Handler
 	// cloudProber builds the read-only probe executor for one provider account.
 	// nil in production (built from server configuration); tests override it.
 	cloudProber func(ctx context.Context, provider, accountID string) (cloudgraph.Prober, error)
 	// probeAudit writes one probe audit entry synchronously. nil in production
 	// (writes audit_logs); tests override it.
 	probeAudit func(ctx context.Context, actorID, action, resource string, detail map[string]any, outcome string) error
+	// cloud holds the validated cloud settings: the account allow-list, the Azure
+	// credentials loaded from the secrets file, and the discovery gate. nil refuses
+	// all cloud work. cmd/server installs it at startup.
+	cloud *CloudSettings
 
 	db     *pgxpool.Pool
 	hub    *ws.Hub
 	engine *scenario.Engine
+	// secrets resolves credential reference columns (nil until WithSecretStore; see secrets.go).
+	secrets secretstore.Store
+	// apibasJobs runs API BAS assessment jobs (nil until WithAPIBASJobs; job endpoints answer 503).
+	apibasJobs *apibasjobs.Service
+	// seg runs segmentation lab packs and segRuns reads their stored results (nil until WithSegmentation).
+	seg     *segprobe.Service
+	segRuns *runstore.Store
+	// apibasAsyncHook replaces the background start of a job. Tests set it to keep a job queued.
+	apibasAsyncHook func(func())
 	// dbsimCheckRunner dispatches the dbsim read-only identity check to an
 	// agent. nil in production until the dbsim run API exists (the check
 	// endpoint answers 501 and no target becomes client-eligible).
@@ -114,8 +139,12 @@ type Handler struct {
 	actionVendorClient   func(actions.ConnectorConfig) (actions.VendorClient, error)
 	secret               string
 	agentSecret          string                 // optional shared secret for agent-facing endpoints
+	enrollmentMode       string                 // "" / "secret" (shared secret enrols) or "token" (single-use per-agent token)
+	enrollThrottle       enrollThrottle         // failed enrolment-token attempts per client address
+	now                  func() time.Time       // server clock override for tests (expired-agent recovery); nil = time.Now
 	ingestAPIKey         string                 // shared secret for POST /api/ingest/v1/events; empty disables the endpoint
 	pki                  *pki.CA                // deployment CA for agent mTLS enrollment (B1/B3)
+	pkiDir               string                 // directory holding the CA files; used for planned CA rotation (audit F-09)
 	signingKey           *cmdsigning.SigningKey // deployment command-signing key (B4) -- separate trust domain from pki above, never chained to it
 	advertisedMTLSPort   int                    // host port agents reach the mTLS listener on (may differ from the in-container port when published ports are remapped); 0 = not advertised
 	advertisedEnrollPort int                    // host port agents reach the enrollment listener on; 0 = not advertised
@@ -145,11 +174,12 @@ type Handler struct {
 	publicBaseURL        string                 // orchestrator's externally-reachable base URL; used for {{SINK_URL}} substitution and exercise tracker links
 	exerciseStore        *exercise.Store
 	exerciseExecutor     *exercise.Executor
-	k8sScenario *K8sScenarioService
-	k8sAnalysis K8sAnalysisRunner
+	k8sScenario          *K8sScenarioService
+	k8sAnalysis          K8sAnalysisRunner
 	exerciseChain        *exercise.EvidenceChain
 	verification         *verification.Store    // nil when not loaded — SP2 verification store
 	relationships        *relationships.Store   // nil when not loaded — CVE-ATT&CK Relationship Store
+	advisories           *advisory.Store        // nil when not loaded — REQ-018 Gap 2 advisory relevance
 	rules                *rulelib.Engine        // nil when not loaded — Detection Rule Library
 	threatPriorityEngine *threatpriority.Engine // nil when not loaded — Threat Prioritization
 	vexSweep             *vexsweep.Store        // nil when not loaded — Full Variant Sweep orchestration
@@ -204,10 +234,21 @@ type Handler struct {
 	// called -- a run then fails with a clear "no evidence" NotTested
 	// result (see executePHDET002), never a fabricated Pass/Fail.
 	phishingReportTicketProvider phishbridge.ReportTicketEvidenceProvider
+	// detectionConnector backs the ransomware Detection capability. Nil keeps
+	// it honestly NotTested (see rwdetectionLookup).
+	detectionConnector detectverify.Connector
+	// preventionBlocks backs the ransomware Prevention capability with Defender
+	// block events. Nil keeps Prevention as an unknown (skipped) observation.
+	preventionBlocks rwprevent.BlockSource
+	// containmentDevices backs the ransomware Containment capability. Nil keeps
+	// it honestly NotTested (see containmentObserverFor).
+	containmentDevices rwcontain.DeviceSource
+	// aleef is the Aleef API discovery state; nil until WithAleef.
+	aleef *aleefState
 }
 
 // New creates a Handler.
-func New(db *pgxpool.Pool, hub *ws.Hub, engine *scenario.Engine, secret string) *Handler {
+func New(pool *pgxpool.Pool, hub *ws.Hub, engine *scenario.Engine, secret string) *Handler {
 	// Wire the Phase C artifact-curation hook once per process -- see
 	// internal/scenario/art.go's ArtifactCuratedLookup doc comment for why this
 	// is a settable hook instead of a direct import.
@@ -215,10 +256,42 @@ func New(db *pgxpool.Pool, hub *ws.Hub, engine *scenario.Engine, secret string) 
 		_, ok := artifactgen.Lookup(techniqueID, testName, argName)
 		return ok
 	}
-	return &Handler{db: db, hub: hub, engine: engine, secret: secret, cancelGracePeriod: 60 * time.Second, emailgwEnvironment: emailgwrun.EnvironmentLab}
+	// Wire admatrix's real evidence lookup the same way -- see
+	// admatrix.LookupADControlVerification's doc comment for why this is a
+	// settable hook rather than admatrix importing internal/db directly.
+	admatrix.LookupADControlVerification = func(primitiveID string) (result string, correlated, found bool) {
+		d, found, err := db.LatestADControlVerification(context.Background(), pool, primitiveID)
+		if err != nil {
+			log.Printf("[admatrix] ad_control_verifications lookup failed for primitive %s: %v", primitiveID, err)
+			return "", false, false
+		}
+		return d.DRSUAPIResult, d.Correlated, found
+	}
+	return &Handler{db: pool, hub: hub, engine: engine, secret: secret, cancelGracePeriod: 60 * time.Second, emailgwEnvironment: emailgwrun.EnvironmentLab}
 }
 
 // WithCompliance attaches the compliance mapper.
+// WithDetectionConnector attaches the vendor connector that verifies the
+// ransomware Detection capability. Without it, that capability stays NotTested.
+func (h *Handler) WithDetectionConnector(c detectverify.Connector) *Handler {
+	h.detectionConnector = c
+	return h
+}
+
+// WithPreventionBlocks attaches the Defender block-event source that grades
+// the ransomware Prevention capability.
+func (h *Handler) WithPreventionBlocks(b rwprevent.BlockSource) *Handler {
+	h.preventionBlocks = b
+	return h
+}
+
+// WithContainmentDevices attaches the EDR device source that verifies the
+// ransomware Containment capability. Without it, that capability stays NotTested.
+func (h *Handler) WithContainmentDevices(d rwcontain.DeviceSource) *Handler {
+	h.containmentDevices = d
+	return h
+}
+
 func (h *Handler) WithCompliance(m *compliance.Mapper) *Handler {
 	h.complianceMapper = m
 	return h
@@ -445,6 +518,9 @@ func (h *Handler) UnenrollAgent(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "agentId required", http.StatusBadRequest)
 		return
 	}
+	if !agentMatchesCertificate(w, r, body.AgentID) {
+		return
+	}
 	tag, err := h.db.Exec(r.Context(), `UPDATE agents SET state = 'retired' WHERE agent_id = $1`, body.AgentID)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -476,7 +552,10 @@ func (h *Handler) RemoveAgent(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "reason is required", http.StatusBadRequest)
 		return
 	}
-	tag, err := h.db.Exec(r.Context(), `UPDATE agents SET state = 'retired' WHERE agent_id = $1`, agentID)
+	// force_removed_at makes the removal permanent (see the agents_force_removed_final trigger). COALESCE keeps
+	// the original time if an agent is removed twice.
+	tag, err := h.db.Exec(r.Context(),
+		`UPDATE agents SET state = 'retired', force_removed_at = COALESCE(force_removed_at, NOW()) WHERE agent_id = $1`, agentID)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -485,7 +564,7 @@ func (h *Handler) RemoveAgent(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "agent not found", http.StatusNotFound)
 		return
 	}
-	h.auditLog(r, "agent.remove", agentID, map[string]any{"reason": body.Reason}, "ok")
+	h.auditLog(r, "agent.remove", agentID, map[string]any{"reason": body.Reason, "permanent": true}, "ok")
 	h.hub.BroadcastBrowsers(models.WSMessage{Type: models.MsgAgentUpdate, AgentID: agentID})
 	respond(w, map[string]string{"agentId": agentID, "state": "retired"})
 }
@@ -695,13 +774,17 @@ func (h *Handler) GetLicenseInfo(w http.ResponseWriter, r *http.Request) {
 	// The tier and its product lines come from the verified licence, never from the UI.
 	productLines, _ := license.ProductLinesFor(lic.EffectiveTier())
 	respond(w, map[string]any{
-		"customer":      lic.Customer,
-		"customerId":    lic.CustomerID,
-		"issuedAt":      lic.IssuedAt,
-		"expiresAt":     lic.ExpiresAt,
-		"features":      lic.Features,
-		"tier":          string(lic.EffectiveTier()),
+		"customer":   lic.Customer,
+		"customerId": lic.CustomerID,
+		"issuedAt":   lic.IssuedAt,
+		"expiresAt":  lic.ExpiresAt,
+		"features":   lic.Features,
+		"tier":       string(lic.EffectiveTier()),
+		// A warning (never an error) when the licence grants more than this package was built to contain.
+		"buildTier":     license.BuildTier(),
+		"buildMismatch": license.BuildMismatch(license.BuildTier(), lic.EffectiveTier()),
 		"productLines":  productLines,
+		"specialAddons": lic.SpecialAddons(),
 		"status":        string(info.State),
 		"daysRemaining": info.DaysRemaining,
 		"lockoutAt":     info.LockoutAt.Format("2006-01-02"),
@@ -882,7 +965,8 @@ const agentSelectColumns = `a.agent_id, a.hostname, a.ip_address, a.os_version, 
 	        COALESCE(sr.sims, 0) AS sims,
 	        a.stopped_by, COALESCE(u.username, a.stopped_by), a.stopped_at, a.stop_reason,
 	        a.group_id, g.name, a.uninstall_error, a.uninstall_error_at, a.uninstall_requested_at,
-	        COALESCE(a.transport, 'legacy')`
+	        COALESCE(a.transport, 'legacy'), a.tray_hidden, (a.force_removed_at IS NOT NULL), a.is_factory_lab,
+	        COALESCE(a.agent_version, '')`
 
 // agentFromJoins is the FROM/JOIN clause shared by every GetAgents query
 // that selects agentSelectColumns above.
@@ -897,7 +981,7 @@ const agentFromJoins = `FROM agents a
 // aware) status, live WSConnected from the hub, and effective uninstall
 // error. Rows that fail to scan are skipped (matches prior GetAgents
 // behavior). Does not close rows -- the caller owns that.
-func scanAgentRows(rows pgx.Rows, hub *ws.Hub, now time.Time) []models.Agent {
+func scanAgentRows(rows pgx.Rows, hub *ws.Hub, now time.Time, minVersion string) []models.Agent {
 	var agents []models.Agent
 	for rows.Next() {
 		var a models.Agent
@@ -909,9 +993,11 @@ func scanAgentRows(rows pgx.Rows, hub *ws.Hub, now time.Time) []models.Agent {
 			&stateStr, &policyRaw, &a.EnrolledAt, &a.Sims,
 			&a.StoppedBy, &a.StoppedByName, &a.StoppedAt, &a.StopReason,
 			&a.GroupID, &a.GroupName, &a.UninstallError, &a.UninstallErrorAt, &uninstallRequestedAt,
-			&a.Transport); err != nil {
+			&a.Transport, &a.TrayHidden, &a.ForceRemoved, &a.FactoryLab, &a.AgentVersion); err != nil {
 			continue
 		}
+		a.BelowMinVersion = belowMinimumAgentVersion(a.AgentVersion, minVersion)
+		a.MinAgentVersion = minVersion
 		// Connectivity is heartbeat-driven: a dead/rebooted agent stops updating
 		// last_update, so surface it as offline rather than its frozen last status.
 		a.Status = models.EffectiveAgentStatus(a.Status, a.LastUpdate, now)
@@ -971,10 +1057,18 @@ func groupRecursiveFilter(args []any, groupID int64) (string, []any) {
 // keyset-paginated APIs accept. See
 // TestGetAgents_Paginated_ConcurrentHeartbeat_NoDuplicateOrCollateralSkip.
 type agentCursor struct {
-	Snapshot   time.Time `json:"snapshot"`
-	LastUpdate time.Time `json:"last_update"`
-	AgentID    string    `json:"agent_id"`
+	// Hostname is the lower-cased sort key of the last row returned (agentSortKeySQL), AgentID its tie-break.
+	Hostname string `json:"hostname"`
+	AgentID  string `json:"agent_id"`
+	// Alpha marks a cursor issued by the hostname-ordered list. A cursor from the earlier last_update ordering
+	// has no such mark and is refused (the client starts again from page 1) rather than read as a position.
+	Alpha bool `json:"alpha"`
 }
+
+// agentSortKeySQL is the list's sort key: the hostname, case-insensitive. The list is ordered by it (then by
+// agent_id) so rows stay where they are while agents heartbeat; ordered by last_update, as it used to be, the
+// table reshuffled every time any agent communicated.
+const agentSortKeySQL = "LOWER(COALESCE(a.hostname, ''))"
 
 func encodeAgentCursor(c agentCursor) string {
 	b, _ := json.Marshal(c)
@@ -1069,7 +1163,7 @@ func (h *Handler) getAgentsUnpaginated(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	agents := scanAgentRows(rows, h.hub, time.Now())
+	agents := scanAgentRows(rows, h.hub, time.Now(), h.minimumAgentVersion(r.Context()))
 	if agents == nil {
 		agents = []models.Agent{}
 	}
@@ -1092,7 +1186,6 @@ func (h *Handler) getAgentsPaginated(w http.ResponseWriter, r *http.Request, lim
 		limit = 500
 	}
 
-	var snapshot time.Time
 	var cursor agentCursor
 	if cursorParam != "" {
 		c, err := decodeAgentCursor(cursorParam)
@@ -1100,19 +1193,11 @@ func (h *Handler) getAgentsPaginated(w http.ResponseWriter, r *http.Request, lim
 			jsonError(w, "invalid cursor", http.StatusBadRequest)
 			return
 		}
-		cursor = c
-		snapshot = cursor.Snapshot
-	} else {
-		// The first page takes its snapshot from the database clock, the same
-		// clock that stamps last_update. Taking it from this host's clock lets
-		// two clocks disagree: a freshly stamped agent can fall after the
-		// snapshot and disappear from the page.
-		var err error
-		snapshot, err = h.databaseNow(r.Context())
-		if err != nil {
-			jsonError(w, "read database time: "+err.Error(), http.StatusInternalServerError)
+		if !c.Alpha {
+			jsonError(w, "invalid cursor", http.StatusBadRequest)
 			return
 		}
+		cursor = c
 	}
 
 	var hasGroup bool
@@ -1128,8 +1213,7 @@ func (h *Handler) getAgentsPaginated(w http.ResponseWriter, r *http.Request, lim
 
 	// Row-list query.
 	var args []any
-	args = append(args, snapshot)
-	where := []string{"a.last_update <= $" + strconv.Itoa(len(args))}
+	var where []string
 
 	if hasGroup {
 		var frag string
@@ -1137,8 +1221,8 @@ func (h *Handler) getAgentsPaginated(w http.ResponseWriter, r *http.Request, lim
 		where = append(where, frag)
 	}
 	if cursorParam != "" {
-		args = append(args, cursor.LastUpdate, cursor.AgentID)
-		where = append(where, fmt.Sprintf("(a.last_update, a.agent_id) < ($%d, $%d)", len(args)-1, len(args)))
+		args = append(args, cursor.Hostname, cursor.AgentID)
+		where = append(where, fmt.Sprintf("("+agentSortKeySQL+", a.agent_id) > ($%d, $%d)", len(args)-1, len(args)))
 	}
 	if qParam := qs.Get("q"); qParam != "" {
 		args = append(args, "%"+qParam+"%")
@@ -1153,9 +1237,13 @@ func (h *Handler) getAgentsPaginated(w http.ResponseWriter, r *http.Request, lim
 	}
 	args = append(args, limit+1)
 
+	whereSQL := ""
+	if len(where) > 0 {
+		whereSQL = " WHERE " + strings.Join(where, " AND ")
+	}
 	query := "SELECT " + agentSelectColumns + " " + agentFromJoins +
-		" WHERE " + strings.Join(where, " AND ") +
-		" ORDER BY a.last_update DESC, a.agent_id DESC" +
+		whereSQL +
+		" ORDER BY " + agentSortKeySQL + " ASC, a.agent_id ASC" +
 		" LIMIT $" + strconv.Itoa(len(args))
 
 	rows, err := h.db.Query(r.Context(), query, args...)
@@ -1163,7 +1251,7 @@ func (h *Handler) getAgentsPaginated(w http.ResponseWriter, r *http.Request, lim
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	agents := scanAgentRows(rows, h.hub, time.Now())
+	agents := scanAgentRows(rows, h.hub, time.Now(), h.minimumAgentVersion(r.Context()))
 	rows.Close()
 
 	hasMore := len(agents) > limit
@@ -1178,9 +1266,9 @@ func (h *Handler) getAgentsPaginated(w http.ResponseWriter, r *http.Request, lim
 	if hasMore {
 		last := agents[len(agents)-1]
 		nextCursor = encodeAgentCursor(agentCursor{
-			Snapshot:   snapshot,
-			LastUpdate: last.LastUpdate,
-			AgentID:    last.AgentID,
+			Hostname: strings.ToLower(last.Hostname),
+			AgentID:  last.AgentID,
+			Alpha:    true,
 		})
 	}
 
@@ -1248,6 +1336,12 @@ func (h *Handler) SetAgentState(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "invalid state: must be active, restricted, quarantined, or retired", http.StatusBadRequest)
 		return
 	}
+	if h.refuseIfForceRemoved(w, r, agentID) {
+		return
+	}
+	if body.State == "active" && h.refuseUntrustedRestore(w, r, agentID) {
+		return
+	}
 	tag, err := h.db.Exec(r.Context(),
 		`UPDATE agents SET state = $1 WHERE agent_id = $2`, body.State, agentID)
 	if err != nil {
@@ -1261,6 +1355,26 @@ func (h *Handler) SetAgentState(w http.ResponseWriter, r *http.Request) {
 	h.auditLog(r, "agent.state", agentID, map[string]any{"state": body.State}, "ok")
 	h.hub.BroadcastBrowsers(models.WSMessage{Type: models.MsgAgentUpdate, AgentID: agentID})
 	respond(w, map[string]any{"agentId": agentID, "state": body.State})
+}
+
+// errForceRemovedText is what every refused change to a force-removed agent says.
+const errForceRemovedText = "this agent was force-removed, which is permanent: it cannot be reactivated, revoked or uninstalled again"
+
+// refuseIfForceRemoved answers 409 and reports true when the agent was force-removed. The database trigger
+// refuses the change regardless; this gives the caller a clear reason instead of a database error. A lookup
+// failure is not treated as "not removed": it answers 500 and reports true so the caller stops.
+func (h *Handler) refuseIfForceRemoved(w http.ResponseWriter, r *http.Request, agentID string) bool {
+	var removed bool
+	if err := h.db.QueryRow(r.Context(),
+		`SELECT COALESCE((SELECT force_removed_at IS NOT NULL FROM agents WHERE agent_id = $1), false)`, agentID).Scan(&removed); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return true
+	}
+	if removed {
+		jsonError(w, errForceRemovedText, http.StatusConflict)
+		return true
+	}
+	return false
 }
 
 // POST /api/agents/{agentId}/stop — durably stops a connected agent: the
@@ -1353,6 +1467,30 @@ func (h *Handler) DownloadAgent(w http.ResponseWriter, r *http.Request) {
 	// The Linux setup file is built per request (CA, server details and the verified agent).
 	if platform == "linux-amd64-setup" {
 		h.serveLinuxSetup(w, r)
+		return
+	}
+
+	if platform == "darwin-arm64-setup" || platform == "darwin-amd64-setup" {
+		h.serveMacSetup(w, r, strings.TrimSuffix(strings.TrimPrefix(platform, "darwin-"), "-setup"))
+		return
+	}
+
+	if platform == "linux-uninstall" {
+		h.serveLinuxUninstall(w, r)
+		return
+	}
+	if platform == "darwin-uninstall" {
+		h.serveMacUninstall(w, r)
+		return
+	}
+
+	if platform == "linux-arm64-setup" {
+		h.serveLinuxSetupFor(w, r, "arm64")
+		return
+	}
+
+	if platform == "windows-amd64-msi" {
+		h.serveWindowsMSI(w, r)
 		return
 	}
 
@@ -1468,11 +1606,14 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "invalid heartbeat payload", http.StatusBadRequest)
 		return
 	}
+	if !agentMatchesCertificate(w, r, hb.AgentID) {
+		return
+	}
 
 	// Verify binary hash against the manifest if one is loaded.
 	trusted := false
 	if hb.BinaryHash != "" && h.manifest != nil && h.manifest.Loaded() {
-		trusted = h.manifest.HashKnown(hb.BinaryHash)
+		trusted = h.manifest.TrustedHash(hb.BinaryHash) && !h.revokedFailClosed(r.Context(), hb.BinaryHash)
 		if !trusted {
 			log.Printf("[!] agent %s binary hash MISMATCH — possible tampered binary (hash %s...)",
 				hb.AgentID, hb.BinaryHash[:16])
@@ -1483,8 +1624,8 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 
 	_, err := h.db.Exec(r.Context(), `
 		INSERT INTO agents (agent_id, hostname, ip_address, os_version, username, status, env_label,
-		                    binary_hash, binary_trusted, protocol_version, state, last_update)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'active', NOW())
+		                    binary_hash, binary_trusted, protocol_version, state, last_update, agent_version)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'active', NOW(), $11)
 		ON CONFLICT (agent_id) DO UPDATE SET
 			hostname         = EXCLUDED.hostname,
 			ip_address       = EXCLUDED.ip_address,
@@ -1495,9 +1636,11 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 			binary_hash      = EXCLUDED.binary_hash,
 			binary_trusted   = EXCLUDED.binary_trusted,
 			protocol_version = EXCLUDED.protocol_version,
+			-- An older agent that sends no version must not blank a stored one.
+			agent_version    = COALESCE(NULLIF(EXCLUDED.agent_version, ''), agents.agent_version),
 			last_update      = NOW()`,
 		hb.AgentID, hb.Hostname, hb.IPAddr, hb.OSVer, hb.Username, hb.Status, hb.EnvLabel,
-		hb.BinaryHash, trusted, hb.ProtocolVersion,
+		hb.BinaryHash, trusted, hb.ProtocolVersion, hb.AgentVersion,
 	)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -1519,6 +1662,15 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 	// pre-upgrade agent binary that doesn't send this field must not clobber
 	// a known value back to the 'legacy' column default. See
 	// models.Agent.Transport's doc comment.
+	// Which CA roots the agent trusts (planned CA rotation). Stored only when reported, like transport.
+	if len(hb.TrustedRootFingerprints) > 0 {
+		if fps, err := json.Marshal(hb.TrustedRootFingerprints); err == nil {
+			_, _ = h.db.Exec(r.Context(),
+				`UPDATE agents SET trusted_root_fps = $2::jsonb WHERE agent_id = $1`,
+				hb.AgentID, string(fps))
+		}
+	}
+
 	if hb.Transport != "" {
 		_, _ = h.db.Exec(r.Context(),
 			`UPDATE agents SET transport = $2 WHERE agent_id = $1`,
@@ -1534,23 +1686,26 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 			hb.AgentID, *hb.DomainJoined)
 	}
 
-	// Quarantine if manifest is loaded and the binary hash is not recognised.
-	// Only transition active→quarantined, never overwrite an already-quarantined agent.
-	if hb.BinaryHash != "" && h.manifest != nil && h.manifest.Loaded() && !trusted {
-		_, _ = h.db.Exec(r.Context(),
-			`UPDATE agents SET state = 'quarantined' WHERE agent_id = $1 AND state = 'active'`,
-			hb.AgentID)
-		log.Printf("[!] agent %s QUARANTINED — binary hash unrecognised", hb.AgentID)
+	// Binary trust drives the agent state (see integrity.NextAgentState): a current
+	// binary returns an outdated agent to active, a previous signed release degrades
+	// it, and an unknown binary quarantines it. Quarantine is never lifted here.
+	if hb.BinaryHash != "" && h.manifest != nil && h.manifest.Loaded() {
+		h.applyBinaryTrustState(r.Context(), hb.AgentID, hb.BinaryHash, trusted)
 	}
 
 	// Fetch current state and policy to return to the agent.
 	var stateStr, policyRaw string
+	var trayOverride *bool
+	var trayFleetDefault bool
 	h.db.QueryRow(r.Context(),
-		`SELECT COALESCE(state,'active'), COALESCE(policy_json::text,'{}') FROM agents WHERE agent_id = $1`,
+		`SELECT COALESCE(state,'active'), COALESCE(policy_json::text,'{}'), tray_hidden,
+		        COALESCE((SELECT (value->>'hidden')::boolean FROM fleet_settings WHERE key = 'tray_icon'), false)
+		 FROM agents WHERE agent_id = $1`,
 		hb.AgentID,
-	).Scan(&stateStr, &policyRaw)
+	).Scan(&stateStr, &policyRaw, &trayOverride, &trayFleetDefault)
 	var policy models.PolicyBundle
 	json.Unmarshal([]byte(policyRaw), &policy)
+	policy.HideTrayIcon = effectiveTrayHidden(trayOverride, trayFleetDefault)
 
 	// Handle attack-path job progress if the agent reports one.
 	if hb.CurrentJobID != "" && hb.JobProgress.Stage != "" {
@@ -1599,10 +1754,13 @@ func (h *Handler) EnrollAgent(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "invalid enrollment payload — agentId required", http.StatusBadRequest)
 		return
 	}
+	if !agentMatchesCertificate(w, r, req.AgentID) {
+		return
+	}
 
 	trusted := false
 	if req.BinaryHash != "" && h.manifest != nil && h.manifest.Loaded() {
-		trusted = h.manifest.HashKnown(req.BinaryHash)
+		trusted = h.manifest.TrustedHash(req.BinaryHash) && !h.revokedFailClosed(r.Context(), req.BinaryHash)
 		if !trusted {
 			log.Printf("[enroll] agent %s binary hash unrecognised — will enroll as active but flag untrusted", req.AgentID)
 		}
@@ -1625,8 +1783,8 @@ func (h *Handler) EnrollAgent(w http.ResponseWriter, r *http.Request) {
 	_, err := h.db.Exec(r.Context(), `
 		INSERT INTO agents (agent_id, hostname, ip_address, os_version, username,
 		                    status, env_label, binary_hash, binary_trusted,
-		                    state, policy_json, posture_catalog, enrolled_at, last_update)
-		VALUES ($1, $2, $3, $4, $5, 'idle', $6, $7, $8, 'active', $9, $10, NOW(), NOW())
+		                    state, policy_json, posture_catalog, enrolled_at, last_update, agent_version)
+		VALUES ($1, $2, $3, $4, $5, 'idle', $6, $7, $8, 'active', $9, $10, NOW(), NOW(), $11)
 		ON CONFLICT (agent_id) DO UPDATE SET
 			hostname       = EXCLUDED.hostname,
 			ip_address     = EXCLUDED.ip_address,
@@ -1642,6 +1800,7 @@ func (h *Handler) EnrollAgent(w http.ResponseWriter, r *http.Request) {
 			policy_json    = EXCLUDED.policy_json,
 			posture_catalog = EXCLUDED.posture_catalog,
 			enrolled_at    = COALESCE(agents.enrolled_at, NOW()),
+			agent_version  = COALESCE(NULLIF(EXCLUDED.agent_version, ''), agents.agent_version),
 			-- A fresh enrollment is itself evidence someone restarted the agent —
 			-- clear any prior remote-stop record unconditionally.
 			stopped_by     = NULL,
@@ -1649,7 +1808,7 @@ func (h *Handler) EnrollAgent(w http.ResponseWriter, r *http.Request) {
 			stop_reason    = NULL,
 			last_update    = NOW()`,
 		req.AgentID, req.Hostname, req.IPAddress, req.OSVersion, req.Username,
-		req.EnvLabel, req.BinaryHash, trusted, policyJSON, postureCatalog,
+		req.EnvLabel, req.BinaryHash, trusted, policyJSON, postureCatalog, req.AgentVersion,
 	)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -1881,6 +2040,12 @@ type dispatchOpts struct {
 	// again, so a publish between the two lookups cannot make the validated
 	// and the executed versions differ. nil means dispatchRun resolves itself.
 	Resolved *scenario.ExecutableVersion
+	// ValidationProfile bounds a factory-validation dispatch. "representative"
+	// applies the deterministic, capped subset selector after BuildSteps so a
+	// large scenario validates within a predictable budget; "" / "full" run the
+	// whole expansion. Coverage is recorded on scenario_runs. See
+	// docs/superpowers/specs/2026-11-03-factory-representative-validation-design.md.
+	ValidationProfile scenario.ValidationProfile
 }
 
 // nullIfEmpty maps "" to a SQL NULL so an ad-hoc run leaves campaign_id null
@@ -2043,7 +2208,7 @@ func (h *Handler) markRunFailed(ctx context.Context, runID string, reason string
 // caller-supplied, so a validationlab caller cannot accidentally dispatch in
 // any other mode.
 func (h *Handler) DispatchFactoryValidation(ctx context.Context, sc *scenario.Scenario, agentID string) (runID, skipReason string, err error) {
-	return h.dispatchRun(ctx, sc, agentID, dispatchOpts{Mode: "factory-validation", Kind: contentregistry.KindFactoryValidation})
+	return h.dispatchRun(ctx, sc, agentID, dispatchOpts{Mode: "factory-validation", Kind: contentregistry.KindFactoryValidation, ValidationProfile: scenario.ValidationProfileRepresentative})
 }
 
 func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentID string, o dispatchOpts) (runID string, skipReason string, err error) {
@@ -2107,7 +2272,7 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 		return "", "factory-validation dispatch requires the factory-owned lab agent", nil
 	}
 	if o.Mode != "factory-validation" && isFactoryLab {
-		return "", "the factory-owned lab agent cannot be dispatched to in mode " + o.Mode, nil
+		return "", "this agent is the factory validation lab and cannot run " + o.Mode + " scenarios. If it should be an ordinary agent, remove VALIDATION_LAB_AGENT_ID from the server configuration and restart the orchestrator", nil
 	}
 
 	// ── OS compatibility check ────────────────────────────────────────────────
@@ -2456,7 +2621,48 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 			runID, o.VariantDepth, baseCount, len(steps))
 	}
 
+	// Representative factory validation: bound the expanded step set to a
+	// deterministic, capped subset so a large scenario validates within a
+	// predictable budget. Coverage is persisted on the run (and copied into the
+	// validation evidence by the lab); steps_total_base above stays the honest
+	// full count. Only the representative profile narrows -- "" / full are
+	// dispatched whole.
+	if o.ValidationProfile == scenario.ValidationProfileRepresentative {
+		subset, cov := scenario.SelectRepresentative(steps, scenario.DefaultRepresentativeLimits())
+		steps = subset
+		covJSON, _ := json.Marshal(cov)
+		if _, err := h.db.Exec(ctx,
+			`UPDATE scenario_runs SET validation_profile = $1, validation_coverage = $2 WHERE id = $3`,
+			string(o.ValidationProfile), covJSON, runID,
+		); err != nil {
+			return "", "", fmt.Errorf("persist validation coverage: %w", err)
+		}
+		log.Printf("[scenario] run %s: representative profile selected %d of %d step(s) across %d of %d technique(s) (truncated=%t)",
+			runID, cov.SelectedSteps, cov.TotalSteps, cov.TechniquesSelected, cov.TechniquesTotal, cov.Truncated)
+	}
+
 	h.persistStepMeta(ctx, runID, steps, resolved)
+
+	// Lab spray exemption (see labExceptionFor). Only the lab spray scenario, and
+	// only for the agent flagged is_spray_lab, gets LabException. A lookup error
+	// fails closed (no exemption). Every other dispatch keeps sc.LivePolicy as-is.
+	scPolicy := sc.LivePolicy
+	if labExceptionScenario(sc.ID) {
+		var isSprayLab bool
+		if qerr := h.db.QueryRow(ctx,
+			`SELECT is_spray_lab FROM agents WHERE agent_id = $1`, agentID,
+		).Scan(&isSprayLab); qerr != nil {
+			isSprayLab = false
+		}
+		if labExceptionFor(sc.ID, isSprayLab) {
+			p := &scenario.LivePolicy{}
+			if sc.LivePolicy != nil {
+				*p = *sc.LivePolicy
+			}
+			p.LabException = true
+			scPolicy = p
+		}
+	}
 
 	cmd := scenario.ScenarioCommand{
 		RunID:                runID,
@@ -2464,7 +2670,7 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 		Name:                 sc.Name,
 		Steps:                steps,
 		Mode:                 o.Mode,
-		Policy:               sc.LivePolicy,
+		Policy:               scPolicy,
 		PreventScreenTimeout: sc.PreventScreenTimeout,
 		InProcessPolicy:      inProcessPolicy,
 		SweepID:              o.SweepID,
@@ -3002,6 +3208,9 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "invalid payload — expected {runId, scenarioId, agentId, results}", http.StatusBadRequest)
 		return
 	}
+	if !agentMatchesCertificate(w, r, raw.AgentID) {
+		return
+	}
 	// validateAgentAuth/verifyResultMAC only prove possession of the
 	// fleet-wide shared secret, not which specific agent is submitting --
 	// reject a result that names an agent other than the one this run was
@@ -3062,6 +3271,7 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 					TechniqueID: m.TechniqueID,
 					Name:        m.Name,
 					Framework:   m.Framework,
+					ActionKey:   m.ActionKey,
 				}
 			}
 		}
@@ -3100,6 +3310,7 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		simResults = make([]models.SimulationResult, 0, len(raw.Results))
+		var rwBatch []rwStep
 		for _, execResult := range raw.Results {
 			step, found := stepMap[execResult.TaskID]
 			if !found {
@@ -3108,7 +3319,10 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 			sim := scenario.Interpret(step, execResult)
 			simResults = append(simResults, sim)
 			h.recordRWEvidence(r.Context(), raw.RunID, raw.ScenarioID, step, sim)
+			h.recordADEvidence(r.Context(), raw.RunID, raw.ScenarioID, step, sim)
+			rwBatch = append(rwBatch, rwStep{Step: step, Sim: sim})
 		}
+		h.recordRecoveryBatch(r.Context(), raw.RunID, raw.ScenarioID, rwBatch)
 	}
 
 	// Merge in any steps the server itself excluded before dispatch under a
@@ -3211,6 +3425,13 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 		scoreJSON, _ := json.Marshal(score)
 		h.db.Exec(r.Context(),
 			`UPDATE scenario_runs SET score = $1 WHERE id = $2`, scoreJSON, raw.RunID)
+	}
+
+	// A finished variant run records its cleanup outcome, stored apart from the attack verdicts above.
+	if status == "completed" || status == "partial" || status == "failed" {
+		if err := h.recordVariantCleanupState(r.Context(), raw.RunID, simResults); err != nil {
+			log.Printf("[variant] record cleanup state for run %s: %v", raw.RunID, err)
+		}
 	}
 
 	// Environment Restoration — count cleanup failures and write hygiene_score.
@@ -3403,6 +3624,11 @@ func scanRunRows(rows pgx.Rows) ([]runRow, error) {
 func (h *Handler) ListScenarioRuns(w http.ResponseWriter, r *http.Request) {
 	agentID := r.URL.Query().Get("agentId")
 	scenarioID := r.URL.Query().Get("scenarioId")
+	// The factory validation lab runs content checks on its own agent every few minutes. Those runs are the
+	// product's internal quality loop, not customer assessments: left in, they flood Live Runs and skew every
+	// figure the console computes from this list (posture, coverage, reports). They stay out of the list unless the
+	// caller asks for them (includeFactory=1) or is looking at one specific agent, such as the lab agent's drawer.
+	includeFactory := r.URL.Query().Get("includeFactory") == "1" || agentID != ""
 
 	rows, err := h.db.Query(r.Context(),
 		`SELECT id, scenario_id, agent_id, sweep_id, em_sweep_id, name, status, results, score, initiated_by, started_at, completed_at,
@@ -3411,8 +3637,9 @@ func (h *Handler) ListScenarioRuns(w http.ResponseWriter, r *http.Request) {
 		 FROM scenario_runs
 		 WHERE ($1 = '' OR agent_id = $1)
 		   AND ($2 = '' OR scenario_id = $2)
+		   AND ($3 OR execution_kind <> 'factory_validation')
 		 ORDER BY started_at DESC LIMIT 100`,
-		agentID, scenarioID,
+		agentID, scenarioID, includeFactory,
 	)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -3773,6 +4000,11 @@ func (h *Handler) GetConnectionConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if h.advertisedEnrollPort > 0 {
 		resp["enrollPort"] = strconv.Itoa(h.advertisedEnrollPort)
+	}
+	if h.signingKey != nil {
+		if fp, err := deployconfig.Fingerprint(h.signingKey.CertPEM()); err == nil {
+			resp["deploymentSigningFingerprint"] = fp
+		}
 	}
 	respond(w, resp)
 }
@@ -4382,7 +4614,7 @@ type AdversaryTemplate struct {
 var adversaryTemplates = []AdversaryTemplate{
 	{
 		ID: "apt29-quick", Name: "APT29 Quick", ShortName: "APT29",
-		Description: "Five-stage Cozy Bear / NOBELIUM post-compromise tradecraft (domain recon, encoded loader, run-key persistence, scheduled task, DNS C2 beacon). ~15 min, production-safe.",
+		Description: "Six-stage Cozy Bear / NOBELIUM post-compromise tradecraft (domain recon, encoded payload download, encoded execution, run-key persistence, scheduled task, DNS C2 beacon). ~15 min, production-safe.",
 		Category:    "apt", ThreatActor: "APT29 — Cozy Bear / NOBELIUM", MITREGroup: "G0016",
 		Tactics:       []string{"discovery", "execution", "persistence", "command-and-control"},
 		KeyTechniques: []string{"T1059.001", "T1482", "T1087.001", "T1547.001", "T1071.004"},
@@ -4394,7 +4626,7 @@ var adversaryTemplates = []AdversaryTemplate{
 	},
 	{
 		ID: "apt29-full", Name: "APT29 Full", ShortName: "APT29",
-		Description: "Extended APT29 emulation adding credential access, process injection, LOLBin proxy execution, and domain account enumeration on top of the Quick chain. ~45 min.",
+		Description: "Extended APT29 emulation: the six-stage kill chain plus ART-sourced credential access, process injection, LOLBin proxy execution and domain account enumeration. The APT29 Mastery scenarios (execution and evasion, persistence, credential access, command and control, collection) run separately. ~45 min.",
 		Category:    "apt", ThreatActor: "APT29 — Cozy Bear / NOBELIUM", MITREGroup: "G0016",
 		Tactics:       []string{"discovery", "credential-access", "execution", "defense-evasion", "persistence", "command-and-control"},
 		KeyTechniques: []string{"T1003.001", "T1059.001", "T1087.002", "T1218.011", "T1055.001", "T1482"},
@@ -5602,6 +5834,13 @@ func (h *Handler) GetBoardOnePager(w http.ResponseWriter, r *http.Request) {
 	}
 	h.auditLog(r, "report.export", scope, map[string]any{"format": format, "type": "board"}, "ok")
 
+	// Estimated annual loss (REQ-052): attached only when inputs exist for an open finding; otherwise the card stays hidden.
+	if rq, rerr := h.riskQuantification(r.Context(), report); rerr != nil {
+		log.Printf("[api] board loss estimate: %v — rendering without it", rerr)
+	} else {
+		report.RiskQuantification = rq
+	}
+
 	if format == "pdf" {
 		var pbuf bytes.Buffer
 		if perr := reporting.RenderBoardOnePagerPDF(r.Context(), &pbuf, report, compRows, genBy); perr != nil {
@@ -5660,15 +5899,18 @@ func (h *Handler) complianceRows(ctx context.Context, agentID string, filter str
 			continue
 		}
 		rows = append(rows, reporting.ComplianceSummaryRow{
-			Framework:     fw.Name + " " + fw.Version,
-			TotalControls: cr.Summary.TotalControls,
-			Manual:        cr.Summary.ManualControls,
-			Tested:        cr.Summary.TestedControls,
-			Passing:       cr.Summary.PassingControls,
-			Failing:       cr.Summary.FailingControls,
-			Untested:      cr.Summary.UntestedControls,
-			CompliancePct: cr.Summary.CompliancePercent,
-			CoveragePct:   cr.Summary.CoveragePercent,
+			Framework:      fw.Name + " " + fw.Version,
+			TotalControls:  cr.Summary.TotalControls,
+			Manual:         cr.Summary.ManualControls,
+			Tested:         cr.Summary.TestedControls,
+			Passing:        cr.Summary.PassingControls,
+			Failing:        cr.Summary.FailingControls,
+			Untested:       cr.Summary.UntestedControls,
+			CompliancePct:  cr.Summary.CompliancePercent,
+			CoveragePct:    cr.Summary.CoveragePercent,
+			Partial:        cr.Summary.PartialControls,
+			CoverageNote:   cr.Summary.CoverageNote,
+			MappingWarning: fw.MappingWarning,
 		})
 	}
 	return rows
@@ -5803,10 +6045,10 @@ func (h *Handler) GetComplianceDashboardScores(w http.ResponseWriter, r *http.Re
 	agentID := r.URL.Query().Get("agentId")
 
 	// Build framework metadata lookup for name enrichment.
-	type fwInfo struct{ name, shortName, regulator string }
+	type fwInfo struct{ name, shortName, regulator, mappingWarning string }
 	fwMeta := make(map[string]fwInfo)
 	for _, fw := range h.complianceMapper.Frameworks() {
-		fwMeta[fw.ID] = fwInfo{fw.Name, complianceShortName(fw.ID), fw.Regulator}
+		fwMeta[fw.ID] = fwInfo{fw.Name, complianceShortName(fw.ID), fw.Regulator, fw.MappingWarning}
 	}
 
 	type scoreResp struct {
@@ -5815,6 +6057,10 @@ func (h *Handler) GetComplianceDashboardScores(w http.ResponseWriter, r *http.Re
 		ShortName        string `json:"shortName"`
 		Regulator        string `json:"regulator"`
 		UntestedControls int    `json:"untestedControls"`
+		// Coverage context that must be shown beside the resistance rate (compliancePct).
+		SufficientCoverage bool   `json:"sufficientCoverage"`
+		CoverageNote       string `json:"coverageNote,omitempty"`
+		MappingWarning     string `json:"mappingWarning,omitempty"`
 	}
 
 	var snaps []db.ComplianceSnapshot
@@ -5847,9 +6093,21 @@ func (h *Handler) GetComplianceDashboardScores(w http.ResponseWriter, r *http.Re
 			ShortName:          meta.shortName,
 			Regulator:          meta.regulator,
 			UntestedControls:   s.TestableControls - s.TestedControls,
+			SufficientCoverage: s.TestedControls > 0 && s.CoveragePct >= compliance.MinConclusiveCoveragePercent,
+			CoverageNote:       coverageNoteFor(s.TestedControls, s.CoveragePct),
+			MappingWarning:     meta.mappingWarning,
 		})
 	}
 	respond(w, out)
+}
+
+// coverageNoteFor is the wording shown beside a resistance rate that rests on too little testing; empty when coverage
+// is enough. It uses the same threshold as the per-framework report.
+func coverageNoteFor(tested int, coveragePct float64) string {
+	if tested > 0 && coveragePct >= compliance.MinConclusiveCoveragePercent {
+		return ""
+	}
+	return compliance.InsufficientCoverageNote
 }
 
 // complianceShortName returns the dashboard display label for a framework ID.
@@ -5892,7 +6150,7 @@ func sanitizeFilename(s string) string {
 
 // buildReportFilename produces every downloadable report/export's filename
 // in one consistent, sortable, self-explanatory shape:
-// Audspect_<ReportType>_<Scope>_<YYYY-MM-DD_HH-mm-ss>.<ext> -- so a
+// Audspect_<ReportType>_<Scope>_<YYYY-MM-DD>.<ext> -- so a
 // customer's Downloads folder stays identifiable even with hundreds of
 // reports accumulated, and files from the same moment sort together
 // regardless of report type. reportType is passed pre-formatted (e.g.
@@ -5923,7 +6181,7 @@ func buildReportFilename(reportType, scope, ext string) string {
 	if safeScope == "" {
 		safeScope = "report"
 	}
-	ts := time.Now().UTC().Format("2006-01-02_15-04-05")
+	ts := time.Now().UTC().Format("2006-01-02")
 	return fmt.Sprintf("Audspect_%s_%s_%s.%s", reportType, safeScope, ts, ext)
 }
 
@@ -6470,7 +6728,15 @@ func (h *Handler) GetRunReportData(w http.ResponseWriter, r *http.Request) {
 	).Scan(&alertsTotal, &alertsHighFidelity, &noiseScore,
 		&perfCpuBefore, &perfCpuAfter, &perfRamBefore, &perfRamAfter, &perfDiskBefore, &perfDiskAfter)
 
+	// Execution coverage: how many scheduled steps ran to a result, separate from the security verdicts above. A run that
+	// cannot be read here still returns its report; the coverage field is then zero, not a guess.
+	coverage, covErr := runExecutionCoverage(r.Context(), h.db, runID)
+	if covErr != nil {
+		log.Printf("[!] execution coverage for run %s: %v", runID, covErr)
+	}
+
 	respond(w, map[string]any{
+		"executionCoverage":      coverage,
 		"topFindings":            report.TopFindings,
 		"recommendations":        report.Summary.Recommendations,
 		"killChain":              report.KillChain,

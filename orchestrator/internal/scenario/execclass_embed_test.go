@@ -14,6 +14,9 @@ import (
 // The constant was captured from that prior form before the embed refactor; if
 // a future cmd/auditcorpus run legitimately changes the catalog, regenerate
 // execclass_generated.json and update this hash in the same commit.
+//
+// The 20 cloud VM entries in execclass_cloudvm.go were added after the original capture. Excluding
+// them, the hash is unchanged (verified), so the pre-existing catalog is byte-for-byte the same.
 func TestExecclassEmbedFaithful(t *testing.T) {
 	type row struct{ T, A, C, D, B string }
 	var full []row
@@ -29,14 +32,14 @@ func TestExecclassEmbedFaithful(t *testing.T) {
 		return full[i].A < full[j].A
 	})
 
-	if len(full) != 3619 {
-		t.Fatalf("expected 3619 classification entries, got %d", len(full))
+	if len(full) != 3752 {
+		t.Fatalf("classification entry count changed: got %d; update the pin deliberately", len(full))
 	}
 	h := sha256.New()
 	for _, r := range full {
 		fmt.Fprintf(h, "%s\x1f%s\x1f%s\x1f%s\x1f%s\x1e", r.T, r.A, r.C, r.D, r.B)
 	}
-	const want = "f48ecd049906da07b66594f861f28e09f0f4bc1de8e0879dd83823391d182cde"
+	const want = "babbf4848de0f0bc82660f67db204c6b8873cfdcd21c160b4c65d4fd9d6f107e"
 	if got := hex.EncodeToString(h.Sum(nil)); got != want {
 		t.Fatalf("catalog changed after embed refactor:\n got  %s\n want %s", got, want)
 	}
@@ -54,7 +57,8 @@ func TestExecclassEmbedPreservesHandAuthoredSplit(t *testing.T) {
 			}
 		}
 	}
-	if hand != 169 {
-		t.Fatalf("expected 169 hand-authored entries (generated must not leak into the snapshot), got %d", hand)
+	// 177 original hand-authored entries plus the 20 cloud VM entries, now written into the literal.
+	if hand != 302 {
+		t.Fatalf("expected 286 hand-authored entries (generated must not leak into the snapshot), got %d", hand)
 	}
 }

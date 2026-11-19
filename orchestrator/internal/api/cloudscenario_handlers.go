@@ -85,7 +85,21 @@ func (h *Handler) TriggerCloudScenarioRun(w http.ResponseWriter, r *http.Request
 		req.InitiatedBy = c.UserID
 	}
 
-	discoverer, err := cloudDiscovererFor(r.Context(), body.Account)
+	// A scenario run always discovers, so it always takes the allow-list check
+	// and a gate slot for the account.
+	settings := h.cloudSettings()
+	if err := settings.permitAccount(body.Account); err != nil {
+		h.refuseCloudRequest(w, r, "cloud.scenario.run", body.Account, err)
+		return
+	}
+	release, err := settings.gate.Acquire(r.Context(), body.Account)
+	if err != nil {
+		h.refuseCloudRequest(w, r, "cloud.scenario.run", body.Account, err)
+		return
+	}
+	defer release()
+
+	discoverer, err := cloudDiscovererFor(r.Context(), settings, body.Account)
 	if err != nil {
 		h.auditCloudScenario(r, body, "", err)
 		jsonError(w, err.Error(), discoveryStatusCode(err))
@@ -94,7 +108,7 @@ func (h *Handler) TriggerCloudScenarioRun(w http.ResponseWriter, r *http.Request
 	req.Discoverer = discoverer
 
 	if body.Observe != nil {
-		source, err := cloudEventSourceFor(r.Context(), body.Account)
+		source, err := cloudEventSourceFor(r.Context(), settings, body.Account)
 		if err != nil {
 			h.auditCloudScenario(r, body, "", err)
 			jsonError(w, err.Error(), discoveryStatusCode(err))

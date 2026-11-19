@@ -1,0 +1,37 @@
+id: apt36-kill-chain
+product_line: killchain
+name: "APT36 Kill Chain (Three-Tier)"
+description: >
+  Ten-stage emulation of documented APT36 (Transparent Tribe / PROJECTM) tradecraft on Windows, reworked from
+  the original five-category pack to attribute each stage to a single MITRE technique and run it for real with
+  run-tagged, independently verified artifacts. s1 a renamed-binary parent spawning PowerShell (delivery itself,
+  T1566.001, is not part of this chain); s2 a document with a remote attachedTemplate relationship fetched from a
+  loopback server, without opening Office; s3 a keyboard-hook API capability probe only, not a real hook; s4 an
+  HKCU Run key write/read/delete; s5 a jittered DNS A-record beacon (telemetry mode; the earlier T1071.001 mapping
+  was an HTTP technique and has moved to the command-control mastery pack); s6 a scheduled task created, run once
+  and deleted; s7 an mshta HTA dropper chain; s8 a regsvr32 local JScript scriptlet chain; s9 a DNS TXT beacon
+  (telemetry mode, the CrimsonRAT channel-registration pattern); s10 a download cradle with SHA-256 verification,
+  payload never executed. A PASS means a Microsoft Defender or AppLocker block event names the stage; a stage
+  that did not run and has no such event is inconclusive, never a pass. Host telemetry visibility is reported
+  separately from prevention.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - apt36
+  - transparent-tribe
+  - projectm
+  - spearphish
+  - bfsi
+  - india
+  - kill-chain
+  - three-tier
+mitre_phases:
+  - initial-access
+  - execution
+  - collection
+  - persistence
+  - command-and-control
+
+steps:

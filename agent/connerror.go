@@ -4,9 +4,13 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"net"
+	"net/http"
 	"strings"
 	"time"
+
+	"audspect/agent/protocol"
 )
 
 // ConnErrorCategory classifies a real connection-attempt failure.
@@ -59,6 +63,14 @@ func ClassifyConnError(err error) LastConnError {
 		if strings.Contains(msg, s) {
 			return LastConnError{Category: ConnErrorProxyAuth, Detail: msg, At: time.Now()}
 		}
+	}
+
+	// The server answered and refused: an unauthorized/forbidden status on enrollment is a rejected secret,
+	// not a transport problem.
+	var statusErr *protocol.StatusError
+	if errors.As(err, &statusErr) && (statusErr.Code == http.StatusUnauthorized || statusErr.Code == http.StatusForbidden) {
+		return LastConnError{Category: ConnErrorServerRejected, At: time.Now(),
+			Detail: fmt.Sprintf("the server rejected enrollment (%d on %s): the agent secret does not match the server's AGENT_SECRET. %s", statusErr.Code, statusErr.Path, msg)}
 	}
 
 	var dnsErr *net.DNSError

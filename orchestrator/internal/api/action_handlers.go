@@ -113,7 +113,18 @@ func (h *Handler) UpdateResponseConnector(w http.ResponseWriter, r *http.Request
 	}
 	// Preserve masked sensitive values (UI returns "***" for secrets it can't show).
 	var existingSecret, existingAPIToken string
-	h.db.QueryRow(r.Context(), `SELECT client_secret, api_token FROM action_connectors WHERE id=$1`, id).Scan(&existingSecret, &existingAPIToken)
+	var secretRef, apiTokenRef string
+	h.db.QueryRow(r.Context(), `SELECT client_secret, client_secret_ref, api_token, api_token_ref FROM action_connectors WHERE id=$1`, id).
+		Scan(&existingSecret, &secretRef, &existingAPIToken, &apiTokenRef)
+	var resolveErr error
+	if existingSecret, resolveErr = h.resolveCredential(r.Context(), secretRef, existingSecret); resolveErr != nil {
+		jsonError(w, "stored credential unavailable", http.StatusInternalServerError)
+		return
+	}
+	if existingAPIToken, resolveErr = h.resolveCredential(r.Context(), apiTokenRef, existingAPIToken); resolveErr != nil {
+		jsonError(w, "stored credential unavailable", http.StatusInternalServerError)
+		return
+	}
 	if req.ClientSecret == "***" {
 		req.ClientSecret = existingSecret
 	}
@@ -191,12 +202,19 @@ func (h *Handler) TestResponseConnector(w http.ResponseWriter, r *http.Request) 
 func (h *Handler) loadResponseConnector(ctx context.Context, id string) (*actions.ConnectorConfig, bool, error) {
 	var cfg actions.ConnectorConfig
 	var enabled bool
+	var secretRef, apiTokenRef string
 	err := h.db.QueryRow(ctx,
-		`SELECT provider, enabled, tenant_id, client_id, client_secret, base_url, kill_process_script_name, api_token
+		`SELECT provider, enabled, tenant_id, client_id, client_secret, client_secret_ref, base_url, kill_process_script_name, api_token, api_token_ref
 		   FROM action_connectors WHERE id=$1`, id,
-	).Scan(&cfg.Provider, &enabled, &cfg.TenantID, &cfg.ClientID, &cfg.ClientSecret,
-		&cfg.BaseURL, &cfg.KillProcessScriptName, &cfg.APIToken)
+	).Scan(&cfg.Provider, &enabled, &cfg.TenantID, &cfg.ClientID, &cfg.ClientSecret, &secretRef,
+		&cfg.BaseURL, &cfg.KillProcessScriptName, &cfg.APIToken, &apiTokenRef)
 	if err != nil {
+		return nil, false, err
+	}
+	if cfg.ClientSecret, err = h.resolveCredential(ctx, secretRef, cfg.ClientSecret); err != nil {
+		return nil, false, err
+	}
+	if cfg.APIToken, err = h.resolveCredential(ctx, apiTokenRef, cfg.APIToken); err != nil {
 		return nil, false, err
 	}
 	return &cfg, enabled, nil

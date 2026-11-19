@@ -160,7 +160,9 @@ func (j *Job) processRun(ctx context.Context, runID, scenarioID string, resultsR
 func (j *Job) annotateSinkReceipts(ctx context.Context, runID string, results []models.SimulationResult) error {
 	rows, err := j.db.Query(ctx,
 		`SELECT t.technique_id, EXISTS (
-		   SELECT 1 FROM dlp_sink_receipts r WHERE r.token = t.token
+		   -- reachability probes carry no sensitive content; a probe receipt is not
+		   -- evidence that data reached the sink, so it is excluded here.
+		   SELECT 1 FROM dlp_sink_receipts r WHERE r.token = t.token AND r.channel <> 'reachability'
 		 ) AS received
 		 FROM dlp_sink_tokens t WHERE t.run_id = $1`,
 		runID,

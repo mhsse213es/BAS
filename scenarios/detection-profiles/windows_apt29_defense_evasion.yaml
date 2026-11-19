@@ -1,0 +1,46 @@
+# Detection Validation Profile — Windows execution / defense-evasion
+# activity exercised by APT29 Kill Chain Phase 7 (stages 11-14: WMI process
+# execution, rundll32 proxy execution, PowerShell obfuscation, event
+# logging impairment).
+profile: windows_apt29_defense_evasion
+version: 1
+technique_ids: [T1047, T1218.011, T1027, T1685.001]
+expected_detection:
+  - id: apt29-devasion-edr-process
+    provider: microsoft_defender
+    type: endpoint
+    confidence: required
+    finding:
+      severity: High
+      title: "Proxy-execution / WMI process-creation pattern not flagged"
+      remediation: >-
+        Flag process creation whose parent is WmiPrvSE.exe, and rundll32.exe
+        invoked by a scripting-engine parent with no corresponding
+        user-initiated action (Sysmon EID 1).
+      reference: "MITRE ATT&CK TA0005 — Defense Evasion"
+  - id: apt29-devasion-scriptblock
+    provider: microsoft_defender
+    type: endpoint
+    confidence: recommended
+    finding:
+      severity: Medium
+      title: "Obfuscated PowerShell not correlated via ScriptBlock logging"
+      remediation: >-
+        Enable and forward PowerShell ScriptBlock logging (EID 4104); alert
+        on de-obfuscated command text that differs materially from the
+        literal source (string concatenation, backtick insertion, case
+        randomization).
+      reference: "MITRE ATT&CK T1027 — Obfuscated Files or Information"
+  - id: apt29-devasion-logging-impairment
+    provider: microsoft_sentinel
+    type: siem
+    confidence: required
+    finding:
+      severity: Critical
+      title: "Event-log impairment not alerted as a standalone P1"
+      remediation: >-
+        Alert immediately on any Security-log auditing configuration
+        change (wevtutil sl /e:false or equivalent), independent of BAS
+        context — legitimate admin changes to this setting are rare and
+        planned, so this should never be low-priority noise.
+      reference: "MITRE ATT&CK T1685.001 — Hide Artifacts: Disable or Modify Tools"

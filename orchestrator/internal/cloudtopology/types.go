@@ -123,7 +123,7 @@ type RouteTableEntry struct {
 	ID              string `json:"id"`
 	SubnetID        string `json:"subnetId"`
 	DestinationCIDR string `json:"destinationCidr"`
-	Target          string `json:"target"`           // TargetLocal | TargetPeering | TargetInternetGateway | TargetNATGateway | TargetTransitGateway | TargetUnknown
+	Target          string `json:"target"`              // TargetLocal | TargetPeering | TargetInternetGateway | TargetNATGateway | TargetTransitGateway | TargetUnknown
 	TargetRef       string `json:"targetRef,omitempty"` // e.g. PeeringConnection.CanonicalID when Target == TargetPeering
 }
 

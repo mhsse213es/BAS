@@ -12,6 +12,7 @@ import (
 	exercisetracker "github.com/audspect/bas/internal/exercise/tracker"
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/telnetsink"
+	"github.com/audspect/bas/internal/wafmodsec"
 	"github.com/audspect/bas/internal/webhooksink"
 	"github.com/audspect/bas/internal/ws"
 )
@@ -37,6 +38,7 @@ func MountEnrollment(h *Handler) http.Handler {
 	r.Use(middleware.StripSlashes)
 	r.Use(LicenseGate)
 	r.Post("/api/agents/enroll-csr", h.EnrollCSR)
+	r.Post("/api/agents/recover-csr", h.RecoverCSR)
 	r.Get("/health", healthHandler)
 	return r
 }
@@ -73,7 +75,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	r.Get("/api/license/status", h.GetLicenseStatus)
 	r.Post("/api/auth/login", h.Login)
 	r.Post("/api/auth/logout", h.Logout)
-	r.Post("/api/auth/setup", h.Setup) // first-run admin provisioning (installer)
+	r.Post("/api/auth/recover", h.RecoverPassword) // forgotten administrator password: needs the setup.conf recovery passphrase
+	r.Post("/api/auth/setup", h.Setup)             // first-run admin provisioning (installer)
 	r.Get("/login/{tenantSlug}/sso", h.InitiateSSOLogin)
 	r.Get("/api/auth/sso/callback", h.SSOCallback)
 	r.Get("/api/config/ca-root", h.GetCARoot)
@@ -146,6 +149,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 
 	// ITSM inbound webhook — no JWT auth; connector validates via HMAC or IP allowlist
 	r.Post("/api/ticketing/webhook/{configId}", h.ReceiveTicketingWebhook)
+
+	// CI validation gate (REQ-057) — dedicated CI bearer token, not JWT.
+	h.registerCIValidationRoutes(r)
 
 	// SCIM (RFC 7644) — own per-tenant bearer-token auth, not JWT. See
 	// docs/superpowers/specs/2026-07-19-phase7-scim-provisioning-design.md.
@@ -233,13 +239,20 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 			r.Use(rateLimit)
 		}
 
+		// CI token management (admin, CanManageCITokens)
+		h.registerCITokenRoutes(r)
+
 		// Viewer + Analyst + Admin
 		r.Get("/api/agents", h.GetAgents)
+		r.Get("/api/fleet/tray-icon", h.GetFleetTrayIcon)
+		r.Get("/api/fleet/min-agent-version", h.GetFleetMinAgentVersion)
+		r.Get("/api/agent-binaries/revocations", h.ListBinaryRevocations)
 		r.Get("/api/agents/legacy-migration-status", h.GetLegacyMigrationStatus)
 		r.Get("/api/agents/download/{platform}", h.DownloadAgent)
 		r.Get("/api/scenarios", h.ListScenarios)
 		r.Get("/api/scenarios/api-bas", h.ListAPIBASScenarios)
 		r.Get("/api/scenarios/library", h.ListScenarioLibrary)
+		r.Get("/api/scenarios/intel-skipped", h.GetIntelSkippedActors)
 		r.Get("/api/scenarios/{id}", h.GetScenario)
 		r.Get("/api/ad/coverage", h.GetADCoverage)
 		// WebGW industry profiles (internal/webgwefficacy), same read-only
@@ -279,6 +292,46 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 			r.Get("/api/waf/scenarios/"+slug, h.wafScenarioJSONHandler(slug))
 			r.Get("/api/waf/scenarios/"+slug+".html", h.wafScenarioHTMLHandler(slug))
 		}
+		// All 10 scenarios above are now evaluated against a REAL, running
+		// ModSecurity + OWASP CRS lab (lab/wafmodsec) instead of a fixture --
+		// only the subset of each scenario's vectors its own
+		// internal/wafmodsec.Run<Scenario>Live function actually drives live
+		// (the rest surface through untestedVectorIds; see
+		// docs/waf-mastery-qa-log.md item #1 for exactly which vectors and
+		// why). Same
+		// read-only, JWT-only tier as the fixture-backed routes above: the
+		// live target is a fixed, operator-configured URL
+		// (wafModsecLabURLEnv), never taken from the request, so there is no
+		// SSRF surface from this being Viewer-reachable.
+		liveScenarios := []struct {
+			slug string
+			run  liveScenarioRunner
+		}{
+			{"exploit-prevention", wafmodsec.RunExploitPreventionLive},
+			{"http-protocol-integrity", wafmodsec.RunHTTPProtocolIntegrityLive},
+			{"routing-cache-integrity", wafmodsec.RunRoutingCacheIntegrityLive},
+			{"api-protection", wafmodsec.RunAPIProtectionLive},
+			{"legitimate-traffic", wafmodsec.RunLegitimateTrafficLive},
+			{"file-upload-content-trust", wafmodsec.RunFileUploadContentTrustLive},
+			{"automated-abuse", wafmodsec.RunAutomatedAbuseLive},
+		}
+		for _, ls := range liveScenarios {
+			r.Get("/api/waf/scenarios/"+ls.slug+"/live", h.wafScenarioLiveJSONHandler(ls.run))
+		}
+		// policy-integrity needs a SECOND WAF lab instance (a genuine
+		// two-leg baseline-vs-weakened comparison), so it can't go through
+		// the single-client liveScenarios loop above -- see
+		// wafPolicyIntegrityLiveJSONHandler's own doc comment.
+		r.Get("/api/waf/scenarios/policy-integrity/live", h.wafPolicyIntegrityLiveJSONHandler)
+		// detection-telemetry needs a filesystem path to the WAF's real
+		// audit log, not another HTTP client -- see
+		// wafDetectionTelemetryLiveJSONHandler's own doc comment.
+		r.Get("/api/waf/scenarios/detection-telemetry/live", h.wafDetectionTelemetryLiveJSONHandler)
+		// origin-resilience needs THREE real targets (baseline, direct-
+		// origin, weakened), so it can't go through any of the shapes
+		// above either -- see wafOriginResilienceLiveJSONHandler's own
+		// doc comment.
+		r.Get("/api/waf/scenarios/origin-resilience/live", h.wafOriginResilienceLiveJSONHandler)
 		// AV/NGAV efficacy assessment scenarios (internal/avefficacy),
 		// same read-only, slug-registry shape as /api/waf/scenarios:
 		// each slug is a fixture-backed scenario evaluation layered
@@ -386,6 +439,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/scenarios/runs/{runId}/rw-score", h.GetRunRWScore)
 		r.Get("/api/scenarios/runs/{runId}/double-extortion-correlation", h.GetDoubleExtortionCorrelation)
 		r.Get("/api/scenarios/runs/{runId}/detection-response-effectiveness", h.GetDetectionResponseEffectiveness)
+		r.Get("/api/scenarios/runs/{runId}/ransomware-efficacy", h.GetRansomwareEfficacy)
+		r.Get("/api/scenarios/runs/{runId}/exfil-chain", h.GetExfilChain)
 		r.Get("/api/campaigns", h.ListCampaigns)
 		r.Get("/api/campaigns/{id}", h.GetCampaign)
 		r.Get("/api/campaigns/{id}/summary", h.CampaignSummary)
@@ -396,6 +451,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/findings/{id}", h.GetFinding)
 		r.Get("/api/findings/{id}/tickets", h.GetFindingTickets)
 		r.Get("/api/remediations", h.ListRemediations)
+		r.Get("/api/remediations/by-endpoint", h.ListRemediationsByEndpoint)
 		r.Get("/api/ticketing/candidates", h.ListTicketCandidates)
 		r.Get("/api/ticketing/revalidation", h.RevalidationStatus)
 		r.Get("/api/ticketing/summary", h.TicketingSummary)
@@ -448,6 +504,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/analytics/threat-intel-summary", h.GetThreatIntelSummary)
 		r.Get("/api/analytics/factory-health", h.GetFactoryHealth)
 		r.Get("/api/intel/threats/{id}/tcv", h.GetThreatTCV)
+		r.Get("/api/intel/factory/sla", h.GetFactorySLA)
 
 		// Endpoint Posture -- fleet-wide agent health + derived EPP isolation
 		// state, for dashboard consumption. Last of the 7 analytics categories.
@@ -484,6 +541,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// Threat Intelligence — readiness, KEV pack suggestions, EPSS priority scoring, and trends.
 		r.Get("/api/ti/readiness", h.GetTIReadiness)
 		r.Get("/api/ti/readiness/history", h.GetTIReadinessHistory)
+		r.Get("/api/ti/readiness/org", h.GetTIReadinessOrg)
 		r.Get("/api/ti/suggest-pack", h.GetSuggestPack)
 		r.Get("/api/ti/priority", h.GetTIPriority)
 
@@ -601,6 +659,16 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanCloneScenario)).Post("/api/scenarios/{id}/clone", h.CloneScenario)
 		r.With(auth.RequirePermission(auth.CanUpdateScenario)).Put("/api/scenarios/{id}", h.UpdateScenario)
 		r.With(auth.RequirePermission(auth.CanDeleteScenario)).Delete("/api/scenarios/{id}", h.DeleteScenario)
+
+		// Content import: Sigma/YARA rules and chains become DRAFTS that cannot run until an Admin approves them
+		// (content:transition). Importing needs only scenario-creation rights.
+		r.With(auth.RequirePermission(auth.CanCreateScenario)).Post("/api/content-import/sigma", h.ImportSigma)
+		r.With(auth.RequirePermission(auth.CanCreateScenario)).Post("/api/content-import/yara", h.ImportYARA)
+		r.With(auth.RequirePermission(auth.CanCreateScenario)).Post("/api/content-import/chain", h.ImportChain)
+		r.With(auth.RequirePermission(auth.CanCreateScenario)).Get("/api/content-import/drafts", h.ListImportDrafts)
+		r.With(auth.RequirePermission(auth.CanCreateScenario)).Get("/api/content-import/drafts/{id}", h.GetImportDraft)
+		r.With(auth.RequirePermission(auth.CanTransitionContent)).Post("/api/content-import/drafts/{id}/approve", h.ApproveImportDraft)
+		r.With(auth.RequirePermission(auth.CanTransitionContent)).Post("/api/content-import/drafts/{id}/reject", h.RejectImportDraft)
 		r.With(auth.RequirePermission(auth.CanViewContentArtifact)).Get("/api/content-registry/versions/{vid}/artifact", h.GetContentArtifact)
 		r.With(auth.RequirePermission(auth.CanTransitionContent)).Post("/api/content-registry/versions/{vid}/transition", h.TransitionContentVersion)
 		r.With(auth.RequirePermission(auth.CanViewContentMigrationReport)).Get("/api/content-registry/migration-report", h.GetContentMigrationReport)
@@ -621,6 +689,42 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// API BAS stored results (read-only). Authorization is the permission; installs are isolated by database.
 		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/runs", h.ListAPIBASRuns)
 		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/runs/{id}", h.GetAPIBASRun)
+		r.With(auth.RequirePermission(auth.CanManageAPIBASTargets)).Post("/api/apibas/targets", h.CreateAPIBASTarget)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/targets", h.ListAPIBASTargets)
+		r.With(auth.RequirePermission(auth.CanRunAPIBAS)).Post("/api/apibas/jobs", h.SubmitAPIBASJob)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/jobs", h.ListAPIBASJobs)
+		r.With(auth.RequirePermission(auth.CanViewSegmentation)).Get("/api/segmentation/packs", h.ListSegmentationPacks)
+		r.With(auth.RequirePermission(auth.CanRunSegmentation)).Post("/api/segmentation/runs", h.SubmitSegmentationRun)
+		r.With(auth.RequirePermission(auth.CanViewSegmentation)).Get("/api/segmentation/runs", h.ListSegmentationRuns)
+		r.With(auth.RequirePermission(auth.CanViewSegmentation)).Get("/api/segmentation/runs/{id}", h.GetSegmentationRun)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/jobs/{id}", h.GetAPIBASJob)
+		r.With(auth.RequirePermission(auth.CanRunAPIBAS)).Post("/api/apibas/jobs/{id}/cancel", h.CancelAPIBASJob)
+		r.With(auth.RequirePermission(auth.CanRunAPIBAS)).Post("/api/apibas/approvals", h.RequestAPIBASApproval)
+		r.With(auth.RequirePermission(auth.CanApproveAPIBASProduction)).Post("/api/apibas/approvals/{id}/approve", h.ApproveAPIBASApproval)
+		r.With(auth.RequirePermission(auth.CanApproveAPIBASProduction)).Post("/api/apibas/approvals/{id}/revoke", h.RevokeAPIBASApproval)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/approvals", h.ListAPIBASApprovals)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/approvals/{id}", h.GetAPIBASApproval)
+		r.With(auth.RequirePermission(auth.CanManageAPIBASTargets)).Post("/api/apibas/targets/{id}/inventory", h.ImportAPIBASInventory)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/targets/{id}/inventory", h.GetAPIBASInventory)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/targets/{id}/inventory/versions", h.ListAPIBASInventoryVersions)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Post("/api/apibas/targets/{id}/inventory/drift", h.DriftAPIBASInventory)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Post("/api/apibas/targets/{id}/binding/plan", h.PlanAPIBASBinding)
+		r.With(auth.RequirePermission(auth.CanManageAPIBASTargets)).Put("/api/apibas/targets/{id}/binding", h.SaveAPIBASBinding)
+		r.With(auth.RequirePermission(auth.CanManageAPIBASTargets)).Get("/api/apibas/targets/{id}/binding", h.GetAPIBASBinding)
+		r.With(auth.RequirePermission(auth.CanManageAPIBASTargets)).Delete("/api/apibas/targets/{id}/binding", h.DeleteAPIBASBinding)
+		r.With(auth.RequirePermission(auth.CanRunAPIBAS)).Post("/api/apibas/targets/{id}/binding/jobs", h.RunAPIBASBinding)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/targets/{id}/jobs", h.ListAPIBASTargetJobs)
+		r.With(auth.RequirePermission(auth.CanManageAPIBASTargets)).Put("/api/apibas/targets/{id}/schedule", h.SaveAPIBASSchedule)
+		r.With(auth.RequirePermission(auth.CanViewAPIBASRuns)).Get("/api/apibas/targets/{id}/schedule", h.GetAPIBASSchedule)
+		r.With(auth.RequirePermission(auth.CanManageAPIBASTargets)).Delete("/api/apibas/targets/{id}/schedule", h.DeleteAPIBASSchedule)
+		// Aleef API discovery (separate licence add-on, license.ProductAleef via productPrefixes).
+		r.With(auth.RequirePermission(auth.CanAuthorizeAleef)).Post("/api/aleef/engagements", h.CreateAleefEngagement)
+		r.With(auth.RequirePermission(auth.CanRunAleef)).Post("/api/aleef/runs", h.StartAleefRun)
+		r.With(auth.RequirePermission(auth.CanViewAleef)).Get("/api/aleef/runs/{id}", h.GetAleefRun)
+		r.With(auth.RequirePermission(auth.CanRunAleef)).Post("/api/aleef/runs/{id}/stop", h.StopAleefRun)
+		r.With(auth.RequirePermission(auth.CanViewAleef)).Get("/api/aleef/findings", h.ListAleefFindings)
+		r.With(auth.RequirePermission(auth.CanViewAleef)).Get("/api/aleef/findings/{id}/regression", h.GetAleefRegression)
+		r.With(auth.RequirePermission(auth.CanRunAleef)).Post("/api/aleef/findings/{id}/prior-knowledge", h.SetAleefPriorKnowledge)
 		r.With(auth.RequirePermission(auth.CanViewVariantStats)).Get("/api/variants/stats", h.GetVariantStats)
 
 		// Full Variant Sweep — server-owned orchestration
@@ -660,7 +764,24 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanApproveExerciseStep)).Post("/api/exercises/executions/{id}/steps/{stepId}/approve", h.ApproveExerciseStep)
 		// Kubernetes state-changing scenarios: request and execute for analysts and admins; approve for admins only.
 		r.With(auth.RequirePermission(auth.CanRequestK8sScenario)).Get("/api/k8s-scenarios/runs", h.ListK8sRuns)
+		// Cluster registry: anyone who can request may read it; only an administrator registers a cluster and sets its class.
+		r.With(auth.RequirePermission(auth.CanRequestK8sScenario)).Get("/api/k8s-scenarios/clusters", h.ListK8sClusters)
+		r.With(auth.RequirePermission(auth.CanApproveK8sScenario)).Post("/api/k8s-scenarios/clusters", h.RegisterK8sCluster)
+		r.With(auth.RequirePermission(auth.CanViewK8sDiscovery)).Get("/api/k8s-scenarios/clusters/{id}/namespaces", h.ListK8sClusterNamespaces)
+		r.With(auth.RequirePermission(auth.CanApproveK8sScenario)).Post("/api/k8s-scenarios/clusters/{id}/verify", h.VerifyK8sCluster)
+		// Safe checks: read-only SubjectAccessReview against a registered cluster. Requestable by analysts and admins.
+		r.With(auth.RequirePermission(auth.CanRequestK8sScenario)).Post("/api/k8s-scenarios/safe-checks/run", h.RunK8sSafeCheck)
+		r.With(auth.RequirePermission(auth.CanRequestK8sScenario)).Post("/api/k8s-scenarios/admission-checks/run", h.RunK8sAdmissionCheck)
+		// Lab-profile network checks create probe pods: execute permission only, and lab-class clusters only.
+		r.With(auth.RequirePermission(auth.CanExecuteK8sScenario)).Post("/api/k8s-scenarios/network-checks/run", h.RunK8sNetworkCheck)
 		r.With(auth.RequirePermission(auth.CanRequestK8sScenario)).Post("/api/k8s-scenarios/runs", h.CreateK8sRun)
+		r.With(auth.RequirePermission(auth.CanApproveK8sScenario)).Post("/api/k8s-scenarios/authorizations", h.CreateK8sAuthorization)
+		r.With(auth.RequirePermission(auth.CanApproveK8sScenario)).Get("/api/k8s-scenarios/authorizations", h.ListK8sAuthorizations)
+		r.With(auth.RequirePermission(auth.CanApproveK8sScenario)).Get("/api/k8s-scenarios/authorizations/{id}", h.GetK8sAuthorization)
+		r.With(auth.RequirePermission(auth.CanApproveK8sScenario)).Post("/api/k8s-scenarios/authorizations/{id}/revoke", h.RevokeK8sAuthorization)
+		r.With(auth.RequirePermission(auth.CanApproveK8sScenario)).Get("/api/k8s-scenarios/controlled-switch", h.GetK8sControlledSwitch)
+		r.With(auth.RequirePermission(auth.CanApproveK8sScenario)).Post("/api/k8s-scenarios/controlled-switch", h.SetK8sControlledSwitch)
+		r.With(auth.RequirePermission(auth.CanExecuteK8sScenario)).Post("/api/k8s-scenarios/runs/{id}/cancel", h.CancelK8sRun)
 		r.With(auth.RequirePermission(auth.CanApproveK8sScenario)).Post("/api/k8s-scenarios/runs/{id}/approve", h.ApproveK8sRun)
 		r.With(auth.RequirePermission(auth.CanExecuteK8sScenario)).Post("/api/k8s-scenarios/runs/{id}/execute", h.ExecuteK8sRun)
 		// Read-only Kubernetes analysis: discovery and configured-permission checks. It writes nothing to the cluster.
@@ -677,6 +798,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/exercises/executions/{id}/evidence", h.GetExerciseEvidence)
 		r.Get("/api/exercises/executions/{id}/evidence/verify", h.VerifyExerciseChain)
 		r.Get("/api/exercises/executions/{id}/events", h.GetExerciseEvents)
+		r.Get("/api/exercises/executions/{id}/phishing-runs", h.ListExecutionPhishingRuns)
 		r.Get("/api/exercises/executions/{id}/report.json", h.GetExerciseReportJSON)
 		r.Get("/api/exercises/executions/{id}/report.html", h.GetExerciseReportHTML)
 		r.Get("/api/exercises/executions/{id}/report.pdf", h.GetExerciseReportPDF)
@@ -697,6 +819,12 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Post("/api/report/verify", h.VerifyAuditPack)
 		r.Get("/api/report/branding", h.GetReportBranding)
 		r.With(auth.RequirePermission(auth.CanUpdateConnectorConfig)).Put("/api/report/branding", h.UpdateReportBranding)
+		// Estimated annual loss inputs (REQ-052). Reads are any signed-in user, as for the board figure; writes are admin only.
+		r.Get("/api/risk/inputs", h.GetRiskInputs)
+		r.Get("/api/risk/inputs/{technique}/history", h.GetRiskInputHistory)
+		r.With(auth.RequirePermission(auth.CanManageRiskInputs)).Put("/api/risk/currency", h.SetRiskCurrency)
+		r.With(auth.RequirePermission(auth.CanManageRiskInputs)).Put("/api/risk/inputs/{technique}", h.PutRiskInput)
+		r.With(auth.RequirePermission(auth.CanManageRiskInputs)).Delete("/api/risk/inputs/{technique}", h.DeleteRiskInput)
 		// Scheduled + emailed reports (admin-managed via CanUpdateConnectorConfig).
 		r.With(auth.RequirePermission(auth.CanUpdateConnectorConfig)).Get("/api/report/schedules", h.ListReportSchedules)
 		r.With(auth.RequirePermission(auth.CanUpdateConnectorConfig)).Post("/api/report/schedules", h.CreateReportSchedule)
@@ -715,6 +843,11 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/me/permissions", h.GetMyPermissions)
 		r.Get("/api/me", h.GetMe)
 		r.Get("/api/scenarios/runs/{runId}/verifications", h.ListRunVerifications)
+		r.Get("/api/scenarios/runs/{runId}/detection-gaps", h.GetRunDetectionGaps)
+		r.Get("/api/scenarios/runs/{runId}/detection-gaps/export", h.ExportRunDetectionGaps)
+		r.Get("/api/scenarios/runs/{runId}/detection-gaps/deployments", h.ListRuleDeployments)
+		r.With(auth.RequirePermission(auth.CanVerify)).Post("/api/scenarios/runs/{runId}/detection-gaps/deployments", h.CreateRuleDeployment)
+		r.With(auth.RequirePermission(auth.CanVerify)).Post("/api/scenarios/runs/{runId}/detection-gaps/deployments/{deploymentId}/retest", h.LinkDeploymentRetest)
 		r.Get("/api/scenarios/runs/{runId}/verifications/{expectationId}/history", h.GetVerificationHistory)
 		r.Get("/api/verifications/{id}/evidence", h.ListVerificationEvidence)
 		r.Get("/api/evidence/{id}/download", h.DownloadEvidence)
@@ -729,6 +862,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/techniques/{id}/relationships", h.ListTechniqueRelationships)
 		r.Get("/api/relationships/{id}", h.GetRelationship)
 		r.Get("/api/relationships/{id}/evidence", h.ListRelationshipEvidence)
+		r.With(auth.RequirePermission(auth.CanDecideAdvisoryRelevance)).Post("/api/advisories/{id}/decision", h.DecideAdvisory)
+		r.With(auth.RequirePermission(auth.CanDecideAdvisoryRelevance)).Post("/api/advisories/{id}/reverse", h.ReverseAdvisoryDecision)
 		r.With(auth.RequirePermission(auth.CanCurateThreatIntel)).Post("/api/relationships", h.CreateRelationship)
 		r.With(auth.RequirePermission(auth.CanCurateThreatIntel)).Put("/api/relationships/{id}", h.UpdateRelationship)
 		r.With(auth.RequirePermission(auth.CanCurateThreatIntel)).Post("/api/relationships/{id}/evidence", h.AddRelationshipEvidence)
@@ -756,9 +891,24 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// since the 2026-07-18 RBAC permission expansion (see
 		// docs/superpowers/specs/2026-07-18-phase7-rbac-permission-expansion-design.md).
 		r.With(auth.RequirePermission(auth.CanSetAgentState)).Put("/api/agents/{agentId}/state", h.SetAgentState)
+		r.With(auth.RequirePermission(auth.CanSetAgentState)).Put("/api/agents/{agentId}/tray-icon", h.SetAgentTrayIcon)
+		r.With(auth.RequirePermission(auth.CanSetAgentState)).Put("/api/fleet/tray-icon", h.SetFleetTrayIcon)
+		r.With(auth.RequirePermission(auth.CanSetAgentState)).Put("/api/fleet/min-agent-version", h.SetFleetMinAgentVersion)
+		r.With(auth.RequirePermission(auth.CanSetAgentState)).Post("/api/agent-binaries/revocations", h.RevokeAgentBinary)
+		r.With(auth.RequirePermission(auth.CanSetAgentState)).Delete("/api/agent-binaries/revocations/{sha256}", h.UnrevokeAgentBinary)
+		r.With(auth.RequirePermission(auth.CanSetAgentState)).Delete("/api/fleet/min-agent-version", h.ResetFleetMinAgentVersion)
 		r.With(auth.RequirePermission(auth.CanStopAgent)).Post("/api/agents/{agentId}/stop", h.StopAgent)
 		r.With(auth.RequirePermission(auth.CanRemoveAgent)).Post("/api/agents/{agentId}/remove", h.RemoveAgent)
 		r.With(auth.RequirePermission(auth.CanRemoveAgent)).Post("/api/agents/{agentId}/uninstall", h.UninstallAgent)
+		r.With(auth.RequirePermission(auth.CanRemoveAgent)).Post("/api/agents/{agentId}/allow-reinstall", h.AllowAgentReinstall)
+		r.With(auth.RequirePermission(auth.CanRemoveAgent)).Post("/api/agents/{agentId}/revoke", h.RevokeAgent)
+		r.With(auth.RequirePermission(auth.CanRemoveAgent)).Post("/api/enrollment-tokens", h.CreateEnrollmentToken)
+		r.With(auth.RequirePermission(auth.CanRemoveAgent)).Post("/api/enrollment-tokens/bulk", h.BulkCreateEnrollmentTokens)
+		r.With(auth.RequirePermission(auth.CanRemoveAgent)).Post("/api/ca-rotation/distribute", h.DistributeCARoot)
+		r.With(auth.RequirePermission(auth.CanRemoveAgent)).Get("/api/ca-rotation/status", h.CARotationStatus)
+		r.With(auth.RequirePermission(auth.CanRemoveAgent)).Get("/api/enrollment-tokens", h.ListEnrollmentTokens)
+		r.With(auth.RequirePermission(auth.CanRemoveAgent)).Delete("/api/enrollment-tokens/{id}", h.RevokeEnrollmentToken)
+		r.With(auth.RequirePermission(auth.CanRemoveAgent)).Post("/api/agents/{agentId}/reinstate", h.ReinstateAgent)
 		r.With(auth.RequirePermission(auth.CanViewAgentGroups)).Get("/api/agent-groups", h.GetAgentGroups)
 		r.With(auth.RequirePermission(auth.CanManageAgentGroups)).Post("/api/agent-groups", h.CreateAgentGroup)
 		r.With(auth.RequirePermission(auth.CanManageAgentGroups)).Patch("/api/agent-groups/{id}", h.UpdateAgentGroup)
@@ -766,6 +916,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanManageAgentGroups)).Patch("/api/agents/{agentId}/group", h.SetAgentGroup)
 		r.With(auth.RequirePermission(auth.CanViewLicense)).Get("/api/license", h.GetLicenseInfo)
 		r.With(auth.RequirePermission(auth.CanViewConnectionConfig)).Get("/api/config/connection", h.GetConnectionConfig)
+		r.With(auth.RequirePermission(auth.CanViewConnectionConfig)).Get("/api/config/deployment-config", h.GetDeploymentConfig)
 		r.With(auth.RequirePermission(auth.CanListUsers)).Get("/api/users", h.ListUsers)
 		r.With(auth.RequirePermission(auth.CanCreateUser)).Post("/api/users", h.CreateUser)
 		r.With(auth.RequirePermission(auth.CanUpdateUser)).Put("/api/users/{id}", h.UpdateUser)
@@ -897,6 +1048,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Get("/api/scheduled-assessments", h.ListScheduledAssessments)
 		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Put("/api/scheduled-assessments/{id}", h.UpdateScheduledAssessment)
 		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Post("/api/scheduled-assessments/{id}/cancel", h.CancelScheduledAssessment)
+		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Get("/api/scheduled-blackouts", h.ListScheduledBlackouts)
+		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Post("/api/scheduled-blackouts", h.CreateScheduledBlackout)
+		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Delete("/api/scheduled-blackouts/{id}", h.DeleteScheduledBlackout)
 		r.With(auth.RequirePermission(auth.CanApproveRemediation)).Post("/api/agents/{agentId}/maintenance-freezes", h.CreateAgentFreeze)
 		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Get("/api/agents/{agentId}/maintenance-freezes", h.ListAgentFreezes)
 		r.With(auth.RequirePermission(auth.CanApproveRemediation)).Delete("/api/maintenance-freezes/{freezeId}", h.DeleteAgentFreeze)

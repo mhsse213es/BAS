@@ -1,0 +1,56 @@
+id: "API-BAS-AUTHZ-402"
+name: "RET-002: shopper redirects another shopper's shipment"
+category: AUTHZ
+claim: cross_identity
+attack_objective: "Shopper A changes the delivery address of shopper B's shipment."
+threat_model:
+  attacker: "authenticated shopper A"
+  identity: shopper-a
+  access_level: "shopper, valid token, owns SHIP-A-001 only"
+  objective: "Shopper A changes the delivery address of shopper B's shipment."
+preconditions:
+  fixture: commerce-telecom-two-tenant
+  identities: [shopper-a, shopper-b]
+  object: SHIP-B-001
+steps:
+  - id: "baseline-owner"
+    role: baseline
+    identity: shopper-b
+    auth: valid
+    method: GET
+    path: "/api/retail/shipments/SHIP-B-001"
+    hypothesis: "Shopper B, the owner, reads their own shipment. If this fails, the scenario is not testable."
+  - id: "attack-authz-402"
+    role: attack
+    identity: shopper-a
+    auth: valid
+    method: PATCH
+    path: "/api/retail/shipments/SHIP-B-001"
+    body: '{"address":"elsewhere"}'
+    hypothesis: "Shopper A's redirect of SHIP-B-001 is refused, and the shipment status is unchanged."
+denied_statuses: [404]
+expected_control: "Only the owner can redirect a shipment. Another shopper's redirect is refused and the shipment is unchanged."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The state shows SHIP-B-001 unchanged after shopper A's redirect.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The redirect names SHIP-B-001, owned by shopper B, from shopper A. Graded against the access event by APIBAS-REL-004. Fixture-validated, not live-SIEM-validated."
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+industry_mapping:
+  - "Retail and logistics: shipment ownership bypass (redirect)"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-AUTHZ-402 against the fixed build must PASS"
+  - "API-BAS-AUTHZ-402 against the vulnerable build must FAIL (exploited)"

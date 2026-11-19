@@ -1,0 +1,26 @@
+id: apt29-credential-access
+product_line: killchain
+name: "APT29 Mastery - Credential Access"
+description: >
+  Three credential-access behaviors attributed to APT29 on MITRE ATT&CK group G0016, using synthetic data only:
+  Kerberos ticket-cache enumeration (the precondition to pass-the-ticket, which is not performed), a recursive
+  search for private-key files that finds planted synthetic keys, and a stealer-style copy of a synthetic browser
+  credential store. No real credential, ticket or browser profile is read. LSASS, SAM and DCSync tests, which are not
+  in the MITRE APT29 technique table used here, live in the existing credential-access scenarios.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - apt29
+  - cozy-bear
+  - nobelium
+  - apt29-mastery
+  - credential-access
+  - t1550
+  - t1552
+  - t1555
+mitre_phases:
+  - credential-access
+
+steps:

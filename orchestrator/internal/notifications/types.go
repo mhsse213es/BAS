@@ -16,6 +16,14 @@ const (
 	EventTargetAssigned EventType = "target_assigned"
 
 	EventSLABreached EventType = "sla_breached"
+
+	// API BAS production approvals. Job-less events: TargetID is the API BAS target, Metadata carries the approval id.
+	EventAPIBASApprovalRequested EventType = "apibas_approval_requested"
+	EventAPIBASApprovalApproved  EventType = "apibas_approval_approved"
+	EventAPIBASApprovalRevoked   EventType = "apibas_approval_revoked"
+
+	// API BAS scheduled assessments. Job-less: TargetID is the API BAS target. Raised once, when a schedule turns itself off.
+	EventAPIBASSchedulePaused EventType = "apibas_schedule_paused"
 )
 
 type Severity string

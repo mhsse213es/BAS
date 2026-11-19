@@ -99,10 +99,13 @@ func main() {
 // fixtures lists every fixture the lab and runner both understand.
 func fixtures() map[string]fixture.Fixture {
 	return map[string]fixture.Fixture{
-		"orders-two-tenant":   fixture.OrdersTwoTenant(),
-		"orders-no-protected": fixture.OrdersNoProtected(),
-		"orders-paged":        fixture.OrdersPaged(),
-		"nbfc-two-borrower":   fixture.NBFCTwoBorrower(),
+		"orders-two-tenant":           fixture.OrdersTwoTenant(),
+		"orders-no-protected":         fixture.OrdersNoProtected(),
+		"orders-paged":                fixture.OrdersPaged(),
+		"nbfc-two-borrower":           fixture.NBFCTwoBorrower(),
+		"manufacturing-two-plant":     fixture.ManufacturingTwoPlant(),
+		"healthcare-two-patient":      fixture.HealthcareTwoPatient(),
+		"commerce-telecom-two-tenant": fixture.CommerceTelecomTwoTenant(),
 	}
 }
 
@@ -116,10 +119,34 @@ func configFromEnv(mode lab.Mode, fx fixture.Fixture) (lab.Config, error) {
 	tokens := map[string]string{a: "cust-a", b: "cust-b"}
 	// NBFC pack identities are optional. Each set variable names one caller, as the fixture names it.
 	for env, caller := range map[string]string{
-		"APIBAS_NBFC_BORROWER_A_TOKEN": "borrower-a",
-		"APIBAS_NBFC_BORROWER_B_TOKEN": "borrower-b",
-		"APIBAS_NBFC_OFFICER_TOKEN":    "loan-officer",
-		"APIBAS_NBFC_ADMIN_TOKEN":      "nbfc-admin",
+		"APIBAS_NBFC_BORROWER_A_TOKEN":     "borrower-a",
+		"APIBAS_NBFC_BORROWER_B_TOKEN":     "borrower-b",
+		"APIBAS_NBFC_OFFICER_TOKEN":        "loan-officer",
+		"APIBAS_NBFC_ADMIN_TOKEN":          "nbfc-admin",
+		"APIBAS_MFG_PLANNER_A_TOKEN":       "planner-a",
+		"APIBAS_MFG_OPERATOR_A_TOKEN":      "operator-a",
+		"APIBAS_MFG_PLANNER_B_TOKEN":       "planner-b",
+		"APIBAS_MFG_OPERATOR_B_TOKEN":      "operator-b",
+		"APIBAS_MFG_SUPPLIER_1_TOKEN":      "supplier-1",
+		"APIBAS_MFG_SUPPLIER_2_TOKEN":      "supplier-2",
+		"APIBAS_MFG_DEVICE_A_TOKEN":        "device-a",
+		"APIBAS_MFG_DEVICE_B_TOKEN":        "device-b",
+		"APIBAS_MFG_OT_ENGINEER_TOKEN":     "ot-engineer",
+		"APIBAS_HC_PATIENT_A_TOKEN":        "patient-a",
+		"APIBAS_HC_PATIENT_B_TOKEN":        "patient-b",
+		"APIBAS_HC_CLINICIAN_A_TOKEN":      "clinician-a",
+		"APIBAS_HC_CLINICIAN_B_TOKEN":      "clinician-b",
+		"APIBAS_HC_DELEGATE_A_TOKEN":       "delegate-a",
+		"APIBAS_HC_BEDSIDE_DEVICE_A_TOKEN": "bedside-device-a",
+		"APIBAS_HC_BEDSIDE_DEVICE_B_TOKEN": "bedside-device-b",
+		"APIBAS_COM_SHOPPER_A_TOKEN":       "shopper-a",
+		"APIBAS_COM_SHOPPER_B_TOKEN":       "shopper-b",
+		"APIBAS_COM_SUBSCRIBER_A_TOKEN":    "subscriber-a",
+		"APIBAS_COM_SUBSCRIBER_B_TOKEN":    "subscriber-b",
+		"APIBAS_COM_PARTNER_1_TOKEN":       "partner-1",
+		"APIBAS_COM_PARTNER_2_TOKEN":       "partner-2",
+		"APIBAS_COM_CARRIER_1_TOKEN":       "carrier-1",
+		"APIBAS_COM_AGENT_1_TOKEN":         "agent-1",
 	} {
 		if v := os.Getenv(env); v != "" {
 			tokens[v] = caller

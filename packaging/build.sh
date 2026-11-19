@@ -73,7 +73,7 @@ fi
 # literally at the call site keeps bash's own quoting intact, so the
 # expansion stays one word regardless of the value's internal spaces.
 LDFLAGS_ORCH="-s -w -X main.Version=${VERSION}"
-LDFLAGS_AGENT="-s -w"
+LDFLAGS_AGENT="-s -w -X main.version=${VERSION}"
 
 # ── 1. Build orchestrator binary ───────────────────────────────────────────────
 log "Building bas-orchestrator ${VERSION} for linux/amd64..."
@@ -138,6 +138,28 @@ rm -f "${INSTALLER_DIR}/bas_agent_darwin_arm64" "${INSTALLER_DIR}/bas_agent_darw
 cd "${REPO_ROOT}"
 log "macOS installers written to ${AGENTS_DIR}/"
 
+# ── 1b'. Previous release's manifest ──────────────────────────────────────────
+# Its hashes are kept in the new manifest as "#prev" lines (packaging/carry-previous-manifest.sh), so agents still on
+# that release show as "outdated" instead of being quarantined after the upgrade. It is the newest earlier release
+# under dist/, not git HEAD: a build overwrites the committed manifest without committing it.
+PREV_MANIFEST=""
+for m in $(ls -d "${DIST_DIR}"/bas-install-*/BINARIES.sha256 2>/dev/null | sort -V); do
+  v="$(basename "$(dirname "$m")")"; v="${v#bas-install-}"
+  [[ "$v" == "$VERSION" ]] && continue
+  # keep the last one that sorts before this version
+  if [[ "$(printf '%s\n%s\n' "$v" "$VERSION" | sort -V | head -1)" == "$v" ]]; then PREV_MANIFEST="$m"; fi
+done
+if [[ -n "$PREV_MANIFEST" ]]; then log "Previous release manifest: ${PREV_MANIFEST}"
+elif [[ "${BAS_ALLOW_NO_PREVIOUS:-0}" == "1" ]]; then
+  warn "No earlier release under ${DIST_DIR}; BAS_ALLOW_NO_PREVIOUS=1, so building without it. Agents on an older build will be quarantined after the upgrade."
+else
+  # Fail closed. Without the previous release's hashes, every agent still on that release is quarantined after the upgrade.
+  # The earlier release must be under dist/ as bas-install-<version>/BINARIES.sha256; use BAS_ALLOW_NO_PREVIOUS=1 only for a first release.
+  err "No earlier release under ${DIST_DIR}. Refusing to build: agents on the release before ${VERSION} would be quarantined after the upgrade. Put that release's bas-install-<version>/BINARIES.sha256 under dist/, or set BAS_ALLOW_NO_PREVIOUS=1 for a first release."
+  exit 1
+fi
+export BAS_PREVIOUS_MANIFEST="${PREV_MANIFEST}"
+
 # ── 1c. Sign binaries if GPG key is available ─────────────────────────────────
 SIGNING_KEY_EMAIL="releases@audspect.com"
 SIGN_BINS="${REPO_ROOT}/packaging/signing/sign-binaries.sh"
@@ -166,6 +188,13 @@ cp "${REPO_ROOT}/packaging/compose/docker-compose.prod.yml" "${BUILD_DIR}/"
 cp "${REPO_ROOT}/packaging/compose/.env.example"            "${BUILD_DIR}/"
 cp "${REPO_ROOT}/packaging/compose/setup.sh"                "${BUILD_DIR}/"
 cp "${REPO_ROOT}/packaging/compose/uninstall.sh"            "${BUILD_DIR}/"
+cp "${REPO_ROOT}/packaging/compose/docker-offline-lib.sh"    "${BUILD_DIR}/"
+cp "${REPO_ROOT}/packaging/compose/install.sh"                "${BUILD_DIR}/"
+cp "${REPO_ROOT}/packaging/compose/db-encryption-key.sh"           "${BUILD_DIR}/"
+cp "${REPO_ROOT}/packaging/compose/db-tls.sh"                      "${BUILD_DIR}/"
+cp "${REPO_ROOT}/packaging/compose/ca-backup.sh"                   "${BUILD_DIR}/"
+cp "${REPO_ROOT}/packaging/compose/backup-key.sh"                  "${BUILD_DIR}/"
+cp "${REPO_ROOT}/packaging/compose/setup-install-state.sh"         "${BUILD_DIR}/"
 cp "${REPO_ROOT}/packaging/compose/systemd/bas-compose.service" "${BUILD_DIR}/systemd/"
 
 chmod +x "${BUILD_DIR}/setup.sh" "${BUILD_DIR}/uninstall.sh"
@@ -186,6 +215,14 @@ fi
 # Application assets
 log "Copying scenarios, wwwroot, and agent binaries..."
 cp -r "${REPO_ROOT}/scenarios/."   "${BUILD_DIR}/scenarios/"
+
+# Content-velocity measurement: record exactly which scenario bytes shipped.
+# The post-build ingest (cmd/tcv-ingest) reads this manifest where the database
+# is, and maps each hash to its registry content version. This build host has
+# no database access, so it only writes the file. Run after the signature gate
+# and the copy, so the manifest describes what is actually in the bundle.
+log "Writing bundle manifest (content-velocity measurement)..."
+"${REPO_ROOT}/packaging/bundle-manifest.sh" "${BUILD_DIR}/scenarios" "${BUILD_NAME}" "${BUILD_DIR}/bundle-manifest.json"
 cp -r "${REPO_ROOT}/orchestrator/wwwroot/." "${BUILD_DIR}/wwwroot/"
 
 # ART external payloads (gsecdump, etc.) staged on the build host — baked into
@@ -249,9 +286,14 @@ if [[ ! -f "$COSIGN_KEY" ]]; then
 fi
 
 log "Building Docker image bas-orchestrator:${VERSION}..."
+PREV_ARGS=()
+if [[ -n "${PREV_MANIFEST}" ]]; then
+  PREV_ARGS=(--build-arg "PREVIOUS_MANIFEST_B64=$(base64 < "${PREV_MANIFEST}" | tr -d '\n')")
+fi
 docker build \
   --build-arg VERSION="${VERSION}" \
   --build-arg BAS_VERSION="${VERSION}" \
+  ${PREV_ARGS[@]+"${PREV_ARGS[@]}"} \
   -t "bas-orchestrator:${VERSION}" \
   -f "${REPO_ROOT}/orchestrator/Dockerfile" \
   "${REPO_ROOT}"
@@ -282,6 +324,36 @@ if [[ ! -f "$COSIGN_PUB" ]]; then
   exit 1
 fi
 cp "$COSIGN_PUB" "${BUILD_DIR}/"
+
+# The air-gapped installer verifies the bundle with the cosign binary shipped
+# here and never downloads one. Each binary must match the SHA-256 pinned in
+# compose/install.sh before it is copied in.
+COSIGN_TOOLS_DIR="${REPO_ROOT}/packaging/tools"
+mkdir -p "${BUILD_DIR}/tools"
+for arch in amd64 arm64; do
+  src="${COSIGN_TOOLS_DIR}/cosign-linux-${arch}"
+  [[ -f "$src" ]] || { err "missing ${src} -- place the pinned cosign linux-${arch} binary there before building the release."; exit 1; }
+  pin=$(grep -oP "readonly COSIGN_SHA256_${arch^^}=\"\K[0-9a-f]{64}" "${REPO_ROOT}/packaging/compose/install.sh")
+  [[ -n "$pin" ]] || { err "no COSIGN_SHA256_${arch^^} pin found in compose/install.sh"; exit 1; }
+  echo "${pin}  ${src}" | sha256sum -c --status - || { err "${src} does not match the SHA-256 pinned in compose/install.sh"; exit 1; }
+  cp "$src" "${BUILD_DIR}/tools/cosign-linux-${arch}"
+done
+
+# Docker + Compose for servers that have neither (static builds, any systemd Linux). Every file must match the
+# SHA-256 pinned in compose/docker-offline-lib.sh; fetch them with packaging/fetch-docker-static.ps1.
+mkdir -p "${BUILD_DIR}/tools/docker"
+_dl="${REPO_ROOT}/packaging/compose/docker-offline-lib.sh"
+_dver=$(grep -oP 'readonly DOCKER_STATIC_VERSION="\K[^"]+' "$_dl")
+for a in x86_64 aarch64; do
+  for f in "docker-${_dver}-${a}.tgz" "docker-compose-linux-${a}"; do
+    src="${COSIGN_TOOLS_DIR}/docker/${f}"
+    [[ -f "$src" ]] || { err "missing ${src} -- run packaging/fetch-docker-static.ps1 before building the release."; exit 1; }
+    case "$f" in docker-*.tgz) key="DOCKER_SHA256_${a^^}" ;; *) key="COMPOSE_SHA256_${a^^}" ;; esac
+    pin=$(grep -oP "readonly ${key}=\"\K[0-9a-f]{64}" "$_dl")
+    echo "${pin}  ${src}" | sha256sum -c --status - || { err "${src} does not match the SHA-256 pinned in docker-offline-lib.sh"; exit 1; }
+    cp "$src" "${BUILD_DIR}/tools/docker/${f}"
+  done
+done
 
 # Postgres: pulled BY DIGEST (packaging/images.pin; a digest mismatch is fatal),
 # saved UNCOMPRESSED and cosign-signed with the same helper and key as the

@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 )
 
 // The agent previously logged only to its console window (lost on reboot) and to
@@ -14,6 +15,8 @@ import (
 const (
 	logFileName = "agent.log"
 	maxLogBytes = 8 << 20 // rotate to agent.log.1 once the file exceeds 8 MiB
+	// logKeepRotated is how many rotated logs (agent.log.1 ... agent.log.N) are kept; older ones are deleted.
+	logKeepRotated = 5
 )
 
 // initFileLogging tees the standard logger to a persistent file (in addition to
@@ -61,11 +64,12 @@ func teeWriter(console, file io.Writer) io.Writer {
 	return io.MultiWriter(bestEffortWriter{console}, file)
 }
 
-// logDirCandidates lists log directories in preference order: a "logs" folder
-// next to the executable (most discoverable — where operators look), then a
-// per-user config dir, then the OS temp dir as a last resort.
+// logDirCandidates lists log directories in preference order: the platform's fixed agent log folder
+// (agentLogDir, the same on every install so operators know where to look), then a "logs" folder next to
+// the executable, then a per-user config dir (an unprivileged tray or status process cannot write the first
+// two), then the OS temp dir as a last resort.
 func logDirCandidates() []string {
-	var dirs []string
+	dirs := []string{agentLogDir()}
 	if exe, err := os.Executable(); err == nil {
 		dirs = append(dirs, filepath.Join(filepath.Dir(exe), "logs"))
 	}
@@ -85,7 +89,16 @@ func openLogFileIn(dir string) (*os.File, error) {
 	}
 	path := filepath.Join(dir, logFileName)
 	if fi, err := os.Stat(path); err == nil && fi.Size() > maxLogBytes {
-		_ = os.Rename(path, path+".1")
+		rotateLog(path, logKeepRotated)
 	}
 	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+}
+
+// rotateLog shifts path.1 ... path.(keep-1) up by one, drops the oldest, and moves path to path.1.
+func rotateLog(path string, keep int) {
+	_ = os.Remove(path + "." + strconv.Itoa(keep))
+	for n := keep - 1; n >= 1; n-- {
+		_ = os.Rename(path+"."+strconv.Itoa(n), path+"."+strconv.Itoa(n+1))
+	}
+	_ = os.Rename(path, path+".1")
 }

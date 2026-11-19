@@ -2,7 +2,8 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
-import { ago, fmtDate, fmtRunIdCode, showToast } from '../core/util.js';
+import { fmtRunIdCode, showToast } from '../core/util.js';
+import { splitReverted } from './restore-model.js';
 import { renderGroupCheckboxList } from './adversaries.js';
 import { agentBucket, loadScenarios, renderScenarios, resolveGroupTargetAgents } from './attack-path.js';
 import { cmpAgentOS } from './campaigns.js';
@@ -10,71 +11,35 @@ import { covStatusMap } from './coverage.js';
 import { vfStatusColor } from './detection-verification.js';
 import { gaugeSVG, showDownloadOptions, triggerDownload } from './evidence.js';
 import { renderRunIOCList, renderRunIOCToolbar } from './iocs.js';
+import { isRansomwareRun, renderRwEfficacyPanel } from './rw-efficacy.js';
+import { isExfilChainRun, renderExfilChainPanel } from './exfil-chain.js';
 import { rerunSubset } from './rerun-review.js';
 import { ROLE, _artCatalogByPlatform, _riskScoreColor } from './shell.js';
 import { renderAttackFlow, renderRunFindings, renderRunRecommendations, renderRunReportExtra, renderVariantCoverage } from './variant-report.js';
 import { displayOf, replaceClasses, setDisplay } from '../core/inline-style.js';
+import { hydrateCharts } from '../core/charts.js';
+import { TYPE_LABEL, formatsFor, agentRows } from './rpt-model.js';
+import { paintAvailable, paintAvailableError, paintHistory, loadReportsHero } from './rpt-view.js';
+import { applyRunsFilter, renderRunsSummary, runsStatusAttr, runsSelCell, runsRowClick } from './runs-rich.js';
+import { fmtWhen, shortRunId, isLive as isLiveRun } from './runs-model.js';
+import { paintResultsExtras, paintRecommendationExtra } from './runs-drawer.js';
 
 
 // ── Reports ──────────────────────────────────────────────────────────────────
 var REPORT_TYPE = 'posture';
 export function loadReports() {
   renderRepHistory();
+  loadReportsHero();
   // Per-agent launcher: which agents have run data we can report on.
   apicall('/api/scenarios/runs').then(function(runs) {
-    var byAgent = {};
-    (runs || []).forEach(function(r) {
-      if (r.status !== 'completed' && r.status !== 'partial') return;
-      var id = r.agentId; if (!id) return;
-      if (!byAgent[id]) byAgent[id] = { runs: 0, last: r.completedAt || r.startedAt, lastName: r.name };
-      byAgent[id].runs++;
-    });
-    var hostOf = {};
-    (state.agents || []).forEach(function(a) { hostOf[a.agentId] = a.hostname || a.agentId; });
-    var ids = Object.keys(byAgent);
-    var el = document.getElementById('rep-available');
-    if (!ids.length) {
-      el.innerHTML = '<div class="empty" style="padding:1.25rem">No agents with completed runs yet. Run a scenario, then generate its report here.</div>';
-      return;
-    }
-    var d = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 1.5h6l3 3V14.5H4z"/><path d="M9.5 1.5v3.5H13M6 8h4M6 10.5h4"/></svg>';
-    el.innerHTML = ids.map(function(id) {
-      var host = hostOf[id] || id, n = byAgent[id].runs, lastName = byAgent[id].lastName;
-      return '<div class="rep-row">' +
-        '<div class="rep-ic">' + d + '</div>' +
-        '<div class="rep-main"><div class="rep-host">' + x(host) + '</div>' +
-          '<div class="rep-sub">Reports on: <strong class="u-text">' + x(lastName || 'unnamed scenario') + '</strong> (latest run) · ' + n + ' run' + (n === 1 ? '' : 's') + ' total · last ' + ago(byAgent[id].last) + '</div></div>' +
-        '<div class="rep-acts">' +
-          '<button class="btn btn-outline btn-sm"' + on('click', 'genAgentReport', id, 'posture', 'pdf') + '>PDF Report</button>' +
-          '<button class="btn btn-outline btn-sm"' + on('click', 'genAgentReport', id, 'posture', 'csv') + '>CSV</button>' +
-          '<button class="btn btn-outline btn-sm"' + on('click', 'genAgentReport', id, 'audit', '') + '>Audit pack</button>' +
-        '</div></div>';
-    }).join('');
-  }).catch(function() {
-    document.getElementById('rep-available').innerHTML = '<div class="empty" style="padding:1.25rem">Could not load agents.</div>';
-  });
+    var hostOf = {}, infoOf = {};
+    (state.agents || []).forEach(function(a) { hostOf[a.agentId] = a.hostname || a.agentId; infoOf[a.agentId] = { os: a.osVersion, status: a.status }; });
+    paintAvailable(agentRows(runs, hostOf, infoOf));
+  }).catch(function() { paintAvailableError(); });
 }
 function renderRepHistory() {
-  apicall('/api/reports').then(function(list) {
-    var tb = document.getElementById('reports-body');
-    list = list || [];
-    if (!list.length) {
-      tb.innerHTML = '<tr><td colspan="7" class="empty" style="padding:1.5rem;line-height:1.6">No reports generated yet — this log fills when you generate one (from a tile above or the per-agent buttons). Test runs don\'t create reports automatically.</td></tr>';
-      return;
-    }
-    var label = { posture: 'Posture report', audit: 'Audit pack', compliance: 'Compliance evidence' };
-    tb.innerHTML = list.map(function(r) {
-      var st = r.status === 'failed' ? 's-failed' : 's-completed';
-      return '<tr>' +
-        '<td class="cell-main">' + x(label[r.reportType] || r.reportType) + '</td>' +
-        '<td class="tiny muted">' + x(r.scopeLabel) + '</td>' +
-        '<td class="tiny">' + x((r.format || '—').toUpperCase()) + '</td>' +
-        '<td class="tiny muted">' + x(r.generatedBy || '—') + '</td>' +
-        '<td class="tiny muted">' + fmtDate(r.generatedAt) + '</td>' +
-        '<td><span class="sbadge ' + st + '">' + x(r.status) + '</span></td>' +
-        '<td class="td-r"><a class="btn btn-outline btn-sm" href="' + x(r.downloadPath) + '" target="_blank" rel="noopener">&#9660; Download</a></td></tr>';
-    }).join('');
-  }).catch(function(e) { showToast(e.message, 'err'); });
+  apicall('/api/reports').then(function(list) { paintHistory(list || []); })
+    .catch(function(e) { showToast(e.message, 'err'); });
 }
 // genAgentReport logs the generation to history (report_log) and opens the
 // download — the same path the modal uses, so the per-agent launcher and the
@@ -100,38 +65,45 @@ export function genAgentReport(agentId, type, format) {
     });
   }
 }
-export function openReportGen(type) {
-  REPORT_TYPE = type;
+// openReportGen(type, framework) opens the Generate report modal. Called from a tile it gets a type
+// name; from the banner button the dispatcher passes the element instead, which means the default type.
+export function openReportGen(type, framework) {
+  if (typeof type !== 'string' || !TYPE_LABEL[type]) type = 'posture';
   if (!state.agents.length) { showToast('No agents registered yet', 'err'); return; }
-  var label = { posture: 'Posture report', audit: 'Audit pack', compliance: 'Compliance evidence' };
-  document.getElementById('report-modal-title').textContent = 'Generate — ' + label[type];
   document.getElementById('rep-agent').innerHTML = state.agents.map(function(a) {
     return '<option value="' + x(a.agentId) + '">' + x(a.agentId) + ' — ' + x(a.hostname) + '</option>';
   }).join('');
-  var fmts = type === 'compliance' ? ['html', 'csv'] : type === 'audit' ? [''] : ['html', 'csv'];
-  document.getElementById('rep-format').innerHTML = fmts.map(function(f) {
-    var lbl = f ? f.toUpperCase() : 'Package';
-    if (type === 'posture' && f === 'csv') lbl = 'CSV (forensic)';
-    return '<option value="' + f + '">' + lbl + '</option>';
+  fillReportForm(type, typeof framework === 'string' ? framework : '');
+  document.getElementById('report-overlay').classList.add('open');
+}
+// setReportType re-fills the modal when the Report type select changes.
+export function setReportType(el) { fillReportForm(el && TYPE_LABEL[el.value] ? el.value : 'posture', ''); }
+// pickReportFormat records the chosen format card in the hidden #rep-format that submitReport reads.
+export function pickReportFormat(el) {
+  document.getElementById('rep-format').value = el.value;
+  document.querySelectorAll('#rep-format-cards .rpt-fmt').forEach(function(l) { l.classList.toggle('on', l.contains(el)); });
+}
+function fillReportForm(type, framework) {
+  REPORT_TYPE = type;
+  document.getElementById('rep-type').value = type;
+  var fmts = formatsFor(type);
+  document.getElementById('rep-format').value = fmts[0].value;
+  document.getElementById('rep-format-cards').innerHTML = fmts.map(function(f, i) {
+    return '<label class="rpt-fmt' + (i === 0 ? ' on' : '') + '"><input type="radio" name="rep-fmt" value="' + x(f.value) + '"' + (i === 0 ? ' checked' : '') + on('change', 'pickReportFormat') + '><b>' + x(f.label) + '</b></label>';
   }).join('');
   var fwWrap = document.getElementById('rep-fw-wrap');
   if (type === 'compliance') {
     setDisplay(fwWrap, '');
     apicall('/api/compliance/frameworks').then(function(fws) {
       document.getElementById('rep-fw').innerHTML = (fws || []).map(function(f) {
-        return '<option value="' + x(f.id) + '">' + x(f.name || f.id) + '</option>';
+        return '<option value="' + x(f.id) + '"' + (f.id === framework ? ' selected' : '') + '>' + x(f.name || f.id) + '</option>';
       }).join('');
     });
   } else {
     setDisplay(fwWrap, 'none');
   }
   var filterWrap = document.getElementById('rep-filter-wrap');
-  if (type === 'audit') {
-    if (filterWrap) setDisplay(filterWrap, 'none');
-  } else {
-    if (filterWrap) setDisplay(filterWrap, '');
-  }
-  document.getElementById('report-overlay').classList.add('open');
+  if (filterWrap) setDisplay(filterWrap, type === 'audit' ? 'none' : '');
 }
 export function closeReportGen() { document.getElementById('report-overlay').classList.remove('open'); }
 export function submitReport() {
@@ -238,16 +210,17 @@ function runRowHtml(r) {
                 // the run having ended incomplete even at N/N.
                 '<span style="color:var(--muted);font-size:0.65rem;margin-left:0.35rem">' + pr.stepsDone + '/' + pr.stepsTotal + ' live</span>';
   }
-  return '<tr>' +
-    '<td>' + fmtRunIdCode(r.id) + '</td>' +
-    '<td style="font-weight:500">' + x(r.name) + '</td>' +
+  var agentRec = state.agents.find(function(a) { return a.agentId === r.agentId; });
+  return '<tr' + runsStatusAttr(r) + runsRowClick(r.id) + '>' + runsSelCell(r.id) +
+    '<td data-csv="' + x(r.id) + '" title="' + x(r.id) + '"><code>' + x(shortRunId(r.id)) + '</code></td>' +
+    '<td class="runs-scn"><div class="runs-scn-n">' + x(r.name) + '</div>' + (agentRec && agentRec.hostname ? '<div class="runs-scn-s muted">' + x(agentRec.hostname) + '</div>' : '') + '</td>' +
     '<td><code>' + x(r.agentId) + '</code></td>' +
     '<td><span class="sbadge ' + (r.agentDisconnected && r.status === 'running' ? 's-agent_disconnected' : (r.status === 'running' && r.paused ? 's-paused' : 's-' + x(r.status))) + '">' +
         (r.agentDisconnected && r.status === 'running' ? 'Agent Disconnected' : (r.status === 'running' && r.paused ? 'Paused' : x(r.status))) + '</span></td>' +
-    '<td style="color:var(--muted);font-size:0.78rem">' + x(r.initiatedBy || '—') + '</td>' +
-    '<td style="color:var(--muted);font-size:0.78rem">' + fmtDate(r.startedAt) + '</td>' +
-    '<td style="color:var(--muted);font-size:0.78rem">' + (r.completedAt ? fmtDate(r.completedAt) : '—') + '</td>' +
-    '<td>' + (function() {
+    '<td class="muted">' + x(r.initiatedBy || '—') + '</td>' +
+    '<td class="mono muted runs-when" data-sort="' + x(r.startedAt || '') + '">' + fmtWhen(r.startedAt) + '</td>' +
+    '<td class="mono muted runs-when" data-sort="' + x(r.completedAt || '') + '">' + (r.completedAt ? fmtWhen(r.completedAt) : '—') + '</td>' +
+    '<td class="runs-res">' + (function() {
       var acts = '';
       // Live is only meaningful while the run is actually running -- once
       // it's terminal (partial/completed), the same underlying data (see
@@ -264,7 +237,7 @@ function runRowHtml(r) {
           : '<button class="btn btn-outline btn-sm" id="pause-btn-' + x(r.id) + '"' + on('click', 'pauseRun', r.id) + '>&#10073;&#10073; Pause</button> ';
       }
       if (verdictCounts(r).total) {
-        acts += '<button class="btn btn-outline btn-sm"' + on('click', 'viewRunResults', r) + '>' + badge + '</button>';
+        acts += '<button class="btn btn-outline btn-sm rk-chip-btn"' + on('click', 'viewRunResults', r) + '>' + badge + '</button>';
       } else if (r.id && r.status !== 'running' && r.progress) {
         // A cancelled/partial run never gets the agent's one atomic
         // `results` write (see cancelScenarioRun/forceCancelAfterGracePeriod
@@ -276,18 +249,18 @@ function runRowHtml(r) {
         // labeled as a completed (partial) run's results instead of "Live".
         var pr = r.progress;
         var toBadge = pr.stepsFailed + ' fail / ' + pr.stepsPassed + ' pass' + (pr.stepsTimeout ? ' / ' + pr.stepsTimeout + ' timeout' : '');
-        acts += '<button class="btn btn-outline btn-sm"' + on('click', 'openRunPanelAction', r.id, r.name, pr.stepsTotal || 0, r.mode || '', r.maxPrivilege || '') + ' title="Per-step results for this partial run">' + toBadge + '</button>';
+        acts += '<button class="btn btn-outline btn-sm rk-chip-btn"' + on('click', 'openRunPanelAction', r.id, r.name, pr.stepsTotal || 0, r.mode || '', r.maxPrivilege || '') + ' title="Per-step results for this partial run">' + toBadge + '</button>';
       } else if (r.failReason) {
         // A run that failed before any step produced results/progress (e.g.
         // dispatch-time failure -- agent offline, no matching agent, etc.)
         // has nothing for the two branches above to render, but the API
         // already returns exactly why (r.failReason) -- it was simply never
         // surfaced here, leaving the cell a dead "—" with no way to see it.
-        acts += '<span style="color:var(--danger);font-size:0.78rem" title="' + x(r.failReason) + '">' + x(r.failReason) + '</span>';
+        acts += '<span class="runs-fail" title="' + x(r.failReason) + '">' + x(r.failReason) + '</span>';
       }
       return acts || '—';
     })() + '</td>' +
-    '<td>' + scoreHtml + '</td></tr>';
+    '<td class="runs-score"' + (r.score && typeof r.score.preventionScore !== 'undefined' ? ' data-sort="' + Math.round(r.score.preventionScore || 0) + '"' : '') + '>' + scoreHtml + '</td></tr>';
 }
 
 function renderRunRows(list) {
@@ -355,15 +328,15 @@ function _sweepRowHtml(payload, opts) {
   var badge = totalCnt ? (totalFail + ' fail / ' + (totalCnt - totalFail) + ' pass') : '—';
   var agent = state.agents.find(function(a) { return a.agentId === sw.agentId; });
   var agentLabel = agent ? agent.hostname : sw.agentId;
-  return '<tr>' +
-    '<td>' + fmtRunIdCode(sw.id) + '</td>' +
-    '<td style="font-weight:500">' + opts.labelPrefix + ' — ' + x(agentLabel) + '</td>' +
+  return '<tr' + runsStatusAttr({ id: sw.id, status: sw.status, agentId: sw.agentId }) + '>' + runsSelCell(sw.id) +
+    '<td data-csv="' + x(sw.id) + '" title="' + x(sw.id) + '"><code>' + x(shortRunId(sw.id)) + '</code></td>' +
+    '<td class="runs-scn"><div class="runs-scn-n">' + opts.labelPrefix + '</div><div class="runs-scn-s muted">' + x(agentLabel) + '</div></td>' +
     '<td><code>' + x(sw.agentId) + '</code></td>' +
     '<td><span class="sbadge s-' + x(sw.status) + '">' + x(sweepStatusLabel(sw.status)) + '</span></td>' +
-    '<td style="color:var(--muted);font-size:0.78rem">' + x(sw.createdBy || '—') + '</td>' +
-    '<td style="color:var(--muted);font-size:0.78rem">' + fmtDate(sw.startedAt) + '</td>' +
-    '<td style="color:var(--muted);font-size:0.78rem">' + (sw.completedAt ? fmtDate(sw.completedAt) : '—') + '</td>' +
-    '<td><button class="btn btn-outline btn-sm"' + on('click', opts.drilldownFn, sw.id) + ' title="' + opts.drilldownTitle + '">' +
+    '<td class="muted">' + x(sw.createdBy || '—') + '</td>' +
+    '<td class="mono muted runs-when" data-sort="' + x(sw.startedAt || '') + '">' + fmtWhen(sw.startedAt) + '</td>' +
+    '<td class="mono muted runs-when" data-sort="' + x(sw.completedAt || '') + '">' + (sw.completedAt ? fmtWhen(sw.completedAt) : '—') + '</td>' +
+    '<td class="runs-res"><button class="btn btn-outline btn-sm rk-chip-btn"' + on('click', opts.drilldownFn, sw.id) + ' title="' + opts.drilldownTitle + '">' +
         x(opts.progressLabel(sw)) + ' — ' + badge + '</button>' +
         ((sw.status === 'running' || sw.status === 'agent_disconnected')
           ? ' <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)"' + on('click', opts.stopFn, sw.id) + '>&#9632; Stop</button>'
@@ -410,6 +383,7 @@ var SWEEP_GROUP_KINDS = [
 
 export function loadRuns() {
   apicall('/api/scenarios/runs').then(function(runs) {
+    renderRunsSummary(runs);
     // Group sweep-dispatched rows (non-null sweepId/emSweepId) so Live Runs
     // shows one row per sweep instead of one row per technique/layer it
     // dispatched. Every OTHER consumer of this same endpoint (Dashboard,
@@ -427,9 +401,12 @@ export function loadRuns() {
     });
 
     var tbody = document.getElementById('runs-body');
+    // In-flight individual runs live in the strip above the charts (runs-rich.js); the table lists
+    // everything else, plus every sweep row (a sweep keeps its own Stop button there).
+    individualRuns = individualRuns.filter(function(r) { return !isLiveRun(r); });
     if (!runs.length) {
-      document.getElementById('runs-cnt').textContent = '0';
-      tbody.innerHTML = '<tr><td colspan="9" class="empty">No runs yet. Go to Scenarios and run one.</td></tr>';
+      tbody.innerHTML = '';
+      applyRunsFilter();
       return;
     }
 
@@ -445,8 +422,8 @@ export function loadRuns() {
 
     var totalGroupIds = groups.reduce(function(n, g) { return n + g.ids.length; }, 0);
     if (!totalGroupIds) {
-      document.getElementById('runs-cnt').textContent = individualRuns.length;
       tbody.innerHTML = individualRuns.slice().sort(byStartedAtDesc).map(runRowHtml).join('');
+      applyRunsFilter();
       return;
     }
 
@@ -481,8 +458,8 @@ export function loadRuns() {
       var allEntries = rowsToRenderIndividually.map(function(r) {
         return { startedAt: r.startedAt, html: runRowHtml(r) };
       }).concat(groupEntries).sort(byStartedAtDesc);
-      document.getElementById('runs-cnt').textContent = allEntries.length;
       tbody.innerHTML = allEntries.map(function(e) { return e.html; }).join('');
+      applyRunsFilter();
     });
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
@@ -1917,7 +1894,10 @@ export function addStep(st) {
       '<div class="bld-field"><label>Executor</label><select class="st-exec">' + execOpts + '</select></div>' +
       '<div class="bld-field"><label>Timeout (sec)</label><input class="st-timeout" type="number" min="0" value="' + (st.timeoutSec || 60) + '"></div>' +
       '<div class="bld-field"><label>Requires privilege</label><select class="st-priv">' + privOpts + '</select></div>' +
-      '<div class="bld-field full"><label>Command</label><textarea class="st-cmd" rows="2" placeholder="command to run on the endpoint">' + x(st.command || '') + '</textarea></div>' +
+      '<div class="bld-field full"><label>Command</label>' +
+        '<label class="btn btn-outline btn-sm" title="Load a .ps1 or .sh file into this step">Upload .ps1 / .sh' +
+          '<input type="file" accept=".ps1,.sh" class="is-hidden" data-on-change="loadStepScript"></label>' +
+        '<textarea class="st-cmd" rows="2" placeholder="command to run on the endpoint">' + x(st.command || '') + '</textarea></div>' +
       '<div class="bld-field full"><label>Cleanup (optional)</label><textarea class="st-cleanup" rows="1" placeholder="command run after the step">' + x(st.cleanup || '') + '</textarea></div>' +
     '</div>' +
     '<div class="bld-mode-help">Steps requiring higher privilege than a run\'s Max Privilege ceiling are skipped, not dispatched.</div>';
@@ -2067,6 +2047,33 @@ export function uploadScenarioFile(input) {
   };
   reader.readAsText(file);
 }
+// Step script upload: loads a .ps1 or .sh file into the step's Command box.
+// Only those two extensions are accepted, the file is size-capped, and the
+// text lands in the normal command field, so it is saved and validated the
+// same way as typed text.
+var STEP_SCRIPT_MAX_BYTES = 256 * 1024;
+export function loadStepScript(input) {
+  var file = input.files && input.files[0];
+  input.value = ''; // reset so the same file can be re-picked
+  if (!file) return;
+  var name = file.name.toLowerCase();
+  var executor = name.endsWith('.ps1') ? 'powershell' : (name.endsWith('.sh') ? 'sh' : '');
+  if (!executor) { showToast('Only .ps1 and .sh files can be uploaded', 'err'); return; }
+  if (file.size === 0) { showToast('Script file is empty', 'err'); return; }
+  if (file.size > STEP_SCRIPT_MAX_BYTES) { showToast('Script is larger than 256 KB', 'err'); return; }
+  var row = input.closest('.bld-step');
+  var reader = new FileReader();
+  reader.onload = function() {
+    var text = String(reader.result);
+    if (text.indexOf('\u0000') !== -1) { showToast('File looks binary, not a text script', 'err'); return; }
+    row.querySelector('.st-cmd').value = text;
+    row.querySelector('.st-exec').value = executor;
+    showToast('Loaded ' + file.name, 'ok');
+  };
+  reader.onerror = function() { showToast('Could not read ' + file.name, 'err'); };
+  reader.readAsText(file);
+}
+
 export function pickScenarioUploadFile() { document.getElementById('sc-upload-file').click(); }
 
 export function downloadBuilderYaml() {
@@ -2206,6 +2213,27 @@ export function viewRunResults(run) {
       titleEl.insertAdjacentElement('afterend', el);
     }).catch(function() {});
   }
+  // Detection and response efficacy statement for ransomware runs. The host
+  // sits under the summary line; a previous run's panel is removed first.
+  var oldEff = document.getElementById('rw-efficacy-host');
+  if (oldEff) oldEff.remove();
+  if (runId && isRansomwareRun(run.scenarioId)) {
+    var effHost = document.createElement('div');
+    effHost.id = 'rw-efficacy-host';
+    document.getElementById('results-summary').insertAdjacentElement('afterend', effHost);
+    renderRwEfficacyPanel(effHost, runId);
+  }
+  // Collection → exfiltration chain report for the DLP chain scenarios. Sits
+  // under the efficacy host (or the summary) and is replaced on each open.
+  var oldChain = document.getElementById('exfil-chain-host');
+  if (oldChain) oldChain.remove();
+  if (runId && isExfilChainRun(run.scenarioId)) {
+    var chainHost = document.createElement('div');
+    chainHost.id = 'exfil-chain-host';
+    var anchor = document.getElementById('rw-efficacy-host') || document.getElementById('results-summary');
+    anchor.insertAdjacentElement('afterend', chainHost);
+    renderExfilChainPanel(chainHost, runId);
+  }
   var hasOutput = runId && (run.status === 'completed' || run.status === 'partial');
   document.getElementById('results-export').innerHTML = '';
 
@@ -2334,6 +2362,8 @@ export function viewRunResults(run) {
         (s.previousPreventionScore ? '<span>Prev Prevention: <strong>' + Math.round(s.previousPreventionScore) + '%</strong></span>' : '') +
       '</div>';
 
+    scorePanel += '<div id="run-ov-extra"></div>';
+
     // Critical failures alert
     var cf = s.criticalFailures || [];
     if (cf.length > 0) {
@@ -2384,6 +2414,8 @@ export function viewRunResults(run) {
         '</div>';
     }
   }
+
+  if (!scorePanel) scorePanel = '<div id="run-ov-extra"></div>';
 
   // Privilege-tier breakdown — always shown; shows "inherited" for unannotated steps
   (function() {
@@ -2602,8 +2634,17 @@ export function viewRunResults(run) {
   // detected but FAILED to revert are not included here -- see
   // docs/superpowers/specs/2026-08-06-endpoint-changes-tab-design.md.
   var endpointHtml = (function() {
-    var items = run.reverted || [];
+    var split = splitReverted(run.reverted);
+    var items = split.reverted;
+    var failedHtml = split.incomplete.length
+      ? '<div style="border:1px solid var(--danger);background:rgba(218,54,51,0.08);border-radius:8px;padding:0.75rem 1rem;margin-bottom:0.8rem">' +
+        '<div style="font-weight:700;color:var(--danger);font-size:0.85rem;margin-bottom:0.3rem">Not fully restored (' + split.incomplete.length + ')</div>' +
+        '<div style="color:var(--muted);font-size:0.78rem;margin-bottom:0.4rem">The agent could not put back, or could not verify, the items below. The endpoint may behave differently until they are fixed.</div>' +
+        split.incomplete.map(function(m) { return '<div style="font-size:0.78rem;padding:0.15rem 0">&bull; ' + x(m) + '</div>'; }).join('') +
+        '</div>'
+      : '';
     if (!items.length) {
+      if (failedHtml) return '<div style="padding:0.5rem 0">' + failedHtml + '</div>';
       return '<div class="dash-panel dash-soon" style="padding:2rem;text-align:center;color:var(--muted);font-size:0.8rem">No endpoint changes were captured for reversal during this run.</div>';
     }
     var rows = items.map(function(item) {
@@ -2611,7 +2652,7 @@ export function viewRunResults(run) {
         '<span class="u-muted">&bull;</span><span>' + x(item) + '</span>' +
       '</div>';
     }).join('');
-    return '<div style="padding:0.5rem 0">' +
+    return '<div style="padding:0.5rem 0">' + failedHtml +
       '<div style="color:var(--muted);font-size:0.78rem;margin-bottom:0.6rem">The agent reverted ' + items.length + ' endpoint change(s) made during the run.</div>' +
       rows +
     '</div>';
@@ -2686,16 +2727,13 @@ export function viewRunResults(run) {
             '<div><div class="kpi-label">Status</div><div>' + x(run.status || '') + '</div></div>' +
           '</div>' +
         '</div></div>' +
-        '<div class="dash-panel"><div class="dash-panel-hdr">Export</div><div class="dash-panel-body" style="display:flex;gap:0.5rem;flex-wrap:wrap">' +
-          '<button class="btn btn-sm btn-outline"' + on('click', 'exportRunJSON', runId) + '>&#8595; JSON</button>' +
-          '<button class="btn btn-sm btn-outline"' + on('click', 'openRunReport', runId) + '>&#8599; HTML Report</button>' +
-          '<button class="btn btn-sm btn-outline"' + on('click', 'downloadRunReport', runId) + '>&#8595; PDF Report</button>' +
-          '<button class="btn btn-sm btn-outline"' + on('click', 'downloadRunCSV', runId) + '>&#8595; CSV</button>' +
-        '</div></div>';
+        '';
     } else {
       reportsEl.innerHTML = '<div style="color:var(--muted);font-size:0.8rem;padding:1rem 0">No exportable output yet — this run hasn\'t completed.</div>';
     }
   }
+
+  paintResultsExtras(run);
 
   // Overview dashboard panels + Key Findings + Prioritised Recommendations —
   // all fetched from the report engine (BuildFromRun, the same source as the
@@ -2712,6 +2750,7 @@ export function viewRunResults(run) {
         if (findingsEl) findingsEl.innerHTML = renderRunFindings(rep);
         var recEl = document.getElementById('run-report-recommendation');
         if (recEl) recEl.innerHTML = renderRunRecommendations(rep);
+        paintRecommendationExtra(rep, run);
         renderDetectionValidationTab(rep, run);
       }
     }).catch(function() {
@@ -2784,6 +2823,9 @@ export function switchRunTab(tabId) {
   Array.prototype.forEach.call(document.getElementById('run-tabbar').querySelectorAll('.run-tab-btn'), function(btn) {
     btn.classList.toggle('active', btn.id === 'run-tabbtn-' + tabId);
   });
+  // Charts drawn while their tab was hidden had no width; redraw the ones that just became visible.
+  var shown = document.getElementById('run-tab-' + tabId);
+  if (shown) hydrateCharts(shown);
 }
 
 // Status label map for the unified Detection Validation tab. Deliberately

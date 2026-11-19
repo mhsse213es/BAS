@@ -11,7 +11,8 @@ func validFamily(f AttackFamily) bool {
 	switch f {
 	case FamilySQLInjection, FamilyXSS, FamilyPathTraversal, FamilySSRF, FamilyFileUpload,
 		FamilyHTTPParser, FamilyAPIAbuse, FamilyAuthAbuse, FamilyRateLimit, FamilyCacheWeakness, FamilyPolicyMisconfig,
-		FamilyCommandInjection, FamilyFileInclusion, FamilyXXE, FamilyNoSQLInjection, FamilyLDAPInjection, FamilyXPathInjection:
+		FamilyCommandInjection, FamilyFileInclusion, FamilyXXE, FamilyNoSQLInjection, FamilyLDAPInjection, FamilyXPathInjection,
+		FamilyJNDIInjection:
 		return true
 	default:
 		return false

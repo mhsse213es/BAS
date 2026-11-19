@@ -1,0 +1,145 @@
+[
+  {
+    "id": "appctl-a07-regsvr32",
+    "n": 7,
+    "name": "Application control Trusted Binary Proxy: Regsvr32 scriptlet execution (T1218.010)",
+    "technique_id": "T1218.010",
+    "timeout_sec": 90,
+    "blast_radius": "Writes a benign .sct scriptlet and runs regsvr32.exe /i against it; the scriptlet writes one marker file. All files are in a private temp directory deleted by the step.",
+    "telemetry": [
+      "AppLocker EXE and DLL event 8004 naming regsvr32.exe, if enforced",
+      "Code Integrity 3077 naming regsvr32.exe, if WDAC enforced",
+      "Sysmon EID 1: regsvr32.exe with /i: and scrobj.dll"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ]
+  },
+  {
+    "id": "appctl-a08-rundll32",
+    "n": 8,
+    "name": "Application control Trusted Binary Proxy: Rundll32 INF execution through advpack (T1218.011)",
+    "technique_id": "T1218.011",
+    "timeout_sec": 90,
+    "blast_radius": "Writes a benign INF and runs rundll32.exe advpack.dll,LaunchINFSection; the INF runs one cmd.exe that writes a marker file. Files are in a private temp directory deleted by the step.",
+    "telemetry": [
+      "AppLocker EXE and DLL event 8004 naming rundll32.exe, if enforced",
+      "Code Integrity 3077 naming rundll32.exe, if WDAC enforced",
+      "Sysmon EID 1: rundll32.exe advpack.dll,LaunchINFSection"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ]
+  },
+  {
+    "id": "appctl-a09-mshta",
+    "n": 9,
+    "name": "Application control Trusted Binary Proxy: Mshta HTA and script execution (T1218.005)",
+    "technique_id": "T1218.005",
+    "timeout_sec": 90,
+    "blast_radius": "Writes a benign .hta that writes one marker file and closes. Files are in a private temp directory deleted by the step.",
+    "telemetry": [
+      "AppLocker EXE and DLL event 8004 naming mshta.exe, if enforced",
+      "Code Integrity 3077 naming mshta.exe, if WDAC enforced",
+      "Sysmon EID 1: mshta.exe with an .hta argument"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ]
+  },
+  {
+    "id": "appctl-a10-msiexec",
+    "n": 10,
+    "name": "Application control Trusted Binary Proxy: Msiexec package execution (T1218.007)",
+    "technique_id": "T1218.007",
+    "timeout_sec": 120,
+    "blast_radius": "Builds a minimal local MSI whose only action runs cmd.exe to write one marker file; it registers no product and installs nothing. The package is in a private temp directory deleted by the step.",
+    "telemetry": [
+      "AppLocker MSI and Script event 8007 naming the package, if AppLocker MSI rules enforced",
+      "AppLocker MSI and Script event 8029 / Code Integrity 3077, if WDAC enforced",
+      "Sysmon EID 1: msiexec.exe /i with a user-writable .msi"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ]
+  },
+  {
+    "id": "appctl-a11-installutil",
+    "n": 11,
+    "name": "Application control Trusted Binary Proxy: InstallUtil assembly execution (T1218.004)",
+    "technique_id": "T1218.004",
+    "timeout_sec": 120,
+    "blast_radius": "Compiles a tiny unsigned .NET assembly in a private temp directory and runs InstallUtil.exe /U against it; its uninstall handler writes one marker file. Everything is deleted by the step.",
+    "telemetry": [
+      "AppLocker EXE and DLL event 8004 naming InstallUtil.exe, if enforced",
+      "Code Integrity 3077 naming InstallUtil.exe or the assembly, if WDAC enforced",
+      "Sysmon EID 1: InstallUtil.exe /U with a user-writable assembly"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ]
+  },
+  {
+    "id": "appctl-a12-cpl",
+    "n": 12,
+    "name": "Application control Trusted Binary Proxy: Control Panel applet (CPL) loaded from a user-writable path (T1218.002)",
+    "technique_id": "T1218.002",
+    "timeout_sec": 90,
+    "blast_radius": "Copies a signed system Control Panel applet into a private temp directory and loads that copy once with LoadLibrary, then frees it. AppLocker does not evaluate .cpl files, so this path is tested against WDAC only.",
+    "telemetry": [
+      "Code Integrity 3077 naming the copied .cpl, if WDAC enforced",
+      "Sysmon EID 7: image load of a .cpl from a user-writable path"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ]
+  },
+  {
+    "id": "appctl-a13-cmstp",
+    "n": 13,
+    "name": "Application control Trusted Binary Proxy: CMSTP INF execution (T1218.003)",
+    "technique_id": "T1218.003",
+    "timeout_sec": 90,
+    "blast_radius": "Writes a benign INF with a pre-setup command and runs cmstp.exe /s /ns; the command writes one marker file. Files are in a private temp directory deleted by the step.",
+    "telemetry": [
+      "AppLocker EXE and DLL event 8004 naming cmstp.exe, if enforced",
+      "Code Integrity 3077 naming cmstp.exe, if WDAC enforced",
+      "Sysmon EID 1: cmstp.exe /s /ns with an .inf"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ]
+  },
+  {
+    "id": "appctl-a14-xsl",
+    "n": 14,
+    "name": "Application control Trusted Binary Proxy: XSL script processing through WMIC (T1220)",
+    "technique_id": "T1220",
+    "timeout_sec": 90,
+    "blast_radius": "Writes a benign XSL stylesheet with an inline script that writes one marker file and runs wmic.exe os get /format against it. Reports not applicable where WMIC is absent. Files are in a private temp directory deleted by the step.",
+    "telemetry": [
+      "AppLocker EXE and DLL event 8004 naming wmic.exe, if enforced",
+      "Code Integrity 3077 naming wmic.exe, if WDAC enforced",
+      "Sysmon EID 1: wmic.exe with /format: pointing to a user-writable .xsl"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ]
+  },
+  {
+    "id": "appctl-a15-msbuild",
+    "n": 15,
+    "name": "Application control Trusted Developer Utility: MSBuild inline task execution (T1127.001)",
+    "technique_id": "T1127.001",
+    "timeout_sec": 120,
+    "blast_radius": "Writes a benign project file with an inline C# task that writes one marker file and runs MSBuild.exe against it. Files are in a private temp directory deleted by the step.",
+    "telemetry": [
+      "AppLocker EXE and DLL event 8004 naming MSBuild.exe, if enforced",
+      "Code Integrity 3077 naming MSBuild.exe, if WDAC enforced",
+      "Sysmon EID 1: MSBuild.exe with a user-writable .proj"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ]
+  }
+]

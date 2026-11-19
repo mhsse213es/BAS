@@ -46,6 +46,14 @@ export function buildPhishingRunRequest(entry, values) {
   return { ok: true, body: { scenarioId: route.id, parameters } };
 }
 
+// Attaches the optional exercise execution a run belongs to. An empty value adds
+// nothing, so an unlinked run sends exactly what it did before.
+export function withExecutionLink(built, executionId) {
+  const id = typeof executionId === 'string' ? executionId.trim() : '';
+  if (!built || !built.ok || id === '') return built;
+  return { ok: true, body: { ...built.body, parameters: { ...built.body.parameters, executionId: id } } };
+}
+
 // Counts phishing entries for the landing card. Each count reads only the
 // server's status field, so the browser never decides availability itself.
 export function phishingLibraryCounts(entries) {

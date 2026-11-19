@@ -91,6 +91,10 @@ func TestBuild_ExposureWindows_MeasuresDaysOpen(t *testing.T) {
 		if exp.Worst[0].ReopenedCount != 2 {
 			t.Errorf("Worst[0].ReopenedCount = %d, want 2", exp.Worst[0].ReopenedCount)
 		}
+		// Each exposure row must carry the ID of the finding it describes, so the UI can open that finding.
+		if exp.Worst[0].FindingID != "f-old" {
+			t.Errorf("Worst[0].FindingID = %q, want f-old", exp.Worst[0].FindingID)
+		}
 	})
 }
 
@@ -118,6 +122,12 @@ func TestBuild_Forecast_FromSnapshots(t *testing.T) {
 			mustExec(t, pool, `
 				INSERT INTO dashboard_snapshots (snapshot_date, avg_risk_score, exposure_score, detection_coverage)
 				VALUES (CURRENT_DATE - $1::int, $2, 0, 0)`, 13-i, 40+i)
+		}
+		// Days with no scored run store a bare 0. They are not measurements and must not drag the forecast.
+		for i := 0; i < 5; i++ {
+			mustExec(t, pool, `
+				INSERT INTO dashboard_snapshots (snapshot_date, avg_risk_score, exposure_score, detection_coverage, risk_measurable)
+				VALUES (CURRENT_DATE - $1::int, 0, 0, 0, false)`, 20+i)
 		}
 		p, err := Build(context.Background(), pool)
 		if err != nil {

@@ -186,3 +186,35 @@ func TestCorrelate_CapsAttachedAlertsAtFive(t *testing.T) {
 		t.Errorf("len(Alerts) = %d, want %d", len(tc.Alerts), maxAlertsPerTech)
 	}
 }
+
+func TestCorrelate_ATelemetryProbeIsCheckedAgainstAlertsLikeAnExecutedStep(t *testing.T) {
+	runStart := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
+	runEnd := runStart.Add(10 * time.Minute)
+	seen := runStart.Add(2 * time.Minute)
+	srv := newFakeQRadarServer(t, []fakeQRadarEvent{{sourceIP: "10.0.0.5", startTimeMs: seen.Add(5 * time.Second).UnixMilli(), ruleName: "net view from non-admin"}})
+	defer srv.Close()
+	probe := func(id string, at time.Time) models.SimulationResult {
+		r := resultAt(id, "Network Share Discovery", models.ResultSkipped, at, 1000)
+		r.SkipReason = models.SkipReasonTelemetryOnly
+		return r
+	}
+	results := []models.SimulationResult{
+		probe("T1135", seen),                    // alert in its window: detected
+		probe("T1083", runStart.Add(6*time.Minute)), // no alert near it: undetected
+		resultAt("T1098", "Account Manipulation", models.ResultSkipped, time.Time{}, 0), // an ordinary skip is still not executed
+	}
+	report, err := Correlate(context.Background(), Config{Provider: ProviderQRadar, ConsoleURL: srv.URL}, "run-1", "agent-1", "10.0.0.5", runStart, runEnd, results)
+	if err != nil {
+		t.Fatalf("Correlate: %v", err)
+	}
+	by := map[string]string{}
+	for _, tc := range report.Techniques {
+		by[tc.TechniqueID] = tc.SIEMVerdict
+	}
+	if by["T1135"] != "detected" || by["T1083"] != "undetected" || by["T1098"] != "not_executed" {
+		t.Errorf("verdicts = %v", by)
+	}
+	if report.Detected != 1 || report.Undetected != 1 || report.NotExecuted != 1 || report.DetectionRate != 50 {
+		t.Errorf("report = detected %d undetected %d notExecuted %d rate %d", report.Detected, report.Undetected, report.NotExecuted, report.DetectionRate)
+	}
+}

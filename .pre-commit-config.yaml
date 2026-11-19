@@ -1,0 +1,8 @@
+# Pre-commit hooks — install once per clone with:  pre-commit install
+# (pip install pre-commit).  The gitleaks hook blocks a commit that would
+# introduce a secret, the local recurrence guard for the 2026-09 incident.
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks

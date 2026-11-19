@@ -74,6 +74,56 @@ var appCtlStepFamilies = map[string]string{
 	"Application control in-process PowerShell": "inprocess_hosting",
 }
 
+// appCtlMasteryStepFamilies is the same fallback for the Application Control
+// Mastery scenarios, keyed by exact step name. Generated from scenarios/appcontrol-*.yaml.
+var appCtlMasteryStepFamilies = map[string]string{
+	"Application control Advanced Loading: DLL resolved by name from the application directory (T1574.001)":                          "dll_search_order",
+	"Application control Advanced Loading: COM scriptlet activation through scrobj.dll (T1546.015)":                                  "com_activation",
+	"Application control Advanced Loading: program launched by a scheduled task (T1053.005)":                                         "scheduled_task_launch",
+	"Application control Advanced Loading: program launched by the service manager (T1543.003)":                                      "service_launch",
+	"Application control File Enforcement: unsigned executable (T1204.002)":                                                          "unsigned_executable",
+	"Application control File Enforcement: signed binary with a corrupted signature (T1553.002)":                                     "tampered_signature",
+	"Application control File Enforcement: executable signed by an untrusted self-signed publisher (T1553.002)":                      "publisher_trust",
+	"Application control Location Enforcement: unsigned executable run from %TEMP% (T1204.002)":                                      "exec_from_temp",
+	"Application control Location Enforcement: unsigned executable run from %APPDATA% (T1204.002)":                                   "exec_from_appdata",
+	"Application control Location Enforcement: downloaded unsigned executable run from Downloads (T1204.002)":                        "exec_from_downloads",
+	"Application control File Identity: executable renamed to a non-executable extension (T1036.008)":                                "renamed_extension",
+	"Application control Module Enforcement: unsigned DLL loaded from a user-writable path (T1129)":                                  "dll_loading",
+	"Application control Module Enforcement: module with an .ocx extension loaded from a user-writable path (T1129)":                 "ocx_module_loading",
+	"Application control Installer Enforcement: MSI installed through the Windows Installer API (T1218.007)":                         "msi_installation",
+	"Application control Operational Reliability: enforcement log channels are enabled and retained (T1562.002)":                     "enforcement_log_health",
+	"Application control Operational Reliability: application identity service runs while AppLocker enforces (T1562.001)":            "identity_service_reliability",
+	"Application control Operational Reliability: allow rules open to everyone over whole drives or user-writable paths (T1562.001)": "overbroad_allow_rules",
+	"Application control Packaged App Rules: Appx collection enforcement posture (T1553)":                                            "packaged_app_rules",
+	"Application control Packaged App Trust: sideloading and developer mode while enforcing (T1553)":                                 "sideloading_policy",
+	"Application control Installer Trust: AlwaysInstallElevated bypass (T1548)":                                                      "always_install_elevated",
+	"Application control Trusted Location Trust: user-writable directories under the Windows directory (T1553)":                      "writable_allowed_paths",
+	"Application control Policy Integrity: application control service tamper resistance (T1562.001)":                                "policy_service_interruption",
+	"Application control Policy Integrity: local AppLocker policy modification (T1562.001)":                                          "policy_modification",
+	"Application control Policy Integrity: audit-mode or missing-collection downgrade (T1562.001)":                                   "policy_downgrade",
+	"Application control Policy Integrity: WDAC active policy directory trust boundary (T1562.001)":                                  "supplemental_policy",
+	"Application control Policy Integrity: Managed Installer rules that trust user-writable paths (T1553)":                           "managed_installer",
+	"Application control Policy Integrity: evidence that enforcement survives a reboot (T1562.001)":                                  "policy_after_reboot",
+	"Application control Policy Integrity: policy drift against an approved baseline (T1562.001)":                                    "policy_lifecycle",
+	"Application control Trusted Binary Proxy: Regsvr32 scriptlet execution (T1218.010)":                                             "regsvr32_proxy",
+	"Application control Trusted Binary Proxy: Rundll32 INF execution through advpack (T1218.011)":                                   "rundll32_proxy",
+	"Application control Trusted Binary Proxy: Mshta HTA and script execution (T1218.005)":                                           "mshta_proxy",
+	"Application control Trusted Binary Proxy: Msiexec package execution (T1218.007)":                                                "msiexec_proxy",
+	"Application control Trusted Binary Proxy: InstallUtil assembly execution (T1218.004)":                                           "installutil_proxy",
+	"Application control Trusted Binary Proxy: Control Panel applet (CPL) loaded from a user-writable path (T1218.002)":              "control_panel_cpl",
+	"Application control Trusted Binary Proxy: CMSTP INF execution (T1218.003)":                                                      "cmstp_proxy",
+	"Application control Trusted Binary Proxy: XSL script processing through WMIC (T1220)":                                           "xsl_script_processing",
+	"Application control Trusted Developer Utility: MSBuild inline task execution (T1127.001)":                                       "msbuild_proxy",
+	"Application control Script Host: wscript.exe VBScript from a user-writable path (T1059.005)":                                    "wscript_host",
+	"Application control Script Host: cmd.exe batch file from a user-writable path (T1059.003)":                                      "cmd_batch_script",
+	"Application control Script Host: Windows Script File (.wsf) through cscript.exe (T1059.005)":                                    "wsf_script_host",
+	"Application control Script Host: JScript from a user-writable path (T1059.007)":                                                 "user_writable_script_host",
+	"Application control PowerShell: unsigned script from a user-writable path (T1059.001)":                                          "powershell_script_signing",
+	"Application control PowerShell: language mode of a script from a user-writable path (T1059.001)":                                "powershell_language_mode",
+	"Application control WMI: Win32_Process.Create launching a benign command (T1047)":                                               "wmi_process_create",
+	"Application control Interpreters: an already-installed alternate interpreter (T1059)":                                           "alternate_interpreters",
+}
+
 // appCtlLimitations is stated in every section that has data. These are
 // report-level facts, not footnotes: a passing fixture or a stubbed test is
 // never evidence that a live control enforces.
@@ -122,6 +172,11 @@ func buildAppControlSection(runID string, results []models.SimulationResult) App
 	for _, fam := range appCtlFamilyOrder {
 		sec.Families = append(sec.Families, appCtlFamilyStatusFor(fam, perFamily[fam], unverified[fam]))
 	}
+	for _, fam := range appCtlMasteryFamilies {
+		if len(perFamily[fam]) > 0 || unverified[fam] {
+			sec.Families = append(sec.Families, appCtlFamilyStatusFor(fam, perFamily[fam], unverified[fam]))
+		}
+	}
 	return sec
 }
 
@@ -168,6 +223,9 @@ func appCtlFamilyByStepName(name string) string {
 		if strings.HasPrefix(name, prefix) {
 			return fam
 		}
+	}
+	if fam, ok := appCtlMasteryStepFamilies[name]; ok {
+		return fam
 	}
 	return ""
 }

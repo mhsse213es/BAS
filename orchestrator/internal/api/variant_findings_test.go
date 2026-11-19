@@ -17,7 +17,7 @@ import (
 // step's task_id to drive result-submission tests.
 func dispatchVariantForTest(t *testing.T, h *Handler, pool *pgxpool.Pool, agentID, techniqueID, executionMode string) (scenarioRunID, variantRunID, taskID string) {
 	t.Helper()
-	seedActiveAgent(t, pool, agentID, "Windows")
+	seedLabAgent(t, pool, agentID, "Windows")
 	fake := startFakeAgent(t, h.hub, agentID)
 	defer fake.Disconnect(t)
 

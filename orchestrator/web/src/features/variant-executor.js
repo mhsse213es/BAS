@@ -1,4 +1,5 @@
 import { state } from '../core/state.js';
+import { refreshPanels } from '../core/refresh.js';
 import { _vexResumeActiveRun, loadVariantCoverage, loadVariantStats, populateVexAgents, populateVexTechniques, startVexSweepPolling } from './variants.js';
 
 
@@ -14,6 +15,12 @@ import { _vexResumeActiveRun, loadVariantCoverage, loadVariantStats, populateVex
 // indefinitely with zero feedback if the connection or session broke mid-run.
 export var VEX_POLL_MAX_FAILURES = 5;
      // set by stopVex(); checked at every queue step
+
+// The hero Refresh button: reload the data panels and say how it went. The sweep poller and the resume of an
+// in-flight run are left alone; a refresh should not restart them.
+export function refreshVariantTab() {
+  refreshPanels('variants', [loadVariantStats, loadVariantCoverage, populateVexAgents, populateVexTechniques]);
+}
 
 export function loadVariantTab() {
   loadVariantStats();

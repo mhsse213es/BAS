@@ -44,6 +44,7 @@ func ExecutePhishingRun(ctx context.Context, pool *pgxpool.Pool, env PhishingRun
 		Status:      phishingrun.StatusPending,
 		InitiatedBy: req.InitiatedBy,
 		StartedAt:   time.Now(),
+		ExecutionID: executionIDFromParams(req.Parameters),
 	}
 	if err := db.InsertPhishingRun(ctx, pool, run); err != nil {
 		return nil, fmt.Errorf("phishingrun: insert run: %w", err)

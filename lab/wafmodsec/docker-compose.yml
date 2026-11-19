@@ -1,0 +1,119 @@
+# wafmodsec lab: a real, self-hosted ModSecurity + OWASP CRS WAF (the
+# "waf" service) in front of a permissive echo origin (the "origin"
+# service). No vendor account or tenant is needed -- this is a live,
+# fully self-owned WAF engine, exercised the same way internal/apibas/lab
+# is: real HTTP requests, real enforcement decisions, never a fixture.
+#
+# "origin" always answers 200 and echoes back the request it received
+# (method, path, headers, body) as JSON. That echo is itself evidence:
+# if a request got through the WAF, origin's response contains it: if
+# ModSecurity blocked it, the client gets ModSecurity's own block page
+# (403) instead and origin never saw the request at all. One real HTTP
+# round trip through "waf" therefore yields two independent signals --
+# the WAF engine's enforcement decision and the origin's own receipt
+# confirmation -- exactly the two mechanisms wafval.Observation expects.
+#
+# Images pinned by digest (resolved 2026-11-10), not by rolling tag --
+# the upstream coreruleset/modsecurity-crs-docker README itself warns
+# rolling tags "should not be used in production"; this is a lab, but
+# the same reproducibility concern applies to a Claude-run lab.
+#
+# Usage: docker compose up -d   (from this directory)
+#        curl http://localhost:8888/search?q=hello   -> origin echo (allowed)
+#        curl "http://localhost:8888/search?q=%27%20UNION%20SELECT%20NULL--"  -> 403 (blocked)
+#        docker compose down -v
+name: wafmodsec-lab
+
+networks:
+  wafmodsec-lab:
+    driver: bridge
+
+services:
+  origin:
+    image: mendhak/http-https-echo@sha256:0fefe04350131d7bb28355e3bf037062643e45f4a8a32f23679529e1b09d8ce4
+    hostname: origin
+    restart: unless-stopped
+    environment:
+      HTTP_PORT: "8080"
+    # Published directly to the host for origin-resilience's WAFORIGIN-002
+    # (direct-origin reachability): a real, common misconfiguration where
+    # the backend behind a CDN/WAF is ALSO directly internet-reachable,
+    # letting an attacker skip the WAF entirely by targeting the origin's
+    # own address instead of the documented edge. Every other live test in
+    # this lab deliberately goes through "waf" (8888) only -- this port
+    # exists solely so WAFORIGIN-002 has a real bypass path to send the
+    # SAME payload to, never used by any other scenario.
+    ports:
+      - "8890:8080"
+    networks: [wafmodsec-lab]
+
+  waf:
+    image: owasp/modsecurity-crs@sha256:b8d5bbf88c643800e31b248993858c335e4907ba0ee473d0c81c5726fb2c1bdc
+    hostname: waf
+    restart: unless-stopped
+    depends_on: [origin]
+    environment:
+      BACKEND: "http://origin:8080"
+      PORT: "8080"
+      MODSEC_RULE_ENGINE: "On"
+      PARANOIA: "1"
+      BLOCKING_PARANOIA: "1"
+      ANOMALY_INBOUND: "5"
+      ANOMALY_OUTBOUND: "4"
+      # Real detection/telemetry evidence for detection-telemetry
+      # (WAFDETECT-001/003/004): the image's own modsecurity.conf.template
+      # substitutes MODSEC_AUDIT_LOG verbatim into ModSecurity's real
+      # SecAuditLog directive (confirmed by reading the template inside
+      # the running container) -- redirecting it from the image's default
+      # /dev/stdout to a real file under ./audit-logs (bind-mounted below)
+      # gives this lab's Go code direct, ordinary file access to
+      # ModSecurity's own structured JSON audit trail (one line per
+      # relevant transaction: time_stamp, unique_id, request.uri,
+      # matched rules), exactly as a real log-shipping agent would read
+      # it -- no SIEM, no docker-logs shell-out, no simulated evidence.
+      MODSEC_AUDIT_LOG: "/var/log/modsecurity/audit/audit.log"
+    ports:
+      - "8888:8080"
+    networks: [wafmodsec-lab]
+    # Real per-client rate limiting for RATE-001 (automated-abuse): these
+    # mount into the image's documented template directory
+    # (/etc/nginx/templates/<path>.template -> rendered to
+    # /etc/nginx/<path> at container start). nginx/default.conf is a
+    # byte-for-byte copy of the image's own shipped conf.d/default.conf
+    # plus one added `limit_req` line -- see both files' own doc comments
+    # for why this is safe and what it enforces.
+    volumes:
+      - ./nginx/00-limit-req-zone.conf:/etc/nginx/templates/conf.d/00-limit-req-zone.conf.template:ro
+      - ./nginx/default.conf:/etc/nginx/templates/conf.d/default.conf.template:ro
+      - ./audit-logs:/var/log/modsecurity/audit
+
+  # A second, deliberately weakened instance for policy-integrity's GAP-001
+  # (detection-only mode): the ONLY difference from "waf" above is
+  # MODSEC_RULE_ENGINE -- ModSecurity's SecRuleEngine directive genuinely
+  # supports exactly "On"/"Off"/"DetectionOnly"; DetectionOnly means every
+  # rule still evaluates and logs, but NEVER blocks, regardless of anomaly
+  # score. Same origin, same CRS ruleset, same paranoia/anomaly thresholds
+  # -- one real, single-variable policy weakening, not a simulated one.
+  # This is honestly WAF-WIDE, broader than the scenario's literal
+  # "the matching rule... was switched to detection-only" (a single-rule
+  # override) -- disclosed in lab/wafmodsec/README.md, not silently
+  # overclaimed.
+  waf-weakened:
+    image: owasp/modsecurity-crs@sha256:b8d5bbf88c643800e31b248993858c335e4907ba0ee473d0c81c5726fb2c1bdc
+    hostname: waf-weakened
+    restart: unless-stopped
+    depends_on: [origin]
+    environment:
+      BACKEND: "http://origin:8080"
+      PORT: "8080"
+      MODSEC_RULE_ENGINE: "DetectionOnly"
+      PARANOIA: "1"
+      BLOCKING_PARANOIA: "1"
+      ANOMALY_INBOUND: "5"
+      ANOMALY_OUTBOUND: "4"
+    ports:
+      - "8889:8080"
+    networks: [wafmodsec-lab]
+    volumes:
+      - ./nginx/00-limit-req-zone.conf:/etc/nginx/templates/conf.d/00-limit-req-zone.conf.template:ro
+      - ./nginx/default.conf:/etc/nginx/templates/conf.d/default.conf.template:ro

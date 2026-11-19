@@ -202,13 +202,26 @@ func (d *Dispatcher) recordStateMetrics(ctx context.Context, jobID, jobType, new
 // tries again next occurrence).
 func (d *Dispatcher) spawnDueSchedules(ctx context.Context) {
 	schedules, err := d.store.ListEnabledSchedules(ctx)
+	if err != nil || len(schedules) == 0 {
+		return
+	}
+	// Change-freeze windows are read once per tick. Fail closed: if they cannot be read, no scheduled assessment
+	// starts this tick, because a freeze must not be breached by a read error. Nothing is marked handled, so the
+	// occurrences are checked again on the next tick.
+	windows, err := d.store.ListBlackouts(ctx)
 	if err != nil {
+		log.Printf("[jobs] blackout windows unreadable: %v -- no scheduled assessment starts until they can be read", err)
 		return
 	}
 	for _, sch := range schedules {
 		occurrence, ok := nextOccurrenceSince(sch, time.Now().UTC())
 		if !ok {
 			continue // no new occurrence since sch.LastOccurrenceAt -- the common case
+		}
+		if w, blocked := CoveringBlackout(windows, occurrence); blocked {
+			log.Printf("[jobs] schedule %s: occurrence %v skipped -- inside blackout %q", sch.ID, occurrence, w.Name)
+			d.store.MarkScheduleOccurrenceHandled(ctx, sch.ID, occurrence, "")
+			continue
 		}
 		if sch.LastSpawnedJobID != "" {
 			if job, err := d.store.Get(ctx, sch.LastSpawnedJobID); err == nil && !IsTerminalJobState(job.State) {

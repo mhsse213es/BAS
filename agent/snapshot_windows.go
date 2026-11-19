@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,9 +44,9 @@ func captureSnapshot(runID string) *SystemSnapshot {
 	// Registry Run keys (persistence locations)
 	regKeys := []string{
 		`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`,
-		`HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`,
+		hkcuReg(`SOFTWARE\Microsoft\Windows\CurrentVersion\Run`),
 		`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce`,
-		`HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce`,
+		hkcuReg(`SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce`),
 	}
 	for _, key := range regKeys {
 		if out, err := snapCmd("reg", "query", key); err == nil {
@@ -76,7 +77,7 @@ func captureSnapshot(runID string) *SystemSnapshot {
 
 	// Startup folders
 	startupDirs := []string{
-		filepath.Join(os.Getenv("APPDATA"), `Microsoft\Windows\Start Menu\Programs\Startup`),
+		userStartupDir(),
 		`C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup`,
 	}
 	for _, dir := range startupDirs {
@@ -86,6 +87,11 @@ func captureSnapshot(runID string) *SystemSnapshot {
 			}
 		}
 	}
+
+	// Registry locations that decide what runs and how Windows behaves; put back at the end of the run.
+	s.Guard = captureRegGuard(runID)
+	s.Health = captureHealth()
+	s.Procs = captureProcs()
 
 	return s
 }
@@ -98,7 +104,10 @@ func captureSnapshot(runID string) *SystemSnapshot {
 func captureSnapshotLite(runID string) *SystemSnapshot {
 	s := newSnapshot(runID)
 
-	if out, err := snapCmd("schtasks", "/query", "/fo", "CSV", "/nh"); err == nil {
+	if out, err := snapCmd("schtasks", "/query", "/fo", "CSV", "/nh"); err != nil {
+		s.markUnavailable("schtasks")
+	} else {
+		s.Lists["schtasks"] = []string{}
 		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 			line = strings.TrimSpace(line)
 			if line == "" {
@@ -125,9 +134,9 @@ func captureSnapshotLite(runID string) *SystemSnapshot {
 
 	regKeys := []string{
 		`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`,
-		`HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`,
+		hkcuReg(`SOFTWARE\Microsoft\Windows\CurrentVersion\Run`),
 		`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce`,
-		`HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce`,
+		hkcuReg(`SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce`),
 	}
 	for _, key := range regKeys {
 		if out, err := snapCmd("reg", "query", key); err == nil {
@@ -145,7 +154,7 @@ func captureSnapshotLite(runID string) *SystemSnapshot {
 	}
 
 	startupDirs := []string{
-		filepath.Join(os.Getenv("APPDATA"), `Microsoft\Windows\Start Menu\Programs\Startup`),
+		userStartupDir(),
 		`C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup`,
 	}
 	for _, dir := range startupDirs {
@@ -162,6 +171,35 @@ func captureSnapshotLite(runID string) *SystemSnapshot {
 func revertFromSnapshot(s *SystemSnapshot) []string {
 	var reverted []string
 
+	// ── Registry restore guard: shell handlers, App Paths, IFEO, UAC/Defender policy, ... ──
+	// Runs first so a hijacked shell handler is repaired even if a later step of the revert fails.
+	if g, ok := s.Guard.(*regGuard); ok && g != nil {
+		changed, residual := g.restore()
+		reverted = append(reverted, changed...)
+		for _, r := range residual {
+			log.Printf("[!] restore guard: %s", r)
+			reverted = append(reverted, "restore incomplete: "+r)
+		}
+	}
+
+	// ── Stray processes next: whatever the run left running may hold files or respawn what is restored below ──
+	if base, ok := s.Procs.(procBaseline); ok {
+		for _, line := range sweepStrayProcesses(base) {
+			log.Printf("[restore] %s", line)
+			reverted = append(reverted, line)
+		}
+	}
+
+	var health *healthState
+	if h, ok := s.Health.(*healthState); ok && h != nil {
+		health = h
+		// Named in the result so a leftover from an earlier run is not silently accepted as the normal state.
+		for _, p := range h.baselineProblems() {
+			log.Printf("[!] %s", p)
+			reverted = append(reverted, "restore incomplete: "+p)
+		}
+	}
+
 	// ── Hosts file restore ────────────────────────────────────────────────────
 	hostsPath := `C:\Windows\System32\drivers\etc\hosts`
 	if original, ok := s.Files[hostsPath]; ok {
@@ -175,9 +213,9 @@ func revertFromSnapshot(s *SystemSnapshot) []string {
 	// ── Registry Run key restore ──────────────────────────────────────────────
 	regKeys := []string{
 		`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`,
-		`HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`,
+		hkcuReg(`SOFTWARE\Microsoft\Windows\CurrentVersion\Run`),
 		`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce`,
-		`HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce`,
+		hkcuReg(`SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce`),
 	}
 	for _, key := range regKeys {
 		original, ok := s.Files["reg:"+key]
@@ -221,7 +259,7 @@ func revertFromSnapshot(s *SystemSnapshot) []string {
 		}
 	}
 
-	// ── Services — stop and disable newly added ───────────────────────────────
+	// ── Services — stop and disable newly added; delete those that are safe to delete ───────────────────────────────
 	origSvcs := toSet(s.Lists["services"])
 	if out, err := snapCmd("sc", "query", "type=", "all", "state=", "all"); err == nil {
 		for _, line := range strings.Split(string(out), "\n") {
@@ -230,9 +268,7 @@ func revertFromSnapshot(s *SystemSnapshot) []string {
 			}
 			name := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "SERVICE_NAME:"))
 			if name != "" && !origSvcs[name] {
-				snapCmdRun("sc", "stop", name)                         //nolint
-				snapCmdRun("sc", "config", name, "start=", "disabled") //nolint
-				reverted = append(reverted, "service stopped: "+name)
+				reverted = append(reverted, removeNewService(name))
 			}
 		}
 	}
@@ -256,7 +292,7 @@ func revertFromSnapshot(s *SystemSnapshot) []string {
 	// ── Startup folder — remove newly added files ─────────────────────────────
 	origStartup := toSet(s.Lists["startup"])
 	startupDirs := []string{
-		filepath.Join(os.Getenv("APPDATA"), `Microsoft\Windows\Start Menu\Programs\Startup`),
+		userStartupDir(),
 		`C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup`,
 	}
 	for _, dir := range startupDirs {
@@ -269,6 +305,14 @@ func revertFromSnapshot(s *SystemSnapshot) []string {
 					}
 				}
 			}
+		}
+	}
+
+	// ── Verify: ask Windows whether things still open the way they did before the run ──
+	if health != nil {
+		for _, p := range health.verify() {
+			log.Printf("[!] %s", p)
+			reverted = append(reverted, "restore incomplete: "+p)
 		}
 	}
 

@@ -93,6 +93,16 @@ func errorReasonLabel(r ErrorReason) string {
 // error. Grouped by category so the set stays auditable as it grows.
 func classifyExecutionError(lower string, exitCode int) ErrorReason {
 	switch {
+	// An unresolved bas-placeholder argument reached execution: our builder
+	// could not fill a required input, so the command ran against a dummy path.
+	// That is OUR content/arg-resolution defect (owner=audspect), never an
+	// environment gap — it must be caught before the "cannot find path" match
+	// below (which it would otherwise hit and be mislabelled a missing
+	// prerequisite, i.e. environment-owned, letting broken content pass
+	// factory validation).
+	case strings.Contains(lower, "bas-placeholder-"):
+		return ErrMalformedContent
+
 	// Our own scheduler / timeout supervisor — never a security outcome.
 	case strings.Contains(lower, "schedule timeout: resource locks unavailable"):
 		return ErrSchedulerContention
@@ -202,6 +212,8 @@ func classifySkipReason(detail string) string {
 		return models.SkipReasonPlatformUnavailable
 	case strings.Contains(lower, "circuit breaker"):
 		return models.SkipReasonCircuitOpen
+	case strings.Contains(lower, "telemetry-only probe"):
+		return models.SkipReasonTelemetryOnly
 	}
 	return ""
 }
@@ -239,9 +251,7 @@ func withEvidence(headline, combined string) string {
 // for errors, a reason. The returned detail is the report's "What happened" line.
 func classifyExecution(r ExecResult, combined string) (ExecutionOutcome, ErrorReason, string) {
 	if r.Vetoed {
-		return OutcomeVetoed, ErrNone, fmt.Sprintf(
-			"VETOED — Audspect prevented execution under its local destructive-action policy (action=%s, class=%s, source=%s). Customer defensive controls were not tested by this step.",
-			r.VetoedActionKey, r.VetoedExecutionClass, r.VetoedBlockSource)
+		return OutcomeVetoed, ErrNone, vetoDetail(r.VetoedActionKey, r.VetoedExecutionClass, r.VetoedBlockSource)
 	}
 
 	lower := strings.ToLower(combined)
@@ -280,7 +290,15 @@ func classifyExecution(r ExecResult, combined string) (ExecutionOutcome, ErrorRe
 		return OutcomeBlocked, ErrNone, fmt.Sprintf("Security control blocked the technique (exit 0x%X): %s", uint32(r.ExitCode), out)
 	}
 
-	// BAS execution error — not a security outcome.
+	// BAS execution error — not a security outcome. Every classified reason,
+	// including a missing prerequisite or an absent required binary, stays an
+	// ERROR here: the normalised ExecutionFailure assessment
+	// (execution_failure.go) matches this detail's "Execution error (<label>)"
+	// prefix and attributes each error to its owner — environment (missing
+	// tool/prereq, timeout, env conflict) vs content (malformed) — which is the
+	// single source of truth downstream consumers (factory validation,
+	// reporting, scoring) key off. Collapsing environment errors to a SKIP here
+	// would blind that taxonomy, so it is deliberately not done.
 	if reason := classifyExecutionError(lower, r.ExitCode); reason != ErrNone {
 		return OutcomeError, reason, "Execution error (" + errorReasonLabel(reason) + "): " + firstLine(combined)
 	}

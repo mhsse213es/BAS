@@ -1,0 +1,351 @@
+id: "cscrf-mii-incident-response"
+product_line: common
+name: "CSCRF-MII Incident Detection, Containment and Evidence Checks (P1)"
+description: >
+  Internal control-validation checks for incident response. Verdicts are internal control references
+  (CSCRF-IR-*), not SEBI clause identifiers. Read-only checks run anywhere. The malware-detection check uses
+  the standard EICAR test string (harmless) and the account-disablement check uses a synthetic account; both
+  require BAS_CONFIRM_IR_TEST=true and clean up in undo. Deferred until an EDR, SOC or SOAR is named:
+  suspicious-process containment, endpoint isolation and alert escalation. A PASS shows a control is
+  configured or works in isolation; it does not show the SOC responded.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cscrf-mii
+  - incident-response
+  - p1
+mitre_phases:
+  - execution
+  - impact
+
+steps:
+
+  # -------------------------------------------------------------------------
+  - id: ir-01
+    name: "Malware Detection with EICAR Test File (T1204.002, internal ref CSCRF-IR-01)"
+    technique_id: T1204.002
+    action_key: cscrf_ir_malware_detect
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: low
+    reversible: true
+    blast_radius: "Writes the standard EICAR test string to a per-run temp folder and checks whether endpoint protection removes or flags it. The folder is deleted in undo. Runs only with BAS_CONFIRM_IR_TEST=true."
+    telemetry:
+      - "File creation in temp"
+      - "Endpoint detection"
+    detection:
+      - "EICAR detection event"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-IR-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgIrGate { return ($env:BAS_CONFIRM_IR_TEST -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      if (-not (Test-CgIrGate)) { Complete-CgStep @{ Outcome = 'skip'; Reason = 'BAS_CONFIRM_IR_TEST not true; no test file written [CSCRF-IR-01]' } 'ir-01' }
+      $dir = Join-Path $env:TEMP ('bas-ir-' + $script:CgRun)
+      New-CgUndoRecord 'ir-01' @{ scenario = 'ir-01'; dir = $dir }
+      New-Item -ItemType Directory -Force -Path $dir | Out-Null
+      $f = Join-Path $dir 'eicar-test.txt'
+      $eicar = 'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*'
+      Set-Content -LiteralPath $f -Value $eicar -NoNewline -Encoding ASCII
+      $gone = $false
+      for ($i = 0; $i -lt 12 -and -not $gone; $i++) {
+      Start-Sleep -Seconds 5
+      if (-not (Test-Path -LiteralPath $f)) { $gone = $true }
+      }
+      $det = Get-MpThreatDetection -ErrorAction SilentlyContinue | Where-Object { $_.Resources -match [regex]::Escape($f) } | Select-Object -First 1
+      if ($gone -and $det -and $det.ActionSuccess) { Complete-CgStep @{ Outcome = 'pass'; Reason = 'EICAR test file detected and removed by endpoint protection (quarantine action succeeded) [CSCRF-IR-01]' } 'ir-01' }
+      if ($gone) { Complete-CgStep @{ Outcome = 'pass'; Reason = 'EICAR test file removed within 60 s; the Defender detection record could not be matched to this path [CSCRF-IR-01]' } 'ir-01' }
+      $st = Get-MpComputerStatus -ErrorAction SilentlyContinue
+      if ($st -and -not $st.RealTimeProtectionEnabled) { Complete-CgStep @{ Outcome = 'fail'; Reason = 'EICAR test file was not removed in 60 s; real-time protection is off [CSCRF-IR-01]' } 'ir-01' }
+      Complete-CgStep @{ Outcome = 'fail'; Reason = 'EICAR test file was not removed in 60 s although real-time protection reports on [CSCRF-IR-01]' } 'ir-01'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-IR-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgIrGate { return ($env:BAS_CONFIRM_IR_TEST -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      $rec = Read-CgUndoRecord 'ir-01'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'PASS: Cleanup complete (no record)'; exit 0 }
+      Remove-Item -LiteralPath $rec.dir -Recurse -Force -ErrorAction SilentlyContinue
+      if (Test-Path -LiteralPath $rec.dir) { Write-Output "FAIL: residue folder $($rec.dir) survived undo"; exit 0 }
+      Remove-CgUndoRecord 'ir-01'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: ir-03
+    name: "Malicious Address Blocking Capability (CSCRF-IR-03)"
+    technique_id: T1562.004
+    action_key: cscrf_ir_block_capability
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only query of outbound firewall block rules."
+    telemetry:
+      - "Firewall rule query"
+    detection:
+      - "Block capability review"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-IR-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgIrGate { return ($env:BAS_CONFIRM_IR_TEST -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      $svc = Get-Service -Name mpssvc -ErrorAction SilentlyContinue
+      if (-not $svc -or $svc.Status -ne 'Running') { Complete-CgStep @{ Outcome = 'error'; Reason = 'Windows Firewall service is not running; rules cannot be read [CSCRF-IR-03]' } 'ir-03' }
+      $rules = @(Get-NetFirewallRule -Direction Outbound -Enabled True -Action Block -ErrorAction SilentlyContinue)
+      if ($rules.Count -eq 0) { Complete-CgStep @{ Outcome = 'fail'; Reason = 'no enabled outbound block rule exists; blocking a malicious address is not configured [CSCRF-IR-03]' } 'ir-03' }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = "$($rules.Count) enabled outbound block rule(s) present; coverage of a given address is not tested [CSCRF-IR-03]" } 'ir-03'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-IR-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgIrGate { return ($env:BAS_CONFIRM_IR_TEST -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: ir-04
+    name: "Compromised Account Disablement (T1078, internal ref CSCRF-IR-04)"
+    technique_id: T1078
+    action_key: cscrf_ir_account_disable
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Creates one synthetic local account, disables it, verifies the state, and deletes it in undo. Runs only with BAS_CONFIRM_IR_TEST=true."
+    telemetry:
+      - "Account creation"
+      - "Account disable"
+    detection:
+      - "Account disable event (EID 4725)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-IR-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgIrGate { return ($env:BAS_CONFIRM_IR_TEST -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      if (-not (Test-CgIrGate)) { Complete-CgStep @{ Outcome = 'skip'; Reason = 'BAS_CONFIRM_IR_TEST not true; no account created [CSCRF-IR-04]' } 'ir-04' }
+      $name = 'bas-ir-' + $script:CgRun
+      New-CgUndoRecord 'ir-04' @{ scenario = 'ir-04'; accountName = $name }
+      try {
+      New-LocalUser -Name $name -Password (ConvertTo-SecureString ([Guid]::NewGuid().ToString('N') + 'Aa1!') -AsPlainText -Force) -AccountNeverExpires -ErrorAction Stop | Out-Null
+      Disable-LocalUser -Name $name -ErrorAction Stop
+      } catch { Complete-CgStep @{ Outcome = 'error'; Reason = "could not create or disable synthetic account: $($_.Exception.Message) [CSCRF-IR-04]" } 'ir-04' }
+      $u = Get-LocalUser -Name $name -ErrorAction SilentlyContinue
+      if ($u -and -not $u.Enabled) { Complete-CgStep @{ Outcome = 'pass'; Reason = 'synthetic account disabled and state verified; who acts and how fast is not tested [CSCRF-IR-04]' } 'ir-04' }
+      Complete-CgStep @{ Outcome = 'fail'; Reason = 'synthetic account is still enabled after the disable action [CSCRF-IR-04]' } 'ir-04'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-IR-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgIrGate { return ($env:BAS_CONFIRM_IR_TEST -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      $rec = Read-CgUndoRecord 'ir-04'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'PASS: Cleanup complete (no record)'; exit 0 }
+      Remove-LocalUser -Name $rec.accountName -ErrorAction SilentlyContinue
+      if (Get-LocalUser -Name $rec.accountName -ErrorAction SilentlyContinue) { Write-Output "FAIL: residue account $($rec.accountName) survived undo"; exit 0 }
+      Remove-CgUndoRecord 'ir-04'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: ir-06
+    name: "Security Log Evidence Export (CSCRF-IR-06)"
+    technique_id: T1070.001
+    action_key: cscrf_ir_evidence_export
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Exports the Security log to a per-run temp file (read only against the log) and deletes the export in undo."
+    telemetry:
+      - "wevtutil export"
+    detection:
+      - "Evidence export review"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-IR-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgIrGate { return ($env:BAS_CONFIRM_IR_TEST -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      $dir = Join-Path $env:TEMP ('bas-ir-ev-' + $script:CgRun)
+      New-CgUndoRecord 'ir-06' @{ scenario = 'ir-06'; dir = $dir }
+      New-Item -ItemType Directory -Force -Path $dir | Out-Null
+      $out = Join-Path $dir 'security-export.evtx'
+      & wevtutil.exe epl Security $out /ow:true 2>&1 | Out-Null
+      $code = $LASTEXITCODE
+      if ($code -eq 0 -and (Test-Path -LiteralPath $out) -and ((Get-Item -LiteralPath $out).Length -gt 0)) {
+      Complete-CgStep @{ Outcome = 'pass'; Reason = "Security log exported to evidence file ($([math]::Round((Get-Item -LiteralPath $out).Length / 1MB, 1)) MB) [CSCRF-IR-06]" } 'ir-06'
+      }
+      Complete-CgStep @{ Outcome = 'fail'; Reason = "Security log could not be exported as evidence (wevtutil exit $code) [CSCRF-IR-06]" } 'ir-06'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-IR-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgIrGate { return ($env:BAS_CONFIRM_IR_TEST -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      $rec = Read-CgUndoRecord 'ir-06'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'PASS: Cleanup complete (no record)'; exit 0 }
+      Remove-Item -LiteralPath $rec.dir -Recurse -Force -ErrorAction SilentlyContinue
+      if (Test-Path -LiteralPath $rec.dir) { Write-Output "FAIL: residue folder $($rec.dir) survived undo"; exit 0 }
+      Remove-CgUndoRecord 'ir-06'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0

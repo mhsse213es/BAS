@@ -1,0 +1,116 @@
+id: ad-forged-ticket-telemetry
+product_line: ad
+name: Forged Kerberos Ticket Telemetry Probe
+description: >
+  Read-only detection-visibility probe for forged Kerberos tickets. It does NOT forge,
+  request or use any ticket, and it never reads KRBTGT or service keys. It checks two
+  things on a domain controller:
+    1. Golden-ticket exposure posture: the KRBTGT password age and the encryption types
+       the account supports (observation only).
+    2. Silver-ticket telemetry visibility: whether the DC's Security log holds 4768/4769
+       ticket events in the last hour, and how many use RC4 (0x17).
+  Verdicts are deliberately conservative. A posture observation is never PASS. The
+  telemetry stage reports PASS only when the ticket events are visible in the log,
+  which proves logging, not that an anomalous ticket would be alerted on.
+
+  KILL CHAIN STAGES:
+    1. KRBTGT posture observation (T1558.001)
+    2. Ticket-event telemetry visibility (T1558.002)
+
+  SAFETY: Read-only. Runs only on a domain controller. Reads account attributes and
+  event counts. No ticket is requested, forged, or used.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - kerberos
+  - golden-ticket
+  - silver-ticket
+  - detection
+  - active-directory
+  - t1558
+  - mitre
+mitre_phases:
+  - credential-access
+  - defense-evasion
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: true
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — KRBTGT posture observation (T1558.001)
+  # ---------------------------------------------------------------------------
+  - name: "Forged Ticket 1 — KRBTGT Password Age and Encryption Posture (T1558.001)"
+    technique_id: T1558.001
+    framework: custom
+    executor: powershell
+    requires_priv: domain_admin
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads two attributes of the krbtgt account (PasswordLastSet, msDS-SupportedEncryptionTypes). No key material is read and nothing is changed."
+    telemetry:
+      - "Security EID 4662 on the krbtgt object, when DS Access auditing and a SACL are configured"
+    detection:
+      - "SIEM: directory attribute read on krbtgt from a non-admin workstation — golden-ticket precursor"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      if ((Get-CimInstance Win32_ComputerSystem).DomainRole -lt 4) {
+        Write-Output "SKIP: This host is not a domain controller. KRBTGT posture was not read. [BAS-SIM-GLD-S1]"
+        exit 0
+      }
+      Import-Module ActiveDirectory
+      $k = Get-ADUser krbtgt -Properties PasswordLastSet, 'msDS-SupportedEncryptionTypes'
+      $age = [int]((Get-Date) - $k.PasswordLastSet).TotalDays
+      $enc = $k.'msDS-SupportedEncryptionTypes'
+      Write-Output "EXEC T1558.001: KRBTGT password age=$age days; msDS-SupportedEncryptionTypes=$enc. Attribute read only; no key material accessed. Golden Stage 1. [BAS-SIM-GLD-S1]"
+      Write-Output "SKIP: Posture observation only. A password age or encryption setting is not a detection result, so no verdict on detection is claimed. [BAS-SIM-GLD-S1]"
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Ticket-event telemetry visibility (T1558.002)
+  # ---------------------------------------------------------------------------
+  - name: "Forged Ticket 2 — Kerberos Ticket Event Telemetry in Last Hour (T1558.002)"
+    technique_id: T1558.002
+    framework: custom
+    executor: powershell
+    requires_priv: domain_admin
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads Security log events 4768 and 4769 from the last hour and counts them. Reads no ticket data and changes nothing."
+    telemetry:
+      - "Security EID 4768 and 4769 on the DC: the events this stage counts"
+    detection:
+      - "SIEM: RC4 service-ticket volume spike — silver-ticket or Kerberoast indicator"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      if ((Get-CimInstance Win32_ComputerSystem).DomainRole -lt 4) {
+        Write-Output "SKIP: This host is not a domain controller. Ticket telemetry was not read. [BAS-SIM-GLD-S2]"
+        exit 0
+      }
+      $ev = @(Get-WinEvent -FilterHashtable @{ LogName = 'Security'; Id = 4768, 4769; StartTime = (Get-Date).AddHours(-1) } -MaxEvents 5000 -ErrorAction SilentlyContinue)
+      $rc4 = 0
+      foreach ($e in $ev) {
+        $x = [xml]$e.ToXml()
+        $t = ($x.Event.EventData.Data | Where-Object { $_.Name -eq 'TicketEncryptionType' }).'#text'
+        if ($t -eq '0x17') { $rc4++ }
+      }
+      Write-Output "EXEC T1558.002: ticket events in last hour=$($ev.Count); RC4 (0x17) ticket events=$rc4. Counts only; no ticket data read. Silver Stage 2. [BAS-SIM-GLD-S2]"
+      if ($ev.Count -gt 0) {
+        Write-Output "PASS: DC ticket telemetry is visible (4768/4769 present). This proves logging only, not that anomalous tickets would alert."
+      } else {
+        Write-Output "SKIP: No 4768/4769 events in the last hour. Either no Kerberos activity occurred or ticket auditing is off. Inconclusive. [BAS-SIM-GLD-S2]"
+      }
+    cleanup: ""

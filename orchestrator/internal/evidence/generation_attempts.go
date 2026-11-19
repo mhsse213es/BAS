@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // maxDetailBytes bounds GenerationAttempt.Detail (spec 2026-10-13 §2.5) --
@@ -17,6 +19,10 @@ const maxDetailBytes = 2048
 // paths in Generator.Write genuinely have no threat/content id/fingerprint
 // yet, and a NOT NULL default would be a lie the caller can't keep.
 type GenerationAttempt struct {
+	// ID is the content_generation_attempts primary key. When empty it is
+	// generated here; a caller may pre-set it (connector.recordAttempt does)
+	// to learn the row id for pipeline-event provenance before the insert.
+	ID               string
 	CycleID          string
 	ThreatID         *string
 	ContentID        *string
@@ -32,14 +38,17 @@ type GenerationAttempt struct {
 // RecordGenerationAttempt persists one attempt. Truncating an over-length
 // Detail happens here, once, rather than at every call site in generator.go.
 func (s *Store) RecordGenerationAttempt(ctx context.Context, a GenerationAttempt) error {
+	if a.ID == "" {
+		a.ID = "cga-" + uuid.NewString()
+	}
 	if a.Detail != nil && len(*a.Detail) > maxDetailBytes {
 		truncated := (*a.Detail)[:maxDetailBytes]
 		a.Detail = &truncated
 	}
 	if _, err := s.pool.Exec(ctx, `INSERT INTO content_generation_attempts
-		(cycle_id, threat_id, content_id, content_version_id, outcome, reason_code, detail, generator_version, fingerprint, started_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-		a.CycleID, a.ThreatID, a.ContentID, a.ContentVersionID, a.Outcome, a.ReasonCode, a.Detail, a.GeneratorVersion, a.Fingerprint, a.StartedAt); err != nil {
+		(id, cycle_id, threat_id, content_id, content_version_id, outcome, reason_code, detail, generator_version, fingerprint, started_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+		a.ID, a.CycleID, a.ThreatID, a.ContentID, a.ContentVersionID, a.Outcome, a.ReasonCode, a.Detail, a.GeneratorVersion, a.Fingerprint, a.StartedAt); err != nil {
 		return fmt.Errorf("evidence: record generation attempt: %w", err)
 	}
 	return nil

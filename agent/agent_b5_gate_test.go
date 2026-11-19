@@ -16,7 +16,7 @@ func TestEvaluateB5Gate_SignedDestructiveIsVetoed(t *testing.T) {
 		ExecutionClass: "destructive",
 		Command:        "Invoke-VendorSpecificShadowCopyPurge -Confirm:$false",
 	}
-	vetoed, source := evaluateB5Gate(step)
+	vetoed, source := evaluateB5Gate(step, "test-run")
 	if !vetoed {
 		t.Fatal("expected veto for a signed-destructive step")
 	}
@@ -34,7 +34,7 @@ func TestEvaluateB5Gate_LocalBackstopCatchesUnderclassifiedStep(t *testing.T) {
 		ExecutionClass: "non_destructive", // WRONG on purpose for this test
 		Command:        "vssadmin delete shadows /all /quiet",
 	}
-	vetoed, source := evaluateB5Gate(step)
+	vetoed, source := evaluateB5Gate(step, "test-run")
 	if !vetoed {
 		t.Fatal("expected the local backstop to override an under-classified signed field")
 	}
@@ -48,7 +48,7 @@ func TestEvaluateB5Gate_NonDestructiveExecutesNormally(t *testing.T) {
 		TechniqueID: "T1082", ExecutionClass: "non_destructive",
 		Command: "Get-ComputerInfo",
 	}
-	vetoed, _ := evaluateB5Gate(step)
+	vetoed, _ := evaluateB5Gate(step, "test-run")
 	if vetoed {
 		t.Error("expected a genuinely non-destructive step to execute")
 	}
@@ -59,7 +59,7 @@ func TestEvaluateB5Gate_PotentiallyDestructiveExecutesNormally(t *testing.T) {
 		TechniqueID: "T1003", ExecutionClass: "potentially_destructive",
 		Command: "Get-Process lsass",
 	}
-	vetoed, _ := evaluateB5Gate(step)
+	vetoed, _ := evaluateB5Gate(step, "test-run")
 	if vetoed {
 		t.Error("expected potentially_destructive to execute (no grant required in this phase's semantics, and this phase has no grant mechanism to check anyway)")
 	}
@@ -77,7 +77,7 @@ func TestEvaluateB5Gate_DestructiveCleanupIsVetoedEvenWithSafeCommand(t *testing
 		Command: "Write-Output hello",
 		Cleanup: "vssadmin delete shadows /all /quiet",
 	}
-	vetoed, source := evaluateB5Gate(step)
+	vetoed, source := evaluateB5Gate(step, "test-run")
 	if !vetoed {
 		t.Fatal("expected a destructive Cleanup to be vetoed even though Command is benign")
 	}
@@ -99,7 +99,7 @@ func TestEvaluateB5Gate_DestructivePayloadContentIsVetoedEvenWithSafeCommand(t *
 			{Name: "helper.ps1", Content: "vssadmin delete shadows /all /quiet"},
 		},
 	}
-	vetoed, source := evaluateB5Gate(step)
+	vetoed, source := evaluateB5Gate(step, "test-run")
 	if !vetoed {
 		t.Fatal("expected a destructive payload content to be vetoed even though Command is benign")
 	}
@@ -143,7 +143,7 @@ func TestEvaluateB5Gate_UnclassifiedIsVetoed(t *testing.T) {
 		TechniqueID: "T9999", ExecutionClass: "", // never resolved / unknown to this agent build
 		Command: "something",
 	}
-	vetoed, _ := evaluateB5Gate(step)
+	vetoed, _ := evaluateB5Gate(step, "test-run")
 	if !vetoed {
 		t.Fatal("expected an unclassified step to fail closed to vetoed")
 	}

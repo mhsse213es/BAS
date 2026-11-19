@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/audspect/bas/internal/jobs"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/ws"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -54,6 +55,10 @@ func runScheduledAPCollection(ctx context.Context, pool *pgxpool.Pool, hub *ws.H
 		intervalMinutes = 1440
 	}
 	if lastRunAt != nil && time.Since(*lastRunAt) < time.Duration(intervalMinutes)*time.Minute {
+		return
+	}
+	// A change-freeze window holds the collection. last_run_at stays as it was, so it runs once the window ends.
+	if jobs.HoldForFreeze(ctx, jobs.NewStore(pool), "attack-path collection", time.Now()) {
 		return
 	}
 

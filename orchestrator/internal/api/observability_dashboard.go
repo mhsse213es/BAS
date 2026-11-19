@@ -113,7 +113,8 @@ func (h *Handler) GetObservabilitySummary(w http.ResponseWriter, r *http.Request
 		  COUNT(*) FILTER (WHERE status = 'running') as running,
 		  COUNT(*) FILTER (WHERE status = 'completed') as completed
 		FROM scenario_runs
-		WHERE initiated_at >= NOW() - INTERVAL '24 hours'
+		WHERE execution_kind <> 'factory_validation'
+		  AND initiated_at >= NOW() - INTERVAL '24 hours'
 	`).Scan(&runningRuns, &completedRuns)
 	if err != nil {
 		runningRuns, completedRuns = 0, 0 // fallback to zeros on query error
@@ -121,7 +122,7 @@ func (h *Handler) GetObservabilitySummary(w http.ResponseWriter, r *http.Request
 
 	// Query total and recent runs
 	var totalRuns int64
-	err = h.db.QueryRow(ctx, `SELECT COUNT(*) FROM scenario_runs`).Scan(&totalRuns)
+	err = h.db.QueryRow(ctx, `SELECT COUNT(*) FROM scenario_runs WHERE execution_kind <> 'factory_validation'`).Scan(&totalRuns)
 	if err != nil {
 		totalRuns = 0
 	}
@@ -130,6 +131,7 @@ func (h *Handler) GetObservabilitySummary(w http.ResponseWriter, r *http.Request
 	rows, err := h.db.Query(ctx, `
 		SELECT id, scenario_name, status, initiated_at, completed_at
 		FROM scenario_runs
+		WHERE execution_kind <> 'factory_validation'
 		ORDER BY initiated_at DESC
 		LIMIT 10
 	`)

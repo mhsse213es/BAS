@@ -28,6 +28,21 @@ const (
 	ExecPostconditionVerified ExecutionValidation = "postcondition_verified"
 )
 
+// LookupADControlVerification reports the most recent real control-decision
+// evidence for primitiveID (today: "dcsync" only, from the live DCSync
+// verification scenario's ControlDecisionSource dispatch). result mirrors
+// adefficacy.DRSUAPIResult's string values ("access_denied"/"succeeded"/
+// "indeterminate"); found is false when no verification has ever been
+// recorded. The default here is the honest, fail-safe "nothing yet" --
+// internal/api wires the real DB-backed lookup at server construction
+// (New()), closing over its own pool. admatrix never imports internal/db
+// directly so this package stays usable without a live database in tests
+// that don't care about real evidence (every existing CapabilityStates
+// test keeps passing unmodified under this default).
+var LookupADControlVerification = func(primitiveID string) (result string, correlated, found bool) {
+	return "", false, false
+}
+
 // DetectionValidation is the independent axis answering whether detection
 // evidence was observed and attributed to the specific run and target that
 // produced it. A connector existing, or a fixture passing, is never
@@ -232,10 +247,10 @@ var realScenarioEvidenceByID = map[string]realScenarioEvidence{
 	"acl-privilege-exposure-check": {
 		Cleanup: []string{"No cleanup required: the check only reads privileged objects' access-control lists; no state change (scenarios/acl-privilege-exposure-audit.yaml Stage 1)."},
 		EvidenceRequirements: []string{
-			"SIEM: a non-tier-0 principal holds a takeover-enabling right (GenericAll/GenericWrite/WriteDacl/WriteOwner/ForceChangePassword/AddMember/AddSelf/AllExtendedRights) over a privileged object — ACL exposure IOC",
+			"SIEM: non-tier-0 ACE with GenericAll/GenericWrite/WriteDacl/WriteOwner on a privileged group",
 		},
 		TelemetrySources: []string{
-			"DC: access-control read of privileged objects' security descriptors (nTSecurityDescriptor) — not separately audited by default",
+			"Sysmon EID 1: powershell.exe reading group ACLs via DirectoryServices",
 		},
 		Limitations: aclExposureCheckLimitations,
 	},
@@ -245,7 +260,7 @@ var realScenarioEvidenceByID = map[string]realScenarioEvidence{
 			"SIEM: a certificate template enrollable by a non-tier-0 principal carries an ESC1-4-class misconfiguration (enrollee-supplied subject + authentication EKU, Any-Purpose/no EKU, enrollment-agent EKU, or a non-tier-0-writable template DACL) — AD CS template exposure IOC",
 		},
 		TelemetrySources: []string{
-			"DC: LDAP read of pKICertificateTemplate objects under the Configuration partition — not separately audited by default",
+			"DC: LDAP read of pKICertificateTemplate objects under CN=Certificate Templates,CN=Public Key Services,CN=Services,<Configuration NC> — not separately audited by default",
 		},
 		Limitations: adcsExposureCheckLimitations,
 	},
@@ -458,6 +473,24 @@ func CapabilityStates() []CapabilityState {
 			cs.EvidenceRequirements = rev.EvidenceRequirements
 			cs.TelemetrySources = rev.TelemetrySources
 			cs.Limitations = rev.Limitations
+		}
+		if result, correlated, found := LookupADControlVerification(p.ID); found {
+			switch {
+			case result == "succeeded" && correlated:
+				// The primitive's own postcondition (replication data
+				// actually returned) was independently confirmed.
+				cs.ExecutionValidation = ExecPostconditionVerified
+			default:
+				// access_denied (the negative control correctly refused) or
+				// indeterminate: a real attempt genuinely ran, but it either
+				// proves the CONTROL worked rather than the primitive's own
+				// postcondition, or proves nothing conclusive either way.
+				cs.ExecutionValidation = ExecAttempted
+			}
+			// DetectionValidation is untouched: no real detection/audit
+			// source is wired yet (adefficacy's Audit4662 corroboration is
+			// always CorroborationUnknown today) -- never claim telemetry
+			// was observed just because DRSUAPI evidence exists.
 		}
 		cs.Outstanding = outstandingFor(cs)
 		out = append(out, cs)

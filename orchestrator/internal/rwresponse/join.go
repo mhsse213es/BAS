@@ -4,6 +4,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/audspect/bas/internal/controlval"
 	"github.com/audspect/bas/internal/db"
 )
 
@@ -61,17 +62,40 @@ func BuildEffectivenessReport(rows []db.RWAttemptRow, latencies []DetectionLaten
 	return EffectivenessReport{Rows: out}
 }
 
+// dimensionSeverity ranks a row so the worst outcome for a technique is the
+// one reported: FAIL, then ERROR, then an unproven skip, then PASS, then
+// not_applicable. Earliest row wins a tie, keeping output deterministic.
+func dimensionSeverity(r db.RWAttemptRow) int {
+	switch {
+	case r.Verdict == controlval.VerdictFail:
+		return 4
+	case r.Verdict == controlval.VerdictError:
+		return 3
+	case r.Verdict == controlval.VerdictSkipped && r.SkipReason != controlval.SkipNotApplicable:
+		return 2
+	case r.Verdict == controlval.VerdictPass:
+		return 1
+	}
+	return 0
+}
+
+// selectDimension reports the WORST row for the capability across every
+// action sharing the technique, so a later FAIL is never hidden behind an
+// earlier PASS (several steps can share one technique, e.g. three T1490).
 func selectDimension(rows []db.RWAttemptRow, capability string) *DimensionEvidence {
-	var matching []db.RWAttemptRow
-	for _, r := range rows {
-		if r.Capability == capability {
-			matching = append(matching, r)
+	var best *db.RWAttemptRow
+	for i := range rows {
+		r := &rows[i]
+		if r.Capability != capability {
+			continue
+		}
+		if best == nil || dimensionSeverity(*r) > dimensionSeverity(*best) ||
+			(dimensionSeverity(*r) == dimensionSeverity(*best) && r.CreatedAt.Before(best.CreatedAt)) {
+			best = r
 		}
 	}
-	if len(matching) == 0 {
+	if best == nil {
 		return nil
 	}
-	sort.Slice(matching, func(i, j int) bool { return matching[i].CreatedAt.Before(matching[j].CreatedAt) })
-	first := matching[0]
-	return &DimensionEvidence{Verdict: first.Verdict, SkipReason: first.SkipReason, Reason: first.Reason, Action: first.Action, CreatedAt: first.CreatedAt}
+	return &DimensionEvidence{Verdict: best.Verdict, SkipReason: best.SkipReason, Reason: best.Reason, Action: best.Action, CreatedAt: best.CreatedAt}
 }

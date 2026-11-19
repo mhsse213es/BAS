@@ -33,9 +33,9 @@ const (
 // ReachabilityComparison pairs one PolicyEvaluation with the
 // NetworkObservation (if any) that corroborates or contradicts it.
 type ReachabilityComparison struct {
-	Evaluation  networkpolicy.PolicyEvaluation    `json:"evaluation"`
+	Evaluation  networkpolicy.PolicyEvaluation   `json:"evaluation"`
 	Observation *networkgraph.NetworkObservation `json:"observation,omitempty"`
-	Label       ComparisonLabel                   `json:"label"`
+	Label       ComparisonLabel                  `json:"label"`
 }
 
 // CorrelateReachability joins each evaluation to the observation (if any)

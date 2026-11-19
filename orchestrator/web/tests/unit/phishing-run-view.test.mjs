@@ -73,3 +73,27 @@ test('a dispatched run without a result is waiting, not graded', () => {
 test('an unknown verdict is neutral, never a pass', () => {
   assert.equal(verdictTone('something-new').tone, 'neutral');
 });
+
+test('a PH-ID-004 result is labelled best-effort, never a confirmed verdict', () => {
+  const run = {
+    id: 'r-id004',
+    scenarioId: 'PH-ID-004',
+    status: 'completed',
+    result: JSON.stringify({ Enforcement: { Verdict: 'pass', Reason: 'denials under threshold' } }),
+  };
+  const view = describePhishingRun(run);
+  const label = view.rows.find((r) => r.label === 'Best-effort heuristic');
+  assert.ok(label, 'expected a best-effort row');
+  assert.match(label.text, /not a confirmed control verdict/);
+});
+
+test('a non-experimental result gets no best-effort label', () => {
+  const run = {
+    id: 'r-id001',
+    scenarioId: 'PH-ID-001',
+    status: 'completed',
+    result: JSON.stringify({ UserInteraction: { Verdict: 'inconclusive', Reason: 'window open' } }),
+  };
+  const view = describePhishingRun(run);
+  assert.equal(view.rows.some((r) => r.label === 'Best-effort heuristic'), false);
+});

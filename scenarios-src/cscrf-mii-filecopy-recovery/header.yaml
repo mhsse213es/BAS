@@ -1,0 +1,24 @@
+id: "cscrf-mii-filecopy-recovery"
+product_line: common
+name: "CSCRF-MII File-Copy Recoverability Checks (P1, separate from Windows backup)"
+description: >
+  Internal control-validation checks for an off-host file copy. Verdicts are internal control references
+  (CSCRF-FC-*), not SEBI clause identifiers. This pack does not test Windows image backup; that is covered by
+  the backup and DR pack (CSCRF-BDR-*). fc-01 is read only: it checks an existing copy at BAS_FC_TARGET
+  against its SHA256SUMS manifest and SKIPs when unset. fc-02 is gated by BAS_CONFIRM_FC_TEST=true: it copies
+  synthetic files (no real data) from a per-run temp source to a target, verifies them, and removes them in
+  undo. A PASS shows that files can be copied and verified; it does not show that the business can recover
+  within its targets.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cscrf-mii
+  - recoverability
+  - file-copy
+  - p1
+mitre_phases:
+  - exfiltration
+
+steps:

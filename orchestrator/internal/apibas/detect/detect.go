@@ -7,6 +7,7 @@ package detect
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -46,7 +47,14 @@ type Event struct {
 	// ActorRole is the role the lab's fixture gives the identity ("borrower", "officer", "administrator", or "customer" for an
 	// authenticated identity the fixture does not name). Empty means the request was not authenticated.
 	ActorRole string `json:"actor_role,omitempty"`
-	Status        int      `json:"status"`
+	// IdentityBasis and ClaimedIdentity mirror the lab event (see lab/auth_context.go). Rules do not read them yet.
+	IdentityBasis   string `json:"identity_basis,omitempty"`
+	ClaimedIdentity string `json:"claimed_identity,omitempty"`
+	// DisclosedClasses and DisclosedFields describe the protected fields a response actually emitted, as classes and
+	// field names only. They never carry a value (see disclosure.go). Empty when the response emitted none.
+	DisclosedClasses []string `json:"disclosed_classes,omitempty"`
+	DisclosedFields  []string `json:"disclosed_fields,omitempty"`
+	Status           int      `json:"status"`
 	// Signature lists the injection-pattern classes the request carried (see Signature* below). It holds
 	// classes only, never the text that matched, so a body is never stored through this field.
 	// ActionClass is the class of the action (see the Class* vocabulary). Empty means the action could not be classified.
@@ -65,7 +73,7 @@ type Event struct {
 	RequestBytes int64  `json:"request_bytes,omitempty"`
 	CacheControl string `json:"cache_control,omitempty"`
 	// Degraded names the controls the lab ran degraded when it served the request (see lab access events).
-	Degraded []string `json:"degraded,omitempty"`
+	Degraded  []string `json:"degraded,omitempty"`
 	Signature []string `json:"signature,omitempty"`
 }
 
@@ -320,6 +328,61 @@ var ElasticRules = []Rule{
 			return (isPrivilegedClass(e.ActionClass) || privilegedFunction(e.Action)) && e.ActorRole != "" && e.ActorRole != "administrator"
 		},
 	},
+	{
+		// REL-020 fires when a response emits a protected class on a resource the disclosure policy does not allow for it. It
+		// reads the response as emitted, and it does not depend on ownership: the owner of a KYC record who receives it through
+		// a loan read is still a violation. REL-004 and REL-008 keep their ownership logic.
+		ID: "APIBAS-REL-020", Name: "Protected disclosure outside the policy for its resource", Severity: SeverityHigh, Threshold: 1,
+		Match: disclosureOutsidePolicy,
+	},
+	{
+		// REL-021 fires when a laboratory result is changed by an identity whose role is known and is not a device. Results are
+		// posted by the registered bedside device; a patient or clinician changing one is the diagnostic-result modification the
+		// healthcare pack tests (HC-004). The attempt is the signal, whatever the outcome. A device posting to another
+		// patient's result is a foreign-object access and is REL-004's.
+		ID: "APIBAS-REL-021", Name: "Laboratory result changed by a non-device identity", Severity: SeverityHigh, Threshold: 1,
+		Match: func(e Event) bool {
+			return e.ActorRole != "" && e.ActorRole != "device" && strings.HasPrefix(e.Action, "PATCH /api/health/lab-results/")
+		},
+	},
+	{
+		// REL-022 fires when a response to a delegate emits a clinical field. A delegate acts under a summary-only consent, so a
+		// diagnosis or insurance number reaching one is a disclosure beyond the consent. It reads what the response emitted, not
+		// who owns the record, so a consented summary read does not fire it.
+		ID: "APIBAS-REL-022", Name: "Clinical data disclosed to a delegate beyond consent", Severity: SeverityHigh, Threshold: 1,
+		Match: func(e Event) bool {
+			return e.ActorRole == "delegate" && slices.Contains(e.DisclosedClasses, DisclosureClinicalRecord)
+		},
+	},
+	{
+		// REL-023 fires when a retail order is changed by an identity whose role is known and is not support staff. Order prices
+		// are set by an agent; the owner changing their own order is the client-controlled price the retail pack tests (RET-003).
+		// The attempt is the signal, whatever the outcome. The caller's own object is named, so REL-004 cannot see it.
+		ID: "APIBAS-REL-023", Name: "Retail order changed by a non-staff identity", Severity: SeverityHigh, Threshold: 1,
+		Match: func(e Event) bool {
+			return e.ActorRole != "" && e.ActorRole != "agent" && strings.HasPrefix(e.Action, "PATCH /api/retail/orders/")
+		},
+	},
+	{
+		// REL-024 fires when a partner API key's scope is changed by an identity whose role is known and is not support staff.
+		// The partner changing their own key is the privilege escalation the partner pack tests (PART-002). The attempt is the
+		// signal, whatever the outcome.
+		ID: "APIBAS-REL-024", Name: "Partner key scope changed by a non-staff identity", Severity: SeverityHigh, Threshold: 1,
+		Match: func(e Event) bool {
+			return e.ActorRole != "" && e.ActorRole != "agent" &&
+				strings.HasPrefix(e.Action, "POST /api/retail/partner-keys/") && strings.HasSuffix(e.Action, "/escalate")
+		},
+	},
+	{
+		// REL-025 fires when a shipment delivery callback is called by an identity whose role is known and is not the carrier.
+		// A shopper reporting their own shipment delivered is the callback trust failure the logistics pack tests (LOG-001). The
+		// attempt is the signal, whatever the outcome.
+		ID: "APIBAS-REL-025", Name: "Delivery reported by a non-carrier identity", Severity: SeverityHigh, Threshold: 1,
+		Match: func(e Event) bool {
+			return e.ActorRole != "" && e.ActorRole != "carrier" &&
+				strings.HasPrefix(e.Action, "POST /api/retail/shipments/") && strings.HasSuffix(e.Action, "/callback")
+		},
+	},
 }
 
 // staffRole reports whether a role belongs to lender staff.
@@ -375,11 +438,11 @@ const (
 // The action-class vocabulary. Each class names what an action does to the object it targets. Ownership of the object
 // never decides the class: the same method and route classify the same way for the owner and for anyone else.
 const (
-	ClassRead               = "read"                  // a GET that returns an object or a page of objects
-	ClassWrite              = "write"                 // a POST, PUT, PATCH or DELETE that changes an object
-	ClassSensitiveExport    = "sensitive_export"      // an export of an object, which may carry protected fields
-	ClassPrivilegeChange    = "privilege_change"      // an administrative route, or a change to the caller's own role
-	ClassFinancialApproval  = "financial_approval"    // approval of a payout, or a refund
+	ClassRead                  = "read"                    // a GET that returns an object or a page of objects
+	ClassWrite                 = "write"                   // a POST, PUT, PATCH or DELETE that changes an object
+	ClassSensitiveExport       = "sensitive_export"        // an export of an object, which may carry protected fields
+	ClassPrivilegeChange       = "privilege_change"        // an administrative route, or a change to the caller's own role
+	ClassFinancialApproval     = "financial_approval"      // approval of a payout, or a refund
 	ClassSecurityControlChange = "security_control_change" // rotation, status or audit of a security control
 )
 
@@ -412,6 +475,9 @@ func ActionClass(action string) string {
 		// A loan decision is an approval: it commits the lender to the loan (NBFC pack).
 		return ClassFinancialApproval
 	case method == "POST" && (strings.HasSuffix(path, "/approve-payout") || strings.HasSuffix(path, "/refund")):
+		return ClassFinancialApproval
+	case method == "POST" && strings.HasSuffix(path, "/execute") && strings.HasPrefix(path, "/api/upi/mandates/"):
+		// Executing a UPI standing-instruction mandate collects a debit: an approval, like a loan decision (UPI pack).
 		return ClassFinancialApproval
 	case method == "GET" && strings.HasSuffix(path, "/export"):
 		return ClassSensitiveExport

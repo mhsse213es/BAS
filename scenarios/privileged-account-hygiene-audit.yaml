@@ -1,0 +1,52 @@
+id: privileged-account-hygiene-audit
+product_line: ad
+name: Privileged Account Hygiene Audit
+description: "Read-only privileged-account audit, two independent steps:\n  A  enabled members of Domain Admins, Enterprise Admins or Schema Admins with no logon in 90 days (or never logged on and created more than 90 days ago).\n  B  enabled members of those groups that carry a servicePrincipalName (Kerberoastable).\nMembership is expanded recursively through nested groups. Group lookup or directory query failure is SKIP, never PASS.\nSAFETY: reads directory attributes only. Changes nothing, requests no tickets, and authenticates to no account. A FAIL shows configuration exposure, not exploitability. Windows domain members only."
+author: Audspect Research
+executable: true
+local_check: false
+supported_os:
+- windows
+tags:
+- active-directory
+- privileged-accounts
+- hygiene
+- kerberoasting
+- t1078
+- mitre
+mitre_phases:
+- discovery
+- credential-access
+steps:
+- name: Privileged Accounts A - enabled tier-0 members not used within 90 days (T1078.002)
+  technique_id: T1078.002
+  executor: powershell
+  requires_priv: user
+  timeout_sec: 60
+  production_safe: true
+  fidelity: telemetry-safe
+  risk: low
+  blast_radius: Reads directory attributes of privileged group members. No changes, no ticket requests, no authentication to any account.
+  reversible: true
+  telemetry:
+  - 'DC: LDAP search of privileged group membership (event 4662 only if object auditing enabled)'
+  detection:
+  - 'SIEM: bulk LDAP enumeration of Domain Admins / Enterprise Admins membership from a non-admin workstation'
+  command: "$ErrorActionPreference = 'SilentlyContinue'\n$findings = @()\n$ok = $false\ntry {\n  $domainDN = ([ADSI]\"LDAP://RootDSE\").defaultNamingContext\n  if (-not $domainDN) { throw \"no domain\" }\n  $groups = @('Domain Admins','Enterprise Admins','Schema Admins')\n  $groupDNs = @()\n  foreach ($g in $groups) {\n    $gs = New-Object System.DirectoryServices.DirectorySearcher\n    $gs.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry(\"LDAP://$domainDN\")\n    $gs.Filter = \"(&(objectClass=group)(sAMAccountName=$g))\"\n    [void]$gs.PropertiesToLoad.Add('distinguishedName')\n    $r = $gs.FindOne()\n    if (-not $r) { throw \"group not found: $g\" }\n    $groupDNs += [string]$r.Properties['distinguishedname'][0]\n  }\n  $ok = $true\n} catch { $ok = $false }\n\n$cutoff = (Get-Date).AddDays(-90)\n$users = @()\nif ($ok) {\n  try {\n    foreach ($gdn in $groupDNs) {\n      $us = New-Object System.DirectoryServices.DirectorySearcher\n      $us.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry(\"LDAP://$domainDN\")\n      $us.PageSize = 500\n      $us.Filter = \"(&(objectClass=user)(objectCategory=person)(memberOf:1.2.840.113556.1.4.1941:=$gdn)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))\"\n      [void]$us.PropertiesToLoad.Add('sAMAccountName')\n      [void]$us.PropertiesToLoad.Add('lastLogonTimestamp')\n      [void]$us.PropertiesToLoad.Add('whenCreated')\n      foreach ($u in @($us.FindAll())) { $users += $u }\n    }\n  } catch { $ok = $false }\n}\n$seen = @{}\nif ($ok) {\n  foreach ($u in $users) {\n    $sam = [string]$u.Properties['samaccountname'][0]\n    if ($seen.ContainsKey($sam)) { continue }\n    $seen[$sam] = $true\n    $ll = $u.Properties['lastlogontimestamp']\n    if ($ll.Count -gt 0) {\n      $last = [DateTime]::FromFileTimeUtc([long]$ll[0])\n      if ($last -lt $cutoff.ToUniversalTime()) { $findings += \"$sam (last logon $($last.ToString('yyyy-MM-dd')))\" }\n    } else {\n      $created = [DateTime]$u.Properties['whencreated'][0]\n      if ($created -lt $cutoff) { $findings += \"$sam (never logged on; created $($created.ToString('yyyy-MM-dd')))\" }\n    }\n  }\n}\nif (-not $ok) {\n  Write-Output \"SKIP: privileged-account staleness could not be evaluated: a privileged group was not found, or the directory query failed. Not scored. [BAS-SIM-PRIV-S1]\"\n} elseif ($findings.Count -eq 0) {\n  Write-Output \"PASS: every enabled member of Domain Admins, Enterprise Admins or Schema Admins has logged on within 90 days. This step assesses last-logon only. [BAS-SIM-PRIV-S1]\"\n} else {\n  Write-Output \"EXEC T1078.002: $($findings.Count) enabled privileged account(s) not used within 90 days. Reads directory attributes only. [BAS-SIM-PRIV-S1]\"\n  foreach ($f in $findings) { Write-Output \"STALE $f\" }\n  Write-Output \"FAIL: enabled privileged accounts are not in use. Stale tier-0 accounts are an attack path that bypasses monitoring. Remediation: disable or remove privileged membership for accounts that are no longer needed; review the approval record for each. Configuration exposure only. [BAS-SIM-PRIV-S1]\"\n}\n"
+  cleanup: ''
+- name: Privileged Accounts B - tier-0 members with a service principal name, Kerberoastable (T1558.003)
+  technique_id: T1558.003
+  executor: powershell
+  requires_priv: user
+  timeout_sec: 60
+  production_safe: true
+  fidelity: telemetry-safe
+  risk: low
+  blast_radius: Reads directory attributes of privileged group members. No changes, no ticket requests, no authentication to any account.
+  reversible: true
+  telemetry:
+  - 'DC: LDAP search of privileged group membership (event 4662 only if object auditing enabled)'
+  detection:
+  - 'SIEM: bulk LDAP enumeration of Domain Admins / Enterprise Admins membership from a non-admin workstation'
+  command: "$ErrorActionPreference = 'SilentlyContinue'\n$findings = @()\n$ok = $false\ntry {\n  $domainDN = ([ADSI]\"LDAP://RootDSE\").defaultNamingContext\n  if (-not $domainDN) { throw \"no domain\" }\n  $groups = @('Domain Admins','Enterprise Admins','Schema Admins')\n  $groupDNs = @()\n  foreach ($g in $groups) {\n    $gs = New-Object System.DirectoryServices.DirectorySearcher\n    $gs.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry(\"LDAP://$domainDN\")\n    $gs.Filter = \"(&(objectClass=group)(sAMAccountName=$g))\"\n    [void]$gs.PropertiesToLoad.Add('distinguishedName')\n    $r = $gs.FindOne()\n    if (-not $r) { throw \"group not found: $g\" }\n    $groupDNs += [string]$r.Properties['distinguishedname'][0]\n  }\n  $ok = $true\n} catch { $ok = $false }\n\n$spnUsers = @()\nif ($ok) {\n  try {\n    foreach ($gdn in $groupDNs) {\n      $us = New-Object System.DirectoryServices.DirectorySearcher\n      $us.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry(\"LDAP://$domainDN\")\n      $us.PageSize = 500\n      $us.Filter = \"(&(objectClass=user)(objectCategory=person)(memberOf:1.2.840.113556.1.4.1941:=$gdn)(servicePrincipalName=*)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))\"\n      [void]$us.PropertiesToLoad.Add('sAMAccountName')\n      foreach ($u in @($us.FindAll())) { $spnUsers += [string]$u.Properties['samaccountname'][0] }\n    }\n  } catch { $ok = $false }\n}\n$spnUsers = @($spnUsers | Select-Object -Unique)\nif (-not $ok) {\n  Write-Output \"SKIP: privileged service-principal exposure could not be evaluated: a privileged group was not found, or the directory query failed. Not scored. [BAS-SIM-PRIV-S2]\"\n} elseif ($spnUsers.Count -eq 0) {\n  Write-Output \"PASS: no enabled member of Domain Admins, Enterprise Admins or Schema Admins has a service principal name. This step assesses SPN presence only. [BAS-SIM-PRIV-S2]\"\n} else {\n  Write-Output \"EXEC T1558.003: $($spnUsers.Count) enabled privileged account(s) have a service principal name. Reads directory attributes only; no ticket is requested. [BAS-SIM-PRIV-S2]\"\n  foreach ($f in $spnUsers) { Write-Output \"SPN $f\" }\n  Write-Output \"FAIL: a privileged account has a service principal name, so its password hash can be requested by any domain user and cracked offline (Kerberoasting). Configuration exposure only. Remediation: move the service to a dedicated non-privileged service account, or remove the SPN. [BAS-SIM-PRIV-S2]\"\n}\n"
+  cleanup: ''

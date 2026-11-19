@@ -1,0 +1,116 @@
+id: collection-removable-media-exfil
+product_line: dlp
+name: Removable Media Copy Probe
+description: >
+  Telemetry-safe emulation of an adversary copying data to a USB or other
+  removable drive to take it off the network. The scenario writes one synthetic
+  [BAS-SIM] file to an attached removable drive, then removes it. If no
+  removable drive is attached, the stage is skipped. It never touches fixed
+  disks, network drives, or any file already on the removable device.
+
+  KILL CHAIN STAGES:
+    1. Removable Drive Discovery — list attached removable volumes (T1120)
+    2. Synthetic Copy to Removable — copy one synthetic file onto the drive, then delete it (T1052.001)
+
+  SAFETY: Only one synthetic file is written, under a bas-sim folder, and only to a
+  drive whose type is removable. The file is deleted in cleanup. No existing data
+  on the drive is read, changed, or removed. Windows only. Telemetry mode.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - exfiltration
+  - removable-media
+  - usb
+  - endpoint-dlp
+  - dlp
+  - t1052
+  - t1120
+  - mitre
+mitre_phases:
+  - exfiltration
+  - discovery
+
+live_policy:
+  block_on_domain_controller: true
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Removable Drive Discovery (T1120)
+  # ---------------------------------------------------------------------------
+  - name: "Removable Exfil 1 — Removable Volume Discovery (T1120)"
+    technique_id: T1120
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Lists removable drives with Win32_LogicalDisk (DriveType 2). Read-only. Adversaries check for removable media before deciding to copy to it."
+    telemetry:
+      - "PowerShell EID 4104: CIM query for removable drives"
+    detection:
+      - "EDR: removable-volume enumeration followed by a copy to that volume"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $removable = @(Get-CimInstance -ClassName Win32_LogicalDisk -Filter 'DriveType=2')
+      Write-Output "EXEC T1120: found $($removable.Count) removable volume(s). Removable Stage 1. [BAS-SIM-USB-S1]"
+      if ($removable.Count -eq 0) {
+        Write-Output "SKIP: No removable drive is attached, so Stage 2 has no target. [BAS-SIM-USB-S1]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Synthetic Copy to Removable Media (T1052.001)
+  # ---------------------------------------------------------------------------
+  - name: "Removable Exfil 2 — Synthetic Copy to Removable Media and Removal (T1052.001)"
+    technique_id: T1052.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Copies one synthetic [BAS-SIM] file into a bas-sim folder on the first removable drive found, then deletes that file and folder. No existing data on the drive is read or changed. Skipped if no removable drive is attached. Fixed and network drives are never used."
+    telemetry:
+      - "Sysmon EID 11: file created on a removable volume"
+      - "Device control / removable-media log: write event on a USB volume"
+    detection:
+      - "Endpoint DLP: copy of data to removable media — exfil block expected"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $removable = Get-CimInstance -ClassName Win32_LogicalDisk -Filter 'DriveType=2' | Select-Object -First 1
+      if (-not $removable) {
+        Write-Output "SKIP: T1052.001: no removable drive is attached. [BAS-SIM-USB-S2]"
+        exit 0
+      }
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $folder = Join-Path ($removable.DeviceID + '\') "bas-sim-usb-$runId"
+      $dest = Join-Path $folder 'synthetic_copy.txt'
+      $copied = $false
+      try {
+        New-Item -ItemType Directory -Path $folder -Force | Out-Null
+        Set-Content -Path $dest -Value "[BAS-SIM] synthetic removable-media payload run=$runId - no real data" -Encoding UTF8
+        $copied = Test-Path $dest
+      } catch { $copied = $false }
+      Write-Output "EXEC T1052.001: copied one synthetic file to removable volume $($removable.DeviceID) (copied=$copied). Removable Stage 2. [BAS-SIM-USB-S2]"
+      if ($copied) {
+        Remove-Item -Path $folder -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Output "FAIL: A file was written to a removable drive with no endpoint DLP block. Removable-media copies should be blocked or alerted by endpoint DLP."
+      } else {
+        Write-Output "PASS: Writing to the removable drive was blocked or failed."
+      }
+    cleanup: |
+      Get-CimInstance -ClassName Win32_LogicalDisk -Filter 'DriveType=2' | ForEach-Object {
+        Remove-Item -Path (Join-Path ($_.DeviceID + '\') 'bas-sim-usb-*') -Recurse -Force -ErrorAction SilentlyContinue
+      }

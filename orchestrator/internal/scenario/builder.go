@@ -79,6 +79,8 @@ type StepMeta struct {
 	BaseTaskID       string       `json:"baseTaskId,omitempty"`
 	VariantSpec      *VariantSpec `json:"variantSpec,omitempty"`
 	ProxyTechniqueID string       `json:"proxyTechniqueId,omitempty"`
+	// ActionKey is the authorized action this step belongs to (see execclass.go).
+	ActionKey string `json:"actionKey,omitempty"`
 }
 
 type ComponentVersions struct {
@@ -129,6 +131,7 @@ func BuildStepMeta(steps []ScenarioStep, resolved map[string]string, cv Componen
 			Name:             st.Name,
 			Framework:        st.Framework,
 			BaseTaskID:       st.BaseTaskID,
+			ActionKey:        st.ActionKey,
 			VariantSpec:      st.VariantSpecRef,
 			ProxyTechniqueID: st.ProxyTechniqueID,
 		}
@@ -295,8 +298,10 @@ func buildStep(s Step, calderaURL, calderaKey string, artStore *ARTStore, agentO
 		if artStore != nil {
 			artSteps := artStore.GetStepsByPlatform(s.TechniqueID, agentOS)
 			idx := s.TestIndex
+			// An out-of-range test_index is not replaced with test 0: the step is left
+			// without a command, so the SKIP fallback below reports it.
 			if idx < 0 || idx >= len(artSteps) {
-				idx = 0
+				artSteps = nil
 			}
 			if len(artSteps) > 0 {
 				m := artStore.materialize(artSteps[idx])

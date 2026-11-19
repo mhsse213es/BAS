@@ -111,3 +111,31 @@ func TestBuildEffectivenessReport_NoRows_ReturnsEmptyNotNilSlice(t *testing.T) {
 		t.Fatalf("got %d rows, want 0", len(report.Rows))
 	}
 }
+
+func TestBuildEffectivenessReport_LaterFailIsNotMaskedByEarlierPass(t *testing.T) {
+	t0 := time.Now()
+	rows := []db.RWAttemptRow{
+		{TechniqueID: "T1490", Action: "a1", Capability: "detection", Verdict: controlval.VerdictPass, CreatedAt: t0},
+		{TechniqueID: "T1490", Action: "a2", Capability: "detection", Verdict: controlval.VerdictFail, CreatedAt: t0.Add(time.Second)},
+		{TechniqueID: "T1490", Action: "a1", Capability: "recovery", Verdict: controlval.VerdictPass, CreatedAt: t0},
+		{TechniqueID: "T1490", Action: "a2", Capability: "recovery", Verdict: controlval.VerdictSkipped, SkipReason: controlval.SkipNotTested, CreatedAt: t0.Add(time.Second)},
+	}
+	got := BuildEffectivenessReport(rows, nil).Rows[0]
+	if got.Detection.Verdict != controlval.VerdictFail || got.Detection.Action != "a2" {
+		t.Errorf("detection = %+v, want the FAIL from a2", got.Detection)
+	}
+	if got.Recovery.Verdict != controlval.VerdictSkipped {
+		t.Errorf("recovery = %+v, an unproven skip must outrank a PASS", got.Recovery)
+	}
+}
+
+func TestBuildEffectivenessReport_NotApplicableNeverOutranksARealVerdict(t *testing.T) {
+	t0 := time.Now()
+	rows := []db.RWAttemptRow{
+		{TechniqueID: "T1486", Action: "a1", Capability: "recovery", Verdict: controlval.VerdictSkipped, SkipReason: controlval.SkipNotApplicable, CreatedAt: t0},
+		{TechniqueID: "T1486", Action: "a2", Capability: "recovery", Verdict: controlval.VerdictPass, CreatedAt: t0.Add(time.Second)},
+	}
+	if got := BuildEffectivenessReport(rows, nil).Rows[0].Recovery; got.Verdict != controlval.VerdictPass {
+		t.Errorf("got %+v, want PASS", got)
+	}
+}

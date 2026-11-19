@@ -131,7 +131,7 @@ func (h *Handler) ListReports(w http.ResponseWriter, r *http.Request) {
 		out = append(out, map[string]any{
 			"id": id, "reportType": rtype, "format": format, "scopeLabel": scope,
 			"source": source, "status": status, "generatedBy": by, "generatedAt": at,
-			"downloadPath": path,
+			"downloadPath": path, "agentId": p.AgentID,
 		})
 	}
 	respond(w, out)

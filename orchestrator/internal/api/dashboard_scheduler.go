@@ -43,14 +43,20 @@ func snapshotAndPrune(ctx context.Context, pool *pgxpool.Pool) {
 		return
 	}
 	_, err = pool.Exec(ctx, `
-		INSERT INTO dashboard_snapshots (snapshot_date, avg_risk_score, exposure_score, detection_coverage, asset_count)
-		VALUES (CURRENT_DATE, $1, $2, $3, $4)
+		INSERT INTO dashboard_snapshots (snapshot_date, avg_risk_score, exposure_score, detection_coverage, asset_count,
+			exposure_measurable, detection_measurable, exposure_measured_assets, risk_measurable)
+		VALUES (CURRENT_DATE, $1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (snapshot_date) DO UPDATE SET
-			avg_risk_score     = EXCLUDED.avg_risk_score,
-			exposure_score     = EXCLUDED.exposure_score,
-			detection_coverage = EXCLUDED.detection_coverage,
-			asset_count        = EXCLUDED.asset_count`,
-		snap.AvgRiskScore, snap.ExposureScore, snap.DetectionCoverage, snap.AssetCount)
+			avg_risk_score           = EXCLUDED.avg_risk_score,
+			exposure_score           = EXCLUDED.exposure_score,
+			detection_coverage       = EXCLUDED.detection_coverage,
+			asset_count              = EXCLUDED.asset_count,
+			exposure_measurable      = EXCLUDED.exposure_measurable,
+			detection_measurable     = EXCLUDED.detection_measurable,
+			exposure_measured_assets = EXCLUDED.exposure_measured_assets,
+			risk_measurable          = EXCLUDED.risk_measurable`,
+		snap.AvgRiskScore, snap.ExposureScore, snap.DetectionCoverage, snap.AssetCount,
+		snap.ExposureMeasurable, snap.DetectionMeasurable, snap.ExposureMeasuredAssets, snap.RiskMeasurable)
 	if err != nil {
 		log.Printf("[dashboard] snapshot upsert failed: %v", err)
 		return

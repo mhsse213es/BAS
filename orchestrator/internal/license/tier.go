@@ -41,7 +41,68 @@ const (
 	// is a credentialed, read-only assessment of customer infrastructure. To move it, change only the
 	// tierProductLines table below.
 	ProductDBSim ProductLine = "dbsim"
+	// ProductAleef is the Aleef API discovery product. It is a separate product outside the three
+	// tiers: no tier includes it, and it is granted only by the signed add-on token "addon:aleef".
+	ProductAleef ProductLine = "aleef"
 )
+
+// addonPrefix starts a Features entry that grants an add-on product.
+const addonPrefix = "addon:"
+
+// addonProducts is the explicit allowlist of add-ons: product line to add-on name. Only a listed
+// product is ever granted by a Features token, so tier permissions are still never derived from
+// free text. An add-on product is granted by its token alone, whatever the tier.
+var addonProducts = map[ProductLine]string{ProductAleef: "aleef"}
+
+// HasAddon reports whether the signed Features list carries the add-on token "addon:"+name. The
+// match is exact: no prefix, substring or case folding, and no trimming. Features are covered by
+// the licence signature, so the token cannot be added after issue.
+func (l *License) HasAddon(name string) bool {
+	return featuresHaveAddon(l.Features, name)
+}
+
+func featuresHaveAddon(features []string, name string) bool {
+	want := addonPrefix + name
+	for _, f := range features {
+		if f == want {
+			return true
+		}
+	}
+	return false
+}
+
+// SpecialAddon describes a licensed add-on for display. Add-ons are sold outside the tiers, under
+// the "special" category.
+type SpecialAddon struct {
+	Name     string `json:"name"`
+	Category string `json:"category"`
+	Label    string `json:"label"`
+}
+
+// addonLabels are the display names of the recognised add-ons.
+var addonLabels = map[string]string{"aleef": "Aleef API discovery"}
+
+// SpecialAddons returns the recognised add-ons this licence carries, labelled category "special".
+func (l *License) SpecialAddons() []SpecialAddon {
+	out := []SpecialAddon{}
+	for _, name := range l.Addons() {
+		out = append(out, SpecialAddon{Name: name, Category: "special", Label: addonLabels[name]})
+	}
+	return out
+}
+
+// Addons returns the recognised add-on names this licence carries, sorted. Unrecognised
+// "addon:" tokens are ignored.
+func (l *License) Addons() []string {
+	var out []string
+	for _, name := range addonProducts {
+		if l.HasAddon(name) {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
 
 // tierProductLines is the one authoritative mapping. The server derives permissions only from this
 // table, never from the free-text Features list.
@@ -83,6 +144,9 @@ func (l *License) EffectiveTier() Tier {
 
 // Permits reports whether this licence allows the product line. An unknown tier permits nothing.
 func (l *License) Permits(p ProductLine) bool {
+	if name, ok := addonProducts[p]; ok {
+		return l.HasAddon(name)
+	}
 	products, err := TierProducts(l.EffectiveTier())
 	if err != nil {
 		return false
@@ -94,6 +158,9 @@ func (l *License) Permits(p ProductLine) bool {
 // common line. A scenario whose product line is not valid is never loaded.
 func ValidProductLine(p string) bool {
 	if ProductLine(p) == ProductCommon {
+		return true
+	}
+	if _, ok := addonProducts[ProductLine(p)]; ok {
 		return true
 	}
 	for _, lines := range tierProductLines {
@@ -111,6 +178,14 @@ func ValidProductLine(p string) bool {
 func PermitsNow(p ProductLine) bool {
 	info := Current()
 	if info.State.Blocked() {
+		return false
+	}
+	if name, ok := addonProducts[p]; ok {
+		for _, a := range info.Addons {
+			if a == name {
+				return true
+			}
+		}
 		return false
 	}
 	products, err := TierProducts(info.Tier)

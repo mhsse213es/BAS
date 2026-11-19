@@ -1,0 +1,48 @@
+id: acl-privilege-exposure-audit
+product_line: ad
+name: ACL Privilege Exposure Audit (Multi-Variant)
+description: >
+  Read-only Active Directory ACL exposure audit with effective-permission
+  analysis. Stages 1-5 audit privileged groups, the domain head and
+  AdminSDHolder, adminCount=1 objects (stale protection reported separately
+  from effective exposure), password-reset rights and WriteDacl / WriteOwner /
+  ownership. Stages 6-21 add GenericAll, GenericWrite, AddMember/AddSelf,
+  ownership, Delete/DeleteTree, validated writes, Shadow Credentials, SPN
+  write, RBCD, LAPS read, gMSA password read, sensitive account attributes,
+  DCSync rights, OU inheritance, domain/Configuration/Schema heads and GPO
+  ACL/link control. Stage 22 correlates permission edges into multi-hop paths
+  from non-tier-0 principals to tier-0 objects, each with a confidence label.
+  Trustees are resolved through nested groups; inherit-only and class-mismatched
+  ACEs are ignored; explicit Deny lowers confidence instead of dropping the
+  finding. Reads security descriptors only; never modifies a DACL, resets a
+  password, takes ownership, changes membership or writes a key credential.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+
+tags:
+  - acl
+  - active-directory
+  - privilege-escalation
+  - permission-discovery
+  - t1069
+  - t1098
+  - t1003-006
+  - t1484-001
+  - effective-permissions
+  - adminsdholder
+  - tier0
+  - attack-path
+mitre_phases:
+  - discovery
+  - privilege-escalation
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: true
+  max_spray_attempts: 0
+  spray_account_allowlist: []      # restored — read-only audit, no spraying
+  execution_window: ""
+
+steps:

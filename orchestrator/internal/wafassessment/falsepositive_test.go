@@ -94,3 +94,43 @@ func TestEvaluateLegitimateTrafficScenario_IncorrectlyBlocked_ReturnsFail(t *tes
 		t.Error("V-2 not found in Assertions")
 	}
 }
+
+// Review Focus: EvaluateLegitimateTrafficScenario has its own
+// hardcoded-EvidenceSource bug, a second occurrence of the exact one
+// fixed in EvaluateScenarioWithSeverities -- a VectorFixture carrying
+// live evidence must not render as "fixture" here either.
+func TestEvaluateLegitimateTrafficScenario_FixtureEvidenceSourceOverride_PropagatesToAssertion(t *testing.T) {
+	scenario, err := NewEnterpriseScenario("S-LEGIT-2", "n", "o", []string{"V-1", "V-2"}, "p", "e", "prov")
+	if err != nil {
+		t.Fatalf("NewEnterpriseScenario: %v", err)
+	}
+	live := allowedLegitFixture("V-1")
+	live.EvidenceSource = EvidenceSourceLiveExecution
+	fixtures := map[string]VectorFixture{
+		"V-1": live,
+		"V-2": allowedLegitFixture("V-2"), // EvidenceSource left unset
+	}
+	severityByID := map[string]wafcatalog.Severity{"V-1": wafcatalog.SeverityCritical, "V-2": wafcatalog.SeverityCritical}
+	result, err := EvaluateLegitimateTrafficScenario(scenario, fixtures, severityByID)
+	if err != nil {
+		t.Fatalf("EvaluateLegitimateTrafficScenario: %v", err)
+	}
+	var sawV1, sawV2 bool
+	for _, a := range result.Assertions {
+		switch a.VectorID {
+		case "V-1":
+			sawV1 = true
+			if a.EvidenceSource != EvidenceSourceLiveExecution {
+				t.Errorf("V-1 EvidenceSource = %q, want %q", a.EvidenceSource, EvidenceSourceLiveExecution)
+			}
+		case "V-2":
+			sawV2 = true
+			if a.EvidenceSource != EvidenceSourceFixture {
+				t.Errorf("V-2 EvidenceSource = %q, want %q (unset should default)", a.EvidenceSource, EvidenceSourceFixture)
+			}
+		}
+	}
+	if !sawV1 || !sawV2 {
+		t.Fatalf("expected assertions for both V-1 and V-2, got %+v", result.Assertions)
+	}
+}

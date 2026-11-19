@@ -16,7 +16,28 @@ steps:
     - name: 'AV-FILE-001: Known test artifact via a user-writable download/temp directory (primary)'
       technique_id: T1204.002
       framework: custom
-      command: Set-Content -Path "$env:TEMP\avtest-eicar.txt" -Value 'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*'
+      command: |
+        $p = "$env:TEMP\avtest-eicar.txt"
+        $written = $false; $denied = $false
+        try {
+          Set-Content -Path $p -Value 'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*' -ErrorAction Stop
+          $written = $true
+        } catch {
+          $denied = $_.Exception.Message -match 'virus|malicious|blocked|denied|policy|did not complete'
+        }
+        if (-not $written) {
+          if ($denied) { Write-Output "PASS: EICAR test artifact write explicitly blocked by a security control." }
+          else { Write-Output "SKIP: EICAR test artifact write failed without an explicit block; not scored." }
+        } else {
+          Start-Sleep -Seconds 3
+          if (Test-Path -LiteralPath $p) { Write-Output "FAIL: EICAR test artifact retained on disk; the security control did not intercept it." }
+          else {
+            $det = $null
+            try { $det = @(Get-MpThreatDetection -ErrorAction Stop | Where-Object { $_.Resources -match [regex]::Escape($p) }) } catch { $det = $null }
+            if ($det -and $det.Count -gt 0) { Write-Output "PASS: EICAR test artifact removed after write; Defender detection record confirms intervention." }
+            else { Write-Output "SKIP: EICAR test artifact no longer present, but no detection record confirmed a control acted; not scored." }
+          }
+        }
       test_index: 0
       executor: powershell
       timeout_sec: 30
@@ -29,7 +50,22 @@ steps:
     - name: 'AV-FILE-001: Known test artifact via a user-writable download/temp directory (counterpart)'
       technique_id: T1204.002
       framework: custom
-      command: Set-Content -Path "$env:TEMP\avtest-benign.txt" -Value 'This is an ordinary harmless test file.'
+      command: |
+        $p = "$env:TEMP\avtest-benign.txt"
+        $written = $false; $denied = $false
+        try {
+          Set-Content -Path $p -Value 'This is an ordinary harmless test file.' -ErrorAction Stop
+          $written = $true
+        } catch {
+          $denied = $_.Exception.Message -match 'virus|malicious|blocked|denied|policy|did not complete'
+        }
+        if ($denied) { Write-Output "FAIL: benign text file was blocked; this is a false positive on benign activity." }
+        elseif (-not $written) { Write-Output "SKIP: benign text file write failed without an explicit block; not scored." }
+        else {
+          Start-Sleep -Seconds 3
+          if (Test-Path -LiteralPath $p) { Write-Output "PASS: benign text file was not blocked (no false positive)." }
+          else { Write-Output "FAIL: benign text file was removed after write; this is a false positive on benign activity." }
+        }
       test_index: 0
       executor: powershell
       timeout_sec: 30
@@ -42,7 +78,28 @@ steps:
     - name: 'AV-FILE-002: Nested archive containing a known test artifact (primary)'
       technique_id: T1027.002
       framework: custom
-      command: Set-Content -Path "$env:TEMP\avtest-eicar-nested.txt" -Value 'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*'; Compress-Archive -Path "$env:TEMP\avtest-eicar-nested.txt" -DestinationPath "$env:TEMP\avtest-archive.zip" -Force
+      command: |
+        $p = "$env:TEMP\avtest-archive.zip"
+        $written = $false; $denied = $false
+        try {
+          Set-Content -Path "$env:TEMP\avtest-eicar-nested.txt" -Value 'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*' -ErrorAction Stop; Compress-Archive -Path "$env:TEMP\avtest-eicar-nested.txt" -DestinationPath $p -Force -ErrorAction Stop
+          $written = $true
+        } catch {
+          $denied = $_.Exception.Message -match 'virus|malicious|blocked|denied|policy|did not complete'
+        }
+        if (-not $written) {
+          if ($denied) { Write-Output "PASS: nested archive with test artifact write explicitly blocked by a security control." }
+          else { Write-Output "SKIP: nested archive with test artifact write failed without an explicit block; not scored." }
+        } else {
+          Start-Sleep -Seconds 3
+          if (Test-Path -LiteralPath $p) { Write-Output "FAIL: nested archive with test artifact retained on disk; the security control did not intercept it." }
+          else {
+            $det = $null
+            try { $det = @(Get-MpThreatDetection -ErrorAction Stop | Where-Object { $_.Resources -match [regex]::Escape($p) }) } catch { $det = $null }
+            if ($det -and $det.Count -gt 0) { Write-Output "PASS: nested archive with test artifact removed after write; Defender detection record confirms intervention." }
+            else { Write-Output "SKIP: nested archive with test artifact no longer present, but no detection record confirmed a control acted; not scored." }
+          }
+        }
       test_index: 0
       executor: powershell
       timeout_sec: 30
@@ -55,7 +112,15 @@ steps:
     - name: 'AV-SCRIPT-001: Encoded PowerShell command execution (primary)'
       technique_id: T1059.001
       framework: custom
-      command: $inner = 'Set-Content -Path "$env:TEMP\avtest-script-marker.txt" -Value marker'; $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($inner)); powershell.exe -NoProfile -EncodedCommand $enc
+      command: |
+        $marker = "$env:TEMP\avtest-script-marker.txt"
+        Remove-Item -LiteralPath $marker -Force -ErrorAction SilentlyContinue
+        $inner = 'Set-Content -Path "$env:TEMP\avtest-script-marker.txt" -Value marker'
+        $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($inner))
+        $out = (powershell.exe -NoProfile -EncodedCommand $enc 2>&1) | Out-String
+        if (Test-Path -LiteralPath $marker) { Write-Output "FAIL: encoded PowerShell command ran and wrote its marker; the script control did not intercept it." }
+        elseif ($out -match 'virus|malicious|blocked|denied|policy') { Write-Output "PASS: encoded PowerShell command explicitly blocked by a security control." }
+        else { Write-Output "SKIP: encoded command produced no marker and no explicit block; not scored." }
       test_index: 0
       executor: powershell
       timeout_sec: 30
@@ -68,7 +133,22 @@ steps:
     - name: 'AV-SCRIPT-001: Encoded PowerShell command execution (counterpart)'
       technique_id: T1059.001
       framework: custom
-      command: Set-Content -Path "$env:TEMP\avtest-script-marker.txt" -Value 'marker'
+      command: |
+        $p = "$env:TEMP\avtest-script-marker.txt"
+        $written = $false; $denied = $false
+        try {
+          Set-Content -Path $p -Value 'marker' -ErrorAction Stop
+          $written = $true
+        } catch {
+          $denied = $_.Exception.Message -match 'virus|malicious|blocked|denied|policy|did not complete'
+        }
+        if ($denied) { Write-Output "FAIL: unencoded marker write was blocked; this is a false positive on benign activity." }
+        elseif (-not $written) { Write-Output "SKIP: unencoded marker write write failed without an explicit block; not scored." }
+        else {
+          Start-Sleep -Seconds 3
+          if (Test-Path -LiteralPath $p) { Write-Output "PASS: unencoded marker write was not blocked (no false positive)." }
+          else { Write-Output "FAIL: unencoded marker write was removed after write; this is a false positive on benign activity." }
+        }
       test_index: 0
       executor: powershell
       timeout_sec: 30
@@ -81,7 +161,13 @@ steps:
     - name: 'AV-SCRIPT-002: LOLBin abuse: certutil used for file transfer instead of its intended certificate role (primary)'
       technique_id: T1105
       framework: custom
-      command: certutil.exe -urlcache -split -f "http://127.0.0.1:1/avtest-marker" "%TEMP%\avtest-certutil-fetch.tmp"
+      command: |
+        $f = "$env:TEMP\avtest-certutil-fetch.tmp"
+        Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue
+        $out = (certutil.exe -urlcache -split -f "http://127.0.0.1:1/avtest-marker" $f 2>&1) | Out-String
+        if (Test-Path -LiteralPath $f) { Write-Output "FAIL: certutil fetch wrote a file; the LOLBin download control did not intercept it." }
+        elseif ($out -match 'virus|malicious|blocked|denied|policy|Access is denied') { Write-Output "PASS: certutil download explicitly blocked by a security control." }
+        else { Write-Output "SKIP: certutil target is an unreachable test address and no explicit block was observed; not scored." }
       test_index: 0
       executor: cmd
       timeout_sec: 30
@@ -145,7 +231,17 @@ steps:
     - name: 'AV-BEHAV-002: Suspicious child-process chain from a simulated document reader (primary)'
       technique_id: T1566.001
       framework: custom
-      command: Start-Process -FilePath "powershell.exe" -ArgumentList '-NoProfile','-Command','Set-Content -Path "$env:TEMP\avtest-docreader-marker.txt" -Value marker' -Wait -WindowStyle Hidden
+      command: |
+        $marker = "$env:TEMP\avtest-docreader-marker.txt"
+        Remove-Item -LiteralPath $marker -Force -ErrorAction SilentlyContinue
+        try {
+          Start-Process -FilePath "powershell.exe" -ArgumentList '-NoProfile','-Command','Set-Content -Path "$env:TEMP\avtest-docreader-marker.txt" -Value marker' -Wait -WindowStyle Hidden -ErrorAction Stop
+          if (Test-Path -LiteralPath $marker) { Write-Output "FAIL: suspicious child-process chain ran and wrote its marker; the behavioural control did not intercept it." }
+          else { Write-Output "SKIP: child process returned without its marker and no explicit block was observed; not scored." }
+        } catch {
+          if ($_.Exception.Message -match 'virus|malicious|blocked|denied|policy|Access is denied') { Write-Output "PASS: suspicious child-process chain explicitly blocked by a security control." }
+          else { Write-Output "SKIP: child-process launch failed without an explicit block; not scored." }
+        }
       test_index: 0
       executor: powershell
       timeout_sec: 30
@@ -158,7 +254,14 @@ steps:
     - name: 'AV-BEHAV-002: Suspicious child-process chain from a simulated document reader (counterpart)'
       technique_id: T1566.001
       framework: custom
-      command: Start-Process -FilePath "cmd.exe" -ArgumentList '/c','echo printing' -Wait -WindowStyle Hidden
+      command: |
+        try {
+          Start-Process -FilePath "cmd.exe" -ArgumentList '/c','echo printing' -Wait -WindowStyle Hidden -ErrorAction Stop
+          Write-Output "PASS: benign child process chain was not blocked (no false positive)."
+        } catch {
+          if ($_.Exception.Message -match 'virus|malicious|blocked|denied|policy|Access is denied') { Write-Output "FAIL: benign child process was blocked; this is a false positive." }
+          else { Write-Output "SKIP: benign child-process launch failed without an explicit block; not scored." }
+        }
       test_index: 0
       executor: powershell
       timeout_sec: 30
@@ -170,7 +273,17 @@ steps:
     - name: 'AV-NET-001: HTTP download of a known test artifact (primary)'
       technique_id: T1105
       framework: custom
-      command: Invoke-WebRequest -Uri "http://avtest-host.local/eicar-test.txt" -OutFile "$env:TEMP\avtest-network-download.txt" -UseBasicParsing
+      command: |
+        $f = "$env:TEMP\avtest-network-download.txt"
+        Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue
+        try {
+          Invoke-WebRequest -Uri "http://avtest-host.local/eicar-test.txt" -OutFile $f -UseBasicParsing -ErrorAction Stop
+          if ((Test-Path -LiteralPath $f) -and ((Get-Content -LiteralPath $f -Raw) -match 'EICAR-STANDARD-ANTIVIRUS-TEST-FILE')) { Write-Output "FAIL: known test artifact downloaded and retained; the network control did not intercept it." }
+          else { Write-Output "SKIP: download completed without a retained test artifact; not scored." }
+        } catch {
+          if ($_.Exception.Message -match 'virus|malicious|blocked|denied|policy') { Write-Output "PASS: test artifact download explicitly blocked by a security control." }
+          else { Write-Output "SKIP: test host unreachable without an explicit block; not scored." }
+        }
       test_index: 0
       executor: powershell
       timeout_sec: 30
@@ -183,7 +296,16 @@ steps:
     - name: 'AV-PERSIST-001: Unauthorized Run-key persistence simulation (primary)'
       technique_id: T1547.001
       framework: custom
-      command: New-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'AVTestMarker' -Value 'cmd.exe /c exit' -Force
+      command: |
+        try {
+          New-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'AVTestMarker' -Value 'cmd.exe /c exit' -Force -ErrorAction Stop | Out-Null
+          $v = Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'AVTestMarker' -ErrorAction SilentlyContinue
+          if ($v) { Write-Output "FAIL: persistence value written to the Run key and retained; the persistence control did not intercept it." }
+          else { Write-Output "SKIP: Run value vanished after write; attribution not confirmed; not scored." }
+        } catch {
+          if ($_.Exception.Message -match 'virus|malicious|blocked|denied|policy|Access is denied') { Write-Output "PASS: Run-key persistence write explicitly blocked by a security control." }
+          else { Write-Output "SKIP: Run-key write failed without an explicit block; not scored." }
+        }
       test_index: 0
       executor: powershell
       timeout_sec: 30
@@ -196,7 +318,16 @@ steps:
     - name: 'AV-PERSIST-001: Unauthorized Run-key persistence simulation (counterpart)'
       technique_id: T1547.001
       framework: custom
-      command: New-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'AVTestLegitInstaller' -Value 'cmd.exe /c exit' -Force
+      command: |
+        try {
+          New-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'AVTestLegitInstaller' -Value 'cmd.exe /c exit' -Force -ErrorAction Stop | Out-Null
+          $v = Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'AVTestLegitInstaller' -ErrorAction SilentlyContinue
+          if ($v) { Write-Output "PASS: benign Run-key entry was not blocked (no false positive)." }
+          else { Write-Output "FAIL: benign Run-key entry was removed after write; this is a false positive." }
+        } catch {
+          if ($_.Exception.Message -match 'virus|malicious|blocked|denied|policy|Access is denied') { Write-Output "FAIL: benign Run-key entry was blocked; this is a false positive." }
+          else { Write-Output "SKIP: Run-key write failed without an explicit block; not scored." }
+        }
       test_index: 0
       executor: powershell
       timeout_sec: 30
@@ -209,7 +340,14 @@ steps:
     - name: 'AV-PERSIST-002: Suspicious scheduled task creation simulation (primary)'
       technique_id: T1053.005
       framework: custom
-      command: schtasks /create /tn "AVTestMarkerTask" /tr "cmd.exe /c exit" /sc onlogon /f
+      command: |
+        $out = (schtasks /create /tn "AVTestMarkerTask" /tr "cmd.exe /c exit" /sc onlogon /f 2>&1) | Out-String
+        $rc = $LASTEXITCODE
+        $exists = $false
+        if ($rc -eq 0) { schtasks /query /tn "AVTestMarkerTask" 2>$null | Out-Null; $exists = ($LASTEXITCODE -eq 0) }
+        if ($exists) { Write-Output "FAIL: suspicious scheduled task was created and retained; the scheduled-task control did not intercept it." }
+        elseif ($out -match 'Access is denied|blocked|denied|policy') { Write-Output "PASS: scheduled task creation explicitly blocked by a security control." }
+        else { Write-Output "SKIP: scheduled task outcome ambiguous (exit=$rc); not scored." }
       test_index: 0
       executor: cmd
       timeout_sec: 30
@@ -222,7 +360,12 @@ steps:
     - name: 'AV-PERSIST-002: Suspicious scheduled task creation simulation (counterpart)'
       technique_id: T1053.005
       framework: custom
-      command: schtasks /create /tn "AVTestLegitUpdaterTask" /tr "cmd.exe /c exit" /sc onlogon /f
+      command: |
+        $out = (schtasks /create /tn "AVTestLegitUpdaterTask" /tr "cmd.exe /c exit" /sc onlogon /f 2>&1) | Out-String
+        $rc = $LASTEXITCODE
+        if ($rc -eq 0) { Write-Output "PASS: benign scheduled task creation was not blocked (no false positive)." }
+        elseif ($out -match 'Access is denied|blocked|denied|policy') { Write-Output "FAIL: benign scheduled task creation was blocked; this is a false positive." }
+        else { Write-Output "SKIP: benign scheduled task outcome ambiguous (exit=$rc); not scored." }
       test_index: 0
       executor: cmd
       timeout_sec: 30
@@ -235,7 +378,22 @@ steps:
     - name: 'AV-FP-001: Legitimate signed business script execution (primary)'
       technique_id: T1059.001
       framework: custom
-      command: Set-Content -Path "$env:TEMP\avtest-business-script-marker.txt" -Value 'business script ran'
+      command: |
+        $p = "$env:TEMP\avtest-business-script-marker.txt"
+        $written = $false; $denied = $false
+        try {
+          Set-Content -Path $p -Value 'business script ran' -ErrorAction Stop
+          $written = $true
+        } catch {
+          $denied = $_.Exception.Message -match 'virus|malicious|blocked|denied|policy|did not complete'
+        }
+        if ($denied) { Write-Output "FAIL: benign business-script marker was blocked; this is a false positive on benign activity." }
+        elseif (-not $written) { Write-Output "SKIP: benign business-script marker write failed without an explicit block; not scored." }
+        else {
+          Start-Sleep -Seconds 3
+          if (Test-Path -LiteralPath $p) { Write-Output "PASS: benign business-script marker was not blocked (no false positive)." }
+          else { Write-Output "FAIL: benign business-script marker was removed after write; this is a false positive on benign activity." }
+        }
       test_index: 0
       executor: powershell
       timeout_sec: 30
@@ -248,7 +406,24 @@ steps:
     - name: 'AV-FP-002: High-I/O legitimate workload during active scanning (primary)'
       technique_id: T1499.003
       framework: custom
-      command: $dir = "$env:TEMP\avtest-highio"; New-Item -ItemType Directory -Path $dir -Force | Out-Null; $sw = [Diagnostics.Stopwatch]::StartNew(); while ($sw.Elapsed.TotalSeconds -lt 60) { 1..50 | ForEach-Object { Set-Content -Path "$dir\f$_.tmp" -Value ([guid]::NewGuid().ToString()) }; Get-ChildItem $dir | Remove-Item -Force }
+      command: |
+        $dir = "$env:TEMP\avtest-highio"
+        $sw = [Diagnostics.Stopwatch]::StartNew(); $loops = 0; $denied = 0
+        try {
+          while ($sw.Elapsed.TotalSeconds -lt 60) {
+            New-Item -ItemType Directory -Path $dir -Force -ErrorAction Stop | Out-Null
+            1..50 | ForEach-Object {
+              try { Set-Content -Path "$dir\f$_.tmp" -Value ([guid]::NewGuid().ToString()) -ErrorAction Stop }
+              catch { if ($_.Exception.Message -match 'virus|malicious|blocked|denied|policy') { $denied++ } }
+            }
+            Get-ChildItem $dir -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+            $loops++
+          }
+        } catch { }
+        Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
+        if ($denied -gt 0) { Write-Output "FAIL: legitimate high-I/O workload had $denied write(s) blocked; this is a false positive during active scanning." }
+        elseif ($loops -ge 1) { Write-Output "PASS: legitimate high-I/O workload completed $loops cycle(s) with no blocked writes (no false positive)." }
+        else { Write-Output "SKIP: high-I/O workload did not start; not scored." }
       test_index: 0
       executor: powershell
       timeout_sec: 30

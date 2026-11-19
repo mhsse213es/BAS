@@ -1,36 +1,75 @@
+
+# =============================================================================
+# Akira Kill Chain — Ransomware Emulation (Extended / Production-Grade Edition)
+# =============================================================================
 id: akira-kill-chain
+version: "2.1.0"
 product_line: ransomware
-name: Akira Kill Chain — Ransomware Emulation
+name: Akira Kill Chain — Ransomware Emulation (Extended)
 description: >
-  Nine-stage telemetry-safe emulation of the Akira ransomware kill chain
-  targeting Windows endpoints. Reflects documented Akira tradecraft
-  validated against CISA AA24-109A: RDP/VPN-without-MFA initial access,
-  credential dumping, and VSS deletion via WMI (Get-WmiObject
-  Win32_ShadowCopy) rather than vssadmin.
+  Stage-based (26 executable steps; pre-flight gating and the closing scorecard are
+  kept out of the step list because the engine requires every step to map to an ATT&CK technique) telemetry-safe emulation of the Akira
+  ransomware kill chain targeting Windows endpoints. Reflects documented Akira
+  tradecraft validated against CISA AA24-109A: RDP/VPN-without-MFA initial
+  access, credential dumping (SAM/SYSTEM + LSASS probe), Defender tampering,
+  SMB admin-share lateral movement, staged exfiltration, XOR "encryption"
+  simulation, VSS deletion via WMI (Get-WmiObject Win32_ShadowCopy) rather than
+  vssadmin, and log clearing. Extended with recovery-inhibition via bcdedit /
+  wbadmin (Stage 8c) and anti-forensics via USN journal / prefetch / SRUM
+  probes (Stage 9b), both telemetry-safe.
 
   KILL CHAIN STAGES:
-    1. Initial Access        — RDP/NLA exposure posture check (T1021.001)
-    2. Discovery              — network share discovery (T1135)
-    3. Credential Access      — SAM/SYSTEM hive theft via reg save (T1003.002)
-    4. Defense Evasion        — Defender exclusion invocation probe (T1562.001)
-    5. Lateral Movement       — SMB admin share reachability check (T1021.002)
-    6. Ransomware Simulation  — XOR-encoded benign file + ransom note, .akira extension (T1486)
-    7. Recovery Inhibition A  — VSS snapshot enumeration, vssadmin (T1490)
-    8. Recovery Inhibition B  — VSS deletion via WMI Win32_ShadowCopy.Delete() (T1490, lab-only)
-    9. Log Clearing Attempt   — wevtutil cl attempt, blocked or audit (T1070.001)
+    17. Initial Access (posture)       — valid-account and credential-reuse posture (T1078, read-only)
+    18. Initial Access (exposure)      — external remote services exposure, VPN/RDP/WinRM/SSH scope (T1133, read-only)
+    1.  Initial Access                 — RDP/NLA exposure posture check (T1021.001)
+    2.  Discovery                      — network share discovery (T1135)
+    19. Discovery                      — remote system and domain trust discovery, time-capped (T1482 / T1018)
+    20. Discovery                      — process, system and file discovery burst (T1082 / T1057 / T1083)
+    21. Execution                      — PowerShell / WMI / service execution, verdict from event-log telemetry (T1059.001 / T1047 / T1569.002)
+    3.  Credential Access              — SAM/SYSTEM hive theft via reg save (T1003.002)
+    3b. Credential Access (supp.)      — LSASS access-mask probe (T1003.001, read-only)
+    22. Credential Access              — Kerberoastable service-account exposure, LDAP read-only (T1558.003)
+    4.  Defense Evasion                — Defender tamper-protection and exclusion state (T1562.001)
+    23. Persistence                    — local account creation exposure, lab-gated disabled account (T1136.001)
+    24. Persistence                    — Run-key persistence, inventory plus lab-gated HKCU write (T1547.001)
+    25. Command and Control            — remote access tool exposure, presence only (T1219)
+    5.  Lateral Movement               — SMB admin share reachability check (T1021.002)
+    5a. Collection (staging)           — synthetic records staged locally, cleanup verified (T1074.001)
+    5b. Exfiltration (pre-encryption)  — synthetic record POST to own sink (T1041)
+    5c. Discovery / Lateral (supp.)    — SMB share fan-out enumeration (T1135/T1021.002)
+    6.  Ransomware Simulation          — XOR-encoded benign file + ransom note, .akira (T1486)
+    6b. Impact (supp.)                 — mass-rename fan-out simulation (T1036.008, not encryption)
+    7.  Recovery Inhibition A          — VSS snapshot enumeration, vssadmin (T1490)
+    8.  Recovery Inhibition B          — VSS deletion via WMI Win32_ShadowCopy.Delete() (T1490, lab-only)
+    8b. Recovery Inhibition (verify)   — post-deletion VSS survival check (T1490)
+    8c. Recovery Inhibition C          — bcdedit/wbadmin recovery-check probe (T1490/T1562.001)
+    9.  Log Clearing Attempt           — wevtutil cl attempt, blocked or audit (T1070.001)
+    9b. Indicator Removal (supp.)      — USN journal / prefetch / SRUM probe (T1070.001)
 
   SAFETY: No real encryption of user data. XOR is applied to a single BAS-
-  created temp file with [BAS-SIM-AKIRA] content only. Ransom note is
-  cleaned up immediately. Stage 8 is lab-only and default-disabled — it
-  requires the operator to explicitly set BAS_CONFIRM_VSS_DELETE=true in
-  an isolated lab; without it, the step SKIPs with no state change and
-  deletes at most ONE (the oldest) real C: shadow copy when enabled. All
-  other stages are production-safe. Windows only. [BAS-SIM] tagged
-  throughout.
+  created temp file with [BAS-SIM-AKIRA] content only. Ransom note is cleaned
+  up immediately. Stage 8 is lab-only and default-disabled — it requires the
+  operator to explicitly set BAS_CONFIRM_VSS_DELETE=true in an isolated lab;
+  without it, the step SKIPs with no state change and deletes at most ONE (the
+  oldest) real C: shadow copy when enabled. Stages 3b, 4b, 8c, 9b are strictly
+  read-only probes (no state change) and are production-safe. All stages are
+  production-safe unless explicitly marked. Stages 21, 23 and 24 write or execute benign
+  artifacts only behind exact-match lab gates (BAS_CONFIRM_SERVICE_EXEC, BAS_CONFIRM_ACCOUNT_CREATE, BAS_CONFIRM_DOMAIN_ACCOUNT_CREATE,
+  BAS_CONFIRM_RUNKEY_WRITE, and BAS_CONFIRM_KERBEROAST_TGS for stage 22; each only the lowercase
+  value true) and verify cleanup. Windows only. [BAS-SIM] tagged
+  throughout. Every step is idempotent and carries its own cleanup.
+
 author: Audspect Research
 executable: true
 local_check: false
 supported_os: [windows]
+severity: critical
+estimated_duration_sec: 360
+abort_conditions:
+  - "BAS_RUN_ID missing AND BAS_ALLOW_UNTRACKED_RUN != 'true'"
+  - "Host is a domain controller AND live_policy.block_on_domain_controller == true"
+  - "Free disk in %TEMP% < 64 MB"
+  - "PowerShell major version < 5"
 tags:
   - akira
   - ransomware
@@ -43,14 +82,30 @@ tags:
   - t1486
   - t1490
   - t1562
+  - t1567
   - mitre
+  - bas
+  - extended
 mitre_phases:
   - initial-access
   - discovery
   - credential-access
   - defense-evasion
   - lateral-movement
+  - exfiltration
   - impact
+attck_tactics:
+  - TA0001  # Initial Access
+  - TA0007  # Discovery
+  - TA0006  # Credential Access
+  - TA0005  # Defense Evasion
+  - TA0008  # Lateral Movement
+  - TA0010  # Exfiltration
+  - TA0040  # Impact
+references:
+  - "CISA AA24-109A — #StopRansomware: Akira Ransomware"
+  - "MITRE ATT&CK T1486, T1490, T1003.002, T1003.001, T1562.001, T1562.006, T1070.001, T1135, T1021.001, T1021.002, T1567, T1074.001, T1078, T1133, T1482, T1082, T1059.001, T1558.003, T1136.001, T1547.001, T1219"
+  - "Sigma: proc_creation_win_reg_save_sam.yml, proc_creation_win_vssadmin_susp_commands.yml, proc_creation_win_net_admin_share_access.yml, proc_creation_win_wevtutil_clear_logs.yml"
 
 live_policy:
   block_on_domain_controller: false
@@ -58,13 +113,135 @@ live_policy:
   max_spray_attempts: 0
   spray_account_allowlist: []
   execution_window: ""
+  require_run_id: true
+  require_temp_disk_mb: 64
+  min_powershell_major: 5
+
+# ---------------------------------------------------------------------------
+# Run-scoped variables (resolved once, referenced by every step)
+# ---------------------------------------------------------------------------
+variables:
+  run_id: "{{env.BAS_RUN_ID | default(random_hex8)}}"
+  temp_dir: "{{env.TEMP}}"
+  sim_prefix: "bas_akira_"
+  sim_tag: "[BAS-SIM-AKIRA]"
 
 steps:
 
-  # ---------------------------------------------------------------------------
+
+  # ===========================================================================
+  # Stage 17 - Valid Account and Compromised Credential Posture (T1078)
+  # ===========================================================================
+  - id: akira-s17-valid-accounts
+    name: "Akira Stage 17 — Valid Account and Compromised Credential Posture (T1078)"
+    technique_id: T1078
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Read-only inventory of local accounts (enabled, password required, expiry, last logon, built-in Administrator and Guest), cached-logon policy and the NUMBER of stored credential entries. No authentication attempt, no spraying, no password read."
+    preconditions: ["Windows host."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; anything created is removed and removal verified."]
+    abort_on: []
+    telemetry:
+      - "Security EID 4798/4799 (local group and account enumeration)"
+    detection:
+      - "EDR: local account enumeration followed by credential-store reads"
+    expected_telemetry_count: 1
+    false_positive_notes: "Administrators, IT tooling and inventory agents perform the same actions; correlate with account, process and change window."
+    mitigations:
+      - "Enforce MFA and least privilege on remote access and valid accounts; monitor for the behaviours above."
+    references: ["CISA AA24-109A", "MITRE T1078"]
+    evidence: ["Emit findings count and account counts."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $f = @()
+      $users = @(Get-LocalUser -ErrorAction SilentlyContinue)
+      $en = @($users | Where-Object { $_.Enabled })
+      foreach ($u in $en) {
+        if (-not $u.PasswordRequired) { $f += "enabled account $($u.Name) does not require a password" }
+        if ($u.PasswordNeverExpires -and $u.Name -ne 'WDAGUtilityAccount') { $f += "enabled account $($u.Name) has a non-expiring password" }
+        if ($u.LastLogon -and ((Get-Date) - $u.LastLogon).TotalDays -gt 90) { $f += "enabled account $($u.Name) unused for over 90 days" }
+        if ($u.SID.Value -like '*-500') { $f += "built-in Administrator account ($($u.Name)) is enabled" }
+      }
+      foreach ($u in $users) { if ($u.Enabled -and $u.SID.Value -like '*-501') { $f += "Guest account is enabled" } }
+      $cached = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name CachedLogonsCount -ErrorAction SilentlyContinue).CachedLogonsCount
+      $cmd = (& cmdkey.exe /list 2>&1 | Out-String); $stored = ([regex]::Matches($cmd, 'Target:')).Count
+      $admins = @((& net.exe localgroup Administrators 2>&1) | Where-Object { $_ -and $_ -notmatch '^(Alias name|Comment|Members|The command|-+)' }).Count
+      Write-Output "EVIDENCE T1078: local_accounts=$($users.Count) enabled=$($en.Count) local_administrators_members=$admins cached_domain_logons_allowed=$cached stored_credential_entries=$stored findings=$($f.Count). Posture only: no authentication attempt, no spraying, no password was read. [BAS-SIM-AKIRA-S17]"
+      foreach ($x in $f) { Write-Output "FINDING: $x [BAS-SIM-AKIRA-S17]" }
+      if ($users.Count -eq 0) { Write-Output "SKIP: prerequisite missing (local account inventory unavailable on this host). [BAS-SIM-AKIRA-S17]" }
+      elseif ($f.Count -gt 0) { Write-Output "FAIL: $($f.Count) valid-account weakness(es) an attacker could reuse or guess were found (see FINDING lines). Akira commonly logs in with valid or compromised accounts. [BAS-SIM-AKIRA-S17]" }
+      else { Write-Output "PASS: no weak local valid-account posture was found (domain account hygiene is not assessed here). [BAS-SIM-AKIRA-S17]" }
+    cleanup: ""
+
+  # ===========================================================================
+  # Stage 18 - External Remote Services Exposure (VPN/RDP) (T1133)
+  # ===========================================================================
+  - id: akira-s18-external-remote-services
+    name: "Akira Stage 18 — External Remote Services Exposure (VPN/RDP) (T1133)"
+    technique_id: T1133
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Read-only: RDP/WinRM/SSH enablement, listeners bound to all interfaces, inbound firewall rules scoped to any address, and VPN client services. Internet reachability and MFA cannot be determined from the endpoint and are not claimed."
+    preconditions: ["Windows host."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; anything created is removed and removal verified."]
+    abort_on: []
+    telemetry:
+      - "Security EID 5156 (listeners), firewall rule reads"
+    detection:
+      - "Posture: remote-access listener reachable from any address"
+    expected_telemetry_count: 1
+    false_positive_notes: "Administrators, IT tooling and inventory agents perform the same actions; correlate with account, process and change window."
+    mitigations:
+      - "Enforce MFA and least privilege on remote access and valid accounts; monitor for the behaviours above."
+    references: ["CISA AA24-109A", "MITRE T1133"]
+    evidence: ["Emit exposed_listeners and any_address_inbound_rules."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $f = @()
+      $rdpOn = ((Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -ErrorAction SilentlyContinue).fDenyTSConnections -eq 0)
+      $listen = @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue)
+      function Test-Exposed($port) { @($listen | Where-Object { $_.LocalPort -eq $port -and $_.LocalAddress -in '0.0.0.0','::' }).Count -gt 0 }
+      $svcPorts = [ordered]@{ RDP=3389; WinRM_HTTP=5985; WinRM_HTTPS=5986; SSH=22 }
+      $expo = @(); foreach ($k in $svcPorts.Keys) { if (Test-Exposed $svcPorts[$k]) { $expo += $k } }
+      $anyScope = @()
+      foreach ($r in @(Get-NetFirewallRule -Direction Inbound -Action Allow -Enabled True -ErrorAction SilentlyContinue)) {
+        $pf = $r | Get-NetFirewallPortFilter -ErrorAction SilentlyContinue
+        if ($pf.Protocol -eq 'TCP' -and (@($pf.LocalPort) | Where-Object { $_ -in '3389','5985','5986','22' })) {
+          $af = $r | Get-NetFirewallAddressFilter -ErrorAction SilentlyContinue
+          if (@($af.RemoteAddress) -contains 'Any') { $anyScope += "$($r.DisplayName) (port $(@($pf.LocalPort) -join ','))" }
+        }
+      }
+      $vpnPat = 'openvpn|forticlient|anyconnect|globalprotect|pulse|wireguard|nordlayer|sonicwall|checkpoint|zscaler'
+      $vpn = @(Get-Service -ErrorAction SilentlyContinue | Where-Object { $_.Name -match $vpnPat -or $_.DisplayName -match $vpnPat } | ForEach-Object { $_.Name })
+      if ($rdpOn -and (Test-Exposed 3389) -and $anyScope.Count -gt 0) { $f += "RDP is enabled, listening on all interfaces, and an enabled inbound firewall rule allows any remote address" }
+      foreach ($k in 'WinRM_HTTP','WinRM_HTTPS','SSH') { if ($expo -contains $k -and @($anyScope | Where-Object { $_ -match [regex]::Escape([string]$svcPorts[$k]) }).Count -gt 0) { $f += "$k listens on all interfaces and a firewall rule allows any remote address" } }
+      Write-Output "EVIDENCE T1133: rdp_enabled=$rdpOn exposed_listeners=[$($expo -join ',')] any_address_inbound_rules=$($anyScope.Count) vpn_client_services=[$($vpn -join ',')]. External exposure is judged from this host's listeners and firewall scopes only; whether the host is reachable from the internet, and whether MFA is enforced on VPN or RDP, cannot be determined from the endpoint. [BAS-SIM-AKIRA-S18]"
+      foreach ($x in $f) { Write-Output "FINDING: $x [BAS-SIM-AKIRA-S18]" }
+      if ($f.Count -gt 0) { Write-Output "FAIL: $($f.Count) remote-access service(s) are broadly exposed on this host - Akira's documented initial access is VPN/RDP without MFA. [BAS-SIM-AKIRA-S18]" }
+      else { Write-Output "PASS: no remote-access listener on this host is reachable from any address by an enabled firewall rule (host scope only; internet exposure and MFA are not assessed). [BAS-SIM-AKIRA-S18]" }
+    cleanup: ""
+
+  # ===========================================================================
   # Stage 1 — Initial Access: RDP / NLA Posture (T1021.001)
-  # ---------------------------------------------------------------------------
-  - name: "Akira Stage 1 — RDP / NLA Exposure Posture Check (T1021.001)"
+  # ===========================================================================
+  - id: akira-s1-rdp-nla
+    name: "Akira Stage 1 — RDP / NLA Exposure Posture Check (T1021.001)"
     technique_id: T1021.001
     detection_profiles:
       - windows_rdp_nla_posture
@@ -75,12 +252,27 @@ steps:
     fidelity: telemetry-safe
     production_safe: true
     risk: low
-    blast_radius: "Reads two registry values (read-only): fDenyTSConnections under HKLM Terminal Server, and UserAuthentication under the RDP-Tcp WinStation. No state change. No connection attempted."
+    severity: medium
+    confidence: high
     reversible: true
+    depends_on: [akira-s0-preflight]
+    blast_radius: "Reads two registry values (read-only): fDenyTSConnections under HKLM Terminal Server, and UserAuthentication under the RDP-Tcp WinStation. No state change. No connection attempted."
+    preconditions: ["Stage 0 passed."]
+    postconditions: ["RDP/NLA posture emitted as PASS/FAIL."]
+    abort_on: ["Registry key access denied to the point both reads fail."]
     telemetry:
       - "Security EID 4657 (registry value queried, if SACL auditing enabled on the key)"
+      - "PowerShell EID 4104 if ScriptBlock logging enabled"
     detection:
       - "SIEM: registry query of Terminal Server RDP/NLA configuration from a non-management process — RDP-exposure recon IOC"
+    expected_telemetry_count: 1
+    false_positive_notes: "Helpdesk/inventory tools also read these keys — correlate with process parent and user context."
+    mitigations:
+      - "Enforce NLA (UserAuthentication=1) on RDP-Tcp WinStation."
+      - "Require MFA on all RDP-reachable endpoints; front RDP with a VPN/gateway."
+      - "Alert on non-management-process registry queries of Terminal Server keys."
+    references: ["CISA AA24-109A", "MITRE T1021.001"]
+    evidence: ["Emit PASS/FAIL/INFO token for the scorecard."]
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $rdpEnabled = (Get-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -ErrorAction SilentlyContinue).fDenyTSConnections -eq 0
@@ -95,10 +287,11 @@ steps:
       }
     cleanup: ""
 
-  # ---------------------------------------------------------------------------
+  # ===========================================================================
   # Stage 2 — Discovery: Network Share Discovery (T1135)
-  # ---------------------------------------------------------------------------
-  - name: "Akira Stage 2 — Network Share Discovery (T1135)"
+  # ===========================================================================
+  - id: akira-s2-share-discovery
+    name: "Akira Stage 2 — Network Share Discovery (T1135)"
     technique_id: T1135
     detection_profiles:
       - windows_network_share_discovery
@@ -109,25 +302,234 @@ steps:
     fidelity: telemetry-safe
     production_safe: true
     risk: low
+    severity: low
+    confidence: high
     reversible: true
+    depends_on: [akira-s0-preflight]
     blast_radius: "Enumerates local administrative shares via net view and WMI Win32_Share. No shares accessed, no files read."
+    preconditions: ["Stage 0 passed."]
+    postconditions: ["Share count emitted."]
+    abort_on: []
     telemetry:
       - "Security EID 4688: net.exe and powershell.exe share enumeration"
       - "Security EID 5140: if SACL object access auditing enabled on shares"
     detection:
       - "SIEM: net view / Win32_Share query from non-admin process — ransomware lateral-spread staging signal"
+    expected_telemetry_count: 2
+    false_positive_notes: "IT inventory tooling also enumerates shares — baseline against known tooling."
+    mitigations:
+      - "Baseline and alert on net view / Win32_Share enumeration from non-admin user context."
+      - "Disable AutoShareWks where policy allows."
+    references: ["MITRE T1135"]
+    evidence: ["Emit share count for scorecard."]
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $wmiShares = @(Get-WmiObject -Class Win32_Share -ErrorAction SilentlyContinue)
       $netOut = & net view \\$env:COMPUTERNAME 2>&1
       $shareCount = if ($wmiShares) { $wmiShares.Count } else { 0 }
       Write-Output "EXEC: network share discovery — $shareCount share(s) via Win32_Share. net view executed for cmdline telemetry. Akira maps shares before lateral spread and mass encryption. [BAS-SIM-AKIRA-S2]"
+      Write-Output "SKIP: telemetry-only probe; it records process telemetry and has no control outcome to score. Not scored."
     cleanup: ""
 
-  # ---------------------------------------------------------------------------
+  # ===========================================================================
+  # Stage 19 - Remote System and Domain Trust Discovery (T1482)
+  # ===========================================================================
+  - id: akira-s19-remote-system-discovery
+    name: "Akira Stage 19 — Remote System and Domain Trust Discovery (T1482)"
+    technique_id: T1482
+    detection_profiles:
+      - windows_ad_discovery
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Runs arp -a and net view (and nltest trusts/DC list when domain joined), each capped at 20 s. Read-only; counts only."
+    preconditions: ["Windows host."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; anything created is removed and removal verified."]
+    abort_on: []
+    telemetry:
+      - "Sysmon EID 1: arp.exe, net.exe, nltest.exe"
+    detection:
+      - "EDR: network and domain discovery commands in sequence"
+    expected_telemetry_count: 1
+    false_positive_notes: "Administrators, IT tooling and inventory agents perform the same actions; correlate with account, process and change window."
+    mitigations:
+      - "Enforce MFA and least privilege on remote access and valid accounts; monitor for the behaviours above."
+    references: ["CISA AA24-109A", "MITRE T1482"]
+    evidence: ["Emit counts and commands_timed_out."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      function Invoke-Timed($exe, $argList) {
+        $j = Start-Job -ScriptBlock { param($e, $a) & $e @a 2>&1 } -ArgumentList $exe, $argList
+        if (Wait-Job $j -Timeout 20) { $o = @(Receive-Job $j); Remove-Job $j -Force; return [pscustomobject]@{ Out = $o; TimedOut = $false } }
+        Stop-Job $j; Remove-Job $j -Force; return [pscustomobject]@{ Out = @(); TimedOut = $true }
+      }
+      $sw = [Diagnostics.Stopwatch]::StartNew()
+      $timeouts = @()
+      $a = Invoke-Timed 'arp.exe' @('-a'); if ($a.TimedOut) { $timeouts += 'arp' }
+      $arp = @($a.Out | Where-Object { "$_" -match '^\s+\d+\.\d+\.\d+\.\d+\s+[0-9a-f-]{17}' } | Where-Object { "$_" -notmatch '\s(ff-ff-ff-ff-ff-ff|01-00-5e)' })
+      $n = Invoke-Timed 'net.exe' @('view'); if ($n.TimedOut) { $timeouts += 'net view' }
+      $netview = @($n.Out | Where-Object { "$_" -match '^\\' })
+      $cs = Get-WmiObject Win32_ComputerSystem
+      $joined = [bool]$cs.PartOfDomain
+      $trusts = @(); $dcs = @()
+      if ($joined) {
+        $t = Invoke-Timed 'nltest.exe' @('/domain_trusts','/all_trusts'); if ($t.TimedOut) { $timeouts += 'nltest trusts' }
+        $trusts = @($t.Out | Where-Object { "$_" -match '^\s*\d+:' })
+        $d = Invoke-Timed 'nltest.exe' @("/dclist:$($cs.Domain)"); if ($d.TimedOut) { $timeouts += 'nltest dclist' }
+        $dcs = @($d.Out | Where-Object { "$_" -match '\.' -and "$_" -notmatch 'command|DCs in domain' })
+      }
+      $sw.Stop()
+      $found = ($arp.Count + $netview.Count + $trusts.Count + $dcs.Count)
+      Write-Output "EVIDENCE T1482: domain_joined=$joined neighbours_from_arp=$($arp.Count) hosts_from_net_view=$($netview.Count) domain_trusts_enumerated=$(if ($joined) { $trusts.Count } else { 'n/a (not domain joined)' }) domain_controllers_listed=$(if ($joined) { $dcs.Count } else { 'n/a' }) commands_timed_out=[$($timeouts -join ',')] elapsed_ms=$($sw.ElapsedMilliseconds). Also covers T1018 remote system discovery. Each command is capped at 20 s; a timed-out command means that discovery was not completed. [BAS-SIM-AKIRA-S19]"
+      if ($found -gt 0) { Write-Output "FAIL: remote-system and domain discovery commands returned $found result(s) without intervention - discovery is not detected or blocked. [BAS-SIM-AKIRA-S19]" }
+      elseif ($timeouts.Count -gt 0) { Write-Output "SKIP: discovery commands timed out ($($timeouts -join ', ')) before returning anything; the result is inconclusive. [BAS-SIM-AKIRA-S19]" }
+      elseif (-not $joined) { Write-Output "SKIP: prerequisite missing (host is not domain joined and no neighbours were discoverable); the domain-trust half of this stage was not assessed. [BAS-SIM-AKIRA-S19]" }
+      else { Write-Output "PASS: the discovery commands returned nothing, consistent with blocking or an isolated host. [BAS-SIM-AKIRA-S19]" }
+    cleanup: ""
+
+  # ===========================================================================
+  # Stage 20 - Process, System and File Discovery (T1082)
+  # ===========================================================================
+  - id: akira-s20-process-system-file-discovery
+    name: "Akira Stage 20 — Process, System and File Discovery (T1082 / T1057 / T1083)"
+    technique_id: T1082
+    detection_profiles:
+      - windows_file_discovery
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Runs tasklist, systeminfo and whoami /all and counts files under the Documents folder (first 500). Read-only; counts only, no names or contents recorded."
+    preconditions: ["Windows host."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; anything created is removed and removal verified."]
+    abort_on: []
+    telemetry:
+      - "Sysmon EID 1: tasklist.exe, systeminfo.exe, whoami.exe"
+    detection:
+      - "EDR: discovery command burst followed by file enumeration"
+    expected_telemetry_count: 1
+    false_positive_notes: "Administrators, IT tooling and inventory agents perform the same actions; correlate with account, process and change window."
+    mitigations:
+      - "Enforce MFA and least privilege on remote access and valid accounts; monitor for the behaviours above."
+    references: ["CISA AA24-109A", "MITRE T1082"]
+    evidence: ["Emit per-command line counts."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $sys = Join-Path $env:SystemRoot 'System32'
+      function Invoke-Disc($exe, $argList) {
+        $o = @(& (Join-Path $sys $exe) @argList 2>&1 | Where-Object { "$_" })
+        [pscustomobject]@{ Name = $exe; Lines = $o.Count; Ok = ($LASTEXITCODE -eq 0 -and $o.Count -gt 3) }
+      }
+      $sw = [Diagnostics.Stopwatch]::StartNew()
+      $r = @((Invoke-Disc 'tasklist.exe' @()), (Invoke-Disc 'systeminfo.exe' @()), (Invoke-Disc 'whoami.exe' @('/all')))
+      $procs = @(Get-Process -ErrorAction SilentlyContinue)
+      $tools = '^(MsMpEng|MsSense|SenseIR|NisSrv|CSFalconService|CSFalconContainer|SentinelAgent|SentinelServiceHost|CylanceSvc|bdservicehost|SophosHealth|SophosFileScanner|cb|CarbonBlack|TaniumClient|Veeam\.Backup\.Service|VeeamDeploymentSvc|BackupExec|beremote|sqlservr|vmms|vmwp)$'
+      $seen = @($procs | Where-Object { $_.ProcessName -match $tools } | ForEach-Object { $_.ProcessName } | Sort-Object -Unique)
+      $docs = [Environment]::GetFolderPath('MyDocuments')
+      $files = @(Get-ChildItem -Path $docs -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 500).Count
+      $sw.Stop()
+      $ok = @($r | Where-Object { $_.Ok })
+      $detail = ($r | ForEach-Object { "$($_.Name)=$($_.Lines)lines/ok=$($_.Ok)" }) -join ' '
+      $procOk = ($procs.Count -gt 5)
+      Write-Output "EVIDENCE T1082: $detail document_files_enumerated=$files elapsed_ms=$($sw.ElapsedMilliseconds). System binaries are called by full System32 path. Only counts are recorded, no file names or contents. [BAS-SIM-AKIRA-S20]"
+      Write-Output "EVIDENCE T1057: processes_enumerated=$($procs.Count) enumeration_ok=$procOk security_or_backup_tool_processes_seen=[$($seen -join ',')]. Attackers enumerate processes to find security and backup tooling to disable before encrypting; names come from a fixed list of known products and no other process names are recorded. Also covers T1083. [BAS-SIM-AKIRA-S20]"
+      if ($ok.Count -ge 3 -and $procOk) { Write-Output "FAIL: process, system and identity discovery all succeeded in a $($sw.ElapsedMilliseconds) ms burst, with $($procs.Count) processes enumerated and $($seen.Count) security or backup tool(s) identified, followed by file enumeration, without intervention - typical pre-ransomware reconnaissance was not blocked. [BAS-SIM-AKIRA-S20]" }
+      else { Write-Output "PASS: discovery was blocked or restricted ($(3 - $ok.Count) of 3 commands failed or returned no usable output, process enumeration ok=$procOk): $detail. [BAS-SIM-AKIRA-S20]" }
+    cleanup: ""
+
+  # ===========================================================================
+  # Stage 21 - PowerShell, WMI and Service Execution Telemetry (T1059.001)
+  # ===========================================================================
+  - id: akira-s21-execution-telemetry
+    name: "Akira Stage 21 — PowerShell, WMI and Service Execution Telemetry (T1059.001)"
+    technique_id: T1059.001
+    detection_profiles:
+      - windows_encoded_powershell
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Runs an encoded PowerShell echo and a WMI Win32_Process create of cmd /c echo, each carrying a unique marker; with BAS_CONFIRM_SERVICE_EXEC=true (exact) also a transient local service that echoes the marker (deleted and verified). Then reads PowerShell 4104, Security 4688, Sysmon 1 and System 7045 back for the marker. The verdict is based on that telemetry."
+    preconditions: ["Windows host."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; anything created is removed and removal verified."]
+    abort_on: []
+    telemetry:
+      - "PowerShell EID 4104; Security EID 4688; Sysmon EID 1; System EID 7045"
+    detection:
+      - "Telemetry: execution visible in script block, process-creation or service logs"
+    expected_telemetry_count: 1
+    false_positive_notes: "Administrators, IT tooling and inventory agents perform the same actions; correlate with account, process and change window."
+    mitigations:
+      - "Enforce MFA and least privilege on remote access and valid accounts; monitor for the behaviours above."
+    references: ["CISA AA24-109A", "MITRE T1059.001"]
+    evidence: ["Emit per-channel telemetry presence."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $mk = "BASAKIRAS21$runId"
+      $start = Get-Date
+      $ex = [ordered]@{}
+      $b64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("Write-Output $mk-ps"))
+      $o = (& powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand $b64 2>&1 | Out-String)
+      $ex['powershell'] = ($o -match "$mk-ps")
+      $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = "cmd.exe /c echo $mk-wmi" } -ErrorAction SilentlyContinue
+      $ex['wmi'] = ($r -and $r.ReturnValue -eq 0)
+      $svcName = "BASAk21$runId"; $svcCleanup = 'not_applicable'
+      if ($env:BAS_CONFIRM_SERVICE_EXEC -ceq 'true') {
+        $c = (& sc.exe create $svcName binPath= "cmd.exe /c echo $mk-svc" start= demand 2>&1 | Out-String)
+        $ex['service'] = ($c -match 'SUCCESS')
+        if ($ex['service']) { & sc.exe start $svcName 2>&1 | Out-Null; Start-Sleep -Milliseconds 800; & sc.exe delete $svcName 2>&1 | Out-Null; Start-Sleep -Milliseconds 500; $svcCleanup = [string]((& sc.exe query $svcName 2>&1 | Out-String) -match '1060') }
+      }
+      Start-Sleep -Seconds 3
+      function Find-Evt($log, $id, $pat) {
+        try { $e = @(Get-WinEvent -FilterHashtable @{ LogName = $log; Id = $id; StartTime = $start.AddSeconds(-2) } -ErrorAction Stop | Where-Object { $_.Message -match $pat }); return ($e.Count -gt 0) } catch { if ($_.Exception.Message -match 'No events were found') { return $false } ; return $null }
+      }
+      $src = [ordered]@{
+        ps_scriptblock_4104 = Find-Evt 'Microsoft-Windows-PowerShell/Operational' 4104 $mk
+        security_4688       = Find-Evt 'Security' 4688 $mk
+        sysmon_1            = Find-Evt 'Microsoft-Windows-Sysmon/Operational' 1 $mk
+        service_7045        = $(if ($ex.Contains('service') -and $ex['service']) { Find-Evt 'System' 7045 $svcName } else { $null })
+      }
+      $sbl = (Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging' -Name EnableScriptBlockLogging -ErrorAction SilentlyContinue).EnableScriptBlockLogging
+      $cmdl = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Audit' -Name ProcessCreationIncludeCmdLine_Enabled -ErrorAction SilentlyContinue).ProcessCreationIncludeCmdLine_Enabled
+      $gaps = @(); $unver = @()
+      function Judge($chan, $names) { $vals = @($names | ForEach-Object { $src[$_] }); if ($vals -contains $true) { return } ; if ($vals -contains $false) { $script:gaps += $chan } else { $script:unver += $chan } }
+      if ($ex['powershell']) { Judge 'powershell' @('ps_scriptblock_4104','security_4688','sysmon_1') }
+      if ($ex['wmi']) { Judge 'wmi' @('security_4688','sysmon_1') }
+      if ($ex.Contains('service') -and $ex['service']) { Judge 'service' @('service_7045') }
+      $s = ($src.Keys | ForEach-Object { "$_=$(if ($null -eq $src[$_]) { 'not_present_or_unreadable' } else { $src[$_] })" }) -join ' '
+      Write-Output "EVIDENCE T1059.001: executed=[$(($ex.Keys | Where-Object { $ex[$_] }) -join ',')] telemetry: $s script_block_logging_policy=$sbl process_cmdline_auditing_policy=$cmdl service_cleanup_verified=$svcCleanup. Verdict comes from event-log evidence read back after execution, not from the commands running. Also covers T1047 and T1569.002 (service part only with BAS_CONFIRM_SERVICE_EXEC=true). [BAS-SIM-AKIRA-S21]"
+      if (-not ($ex.Values -contains $true)) { Write-Output "PASS: PowerShell and WMI execution were both blocked. [BAS-SIM-AKIRA-S21]" }
+      elseif ($gaps.Count -gt 0) { Write-Output "FAIL: execution through $($gaps -join ', ') completed but left no matching event in the readable logs - a telemetry blind spot an attacker can use (enable script block logging, process-creation command-line auditing or Sysmon). [BAS-SIM-AKIRA-S21]" }
+      elseif ($unver.Count -gt 0) { Write-Output "SKIP: execution through $($unver -join ', ') succeeded but the relevant event logs were not readable from this context (run elevated), so telemetry could not be verified. [BAS-SIM-AKIRA-S21]" }
+      else { Write-Output "PASS: every executed channel ($(($ex.Keys | Where-Object { $ex[$_] }) -join ', ')) produced matching telemetry; execution was visible (prevention was not tested here). [BAS-SIM-AKIRA-S21]" }
+    cleanup: |
+      Get-Service -Name 'BASAk21*' | ForEach-Object { sc.exe delete $_.Name | Out-Null }
+
+  # ===========================================================================
   # Stage 3 — Credential Access: SAM/SYSTEM Hive Theft (T1003.002)
-  # ---------------------------------------------------------------------------
-  - name: "Akira Stage 3 — SAM & SYSTEM Hive Theft via reg save (T1003.002)"
+  # ===========================================================================
+  - id: akira-s3-sam-theft
+    name: "Akira Stage 3 — SAM & SYSTEM Hive Theft via reg save (T1003.002)"
     technique_id: T1003.002
     detection_profiles:
       - windows_sam_theft
@@ -136,10 +538,16 @@ steps:
     requires_priv: admin
     timeout_sec: 40
     fidelity: telemetry-safe
-    production_safe: true
+    production_safe: false
     risk: high
+    severity: high
+    confidence: high
     reversible: true
+    depends_on: [akira-s0-preflight]
     blast_radius: "Attempts reg save HKLM\\SAM and HKLM\\SYSTEM to a temp file, then deletes both immediately. The saved SAM hive is encrypted with the bootkey (which is NOT exported), so the artifact is unusable, and it is removed in the same step. Generates Sysmon EID 1 (reg.exe save) + EID 11 (file create) + immediate delete."
+    preconditions: ["Admin privilege.", "Stage 0 passed.", "Lab gate BAS_CONFIRM_CREDENTIAL_ARTIFACTS=true on an isolated host."]
+    postconditions: ["PASS (blocked while elevated) or FAIL (saved); SKIP without the gate or without elevation; hive copies overwritten then deleted and removal verified (cleanup_verified)."]
+    abort_on: ["reg.exe not present AND no alternate hive-save path available."]
     telemetry:
       - "Sysmon EID 1: reg.exe save HKLM\\SAM / HKLM\\SYSTEM"
       - "Sysmon EID 11: hive file written to %TEMP% then deleted"
@@ -147,30 +555,205 @@ steps:
     detection:
       - "EDR: reg.exe save hklm\\sam — Sigma proc_creation_win_reg_save_sam.yml (offline hash-theft IOC)"
       - "SIEM: reg SAVE targeting SAM or SYSTEM hive — page immediately, extremely rare in normal ops"
+    expected_telemetry_count: 4
+    false_positive_notes: "Backup/imaging software may reg save hives — whitelist known backup agents by signer."
+    mitigations:
+      - "Block reg.exe save of SAM/SYSTEM via WDAC/AppLocker."
+      - "Alert (page) on 'reg save hklm\\sam'."
+      - "Deploy LAPS; enable Credential Guard where applicable."
+    references: ["MITRE T1003.002", "Sigma proc_creation_win_reg_save_sam.yml"]
+    evidence: ["Emit sam_saved/system_saved booleans for scorecard."]
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
+      if ($env:BAS_CONFIRM_CREDENTIAL_ARTIFACTS -cne 'true') {
+        Write-Output "SKIP: gate not confirmed (BAS_CONFIRM_CREDENTIAL_ARTIFACTS is not exactly 'true') - SAM/SYSTEM hive save NOT attempted; no state change. Set it only on an isolated lab host. [BAS-SIM-AKIRA-S3]"
+        return
+      }
+      $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      if (-not $isAdmin) {
+        Write-Output "SKIP: prerequisite missing (administrator rights required) - a denied reg save without elevation would not prove a control blocked it. [BAS-SIM-AKIRA-S3]"
+        return
+      }
       $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
-      $samOut = Join-Path $env:TEMP "bas_akira_sam_$runId.hive"
-      $sysOut = Join-Path $env:TEMP "bas_akira_sys_$runId.hive"
+      $dir = Join-Path $env:TEMP "bas_akira_cred_$runId"
+      if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
+      New-Item -ItemType Directory -Path $dir -Force | Out-Null
+      try {
+        $acl = New-Object System.Security.AccessControl.DirectorySecurity
+        $acl.SetAccessRuleProtection($true, $false)
+        $me = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($me, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
+        Set-Acl -Path $dir -AclObject $acl
+      } catch { }
+      $samOut = Join-Path $dir 'sam.hive'
+      $sysOut = Join-Path $dir 'system.hive'
       & reg.exe save HKLM\SAM $samOut /y 2>&1 | Out-Null
       & reg.exe save HKLM\SYSTEM $sysOut /y 2>&1 | Out-Null
       $samSaved = Test-Path $samOut
       $sysSaved = Test-Path $sysOut
-      Remove-Item $samOut,$sysOut -Force -ErrorAction SilentlyContinue
+      $samBytes = 0; if ($samSaved) { $samBytes = (Get-Item $samOut).Length }
+      $sysBytes = 0; if ($sysSaved) { $sysBytes = (Get-Item $sysOut).Length }
+      foreach ($f in @($samOut, $sysOut)) {
+        if (Test-Path $f) {
+          try {
+            $left = (Get-Item $f).Length
+            $fs = [System.IO.File]::Open($f, 'Open', 'Write')
+            $buf = New-Object byte[] 65536
+            while ($left -gt 0) { $n = [Math]::Min($buf.Length, $left); $fs.Write($buf, 0, $n); $left -= $n }
+            $fs.Close()
+          } catch { }
+          Remove-Item $f -Force
+        }
+      }
+      Remove-Item $dir -Recurse -Force
+      $cleanupVerified = -not (Test-Path $dir)
+      Write-Output "EVIDENCE T1003.002: sam_saved=$samSaved ($samBytes bytes) system_saved=$sysSaved ($sysBytes bytes) artifacts_overwritten_then_deleted=True cleanup_verified=$cleanupVerified dir=$dir. [BAS-SIM-AKIRA-S3]"
+      if (-not $cleanupVerified) { Write-Output "WARNING: residue may remain at $dir - remove it manually and treat any hive copy as sensitive. [BAS-SIM-AKIRA-S3]" }
       if ($samSaved -or $sysSaved) {
-        Write-Output "EXEC T1003.002: reg save of SAM=$samSaved SYSTEM=$sysSaved to %TEMP% then deleted. Akira steals these hives for OFFLINE hash extraction and LSASS-adjacent credential dumping. reg.exe SAVE telemetry (Sysmon EID 1) expected. [BAS-SIM-AKIRA-S3]"
-        Write-Output "FAIL: reg.exe was able to SAVE the SAM/SYSTEM hive unblocked — local password hashes can be exfiltrated for offline cracking. 'reg save hklm\\sam' should be a paging alert. Verify EDR blocked or at least alerted."
+        Write-Output "FAIL: reg.exe was able to SAVE the SAM/SYSTEM hive unblocked - local password hashes could be taken for offline cracking. 'reg save hklm\sam' should be a paging alert. [BAS-SIM-AKIRA-S3]"
       } else {
-        Write-Output "PASS: reg save of SAM/SYSTEM was blocked or denied — EDR/WDAC prevented offline hive theft. [BAS-SIM-AKIRA-S3]"
+        Write-Output "PASS: reg save of SAM/SYSTEM was blocked or denied while running elevated - EDR/WDAC prevented offline hive theft. [BAS-SIM-AKIRA-S3]"
       }
     cleanup: |
-      Remove-Item (Join-Path $env:TEMP 'bas_akira_sam_*') -Force -ErrorAction SilentlyContinue
-      Remove-Item (Join-Path $env:TEMP 'bas_akira_sys_*') -Force -ErrorAction SilentlyContinue
+      Remove-Item (Join-Path $env:TEMP 'bas_akira_cred_*') -Recurse -Force -ErrorAction SilentlyContinue
 
-  # ---------------------------------------------------------------------------
+  # ===========================================================================
+  # Stage 3b — Credential Access (supp.): LSASS Access-Mask Probe (T1003.001)
+  # ===========================================================================
+  - id: akira-s3b-lsass-probe
+    name: "Akira Stage 3b — LSASS Handle-Access Probe (no memory read) (T1003.001)"
+    technique_id: T1003.001
+    detection_profiles:
+      - windows_lsass_access
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    severity: high
+    confidence: medium
+    reversible: true
+    depends_on: [akira-s3-sam-theft]
+    blast_radius: "Opens and immediately closes a PROCESS_QUERY_LIMITED_INFORMATION handle to lsass.exe. With BAS_CONFIRM_LSASS_HANDLE=true it also opens and closes a VM_READ-capable handle. No memory is read and no dump is written; the result is handle-access evidence, not proof of credential extraction."
+    preconditions: ["Admin privilege.", "Stage 3 executed."]
+    postconditions: ["Access-mask verdict emitted (granted / denied / PPL-protected)."]
+    abort_on: ["LSASS process not found."]
+    telemetry:
+      - "Sysmon EID 10: ProcessAccess targeting lsass.exe (GrantedAccess logged)"
+      - "EDR: LSASS handle-open from powershell.exe — high-fidelity credential-theft signal"
+    detection:
+      - "EDR: ProcessAccess to lsass.exe from non-allowlisted process — Sigma rule on LSASS access (GrantedAccess 0x1010/0x1410 etc.)"
+      - "SIEM: EID 10 LSASS access with suspicious GrantedAccess"
+    expected_telemetry_count: 1
+    false_positive_notes: "AV/EDR themselves open LSASS — correlate by signer and known security processes."
+    mitigations:
+      - "Enable LSA Protection (RunAsPPL) and Credential Guard."
+      - "Alert on non-allowlisted PROCESS_VM_READ of lsass.exe."
+      - "WDAC block of unsigned PowerShell interpreters performing process access."
+    references: ["MITRE T1003.001"]
+    evidence: ["Emit process_query_access, vm_read_handle and ppl_configured."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      if (-not $isAdmin) {
+        Write-Output "SKIP: prerequisite missing (administrator rights required) - an LSASS handle denied to a non-admin proves nothing about the control. [BAS-SIM-AKIRA-S3B]"
+        return
+      }
+      $lsass = Get-Process -Name lsass -ErrorAction SilentlyContinue | Select-Object -First 1
+      if (-not $lsass) { Write-Output "SKIP: prerequisite missing (lsass.exe not found). [BAS-SIM-AKIRA-S3B]"; return }
+      $sig = @(
+        '[DllImport("kernel32.dll", SetLastError=true)] public static extern IntPtr OpenProcess(uint a, bool i, int p);',
+        '[DllImport("kernel32.dll", SetLastError=true)] public static extern bool CloseHandle(IntPtr h);'
+      ) -join "`n"
+      Add-Type -Namespace BAS -Name LsassProbe -MemberDefinition $sig -ErrorAction SilentlyContinue
+      $ppl = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa' -Name RunAsPPL -ErrorAction SilentlyContinue).RunAsPPL
+      $pplConfigured = ($ppl -eq 1 -or $ppl -eq 2)
+      # 0x1000 = PROCESS_QUERY_LIMITED_INFORMATION
+      $h = [BAS.LsassProbe]::OpenProcess(0x1000, $false, $lsass.Id)
+      $queryOk = ($h -ne [IntPtr]::Zero)
+      if ($queryOk) { [void][BAS.LsassProbe]::CloseHandle($h) }
+      $vm = 'not_attempted'
+      if ($env:BAS_CONFIRM_LSASS_HANDLE -ceq 'true') {
+        # 0x0410 = PROCESS_QUERY_INFORMATION | PROCESS_VM_READ. The handle is closed at once; no memory is read.
+        $h2 = [BAS.LsassProbe]::OpenProcess(0x0410, $false, $lsass.Id)
+        $err = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+        if ($h2 -ne [IntPtr]::Zero) { $vm = 'granted'; [void][BAS.LsassProbe]::CloseHandle($h2) } else { $vm = "denied(Win32Error=$err)" }
+      }
+      Write-Output "EVIDENCE T1003.001: process_query_access=$queryOk vm_read_handle=$vm ppl_configured=$pplConfigured. This is handle-access evidence only: no LSASS memory was read and no credential was extracted. Sysmon EID 10 should show the ProcessAccess. [BAS-SIM-AKIRA-S3B]"
+      if ($vm -eq 'not_attempted') {
+        Write-Output "SKIP: gate not confirmed (BAS_CONFIRM_LSASS_HANDLE is not exactly 'true') - VM_READ-capable handle NOT tested; only query access was observed (process_query_access=$queryOk). [BAS-SIM-AKIRA-S3B]"
+      } elseif ($vm -eq 'granted') {
+        Write-Output "FAIL: a VM_READ-capable handle to lsass.exe was granted (opened and closed, nothing read) - an attacker with this access could read credential memory. Enable RunAsPPL / Credential Guard and alert on VM_READ to lsass. [BAS-SIM-AKIRA-S3B]"
+      } else {
+        Write-Output "PASS: a VM_READ-capable handle to lsass.exe was denied while elevated ($vm) - the access path used for credential-memory reads is blocked. [BAS-SIM-AKIRA-S3B]"
+      }
+    cleanup: ""
+
+  # ===========================================================================
+  # Stage 22 - Kerberos Service Account Exposure (Kerberoasting) (T1558.003)
+  # ===========================================================================
+  - id: akira-s22-kerberoast-exposure
+    name: "Akira Stage 22 — Kerberos Service Account Exposure (Kerberoasting) (T1558.003)"
+    technique_id: T1558.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Read-only LDAP query for enabled user accounts with SPNs; records counts of privileged, RC4-permitting and stale-password accounts (no names). A single TGS request happens only with BAS_CONFIRM_KERBEROAST_TGS=true and an operator-supplied BAS_KERBEROAST_SPN; no ticket is extracted or cracked. SKIPs off-domain."
+    preconditions: ["Windows host."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; anything created is removed and removal verified."]
+    abort_on: []
+    telemetry:
+      - "Security EID 4769 (only if the gated TGS request is made); LDAP query telemetry"
+    detection:
+      - "DC: LDAP query for servicePrincipalName=* accounts"
+    expected_telemetry_count: 1
+    false_positive_notes: "Administrators, IT tooling and inventory agents perform the same actions; correlate with account, process and change window."
+    mitigations:
+      - "Enforce MFA and least privilege on remote access and valid accounts; monitor for the behaviours above."
+    references: ["CISA AA24-109A", "MITRE T1558.003"]
+    evidence: ["Emit spn_user_accounts and weakness counts."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $cs = Get-WmiObject Win32_ComputerSystem
+      if (-not $cs.PartOfDomain) { Write-Output "SKIP: prerequisite missing (host is not domain joined; no Active Directory to assess for Kerberoastable service accounts). [BAS-SIM-AKIRA-S22]"; return }
+      try {
+        $ds = New-Object DirectoryServices.DirectorySearcher
+        $ds.Filter = '(&(objectCategory=person)(objectClass=user)(servicePrincipalName=*)(!(sAMAccountName=krbtgt))(!(userAccountControl:1.2.840.113556.1.4.803:=2)))'
+        $ds.PageSize = 500
+        foreach ($p in 'samaccountname','admincount','pwdlastset','msds-supportedencryptiontypes') { [void]$ds.PropertiesToLoad.Add($p) }
+        $res = @($ds.FindAll())
+      } catch { Write-Output "SKIP: prerequisite missing (directory query failed: $($_.Exception.Message)). [BAS-SIM-AKIRA-S22]"; return }
+      $priv = 0; $rc4 = 0; $old = 0
+      foreach ($r in $res) {
+        if ($r.Properties['admincount'].Count -gt 0 -and [int]$r.Properties['admincount'][0] -eq 1) { $priv++ }
+        $et = if ($r.Properties['msds-supportedencryptiontypes'].Count -gt 0) { [int]$r.Properties['msds-supportedencryptiontypes'][0] } else { 0 }
+        if ($et -eq 0 -or ($et -band 4) -ne 0) { $rc4++ }
+        if ($r.Properties['pwdlastset'].Count -gt 0 -and ([DateTime]::FromFileTime([int64]$r.Properties['pwdlastset'][0]) -lt (Get-Date).AddDays(-365))) { $old++ }
+      }
+      $tgs = 'not_attempted'
+      if ($env:BAS_CONFIRM_KERBEROAST_TGS -ceq 'true' -and $env:BAS_KERBEROAST_SPN) {
+        try { Add-Type -AssemblyName System.IdentityModel; $null = New-Object System.IdentityModel.Tokens.KerberosRequestorSecurityToken -ArgumentList $env:BAS_KERBEROAST_SPN; $tgs = 'issued_for_operator_spn_not_extracted' } catch { $tgs = 'denied_or_failed' }
+      }
+      Write-Output "EVIDENCE T1558.003: spn_user_accounts=$($res.Count) privileged_adminCount1=$priv rc4_or_default_encryption=$rc4 password_older_than_365d=$old tgs_request=$tgs. Account names are not recorded; no ticket was extracted or cracked. [BAS-SIM-AKIRA-S22]"
+      if ($res.Count -eq 0) { Write-Output "PASS: no enabled user account with a service principal name was found (nothing to Kerberoast). [BAS-SIM-AKIRA-S22]" }
+      elseif ($priv -gt 0 -or $rc4 -gt 0 -or $old -gt 0) { Write-Output "FAIL: $($res.Count) Kerberoastable service account(s): $priv privileged, $rc4 allowing RC4/default encryption, $old with password older than a year - offline cracking is feasible. [BAS-SIM-AKIRA-S22]" }
+      else { Write-Output "PASS: $($res.Count) service account(s) have SPNs but none are privileged, RC4-permitting or stale. [BAS-SIM-AKIRA-S22]" }
+    cleanup: ""
+
+  # ===========================================================================
   # Stage 4 — Defense Evasion: Defender Exclusion Invocation (T1562.001)
-  # ---------------------------------------------------------------------------
-  - name: "Akira Stage 4 — Defender Exclusion Invocation (cmdline probe  -  no state change) (T1562.001)"
+  # ===========================================================================
+  - id: akira-s4-defender-exclusion
+    name: "Akira Stage 4 — Defender Tamper Protection and Exclusion State (T1562.001)"
     technique_id: T1562.001
     detection_profiles:
       - windows_defender_tampering
@@ -181,25 +764,275 @@ steps:
     fidelity: telemetry-safe
     production_safe: true
     risk: low
-    blast_radius: "Invokes Add-MpPreference cmdline in a dry-run context that exits before modifying any exclusion. Security state is NOT changed."
+    severity: high
+    confidence: high
     reversible: true
+    depends_on: [akira-s0-preflight]
+    blast_radius: "Default: read-only (Get-MpComputerStatus / Get-MpPreference). With BAS_CONFIRM_DEFENDER_TAMPER=true: adds one BAS-owned path exclusion under %TEMP%, reads it back, removes it and verifies removal."
+    preconditions: ["Stage 0 passed."]
+    postconditions: ["Verdict derived from Defender state read back, not from a command line; any added exclusion removed and verified."]
+    abort_on: []
     telemetry:
       - "Security EID 4688 (powershell.exe with Add-MpPreference -ExclusionPath in command line)"
       - "PowerShell EID 4104 (script block: Add-MpPreference invocation) if ScriptBlock logging enabled"
     detection:
       - "EDR: PowerShell invoking Add-MpPreference  -  primary Defender tampering signal"
       - "SIEM: cmdline containing Add-MpPreference and ExclusionPath from a non-management process"
+    expected_telemetry_count: 2
+    false_positive_notes: "Legit management tooling adds exclusions — whitelist by signer/known management host."
+    mitigations:
+      - "Enable Tamper Protection on Defender."
+      - "Alert on Add-MpPreference from non-management process/user."
+      - "Use managed Defender exclusions only."
+    references: ["MITRE T1562.001", "CISA AA24-109A"]
+    evidence: ["Emit whether 4104/4688 captured the probe."]
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
-      $cmdLine = 'Add-MpPreference -ExclusionPath $env:TEMP'
-      Write-Output "EXEC: Defender exclusion invocation probe  -  cmdline '$cmdLine' logged to EID 4104/4688. Security state NOT modified (dry-run). Akira disables Defender before mass encryption. [BAS-SIM-AKIRA-S4]"
-      Write-Output "TELEMETRY: if ScriptBlock logging (EID 4104) captured this block, the control is detecting Defender tampering attempts correctly."
+      if (-not (Get-Command Get-MpComputerStatus -ErrorAction SilentlyContinue)) {
+        Write-Output "SKIP: prerequisite missing (Microsoft Defender cmdlets unavailable - Defender not installed or another AV is primary); Defender state not assessed. [BAS-SIM-AKIRA-S4]"
+        return
+      }
+      $st = Get-MpComputerStatus
+      if (-not $st) { Write-Output "SKIP: prerequisite missing (Defender status could not be read - service stopped or access denied). [BAS-SIM-AKIRA-S4]"; return }
+      $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      $pref = Get-MpPreference
+      $exclusions = 'unreadable (not elevated)'
+      if ($isAdmin -and $pref) { $exclusions = @($pref.ExclusionPath | Where-Object { $_ }).Count }
+      $tamper = $st.IsTamperProtected
+      $rt = $st.RealTimeProtectionEnabled
+      Write-Output "EVIDENCE T1562.001: tamper_protection=$tamper realtime_monitoring=$rt exclusion_paths=$exclusions elevated=$isAdmin. State read from Defender itself, not inferred from a command line. [BAS-SIM-AKIRA-S4]"
+      $tamperAttempt = $null
+      if ($env:BAS_CONFIRM_DEFENDER_TAMPER -ceq 'true') {
+        if (-not $isAdmin) {
+          Write-Output "NOTE: exclusion add/remove test not run (administrator rights required); posture verdict below. [BAS-SIM-AKIRA-S4]"
+        } else {
+          $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+          $path = Join-Path $env:TEMP "bas_akira_defender_$runId"
+          Add-MpPreference -ExclusionPath $path -ErrorAction SilentlyContinue
+          $added = [bool](@((Get-MpPreference).ExclusionPath) -contains $path)
+          Remove-MpPreference -ExclusionPath $path -ErrorAction SilentlyContinue
+          $removed = -not [bool](@((Get-MpPreference).ExclusionPath) -contains $path)
+          Write-Output "EVIDENCE T1562.001: exclusion_added=$added exclusion_removed=$removed cleanup_verified=$removed path=$path. Result confirmed by reading Defender state back. [BAS-SIM-AKIRA-S4]"
+          if (-not $removed) { Write-Output "WARNING: exclusion for $path may still be present - remove it with Remove-MpPreference. [BAS-SIM-AKIRA-S4]" }
+          $tamperAttempt = if ($added) { 'added' } else { 'blocked' }
+        }
+      }
+      if ($tamperAttempt -eq 'added') {
+        Write-Output "FAIL: a Defender exclusion could be ADDED and was confirmed by reading the state back - Defender tampering is not prevented. Enable Tamper Protection. [BAS-SIM-AKIRA-S4]"
+      } elseif ($tamperAttempt -eq 'blocked') {
+        Write-Output "PASS: adding a Defender exclusion did not take effect (confirmed by read-back) - tamper resistance holds. [BAS-SIM-AKIRA-S4]"
+      } elseif ($null -eq $tamper) {
+        Write-Output "SKIP: prerequisite missing (this Defender build does not expose tamper protection state); real-time monitoring=$rt. [BAS-SIM-AKIRA-S4]"
+      } elseif ($tamper -and $rt) {
+        Write-Output "PASS: Defender tamper protection and real-time monitoring are on (posture). The exclusion add/remove test was not run (BAS_CONFIRM_DEFENDER_TAMPER not 'true'). [BAS-SIM-AKIRA-S4]"
+      } else {
+        Write-Output "FAIL: Defender posture weak - tamper_protection=$tamper realtime_monitoring=$rt. Akira disables Defender before encryption. [BAS-SIM-AKIRA-S4]"
+      }
     cleanup: ""
 
-  # ---------------------------------------------------------------------------
+
+  # ===========================================================================
+  # Stage 23 - Local and Domain Account Persistence Exposure (T1136.001)
+  # ===========================================================================
+  - id: akira-s23-account-persistence
+    name: "Akira Stage 23 — Local and Domain Account Persistence Exposure (T1136.001 / T1136.002)"
+    technique_id: T1136.001
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Default: capability posture only. With BAS_CONFIRM_ACCOUNT_CREATE=true (exact): creates one DISABLED local account with a random password and no group membership, confirms it exists, deletes it and confirms removal. With BAS_CONFIRM_DOMAIN_ACCOUNT_CREATE=true (exact) on a domain-joined agent it also creates one DISABLED domain user in CN=Users with no group membership and no password, confirms it, deletes it and confirms removal. The domain path has never been run against a real domain."
+    preconditions: ["Windows host."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; anything created is removed and removal verified."]
+    abort_on: []
+    telemetry:
+      - "Security EID 4720 and 4726 (account created, deleted)"
+    detection:
+      - "SIEM: local account creation outside change windows"
+    expected_telemetry_count: 1
+    false_positive_notes: "Administrators, IT tooling and inventory agents perform the same actions; correlate with account, process and change window."
+    mitigations:
+      - "Enforce MFA and least privilege on remote access and valid accounts; monitor for the behaviours above."
+    references: ["CISA AA24-109A", "MITRE T1136.001"]
+    evidence: ["Emit created, removed and cleanup_verified."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      $ao = @((& net.exe localgroup 'Account Operators' 2>&1) | Where-Object { $_ -and $_ -notmatch '^(Alias name|Comment|Members|The command|-+)' }).Count
+      $adm = @((& net.exe localgroup Administrators 2>&1) | Where-Object { $_ -and $_ -notmatch '^(Alias name|Comment|Members|The command|-+)' }).Count
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      # --- domain posture (T1136.002), read-only ---
+      $joined = [bool](Get-WmiObject Win32_ComputerSystem).PartOfDomain
+      $domainDN = $null; $domRights = @(); $domAo = -1
+      if ($joined) {
+        try { $domainDN = [string]([ADSI]'LDAP://RootDSE').defaultNamingContext } catch { }
+        $tokenGroups = @(([Security.Principal.WindowsIdentity]::GetCurrent()).Groups | ForEach-Object { try { $_.Translate([Security.Principal.NTAccount]).Value } catch { } })
+        $domRights = @($tokenGroups | Where-Object { $_ -match '\\(Domain Admins|Enterprise Admins|Account Operators|Administrators)$' })
+        if ($domainDN) { try { $g = [ADSI]("LDAP://CN=Account Operators,CN=Builtin,$domainDN"); $domAo = @($g.member).Count } catch { } }
+      }
+      $domPosture = if (-not $joined) { 'not_domain_joined' } elseif (-not $domainDN) { 'domain_unreachable' } else { 'assessed' }
+      Write-Output "EVIDENCE T1136.002: domain_posture=$domPosture current_identity_account_creating_groups=[$($domRights -join ',')] domain_account_operators_members=$domAo. Read-only: token groups of the running identity and the Account Operators member count; no account was created by this check. [BAS-SIM-AKIRA-S23]"
+      $localGate = ($env:BAS_CONFIRM_ACCOUNT_CREATE -ceq 'true')
+      $domGate = ($env:BAS_CONFIRM_DOMAIN_ACCOUNT_CREATE -ceq 'true')
+      if (-not $localGate -and -not $domGate) {
+        Write-Output "EVIDENCE T1136.001: current_identity_can_create_local_accounts=$isAdmin local_administrators=$adm account_operators_members=$ao. Capability posture only; no account was created. [BAS-SIM-AKIRA-S23]"
+        Write-Output "SKIP: gate not confirmed (neither BAS_CONFIRM_ACCOUNT_CREATE nor BAS_CONFIRM_DOMAIN_ACCOUNT_CREATE is exactly 'true') - no account-creation simulation was run. [BAS-SIM-AKIRA-S23]"
+        return
+      }
+      $attempted = 0; $createdAny = $false; $notGone = $false; $detail = @()
+      if ($localGate) {
+        if (-not $isAdmin) { $detail += 'local=skipped_not_admin' } else {
+          $attempted++
+          $name = "bas_p_$runId"
+          $pw = ConvertTo-SecureString ("Aa1!" + [guid]::NewGuid().ToString('N')) -AsPlainText -Force
+          Remove-LocalUser -Name $name -ErrorAction SilentlyContinue
+          try { New-LocalUser -Name $name -Password $pw -Disabled -Description '[BAS-SIM-AKIRA] persistence exposure test' -ErrorAction Stop | Out-Null } catch { }
+          $u = Get-LocalUser -Name $name -ErrorAction SilentlyContinue
+          $created = [bool]$u; $disabled = ($created -and -not $u.Enabled)
+          if ($created) { Remove-LocalUser -Name $name -ErrorAction SilentlyContinue }
+          $gone = -not [bool](Get-LocalUser -Name $name -ErrorAction SilentlyContinue)
+          if ($created) { $createdAny = $true }; if ($created -and -not $gone) { $notGone = $true }
+          $detail += "local account=$name created=$created created_disabled=$disabled removed=$gone"
+        }
+      }
+      if ($domGate) {
+        if ($domPosture -ne 'assessed') { $detail += "domain=skipped_$domPosture" } else {
+          $attempted++
+          $dn = "bas_pd_$runId"
+          $cont = [ADSI]("LDAP://CN=Users,$domainDN")
+          try { $o = $cont.Create('user', "CN=$dn"); $o.Put('sAMAccountName', $dn); $o.Put('description', '[BAS-SIM-AKIRA] persistence exposure test'); $o.SetInfo(); $o.Put('userAccountControl', 514); $o.SetInfo() } catch { }
+          $ds = New-Object DirectoryServices.DirectorySearcher([ADSI]("LDAP://$domainDN")); $ds.Filter = "(&(objectCategory=person)(sAMAccountName=$dn))"
+          $found = $ds.FindOne(); $dcreated = [bool]$found
+          $dDisabled = $false; if ($found) { $dDisabled = [bool](([int]$found.Properties['useraccountcontrol'][0]) -band 2) }
+          if ($found) { try { ([ADSI]$found.Path).DeleteTree() } catch { } }
+          $dgone = -not [bool]$ds.FindOne()
+          if ($dcreated) { $createdAny = $true }; if ($dcreated -and -not $dgone) { $notGone = $true }
+          $detail += "domain account=$dn created=$dcreated created_disabled=$dDisabled removed=$dgone"
+        }
+      }
+      Write-Output "EVIDENCE T1136.001: $($detail -join '; ') cleanup_verified=$(-not $notGone) local_administrators=$adm account_operators_members=$ao. Accounts were created disabled and never added to any group. [BAS-SIM-AKIRA-S23]"
+      if ($notGone) { Write-Output "WARNING: a test account may remain (bas_p_$runId local or bas_pd_$runId in CN=Users); remove it manually. [BAS-SIM-AKIRA-S23]" }
+      if ($attempted -eq 0) { Write-Output "SKIP: prerequisite missing (the confirmed gate(s) need administrator rights for the local test or a reachable domain for the domain test: $($detail -join '; ')). [BAS-SIM-AKIRA-S23]" }
+      elseif ($createdAny) { Write-Output "FAIL: an account could be created by this identity without intervention and was independently confirmed to exist ($($detail -join '; ')) - account-creation persistence is not prevented. [BAS-SIM-AKIRA-S23]" }
+      else { Write-Output "PASS: account creation was blocked or failed for every attempted path (accounts not found after the attempt): $($detail -join '; '). [BAS-SIM-AKIRA-S23]" }
+    cleanup: |
+      Get-LocalUser -Name 'bas_p_*' -ErrorAction SilentlyContinue | Remove-LocalUser -ErrorAction SilentlyContinue
+      try { $ds = New-Object DirectoryServices.DirectorySearcher; $ds.Filter = '(&(objectCategory=person)(sAMAccountName=bas_pd_*))'; foreach ($r in @($ds.FindAll())) { ([ADSI]$r.Path).DeleteTree() } } catch { }
+
+  # ===========================================================================
+  # Stage 24 - Registry Run Key Persistence (T1547.001)
+  # ===========================================================================
+  - id: akira-s24-runkey-persistence
+    name: "Akira Stage 24 — Registry Run Key Persistence (T1547.001)"
+    technique_id: T1547.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Default: Run/RunOnce value counts and whether the machine-wide Run key is writable by non-admins. With BAS_CONFIRM_RUNKEY_WRITE=true (exact): writes one HKCU Run value that only runs rem, reads it back, removes it and verifies removal."
+    preconditions: ["Windows host."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; anything created is removed and removal verified."]
+    abort_on: []
+    telemetry:
+      - "Sysmon EID 13: registry value set under Run"
+    detection:
+      - "EDR: Run-key value set outside software installation"
+    expected_telemetry_count: 1
+    false_positive_notes: "Administrators, IT tooling and inventory agents perform the same actions; correlate with account, process and change window."
+    mitigations:
+      - "Enforce MFA and least privilege on remote access and valid accounts; monitor for the behaviours above."
+    references: ["CISA AA24-109A", "MITRE T1547.001"]
+    evidence: ["Emit written_and_read_back and cleanup_verified."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $paths = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run','HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce','HKLM:\Software\Microsoft\Windows\CurrentVersion\Run','HKLM:\Software\Microsoft\Windows\CurrentVersion\RunOnce','HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Run'
+      $inv = @(); foreach ($p in $paths) { $k = Get-Item $p -ErrorAction SilentlyContinue; $inv += "$($p.Replace('HKCU:\Software\Microsoft\Windows\CurrentVersion\','HKCU\').Replace('HKLM:\Software\Microsoft\Windows\CurrentVersion\','HKLM\').Replace('HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\','HKLM32\'))=$(if ($k) { $k.ValueCount } else { 'absent' })" }
+      $weak = @()
+      foreach ($p in 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run') { $acl = Get-Acl $p -ErrorAction SilentlyContinue; foreach ($a in @($acl.Access)) { if ($a.AccessControlType -eq 'Allow' -and "$($a.IdentityReference)" -match '(Users|Everyone|Authenticated Users)$' -and "$($a.RegistryRights)" -match 'SetValue|FullControl|WriteKey') { $weak += "$($a.IdentityReference): $($a.RegistryRights)" } } }
+      if ($env:BAS_CONFIRM_RUNKEY_WRITE -cne 'true') {
+        Write-Output "EVIDENCE T1547.001: run_key_value_counts=[$($inv -join '; ')] hklm_run_writable_by_non_admins=$($weak.Count). Inventory only; nothing was written. [BAS-SIM-AKIRA-S24]"
+        if ($weak.Count -gt 0) { Write-Output "FAIL: the machine-wide Run key grants non-administrators write access ($($weak -join '; ')) - any user could plant persistence for all users. [BAS-SIM-AKIRA-S24]" }
+        else { Write-Output "SKIP: gate not confirmed (BAS_CONFIRM_RUNKEY_WRITE is not exactly 'true') - the Run-key write simulation was not run; the machine-wide Run key is not writable by non-admins. [BAS-SIM-AKIRA-S24]" }
+        return
+      }
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $rk = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'; $vn = "BAS_Persist_$runId"; $val = 'cmd.exe /c rem [BAS-SIM-AKIRA] run key persistence test'
+      try { Set-ItemProperty -Path $rk -Name $vn -Value $val -ErrorAction Stop } catch { }
+      $set = ((Get-ItemProperty $rk -ErrorAction SilentlyContinue).$vn -eq $val)
+      Remove-ItemProperty -Path $rk -Name $vn -ErrorAction SilentlyContinue
+      $gone = ($null -eq (Get-ItemProperty $rk -ErrorAction SilentlyContinue).$vn)
+      Write-Output "EVIDENCE T1547.001: value=$vn written_and_read_back=$set removed=$gone cleanup_verified=$gone run_key_value_counts=[$($inv -join '; ')] hklm_run_writable_by_non_admins=$($weak.Count). The value only runs 'rem'; it was removed before any logon. [BAS-SIM-AKIRA-S24]"
+      if ($set -and -not $gone) { Write-Output "WARNING: Run value $vn may remain under $rk; remove it manually. [BAS-SIM-AKIRA-S24]" }
+      if ($set) { Write-Output "FAIL: a Run-key persistence value was written and confirmed by read-back without intervention - registry persistence is not prevented. [BAS-SIM-AKIRA-S24]" }
+      else { Write-Output "PASS: the Run-key write was blocked or did not persist (read-back did not match). [BAS-SIM-AKIRA-S24]" }
+    cleanup: |
+      $k = Get-Item 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -ErrorAction SilentlyContinue; if ($k) { $k.GetValueNames() | Where-Object { $_ -like 'BAS_Persist_*' } | ForEach-Object { Remove-ItemProperty -Path $k.PSPath -Name $_ -ErrorAction SilentlyContinue } }
+
+  # ===========================================================================
+  # Stage 25 - Remote Access Tool Exposure (T1219)
+  # ===========================================================================
+  - id: akira-s25-remote-access-tools
+    name: "Akira Stage 25 — Remote Access Tool Exposure (T1219)"
+    technique_id: T1219
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 90
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    blast_radius: "Read-only presence check for a catalogue of 15 remote-access tools via service, process and installed-software names; operator allow-list in BAS_ALLOWED_REMOTE_TOOLS. No network connection is made."
+    preconditions: ["Windows host."]
+    postconditions: ["PASS, FAIL or SKIP with a stated reason; anything created is removed and removal verified."]
+    abort_on: []
+    telemetry:
+      - "Sysmon EID 1: service and process inventory reads"
+    detection:
+      - "EDR/CASB: unsanctioned remote-access software"
+    expected_telemetry_count: 1
+    false_positive_notes: "Administrators, IT tooling and inventory agents perform the same actions; correlate with account, process and change window."
+    mitigations:
+      - "Enforce MFA and least privilege on remote access and valid accounts; monitor for the behaviours above."
+    references: ["CISA AA24-109A", "MITRE T1219"]
+    evidence: ["Emit unsanctioned tools list."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tools = [ordered]@{ AnyDesk='anydesk'; TeamViewer='teamviewer'; ScreenConnect='screenconnect|connectwise control'; Splashtop='splashtop'; RustDesk='rustdesk'; Atera='atera'; LogMeIn='logmein'; Ammyy='ammyy'; UltraViewer='ultraviewer'; NetSupport='netsupport|client32'; RemotePC='remotepc'; Supremo='supremo'; Action1='action1'; MeshCentral='meshagent|meshcentral'; Level='level\.io' }
+      $allow = @(); if ($env:BAS_ALLOWED_REMOTE_TOOLS) { $allow = @($env:BAS_ALLOWED_REMOTE_TOOLS -split '[;,]' | ForEach-Object { $_.Trim().ToLower() } | Where-Object { $_ }) }
+      $svc = @(Get-Service -ErrorAction SilentlyContinue | ForEach-Object { "$($_.Name) $($_.DisplayName)" })
+      $proc = @(Get-Process -ErrorAction SilentlyContinue | ForEach-Object { $_.ProcessName })
+      $apps = @(); foreach ($k in 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*','HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*') { $apps += @(Get-ItemProperty $k -ErrorAction SilentlyContinue | ForEach-Object { $_.DisplayName } | Where-Object { $_ }) }
+      $present = @(); $allowed = @()
+      foreach ($t in $tools.Keys) {
+        $pat = $tools[$t]
+        $hit = (@($svc | Where-Object { $_ -match $pat }).Count + @($proc | Where-Object { $_ -match $pat }).Count + @($apps | Where-Object { $_ -match $pat }).Count) -gt 0
+        if ($hit) { if ($allow -contains $t.ToLower()) { $allowed += $t } else { $present += $t } }
+      }
+      Write-Output "EVIDENCE T1219: unsanctioned_remote_access_tools=[$($present -join ',')] allow_listed_present=[$($allowed -join ',')] catalogue_size=$($tools.Count). Presence is read from services, processes and installed-software names only; no network connection was made and tool names are matched by substring, so renamed or portable copies are missed. [BAS-SIM-AKIRA-S25]"
+      if ($present.Count -gt 0) { Write-Output "FAIL: $($present.Count) remote-access tool(s) not on the allow-list are present ($($present -join ', ')) - attackers abuse legitimate remote-access software for persistence and C2. [BAS-SIM-AKIRA-S25]" }
+      else { Write-Output "PASS: no remote-access tool outside the allow-list was found in services, processes or installed software. [BAS-SIM-AKIRA-S25]" }
+    cleanup: ""
+
+  # ===========================================================================
   # Stage 5 — Lateral Movement: SMB Admin Share Probe (T1021.002)
-  # ---------------------------------------------------------------------------
-  - name: "Akira Stage 5 — SMB Admin Share Lateral Movement Probe (T1021.002)"
+  # ===========================================================================
+  - id: akira-s5-smb-admin
+    name: "Akira Stage 5 — SMB Admin Share Lateral Movement Probe (T1021.002)"
     technique_id: T1021.002
     detection_profiles:
       - windows_smb_lateral_probe
@@ -210,8 +1043,14 @@ steps:
     fidelity: telemetry-safe
     production_safe: true
     risk: low
-    blast_radius: "Tests whether \\127.0.0.1\\ADMIN$ is accessible with the current user token via net use (loopback). Disconnects immediately. Generates Security EID 4624 Type 3 + Sysmon EID 3 loopback."
+    severity: medium
+    confidence: high
     reversible: true
+    depends_on: [akira-s2-share-discovery]
+    blast_radius: "Tests whether \\\\127.0.0.1\\ADMIN$ is accessible with the current user token via net use (loopback). Disconnects immediately. Generates Security EID 4624 Type 3 + Sysmon EID 3 loopback."
+    preconditions: ["Stage 2 executed."]
+    postconditions: ["Reachability verdict emitted; any loopback mount removed."]
+    abort_on: []
     telemetry:
       - "Sysmon EID 1: net.exe with use \\\\127.0.0.1\\ADMIN$ argument"
       - "Security EID 4624: Logon Type 3 (network) from 127.0.0.1 to ADMIN$"
@@ -219,6 +1058,13 @@ steps:
     detection:
       - "EDR: net use to ADMIN$ from PowerShell  -  Sigma rule proc_creation_win_net_admin_share_access.yml"
       - "SIEM: EID 5140 access to ADMIN$ outside of IT provisioning window — lateral movement IOC"
+    expected_telemetry_count: 3
+    false_positive_notes: "IT provisioning legitimately maps ADMIN$ — correlate with change window and user."
+    mitigations:
+      - "Set AutoShareWks=0 via GPO; enforce SMB signing + LAPS."
+      - "Alert on net use ADMIN$ from user context."
+    references: ["MITRE T1021.002", "Sigma proc_creation_win_net_admin_share_access.yml"]
+    evidence: ["Emit accessible/authFailed tokens."]
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $netOut = & net use '\\127.0.0.1\ADMIN$' 2>&1 | Out-String
@@ -236,10 +1082,193 @@ steps:
     cleanup: |
       & net use '\\127.0.0.1\ADMIN$' /delete 2>&1 | Out-Null
 
-  # ---------------------------------------------------------------------------
+  # ===========================================================================
+  # Stage 5a — Collection: Local Data Staging (T1074.001)
+  # ===========================================================================
+  - id: akira-s5a-local-staging
+    name: "Akira Stage 5a — Local Data Staging (T1074.001)"
+    technique_id: T1074.001
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    depends_on: [akira-s5-smb-admin]
+    blast_radius: "Writes 5 small synthetic customer-record files into a BAS-owned directory under %TEMP%, hashes them, then deletes the directory and verifies it is gone. No real data is read or copied."
+    preconditions: ["Stage 5 executed."]
+    postconditions: ["Staging attempt outcome emitted; directory removed and removal verified (cleanup_verified)."]
+    abort_on: []
+    telemetry:
+      - "Sysmon EID 11: bulk file creation in a single new directory under %TEMP%"
+      - "Sysmon EID 23/26: the same files deleted"
+    detection:
+      - "EDR: many small files containing regulated-data patterns written to one new directory"
+      - "DLP endpoint: PAN/Aadhaar/credit-card patterns written to local staging path"
+    expected_telemetry_count: 2
+    false_positive_notes: "Export jobs and installers write many files to %TEMP%; correlate with process and data pattern."
+    mitigations:
+      - "Endpoint DLP on regulated-data patterns written outside approved paths."
+      - "Controlled Folder Access / EDR bulk-collection detection."
+    references: ["MITRE T1074.001", "CISA AA24-109A (double extortion)"]
+    evidence: ["Emit staged_files, content_hash_verified and cleanup_verified."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $dir = Join-Path $env:TEMP "bas_akira_stage_$runId"
+      if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
+      New-Item -ItemType Directory -Path $dir -Force -ErrorAction SilentlyContinue | Out-Null
+      $expected = 5
+      $written = 0
+      $hashOk = 0
+      if (Test-Path $dir) {
+        for ($i = 1; $i -le $expected; $i++) {
+          $f = Join-Path $dir "customers_$i.csv"
+          $body = "[BAS-SIM-AKIRA-S5A] CustomerID,PAN,Aadhaar,CreditCard`r`nBAS-SIM-$i,ABCDE1234F,123456789012,4111111111111111`r`n"
+          try { [System.IO.File]::WriteAllText($f, $body, [System.Text.Encoding]::UTF8) } catch { }
+          if (Test-Path $f) {
+            $written++
+            $h1 = (Get-FileHash -Path $f -Algorithm SHA256).Hash
+            $tmp = [System.IO.Path]::GetTempFileName()
+            [System.IO.File]::WriteAllText($tmp, $body, [System.Text.Encoding]::UTF8)
+            $h2 = (Get-FileHash -Path $tmp -Algorithm SHA256).Hash
+            Remove-Item $tmp -Force
+            if ($h1 -and $h1 -eq $h2) { $hashOk++ }
+          }
+        }
+      }
+      Remove-Item $dir -Recurse -Force
+      $cleanupVerified = -not (Test-Path $dir)
+      Write-Output "EVIDENCE T1074.001: staged_files=$written/$expected content_hash_verified=$hashOk cleanup_verified=$cleanupVerified dir=$dir. Synthetic regulated-data records only. [BAS-SIM-AKIRA-S5A]"
+      if ($written -gt 0) {
+        Write-Output "FAIL: $written synthetic customer-record file(s) were staged in a collection directory without intervention - staging detections (DLP, EDR bulk-collection) did not prevent it. [BAS-SIM-AKIRA-S5A]"
+      } else {
+        Write-Output "PASS: staging writes were blocked or denied - EDR/Controlled Folder Access prevented local data staging (or the directory was not writable; see EVIDENCE). [BAS-SIM-AKIRA-S5A]"
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_akira_stage_*') -Recurse -Force -ErrorAction SilentlyContinue
+
+  # ===========================================================================
+  # Stage 5b — Pre-Encryption Data Staging & Exfiltration (T1567)
+  # ===========================================================================
+  - id: akira-s5b-exfil-staging
+    name: "Akira Stage 5b — Pre-Encryption HTTPS Exfiltration to Own Sink (T1041)"
+    technique_id: T1041
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: medium
+    reversible: true
+    depends_on: [akira-s5a-local-staging]
+    blast_radius: "POSTs a synthetic customer record to the platform's own sink endpoint over HTTPS before the encryption stage. No real data, no external destination -- the receiving endpoint is this same on-prem deployment. A reachability probe (empty payload) fires first so DLP has nothing to match on that channel."
+    preconditions: ["Stage 5 executed."]
+    postconditions: ["Staging POST attempted; outcome emitted."]
+    abort_on: ["SINK_URL/SINK_TOKEN unresolved — stage SKIPs rather than POST to an unknown host."]
+    telemetry:
+      - "Sysmon EID 3: network connection to the orchestrator's own HTTPS port"
+      - "Sysmon EID 22: DNS query for sink host (if name-based)"
+    detection:
+      - "DLP: outbound HTTPS POST body matching regulated-data patterns (PAN/Aadhaar/credit-card regex)"
+      - "Proxy/SWG: POST to non-baselined destination carrying regulated-data shapes"
+    expected_telemetry_count: 2
+    false_positive_notes: "Business apps legitimately POST customer records — DLP must scope to the sink/unknown destinations and correlate with process context."
+    mitigations:
+      - "DLP with regulated-data patterns (PAN, Aadhaar, credit-card) on egress HTTPS."
+      - "Egress allow-listing; alert on POST to non-baselined destinations."
+      - "CASB/SWG inspection of TLS where lawful."
+    references: ["MITRE T1041", "CISA AA24-109A (double extortion)"]
+    evidence: ["Emit reachability_ok + staging_ok booleans."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $staged = "[BAS-SIM-AKIRA-S5B] CustomerID,PAN,Aadhaar,CreditCard`nBAS-SIM-SINK,ABCDE1234F,123456789012,4111111111111111"
+      # Reachability probe: empty payload on its own channel. It carries no sensitive
+      # content, so DLP has nothing to match. The sink records it only if this path reaches it.
+      try {
+        Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=''; channel='reachability'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "INFO: sink reachability probe completed. [BAS-SIM-AKIRA-S5B]"
+      } catch {
+        Write-Output "INFO: sink reachability probe failed or blocked: $($_.Exception.Message). [BAS-SIM-AKIRA-S5B]"
+      }
+      try {
+        Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=$staged; channel='https-post'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "EXEC T1041: pre-encryption staging record POSTed over HTTPS. [BAS-SIM-AKIRA-S5B]"
+        Write-Output "FAIL: synthetic regulated-data record traversed egress HTTPS unblocked — DLP did not match PAN/Aadhaar/card patterns. Tune DLP rules."
+      } catch {
+        Write-Output "EXEC T1041: HTTPS POST to sink was blocked or failed before completing. [BAS-SIM-AKIRA-S5B]"
+        Write-Output "PASS: staging exfil path blocked/failed — DLP or egress control intervened."
+      }
+    cleanup: ""
+
+  # ===========================================================================
+  # Stage 5c — Discovery / Lateral (supp.): SMB Share Fan-Out Enumeration (T1135/T1021.002)
+  # ===========================================================================
+  - id: akira-s5c-smb-fanout
+    name: "Akira Stage 5c — SMB Share Fan-Out Enumeration (T1135/T1021.002)"
+    technique_id: T1135
+    detection_profiles:
+      - windows_network_share_discovery
+      - windows_smb_lateral_probe
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: medium
+    confidence: high
+    reversible: true
+    depends_on: [akira-s5-smb-admin]
+    blast_radius: "Enumerates SMB shares visible from the current context via 'net view' (loopback only — targets \\\\127.0.0.1, not the network) and Win32_Share. No share is mounted or written to; no remote host is contacted. Generates EID 4688 for net.exe plus EID 5140 if SACL auditing is on."
+    preconditions: ["Stage 5 executed."]
+    postconditions: ["Share inventory emitted (count + names)."]
+    abort_on: []
+    telemetry:
+      - "Security EID 4688: net.exe view invocation (loopback target)"
+      - "Security EID 5140: share access if SACL auditing enabled"
+      - "Sysmon EID 1: net.exe cmdline captured"
+    detection:
+      - "SIEM: net view fan-out from non-admin process in short window — ransomware staging signal"
+      - "EDR: enumeration of shares from PowerShell child process"
+    expected_telemetry_count: 2
+    false_positive_notes: "Inventory/scanner tools enumerate shares — baseline expected hosts/processes."
+    mitigations:
+      - "Alert on share enumeration bursts from user context."
+      - "Segment SMB; enforce SMB signing; disable admin shares on workstations."
+    references: ["MITRE T1135", "MITRE T1021.002"]
+    evidence: ["Emit share names + count for the scorecard."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $target = "\\$env:COMPUTERNAME"
+      $shares = @(Get-WmiObject -Class Win32_Share -ErrorAction SilentlyContinue | Select-Object Name,Path,Type)
+      $netOut = (& net view $target 2>&1) -join "`n"
+      $names = ($shares | ForEach-Object { $_.Name }) -join ','
+      Write-Output "EXEC T1135/T1021.002: SMB share fan-out — $($shares.Count) share(s) on $target (names: $names). net view executed for 4688 telemetry. Akira enumerates share names to stage lateral encryption. [BAS-SIM-AKIRA-S5C]"
+      if ($shares.Count -gt 0) {
+        Write-Output "FAIL: shares enumerable from user context — restrict share ACLs, disable AutoShareWks, enable SMB signing."
+      } else {
+        Write-Output "PASS: no enumerable shares visible — lateral fan-out surface minimized."
+      }
+    cleanup: ""
+
+  # ===========================================================================
   # Stage 6 — Ransomware Impact Simulation (T1486)
-  # ---------------------------------------------------------------------------
-  - name: "Akira Stage 6 — Ransomware Payload Simulation (T1486)"
+  # ===========================================================================
+  - id: akira-s6-ransom-sim
+    name: "Akira Stage 6 — Ransomware Payload Simulation (T1486)"
     technique_id: T1486
     detection_profiles:
       - windows_ransomware_encryption
@@ -250,8 +1279,14 @@ steps:
     fidelity: telemetry-safe
     production_safe: true
     risk: low
-    blast_radius: "Creates one BAS-owned plaintext file in %TEMP%, XOR-encodes it (simulating encryption), writes a benign ransom note ([BAS-SIM-AKIRA] only), then DELETES BOTH immediately. No user data touched. No real ransomware code. Generates Sysmon EID 11 (file create x2) and EID 23 (file delete x2)."
+    severity: critical
+    confidence: high
     reversible: true
+    depends_on: [akira-s5c-smb-fanout]
+    blast_radius: "Creates one BAS-owned plaintext file in %TEMP%, XOR-encodes it (simulating encryption), writes a benign ransom note ([BAS-SIM-AKIRA] only), then DELETES BOTH immediately. No user data touched. No real ransomware code. Generates Sysmon EID 11 (file create x2) and EID 23 (file delete x2)."
+    preconditions: ["Stage 5c executed."]
+    postconditions: ["Encryption simulation attempted; PASS/FAIL emitted; artifacts deleted."]
+    abort_on: []
     telemetry:
       - "Sysmon EID 11: bas_akira_<id>.txt created in %TEMP%"
       - "Sysmon EID 11: bas_akira_<id>.akira (encrypted simulation) created"
@@ -261,40 +1296,137 @@ steps:
       - "EDR: high-frequency file create + rename + delete in short window  -  Sigma rule win_security_susp_file_modifications.yml"
       - "Defender: ransom-pattern file creation heuristic (many .akira extension files)"
       - "EDR: PowerShell creating and immediately deleting files with suspicious extension"
+    expected_telemetry_count: 4
+    false_positive_notes: "Text editors/temp tooling create+delete files — heuristics must weigh extension + burst rate."
+    mitigations:
+      - "Controlled Folder Access on user-data folders."
+      - "Defender ransomware behavior monitoring + attack surface reduction rules."
+      - "Alert on .akira/.lockbit/etc extension bursts."
+    references: ["MITRE T1486", "CISA AA24-109A"]
+    evidence: ["Emit created/cleaned booleans."]
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
-      $plainFile = Join-Path $env:TEMP "bas_akira_$runId.txt"
-      $encFile   = Join-Path $env:TEMP "bas_akira_$runId.akira"
-      $noteFile  = Join-Path $env:TEMP "bas_ransom_$runId.txt"
-      $plainContent = '[BAS-SIM-AKIRA] T1486 ransomware simulation target file'
-      [System.IO.File]::WriteAllText($plainFile, $plainContent, [System.Text.Encoding]::UTF8)
-      # Simulate XOR encryption (key=0x41 = 'A' for Akira)
+      $dir = Join-Path $env:TEMP "bas_akira_enc_$runId"
+      if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
+      New-Item -ItemType Directory -Path $dir -Force -ErrorAction SilentlyContinue | Out-Null
+      $expected = 6
+      $created = 0; $transformed = 0; $verified = 0
       $key = 0x41
-      $bytes = [System.Text.Encoding]::UTF8.GetBytes($plainContent)
-      $enc   = $bytes | ForEach-Object { $_ -bxor $key }
-      [System.IO.File]::WriteAllBytes($encFile, [byte[]]$enc)
-      $note = '[BAS-SIM-AKIRA] Akira Ransomware Simulation Note' + [char]13 + [char]10 +
-              'This is a BAS simulation. No real files were encrypted.' + [char]13 + [char]10 +
-              'Run ID: ' + $runId
-      [System.IO.File]::WriteAllText($noteFile, $note, [System.Text.Encoding]::UTF8)
-      $created = (Test-Path $plainFile) -and (Test-Path $encFile) -and (Test-Path $noteFile)
-      Remove-Item $plainFile,$encFile,$noteFile -Force -ErrorAction SilentlyContinue
-      $cleaned = -not (Test-Path $plainFile) -and -not (Test-Path $encFile) -and -not (Test-Path $noteFile)
-      if ($created) {
-        Write-Output "EXEC T1486: ransomware simulation completed — target file XOR-encoded (.akira), ransom note written, all cleaned=$cleaned. Sysmon EID 11+23 expected. [BAS-SIM-AKIRA-S6]"
-        Write-Output "FAIL: File encryption simulation ran unblocked. Defender ransomware protection and controlled folder access should have flagged this pattern."
+      if (Test-Path $dir) {
+        for ($i = 1; $i -le $expected; $i++) {
+          $plain = Join-Path $dir "doc_$i.txt"
+          $enc = Join-Path $dir "doc_$i.txt.akira"
+          $text = "[BAS-SIM-AKIRA] T1486 synthetic target document $i " + ('x' * (40 * $i))
+          try { [System.IO.File]::WriteAllText($plain, $text, [System.Text.Encoding]::UTF8) } catch { }
+          if (-not (Test-Path $plain)) { continue }
+          $created++
+          $origHash = (Get-FileHash -Path $plain -Algorithm SHA256).Hash
+          $bytes = [System.IO.File]::ReadAllBytes($plain)
+          $out = New-Object byte[] $bytes.Length
+          for ($b = 0; $b -lt $bytes.Length; $b++) { $out[$b] = $bytes[$b] -bxor $key }
+          try { [System.IO.File]::WriteAllBytes($enc, $out); Remove-Item $plain -Force } catch { }
+          if (Test-Path $enc) {
+            $transformed++
+            $encHash = (Get-FileHash -Path $enc -Algorithm SHA256).Hash
+            $back = [System.IO.File]::ReadAllBytes($enc)
+            $dec = New-Object byte[] $back.Length
+            for ($b = 0; $b -lt $back.Length; $b++) { $dec[$b] = $back[$b] -bxor $key }
+            $tmp = [System.IO.Path]::GetTempFileName()
+            [System.IO.File]::WriteAllBytes($tmp, $dec)
+            $decHash = (Get-FileHash -Path $tmp -Algorithm SHA256).Hash
+            Remove-Item $tmp -Force
+            if ($encHash -ne $origHash -and $decHash -eq $origHash) { $verified++ }
+          }
+        }
+      }
+      $note = Join-Path $dir 'README_AKIRA_SIM.txt'
+      try { [System.IO.File]::WriteAllText($note, "[BAS-SIM-AKIRA] Akira Ransomware Simulation Note`r`nThis is a BAS simulation. No real files were encrypted.`r`nRun ID: $runId", [System.Text.Encoding]::UTF8) } catch { }
+      $noteWritten = Test-Path $note
+      Remove-Item $dir -Recurse -Force
+      $cleanupVerified = -not (Test-Path $dir)
+      Write-Output "EVIDENCE T1486: files_created=$created/$expected files_transformed=$transformed transform_verified=$verified ransom_note_written=$noteWritten cleanup_verified=$cleanupVerified dir=$dir. Transform = reversible XOR on synthetic files, content change confirmed by SHA-256 (original differs from transformed, decoded equals original). This is a transform simulation, not cryptographic encryption. [BAS-SIM-AKIRA-S6]"
+      if ($transformed -gt 0) {
+        Write-Output "FAIL: $transformed synthetic file(s) were rewritten and renamed to .akira without intervention (transform_verified=$verified) - Defender ransomware protection / Controlled Folder Access / EDR did not stop the encryption-style write pattern. [BAS-SIM-AKIRA-S6]"
       } else {
-        Write-Output "PASS: Ransomware simulation file creation blocked  -  Controlled Folder Access or EDR prevented file write to %TEMP%. [BAS-SIM-AKIRA-S6]"
+        Write-Output "PASS: the encryption-style write pattern was blocked or denied (files_created=$created, files_transformed=0) - Controlled Folder Access or EDR intervened. [BAS-SIM-AKIRA-S6]"
       }
     cleanup: |
-      Remove-Item (Join-Path $env:TEMP 'bas_akira_*') -Force -ErrorAction SilentlyContinue
+      Remove-Item (Join-Path $env:TEMP 'bas_akira_enc_*') -Recurse -Force -ErrorAction SilentlyContinue
+      Remove-Item (Join-Path $env:TEMP 'bas_akira_*.txt') -Force -ErrorAction SilentlyContinue
+      Remove-Item (Join-Path $env:TEMP 'bas_akira_*.akira') -Force -ErrorAction SilentlyContinue
       Remove-Item (Join-Path $env:TEMP 'bas_ransom_*') -Force -ErrorAction SilentlyContinue
 
-  # ---------------------------------------------------------------------------
+  # ===========================================================================
+  # Stage 6b — Impact (supp.): Mass-Rename Fan-Out Simulation (T1036.008)
+  # ===========================================================================
+  - id: akira-s6b-mass-rename
+    name: "Akira Stage 6b — Mass-Rename Fan-Out Simulation (T1036.008)"
+    technique_id: T1036.008
+    detection_profiles:
+      - windows_ransomware_encryption
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: critical
+    confidence: high
+    reversible: true
+    depends_on: [akira-s6-ransom-sim]
+    blast_radius: "Creates N (default 20, capped 50) BAS-owned plaintext files in a single %TEMP% subdir, renames each to .akira extension in a burst (mimicking mass-encryption fan-out), then deletes the entire subdir. No user data touched. Generates a burst of Sysmon EID 11 (create+rename) and EID 23 (delete)."
+    preconditions: ["Stage 6 executed.", "Free %TEMP% >= 16 MB."]
+    postconditions: ["Fan-out burst attempted; subdir removed; PASS/FAIL emitted."]
+    abort_on: ["Subdir creation fails."]
+    telemetry:
+      - "Sysmon EID 11: bas_akira_fan_<id>/file_*.txt created (N)"
+      - "Sysmon EID 11: rename to *.akira (N)"
+      - "Sysmon EID 23: files + subdir deleted"
+      - "EDR: file write burst rate (files/sec)"
+    detection:
+      - "EDR: file-extension-change burst (mass rename) — ransomware fan-out signature"
+      - "Defender: ransomware behavior monitoring triggers on .akira extension burst"
+      - "SIEM: file rename rate anomaly per process/user"
+    expected_telemetry_count: 3
+    false_positive_notes: "Bulk-rename scripts (photo/archive tooling) can trigger — correlate extension and destination."
+    mitigations:
+      - "Controlled Folder Access + Defender ransomware behavior monitoring."
+      - "Alert on extension-change burst > threshold within window."
+      - "File-server canaries / honeyfiles."
+    references: ["MITRE T1036.008", "MITRE T1486 (Akira renames files as part of encryption; rename alone is not encryption)", "CISA AA24-109A"]
+    evidence: ["Emit files_created / renames_ok counts."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $fanDir = Join-Path $env:TEMP "bas_akira_fan_$runId"
+      New-Item -ItemType Directory -Path $fanDir -Force -ErrorAction SilentlyContinue | Out-Null
+      $N = 20
+      $created = 0; $renamed = 0
+      for ($i=0; $i -lt $N; $i++) {
+        $p = Join-Path $fanDir ("file_{0:D3}.txt" -f $i)
+        try { [System.IO.File]::WriteAllText($p, "[BAS-SIM-AKIRA] fan-out file $i", [System.Text.Encoding]::UTF8); $created++ } catch {}
+      }
+      Get-ChildItem -Path $fanDir -Filter '*.txt' -ErrorAction SilentlyContinue | ForEach-Object {
+        try { Rename-Item -Path $_.FullName -NewName ($_.Name -replace '\.txt$','.akira') -Force -ErrorAction SilentlyContinue; $renamed++ } catch {}
+      }
+      Remove-Item $fanDir -Recurse -Force -ErrorAction SilentlyContinue
+      $cleaned = -not (Test-Path $fanDir)
+      Write-Output "EXEC T1036.008: mass-rename fan-out — created=$created renamed=$renamed (N=$N), cleaned=$cleaned. Sysmon EID 11 burst expected. Rename alone is NOT encryption: no file content was changed and this step is reported separately from Stage 6 (T1486). cleanup_verified=$cleaned. [BAS-SIM-AKIRA-S6B]"
+      if ($created -ge 1 -and $renamed -ge 1) {
+        Write-Output "FAIL: mass-rename burst executed unblocked. Verify Defender ransomware behavior monitoring + CFA are armed and alerting on extension bursts."
+      } else {
+        Write-Output "PASS: mass-rename fan-out was blocked or partially denied — EDR/CFA intervened."
+      }
+    cleanup: |
+      Get-ChildItem -Path $env:TEMP -Filter 'bas_akira_fan_*' -Directory -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+  # ===========================================================================
   # Stage 7 — Recovery Inhibition A: VSS Enumeration (T1490)
-  # ---------------------------------------------------------------------------
-  - name: "Akira Stage 7 — VSS Snapshot Enumeration (T1490)"
+  # ===========================================================================
+  - id: akira-s7-vss-enum
+    name: "Akira Stage 7 — VSS Snapshot Enumeration (T1490)"
     technique_id: T1490
     action_key: enumerate
     detection_profiles:
@@ -306,30 +1438,50 @@ steps:
     fidelity: telemetry-safe
     production_safe: true
     risk: low
-    blast_radius: "Runs vssadmin list shadows to enumerate VSS snapshots (READ ONLY). Akira deletes these via WMI Win32_ShadowCopy.Delete() (see Stage 8) — we enumerate only to show the attack surface. Generates Sysmon EID 1: vssadmin.exe with 'list' argument."
+    severity: high
+    confidence: high
     reversible: true
+    depends_on: [akira-s6b-mass-rename]
+    blast_radius: "Runs vssadmin list shadows to enumerate VSS snapshots (READ ONLY). Akira deletes these via WMI Win32_ShadowCopy.Delete() (see Stage 8) — we enumerate only to show the attack surface. Generates Sysmon EID 1: vssadmin.exe with 'list' argument."
+    preconditions: ["Admin privilege.", "Stage 6b executed."]
+    postconditions: ["Shadow copy count emitted."]
+    abort_on: []
     telemetry:
       - "Sysmon EID 1: vssadmin.exe list shadows (pre-wipe reconnaissance)"
       - "Security EID 4688: vssadmin.exe spawned by powershell.exe"
     detection:
       - "EDR: vssadmin.exe invoked from PowerShell  -  Sigma rule proc_creation_win_vssadmin_susp_commands.yml"
       - "SIEM: vssadmin list shadows — pre-ransomware VSS enumeration IOC"
+    expected_telemetry_count: 2
+    false_positive_notes: "Backup tools legitimately enumerate shadows — whitelist signer/process."
+    mitigations:
+      - "Alert on vssadmin.exe from PowerShell."
+      - "Immutable/offline cloud backups + hardened Veeam repo not reachable from endpoints."
+    references: ["MITRE T1490", "Sigma proc_creation_win_vssadmin_susp_commands.yml"]
+    evidence: ["Emit shadow_count."]
     command: |
-      $ErrorActionPreference = 'SilentlyContinue'
+      $ErrorActionPreference = 'Continue'
       $vssOut = & vssadmin.exe list shadows 2>&1 | Out-String
+      $rc = $LASTEXITCODE
       $shadowCount = ([regex]::Matches($vssOut, 'Shadow Copy ID')).Count
-      if ($shadowCount -gt 0) {
+      if ($rc -eq 0 -and $shadowCount -gt 0) {
         Write-Output "EXEC T1490: $shadowCount VSS shadow copy(ies) enumerated. Akira would now delete these via WMI Win32_ShadowCopy.Delete() to destroy backups. Sysmon EID 1 vssadmin.exe logged. [BAS-SIM-AKIRA-S7]"
-        Write-Output "FAIL: VSS snapshots exist and are enumerable ($shadowCount found). If Akira reached this stage, backups would be destroyed before encryption. Ensure immutable cloud backup or Veeam hardened repo is NOT reachable from endpoint."
+        Write-Output "FAIL: VSS snapshots exist and are enumerable ($shadowCount found). If Akira reached this stage, backups would be destroyed before encryption. Ensure immutable cloud backup or Veeam hardened repo is NOT reachable from endpoint. [BAS-SIM-AKIRA-S7]"
+      } elseif ($rc -eq 0) {
+        Write-Output "PASS: vssadmin reports no shadow copies; the recovery inhibition surface is reduced on this host. Positive read of the configuration. [BAS-SIM-AKIRA-S7]"
+      } elseif ($vssOut -match 'Access is denied') {
+        Write-Output "PASS: vssadmin shadow listing was explicitly denied (Access is denied). Positive evidence of a control denial. [BAS-SIM-AKIRA-S7]"
       } else {
-        Write-Output "PASS: No VSS shadow copies found or vssadmin blocked  -  recovery inhibition surface is reduced. [BAS-SIM-AKIRA-S7]"
+        Write-Output "SKIP: vssadmin listing failed (exit=$rc); shadow state unknown, not scored. [BAS-SIM-AKIRA-S7]"
       }
     cleanup: ""
 
-  # ---------------------------------------------------------------------------
+  # ===========================================================================
   # Stage 8 — Recovery Inhibition B: VSS Deletion via WMI (T1490, lab-only)
-  # ---------------------------------------------------------------------------
-  - name: "Akira Stage 8 — VSS Shadow Copy Deletion via WMI (lab  -  requires BAS_CONFIRM_VSS_DELETE=true) (T1490)"
+  # ===========================================================================
+  - id: akira-s8-vss-wmi-delete
+    name: "Akira Stage 8 — VSS Shadow Copy Deletion via WMI (lab  -  requires BAS_CONFIRM_VSS_DELETE=true) (T1490)"
+    irreversible: "Deleted VSS shadow copies cannot be restored by any cleanup step; recovery needs a backup taken before the run. Lab gate BAS_CONFIRM_VSS_DELETE is unchanged."
     technique_id: T1490
     action_key: vss_delete
     detection_profiles:
@@ -341,14 +1493,29 @@ steps:
     fidelity: lab-only
     production_safe: false
     risk: high
-    blast_radius: "Deletes ONE oldest VSS shadow copy of C: via WMI Win32_ShadowCopy.Delete() -- Akira's exact documented command style (CISA AA24-109A: 'Get-WmiObject Win32_Shadowcopy | ForEach-Object {$_.Delete()}'), as opposed to LockBit/BlackCat's vssadmin-based deletion. Requires explicit BAS_CONFIRM_VSS_DELETE=true env var and verifies a snapshot exists first. Default-disabled without the flag."
+    severity: critical
+    confidence: high
     reversible: false
+    depends_on: [akira-s7-vss-enum]
+    blast_radius: "Deletes ONE oldest VSS shadow copy of C: via WMI Win32_ShadowCopy.Delete() -- Akira's exact documented command style (CISA AA24-109A: 'Get-WmiObject Win32_Shadowcopy | ForEach-Object {$_.Delete()}'), as opposed to LockBit/BlackCat's vssadmin-based deletion. Requires explicit BAS_CONFIRM_VSS_DELETE=true env var and verifies a snapshot exists first. Default-disabled without the flag."
+    preconditions: ["Admin privilege.", "BAS_CONFIRM_VSS_DELETE=true.", "Isolated lab environment.", "At least one C: shadow copy exists."]
+    postconditions: ["At most one oldest C: shadow copy deleted; remaining count emitted."]
+    abort_on:
+      - "BAS_CONFIRM_VSS_DELETE != 'true' → SKIP"
+      - "No C: shadow copies → SKIP"
     telemetry:
       - "Security EID 8224 (VSS service shutdown) + EID 524 (shadow copy deletion)"
       - "PowerShell EID 4104: Get-WmiObject Win32_ShadowCopy | ForEach-Object Delete()"
     detection:
       - "EDR: PowerShell WMI-based shadow copy deletion (Win32_ShadowCopy.Delete())  -  Akira's documented signature VSS-kill pattern, distinct from vssadmin.exe"
       - "SIEM: shadow copy count decrease; alert if count drops to 0"
+    expected_telemetry_count: 2
+    false_positive_notes: "Storage-management scripts use Win32_ShadowCopy.Delete() — require change-window correlation."
+    mitigations:
+      - "Alert on Win32_ShadowCopy.Delete() from PowerShell."
+      - "Immutable offsite backups; restrict shadow-copy management to dedicated accounts."
+    references: ["CISA AA24-109A", "MITRE T1490"]
+    evidence: ["Emit deleted_shadow_count + remaining."]
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $confirm = $env:BAS_CONFIRM_VSS_DELETE
@@ -356,21 +1523,134 @@ steps:
         Write-Output "SKIP: BAS_CONFIRM_VSS_DELETE not set to 'true'  -  WMI-based VSS deletion skipped (default-disabled per ransomware safety policy). Set env var explicitly in isolated lab to enable. [BAS-SIM-AKIRA-S8]"
         return
       }
-      $shadows = Get-WmiObject Win32_ShadowCopy -ErrorAction SilentlyContinue | Where-Object { $_.VolumeName -match 'C:' }
+      # Win32_ShadowCopy.VolumeName is a \?\Volume{GUID}\ path, never a drive letter: resolve C: to its volume DeviceID first.
+      $cVol = Get-WmiObject Win32_Volume -Filter "DriveLetter='C:'" -ErrorAction SilentlyContinue
+      $shadows = @(); if ($cVol.DeviceID) { $shadows = @(Get-WmiObject Win32_ShadowCopy -ErrorAction SilentlyContinue | Where-Object { $_.VolumeName -eq $cVol.DeviceID }) }
       if (-not $shadows -or @($shadows).Count -eq 0) {
         Write-Output "SKIP: no C: VSS shadow copies exist  -  nothing to delete. Create a snapshot first with: vssadmin create shadow /for=C:"
         return
       }
       $oldest = @($shadows | Sort-Object InstallDate)[0]
       $oldest.Delete()
-      $remaining = @(Get-WmiObject Win32_ShadowCopy -ErrorAction SilentlyContinue | Where-Object { $_.VolumeName -match 'C:' }).Count
+      $remaining = @(Get-WmiObject Win32_ShadowCopy -ErrorAction SilentlyContinue | Where-Object { $_.VolumeName -eq $cVol.DeviceID }).Count
       Write-Output "FAIL: VSS shadow copy deleted via WMI Win32_ShadowCopy.Delete() -- Akira's exact documented command is 'Get-WmiObject Win32_Shadowcopy | ForEach-Object {\$_.Delete()}'. $remaining shadow copy/copies remaining on C:. Create a new snapshot to restore recovery capability. [BAS-SIM-AKIRA-S8]"
     cleanup: ""
 
-  # ---------------------------------------------------------------------------
+  # ===========================================================================
+  # Stage 8b — Post-deletion survival check (read-only, T1490)
+  # ===========================================================================
+  - id: akira-s8b-vss-survival
+    name: "Akira Stage 8b — Post-Deletion VSS Survival Check (T1490)"
+    technique_id: T1490
+    action_key: survival
+    detection_profiles:
+      - windows_vss_inhibition
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: medium
+    confidence: high
+    reversible: true
+    depends_on: [akira-s8-vss-wmi-delete]
+    blast_radius: "Read-only: counts VSS shadow copies after the deletion stage with vssadmin list shadows. Changes nothing. Used to tell whether the copies targeted by the deletion survived."
+    preconditions: ["Stage 8 executed (or SKIPped)."]
+    postconditions: ["Post-step shadow count emitted."]
+    abort_on: []
+    telemetry:
+      - "Sysmon EID 1: vssadmin.exe list shadows (post-step survival check)"
+    detection:
+      - "EDR: vssadmin.exe list invoked from PowerShell (read-only)"
+    expected_telemetry_count: 1
+    false_positive_notes: "Backup tooling enumerates — whitelist signer."
+    mitigations: ["Same as Stage 7."]
+    references: ["MITRE T1490"]
+    evidence: ["Emit post_count."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $vssOut = & vssadmin.exe list shadows 2>&1 | Out-String
+      if ($LASTEXITCODE -ne 0) {
+        Write-Output "SKIP: T1490 survival check could not read VSS state (vssadmin exit $LASTEXITCODE). [BAS-SIM-AKIRA-S8B]"
+        return
+      }
+      $count = ([regex]::Matches($vssOut, 'Shadow Copy ID')).Count
+      Write-Output "EXEC T1490: survival check -- $count VSS shadow copy(ies) present after the deletion step. [BAS-SIM-AKIRA-S8B]"
+    cleanup: ""
+
+  # ===========================================================================
+  # Stage 8c — Recovery Inhibition C: bcdedit / wbadmin Recovery-Check Probe
+  # ===========================================================================
+  - id: akira-s8c-recovery-probe
+    name: "Akira Stage 8c — bcdedit/wbadmin Recovery-Check Probe (read-only) (T1490/T1562.001)"
+    technique_id: T1490
+    detection_profiles:
+      - windows_vss_inhibition
+      - windows_backup_tampering
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 25
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: high
+    reversible: true
+    depends_on: [akira-s8b-vss-survival]
+    blast_radius: "READ-ONLY probes only: runs 'bcdedit /enum {default}' and 'wbadmin get versions' and 'wbadmin get status' to enumerate boot/recovery config and backup catalog visibility. Does NOT run recoveryenabled/no, does NOT delete backups, does NOT modify BCD. Akira uses 'bcdedit /set {default} recoveryenabled No' and 'wbadmin delete catalog' to inhibit recovery — this surfaces whether those paths are reachable/observable."
+    preconditions: ["Admin privilege.", "Stage 8b executed."]
+    postconditions: ["Recovery-config posture emitted (recovery enabled? backups visible?)."]
+    abort_on: []
+    telemetry:
+      - "Sysmon EID 1: bcdedit.exe /enum (cmdline captured)"
+      - "Sysmon EID 1: wbadmin.exe get versions / get status (cmdline captured)"
+      - "Security EID 4688: bcdedit.exe, wbadmin.exe spawned by powershell.exe"
+    detection:
+      - "EDR: bcdedit.exe and wbadmin.exe from PowerShell — recovery/backup tampering reconnaissance"
+      - "SIEM: bcdedit /enum + wbadmin get versions within short window — Akira recovery-inhibition staging"
+    expected_telemetry_count: 3
+    false_positive_notes: "Backup admins and imaging tools legitimately run bcdedit/wbadmin — correlate with user context and change windows."
+    mitigations:
+      - "Alert on 'bcdedit /set ... recoveryenabled No' and 'wbadmin delete catalog' (write variants) — highest priority."
+      - "Restrict bcdedit/wbadmin to signed management tooling via WDAC."
+      - "Off-host immutable backups so 'wbadmin delete catalog' can't destroy the recovery chain."
+    references: ["CISA AA24-109A", "MITRE T1490", "MITRE T1562.001"]
+    evidence: ["Emit bcdedit_recovery_enabled + wbadmin_versions_visible booleans."]
+    command: |
+      $ErrorActionPreference = 'Continue'
+      # READ-ONLY: /enum and get versions only. Never /set, never delete catalog.
+      $bcd = (& bcdedit.exe /enum '{default}' 2>&1) -join "`n"
+      $bcdRc = $LASTEXITCODE
+      $recovEnabled = if ($bcd -match 'recoveryenabled\s+(Yes|No)') { $Matches[1] } else { 'unknown' }
+      $wbVers = (& wbadmin.exe get versions 2>&1) -join "`n"
+      $wbRc = $LASTEXITCODE
+      $wbNone = $wbVers -match 'There are no backup|No backup versions'
+      $wbHasVersions = $wbVers -match 'Version identifier|Backup time'
+      $wbReadable = $wbNone -or $wbHasVersions
+      $wbVisible = (-not $wbNone) -and $wbHasVersions
+      Write-Output "EXEC T1490/T1562.001: recovery-config probe (read-only). bcdedit.recoveryenabled=$recovEnabled (exit=$bcdRc); local backup catalog visible=$wbVisible (readable=$wbReadable, exit=$wbRc). [BAS-SIM-AKIRA-S8C]"
+      if ($recovEnabled -eq 'unknown') {
+        Write-Output "SKIP: bcdedit recovery state could not be read; posture unknown, not scored. [BAS-SIM-AKIRA-S8C]"
+      } elseif ($recovEnabled -eq 'No') {
+        Write-Output "FAIL: recoveryenabled=No. Windows RE is disabled, so Akira's recovery-inhibition goal is already satisfied on this host. Re-enable with 'bcdedit /set {default} recoveryenabled Yes'. [BAS-SIM-AKIRA-S8C]"
+      } elseif (-not $wbReadable) {
+        Write-Output "SKIP: the wbadmin backup catalog could not be read (exit=$wbRc); not scored. [BAS-SIM-AKIRA-S8C]"
+      } elseif ($wbVisible) {
+        Write-Output "FAIL: a local backup catalog is visible from the endpoint, so Akira's 'wbadmin delete catalog' would reach it. Ensure off-host immutable copies exist and alert on write-variant wbadmin invocations. [BAS-SIM-AKIRA-S8C]"
+      } else {
+        Write-Output "PASS: Windows Recovery Environment is enabled and no local backup catalog is visible. Positive read of the configuration. [BAS-SIM-AKIRA-S8C]"
+      }
+    cleanup: ""
+
+  
+  # ===========================================================================
   # Stage 9 — Indicator Removal: Event Log Clearing Attempt (T1070.001)
-  # ---------------------------------------------------------------------------
-  - name: "Akira Stage 9 — Event Log Clearing Attempt (T1070.001)"
+  # ===========================================================================
+  - id: akira-s9-log-clear
+    name: "Akira Stage 9 — Event Log Clearing Attempt (T1070.001)"
     technique_id: T1070.001
     detection_profiles:
       - windows_log_manipulation
@@ -381,8 +1661,14 @@ steps:
     fidelity: telemetry-safe
     production_safe: true
     risk: low
-    blast_radius: "Creates a BAS-owned custom event log (BAS-Sim-Akira), attempts wevtutil cl on it, then removes the log. Does NOT touch System/Security/Application logs. Generates Security EID 1102 if the clear succeeds, and Sysmon EID 1 wevtutil.exe."
+    severity: high
+    confidence: high
     reversible: true
+    depends_on: [akira-s8c-recovery-probe]
+    blast_radius: "Creates a BAS-owned custom event log (BAS-Sim-Akira), attempts wevtutil cl on it, then removes the log. Does NOT touch System/Security/Application logs. Generates Security EID 1102 if the clear succeeds, and Sysmon EID 1 wevtutil.exe."
+    preconditions: ["Admin privilege.", "Stage 8c executed."]
+    postconditions: ["wevtutil cl outcome emitted; custom log removed."]
+    abort_on: ["Cannot create custom event log (insufficient privilege) → SKIP."]
     telemetry:
       - "Sysmon EID 1: wevtutil.exe with cl argument (log-clearing pattern)"
       - "Security EID 1102: audit log cleared (if wevtutil cl succeeds on custom log)"
@@ -391,6 +1677,14 @@ steps:
       - "EDR: wevtutil.exe with 'cl' argument  -  Sigma rule proc_creation_win_wevtutil_clear_logs.yml"
       - "SIEM: Security EID 1102 event log cleared  -  high-priority anti-forensics IOC"
       - "SIEM: wevtutil.exe invoked from PowerShell at unusual time"
+    expected_telemetry_count: 3
+    false_positive_notes: "Legit admin scripts clear custom logs — but 'wevtutil cl Security/System' should always alert."
+    mitigations:
+      - "Enable log forwarding to SIEM (WEF) so local clear doesn't destroy evidence."
+      - "Alert on wevtutil cl — page for Security/System."
+      - "WORM log storage."
+    references: ["MITRE T1070.001", "Sigma proc_creation_win_wevtutil_clear_logs.yml"]
+    evidence: ["Emit cleared boolean + target log name."]
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $logName = 'BAS-Sim-Akira'
@@ -400,17 +1694,92 @@ steps:
       }
       $created = [System.Diagnostics.EventLog]::Exists($logName)
       if ($created) {
+        $start = Get-Date
         $clOut = & wevtutil.exe cl $logName 2>&1 | Out-String
         $cleared = $clOut -notmatch 'Access is denied|The specified channel could not be found|error'
+        $eid104 = $null
+        if ($cleared) {
+          Start-Sleep -Milliseconds 700
+          $ev = @(Get-WinEvent -FilterHashtable @{ LogName = 'System'; Id = 104; StartTime = $start.AddSeconds(-2) } -ErrorAction SilentlyContinue | Where-Object { $_.Message -match [regex]::Escape($logName) })
+          $eid104 = ($ev.Count -gt 0)
+        }
+        $gl = (& wevtutil.exe gl Security 2>&1 | Out-String)
+        $maxSize = if ($gl -match 'maxSize:\s*(\d+)') { [int64]$Matches[1] / 1024 } else { 'unknown' }
+        $retention = if ($gl -match 'retention:\s*(\w+)') { $Matches[1] } else { 'unknown' }
         try { Remove-EventLog -LogName $logName -ErrorAction SilentlyContinue } catch {}
+        $removed = -not [System.Diagnostics.EventLog]::Exists($logName)
+        Write-Output "EVIDENCE T1070.001: clear_attempt_succeeded=$cleared system_eid104_recorded=$eid104 security_log_max_kb=$maxSize security_log_retention=$retention test_log_removed=$removed siem_ingestion=unverified (no SIEM sink is visible from the endpoint; confirm EID 104 / 1102 reached the SIEM separately). [BAS-SIM-AKIRA-S9]"
         if ($cleared) {
           Write-Output "EXEC T1070.001: wevtutil cl on BAS custom log succeeded (exit 0). Akira uses 'wevtutil cl System' 'wevtutil cl Security' after ransomware deployment. Sysmon EID 1 wevtutil.exe logged. [BAS-SIM-AKIRA-S9]"
-          Write-Output "FAIL: wevtutil cl ran without EDR intervention. Ensure wevtutil.exe invocation from PowerShell triggers an alert. Security EID 1102 should generate a SIEM alert."
+          Write-Output "FAIL: wevtutil cl ran without EDR intervention. Ensure wevtutil.exe invocation from PowerShell triggers an alert. Security EID 1102 should generate a SIEM alert. [BAS-SIM-AKIRA-S9]"
         } else {
           Write-Output "PASS: wevtutil cl was blocked or failed  -  $($clOut.Trim()). [BAS-SIM-AKIRA-S9]"
         }
       } else {
-        Write-Output "SKIP: Could not create test event log (insufficient privilege). wevtutil cl test skipped. [BAS-SIM-AKIRA-S9]"
+        Write-Output "SKIP: prerequisite missing (could not create the BAS test event log - insufficient privilege). wevtutil cl test skipped. [BAS-SIM-AKIRA-S9]"
       }
     cleanup: |
       try { Remove-EventLog -LogName 'BAS-Sim-Akira' -ErrorAction SilentlyContinue } catch {}
+
+
+    # ===========================================================================
+  # Stage 9b — Indicator Removal (supp.): USN Journal / Prefetch / SRUM Probe
+  # ===========================================================================
+  - id: akira-s9b-antiforensics-probe
+    name: "Akira Stage 9b — USN Journal / Prefetch / SRUM Anti-Forensics Probe (read-only) (T1070.001)"
+    technique_id: T1070.001
+    detection_profiles:
+      - windows_log_manipulation
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 25
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    severity: high
+    confidence: high
+    reversible: true
+    depends_on: [akira-s9-log-clear]
+    blast_radius: "READ-ONLY probes only: uses 'fsutil usn queryjournal C:' to read USN journal metadata, checks presence of the Prefetch directory + a sample of .pf files, and stats SRUDB.dat. Does NOT delete the USN journal, does NOT clear Prefetch, does NOT touch SRUDB. Akira-adjacent actors wipe these to blind forensics — this surfaces whether those anti-forensic write paths are reachable and observable."
+    preconditions: ["Admin privilege.", "Stage 9 executed."]
+    postconditions: ["Anti-forensics posture emitted (USN present, Prefetch present, SRUM present)."]
+    abort_on: []
+    telemetry:
+      - "Sysmon EID 1: fsutil.exe usn queryjournal (read-only)"
+      - "Sysmon EID 1: Get-ChildItem on C:\\Windows\\Prefetch and stat on C:\\Windows\\System32\\LogFiles\\SRU\\SRUDB.dat"
+      - "Security EID 4688: fsutil.exe spawned by powershell.exe"
+    detection:
+      - "EDR: fsutil usn deletejournal / createjournal (WRITE variant) — highest priority anti-forensics IOC"
+      - "SIEM: USN journal size sudden reset; Prefetch folder mass-clear; SRUDB.dat deletion"
+      - "SIEM: fsutil.exe usn queryjournal from PowerShell at unusual time (reconnaissance precursor)"
+    expected_telemetry_count: 2
+    false_positive_notes: "Storage/forensic admin tools legitimately query the USN journal — the WRITE variants ('fsutil usn deletejournal', mass-delete of C:\\Windows\\Prefetch\\*.pf, deletion of SRUDB.dat) are what should page."
+    mitigations:
+      - "Alert on 'fsutil usn deletejournal' and on Prefetch folder mass-deletes."
+      - "Forward Security ETW + Sysmon + WEF off-host; retain 90+ days."
+      - "Enable SRUM + Prefetch and restrict their deletion via ACL/WDAC."
+    references: ["MITRE T1070.001", "CISA AA24-109A (anti-forensics post-encryption)"]
+    evidence: ["Emit usn_present / prefetch_present / srum_present booleans."]
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      # READ-ONLY: query the USN journal, list Prefetch, and stat SRUDB.dat. NEVER delete.
+      $usn = (& fsutil.exe usn queryjournal C: 2>&1) -join "`n"
+      $usnPresent = ($usn -match 'Usn Journal ID') -and ($usn -notmatch 'The journal is not active|not found|Access is denied')
+      $prefetchPath = Join-Path $env:SystemRoot 'Prefetch'
+      $pf = @(Get-ChildItem -Path $prefetchPath -Filter '*.pf' -ErrorAction SilentlyContinue | Select-Object -First 5)
+      $prefetchPresent = ($pf.Count -gt 0)
+      $srumPath = Join-Path $env:SystemRoot 'System32\sru'
+      $srumPresent = (Test-Path (Join-Path $srumPath 'SRUDB.dat'))
+      Write-Output "EXEC T1070.001: anti-forensics probe (read-only) — USN journal present=$usnPresent, Prefetch present=$prefetchPresent, SRUM present=$srumPresent. Akira-adjacent actors delete the USN journal, clear Prefetch, and remove SRUM to blind post-incident forensics. [BAS-SIM-AKIRA-S9B]"
+      if ($usnPresent -and $prefetchPresent -and $srumPresent) {
+        Write-Output "PASS: all three forensic telemetry sources (USN, Prefetch, SRUM) are present and readable — anti-forensics write paths are the residual risk. Alert on 'fsutil usn deletejournal' and Prefetch/SRUM mass-delete."
+      } elseif (-not $usnPresent -or -not $prefetchPresent -or -not $srumPresent) {
+        Write-Output "FAIL: one or more forensic telemetry sources are missing on this host — attacker anti-forensics already ran, or OS hardening removed them. Investigate. USN=$usnPresent Prefetch=$prefetchPresent SRUM=$srumPresent"
+      } else {
+        Write-Output "INFO: anti-forensics posture inconclusive. [BAS-SIM-AKIRA-S9B]"
+      }
+    cleanup: ""
+
+
+    # ===========================================================================

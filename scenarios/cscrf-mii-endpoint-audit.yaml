@@ -1,0 +1,1042 @@
+id: "cscrf-mii-endpoint-audit"
+product_line: common
+name: "CSCRF-MII Endpoint Hardening and Audit Integrity Validation (P0)"
+description: >
+  Internal control-validation checks for endpoint hardening and audit integrity. Verdicts are internal
+  control references (CSCRF-EA-*), not SEBI clause identifiers. Eight checks are read only. Two steps
+  change state (an unauthorised-execution marker and an audit-policy change) and run only with
+  BAS_CONFIRM_ENDPOINT_CHANGE=true, with undo that restores the original state. Deferred to a lab VM:
+  real-time protection impairment, dedicated log clear, and Sysmon service stop. Passing a check does not
+  establish CSCRF compliance.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cscrf-mii
+  - endpoint
+  - audit-integrity
+  - p0
+mitre_phases:
+  - defense-evasion
+  - discovery
+  - execution
+
+steps:
+
+  # -------------------------------------------------------------------------
+  - id: ea-01
+    name: "Security Patch Currency (CSCRF-EA-01)"
+    technique_id: T1082
+    action_key: cscrf_ea_patch_currency
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only query of installed hotfixes."
+    telemetry:
+      - "Hotfix query"
+    detection:
+      - "Patch currency review"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:ProcessCreationGuid = '{0CCE922B-69AE-11D9-BED3-505054503030}'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgEndpointGate { return ($env:BAS_CONFIRM_ENDPOINT_CHANGE -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgProcessCreationSetting {
+      $csv = & auditpol.exe /get /subcategory:$script:ProcessCreationGuid /r 2>$null
+      $row = @($csv | ConvertFrom-Csv)
+      if ($row.Count -eq 0) { return $null }
+      switch ([string]$row[0].'Inclusion Setting') {
+      'No Auditing' { return 0 }
+      'Success' { return 1 }
+      'Failure' { return 2 }
+      'Success and Failure' { return 3 }
+      default { return $null }
+      }
+      }
+      try { $hf = Get-HotFix -ErrorAction Stop | Where-Object { $_.InstalledOn } | Sort-Object InstalledOn -Descending | Select-Object -First 1 } catch { $hf = $null }
+      if (-not $hf) { Complete-CgStep @{ Outcome = 'error'; Reason = 'no installed update history could be read [CSCRF-EA-01]' } 'ea-01' }
+      $age = [int]((Get-Date) - $hf.InstalledOn).TotalDays
+      if ($age -gt 60) { Complete-CgStep @{ Outcome = 'fail'; Reason = "newest update $($hf.HotFixID) is $age days old (baseline 60) [CSCRF-EA-01]" } 'ea-01' }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = "newest update $($hf.HotFixID) is $age days old [CSCRF-EA-01]" } 'ea-01'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:ProcessCreationGuid = '{0CCE922B-69AE-11D9-BED3-505054503030}'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgEndpointGate { return ($env:BAS_CONFIRM_ENDPOINT_CHANGE -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgProcessCreationSetting {
+      $csv = & auditpol.exe /get /subcategory:$script:ProcessCreationGuid /r 2>$null
+      $row = @($csv | ConvertFrom-Csv)
+      if ($row.Count -eq 0) { return $null }
+      switch ([string]$row[0].'Inclusion Setting') {
+      'No Auditing' { return 0 }
+      'Success' { return 1 }
+      'Failure' { return 2 }
+      'Success and Failure' { return 3 }
+      default { return $null }
+      }
+      }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: ea-02
+    name: "Supported Operating System (CSCRF-EA-02)"
+    technique_id: T1082
+    action_key: cscrf_ea_os_supported
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only query of the OS caption and build."
+    telemetry:
+      - "OS query"
+    detection:
+      - "Asset lifecycle review"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:ProcessCreationGuid = '{0CCE922B-69AE-11D9-BED3-505054503030}'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgEndpointGate { return ($env:BAS_CONFIRM_ENDPOINT_CHANGE -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgProcessCreationSetting {
+      $csv = & auditpol.exe /get /subcategory:$script:ProcessCreationGuid /r 2>$null
+      $row = @($csv | ConvertFrom-Csv)
+      if ($row.Count -eq 0) { return $null }
+      switch ([string]$row[0].'Inclusion Setting') {
+      'No Auditing' { return 0 }
+      'Success' { return 1 }
+      'Failure' { return 2 }
+      'Success and Failure' { return 3 }
+      default { return $null }
+      }
+      }
+      try { $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop } catch { Complete-CgStep @{ Outcome = 'error'; Reason = 'OS version could not be read [CSCRF-EA-02]' } 'ea-02' }
+      $cap = $os.Caption
+      $build = [int]$os.BuildNumber
+      if ($cap -match 'Windows 10') {
+      if ($env:BAS_ESU_ENROLLED -eq 'true') { Complete-CgStep @{ Outcome = 'pass'; Reason = "$cap build $build is covered by ESU enrolment (BAS_ESU_ENROLLED=true) [CSCRF-EA-02]" } 'ea-02' }
+      Complete-CgStep @{ Outcome = 'fail'; Reason = "$cap build $build is past end of mainstream support (2025-10-14) with no ESU enrolment recorded [CSCRF-EA-02]" } 'ea-02'
+      }
+      if ($cap -match 'Windows (11|Server 2019|Server 2022|Server 2025)') { Complete-CgStep @{ Outcome = 'pass'; Reason = "$cap build $build is listed as in-support in this baseline [CSCRF-EA-02]" } 'ea-02' }
+      Complete-CgStep @{ Outcome = 'error'; Reason = "$cap is not in the lifecycle baseline; not evaluated [CSCRF-EA-02]" } 'ea-02'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:ProcessCreationGuid = '{0CCE922B-69AE-11D9-BED3-505054503030}'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgEndpointGate { return ($env:BAS_CONFIRM_ENDPOINT_CHANGE -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgProcessCreationSetting {
+      $csv = & auditpol.exe /get /subcategory:$script:ProcessCreationGuid /r 2>$null
+      $row = @($csv | ConvertFrom-Csv)
+      if ($row.Count -eq 0) { return $null }
+      switch ([string]$row[0].'Inclusion Setting') {
+      'No Auditing' { return 0 }
+      'Success' { return 1 }
+      'Failure' { return 2 }
+      'Success and Failure' { return 3 }
+      default { return $null }
+      }
+      }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: ea-03
+    name: "Defender Real-Time Protection Status (CSCRF-EA-03)"
+    technique_id: T1562.001
+    action_key: cscrf_ea_defender_status
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only query of Defender status."
+    telemetry:
+      - "Defender status query"
+    detection:
+      - "Endpoint protection status review"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:ProcessCreationGuid = '{0CCE922B-69AE-11D9-BED3-505054503030}'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgEndpointGate { return ($env:BAS_CONFIRM_ENDPOINT_CHANGE -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgProcessCreationSetting {
+      $csv = & auditpol.exe /get /subcategory:$script:ProcessCreationGuid /r 2>$null
+      $row = @($csv | ConvertFrom-Csv)
+      if ($row.Count -eq 0) { return $null }
+      switch ([string]$row[0].'Inclusion Setting') {
+      'No Auditing' { return 0 }
+      'Success' { return 1 }
+      'Failure' { return 2 }
+      'Success and Failure' { return 3 }
+      default { return $null }
+      }
+      }
+      try { $st = Get-MpComputerStatus -ErrorAction Stop } catch { Complete-CgStep @{ Outcome = 'error'; Reason = 'Defender status could not be read [CSCRF-EA-03]' } 'ea-03' }
+      $bad = @()
+      if (-not $st.RealTimeProtectionEnabled) { $bad += 'real-time protection off' }
+      if (-not $st.AntivirusEnabled) { $bad += 'antivirus off' }
+      if ($bad.Count -gt 0) { Complete-CgStep @{ Outcome = 'fail'; Reason = ('Defender: ' + ($bad -join ', ') + ' [CSCRF-EA-03]') } 'ea-03' }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = "Defender real-time protection and antivirus enabled (signatures $($st.AntivirusSignatureAge) day(s) old) [CSCRF-EA-03]" } 'ea-03'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:ProcessCreationGuid = '{0CCE922B-69AE-11D9-BED3-505054503030}'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgEndpointGate { return ($env:BAS_CONFIRM_ENDPOINT_CHANGE -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgProcessCreationSetting {
+      $csv = & auditpol.exe /get /subcategory:$script:ProcessCreationGuid /r 2>$null
+      $row = @($csv | ConvertFrom-Csv)
+      if ($row.Count -eq 0) { return $null }
+      switch ([string]$row[0].'Inclusion Setting') {
+      'No Auditing' { return 0 }
+      'Success' { return 1 }
+      'Failure' { return 2 }
+      'Success and Failure' { return 3 }
+      default { return $null }
+      }
+      }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: ea-04
+    name: "PowerShell Script Block Logging Configuration (CSCRF-EA-04)"
+    technique_id: T1562.003
+    action_key: cscrf_ea_ps_logging_config
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only registry query."
+    telemetry:
+      - "Registry read"
+    detection:
+      - "Command logging configuration review"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:ProcessCreationGuid = '{0CCE922B-69AE-11D9-BED3-505054503030}'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgEndpointGate { return ($env:BAS_CONFIRM_ENDPOINT_CHANGE -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgProcessCreationSetting {
+      $csv = & auditpol.exe /get /subcategory:$script:ProcessCreationGuid /r 2>$null
+      $row = @($csv | ConvertFrom-Csv)
+      if ($row.Count -eq 0) { return $null }
+      switch ([string]$row[0].'Inclusion Setting') {
+      'No Auditing' { return 0 }
+      'Success' { return 1 }
+      'Failure' { return 2 }
+      'Success and Failure' { return 3 }
+      default { return $null }
+      }
+      }
+      $k = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging'
+      $v = (Get-ItemProperty -Path $k -Name EnableScriptBlockLogging -ErrorAction SilentlyContinue).EnableScriptBlockLogging
+      if ($v -eq 1) { Complete-CgStep @{ Outcome = 'pass'; Reason = 'script block logging enabled by policy [CSCRF-EA-04]' } 'ea-04' }
+      Complete-CgStep @{ Outcome = 'fail'; Reason = 'script block logging is not enabled by policy; PowerShell command content is not recorded [CSCRF-EA-04]' } 'ea-04'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:ProcessCreationGuid = '{0CCE922B-69AE-11D9-BED3-505054503030}'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgEndpointGate { return ($env:BAS_CONFIRM_ENDPOINT_CHANGE -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgProcessCreationSetting {
+      $csv = & auditpol.exe /get /subcategory:$script:ProcessCreationGuid /r 2>$null
+      $row = @($csv | ConvertFrom-Csv)
+      if ($row.Count -eq 0) { return $null }
+      switch ([string]$row[0].'Inclusion Setting') {
+      'No Auditing' { return 0 }
+      'Success' { return 1 }
+      'Failure' { return 2 }
+      'Success and Failure' { return 3 }
+      default { return $null }
+      }
+      }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: ea-05
+    name: "Sysmon Service and Presence (CSCRF-EA-05)"
+    technique_id: T1562.001
+    action_key: cscrf_ea_sysmon_status
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only service query."
+    telemetry:
+      - "Service query"
+    detection:
+      - "Monitoring agent presence review"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:ProcessCreationGuid = '{0CCE922B-69AE-11D9-BED3-505054503030}'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgEndpointGate { return ($env:BAS_CONFIRM_ENDPOINT_CHANGE -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgProcessCreationSetting {
+      $csv = & auditpol.exe /get /subcategory:$script:ProcessCreationGuid /r 2>$null
+      $row = @($csv | ConvertFrom-Csv)
+      if ($row.Count -eq 0) { return $null }
+      switch ([string]$row[0].'Inclusion Setting') {
+      'No Auditing' { return 0 }
+      'Success' { return 1 }
+      'Failure' { return 2 }
+      'Success and Failure' { return 3 }
+      default { return $null }
+      }
+      }
+      $svc = Get-Service -ErrorAction SilentlyContinue | Where-Object { $_.Name -in @('Sysmon', 'Sysmon64') } | Select-Object -First 1
+      if (-not $svc) { Complete-CgStep @{ Outcome = 'fail'; Reason = 'Sysmon service is not installed [CSCRF-EA-05]' } 'ea-05' }
+      if ($svc.Status -ne 'Running') { Complete-CgStep @{ Outcome = 'fail'; Reason = "Sysmon service $($svc.Name) is $($svc.Status) [CSCRF-EA-05]" } 'ea-05' }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = "Sysmon service $($svc.Name) is running [CSCRF-EA-05]" } 'ea-05'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:ProcessCreationGuid = '{0CCE922B-69AE-11D9-BED3-505054503030}'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgEndpointGate { return ($env:BAS_CONFIRM_ENDPOINT_CHANGE -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgProcessCreationSetting {
+      $csv = & auditpol.exe /get /subcategory:$script:ProcessCreationGuid /r 2>$null
+      $row = @($csv | ConvertFrom-Csv)
+      if ($row.Count -eq 0) { return $null }
+      switch ([string]$row[0].'Inclusion Setting') {
+      'No Auditing' { return 0 }
+      'Success' { return 1 }
+      'Failure' { return 2 }
+      'Success and Failure' { return 3 }
+      default { return $null }
+      }
+      }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: ea-06
+    name: "Unnecessary Services Running (CSCRF-EA-06)"
+    technique_id: T1543.003
+    action_key: cscrf_ea_unnecessary_services
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only service query."
+    telemetry:
+      - "Service query"
+    detection:
+      - "Service baseline review"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:ProcessCreationGuid = '{0CCE922B-69AE-11D9-BED3-505054503030}'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgEndpointGate { return ($env:BAS_CONFIRM_ENDPOINT_CHANGE -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgProcessCreationSetting {
+      $csv = & auditpol.exe /get /subcategory:$script:ProcessCreationGuid /r 2>$null
+      $row = @($csv | ConvertFrom-Csv)
+      if ($row.Count -eq 0) { return $null }
+      switch ([string]$row[0].'Inclusion Setting') {
+      'No Auditing' { return 0 }
+      'Success' { return 1 }
+      'Failure' { return 2 }
+      'Success and Failure' { return 3 }
+      default { return $null }
+      }
+      }
+      $disallowed = @('TlntSvr', 'FTPSVC', 'tftpd', 'RemoteRegistry', 'SNMP', 'simptcp')
+      try { $running = Get-Service -ErrorAction Stop | Where-Object { $_.Status -eq 'Running' -and $_.Name -in $disallowed } } catch { Complete-CgStep @{ Outcome = 'error'; Reason = 'services could not be read [CSCRF-EA-06]' } 'ea-06' }
+      if (@($running).Count -gt 0) { Complete-CgStep @{ Outcome = 'fail'; Reason = ('disallowed service(s) running: ' + (($running | ForEach-Object Name) -join ', ') + ' [CSCRF-EA-06]') } 'ea-06' }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = 'no disallowed service is running [CSCRF-EA-06]' } 'ea-06'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:ProcessCreationGuid = '{0CCE922B-69AE-11D9-BED3-505054503030}'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgEndpointGate { return ($env:BAS_CONFIRM_ENDPOINT_CHANGE -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgProcessCreationSetting {
+      $csv = & auditpol.exe /get /subcategory:$script:ProcessCreationGuid /r 2>$null
+      $row = @($csv | ConvertFrom-Csv)
+      if ($row.Count -eq 0) { return $null }
+      switch ([string]$row[0].'Inclusion Setting') {
+      'No Auditing' { return 0 }
+      'Success' { return 1 }
+      'Failure' { return 2 }
+      'Success and Failure' { return 3 }
+      default { return $null }
+      }
+      }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: ea-07
+    name: "Weak Local Security Configuration (CSCRF-EA-07)"
+    technique_id: T1082
+    action_key: cscrf_ea_weak_local_config
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only query of SMB1, guest account and UAC settings."
+    telemetry:
+      - "Registry and account query"
+    detection:
+      - "Security baseline review"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:ProcessCreationGuid = '{0CCE922B-69AE-11D9-BED3-505054503030}'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgEndpointGate { return ($env:BAS_CONFIRM_ENDPOINT_CHANGE -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgProcessCreationSetting {
+      $csv = & auditpol.exe /get /subcategory:$script:ProcessCreationGuid /r 2>$null
+      $row = @($csv | ConvertFrom-Csv)
+      if ($row.Count -eq 0) { return $null }
+      switch ([string]$row[0].'Inclusion Setting') {
+      'No Auditing' { return 0 }
+      'Success' { return 1 }
+      'Failure' { return 2 }
+      'Success and Failure' { return 3 }
+      default { return $null }
+      }
+      }
+      $bad = @()
+      try { $smb1 = (Get-SmbServerConfiguration -ErrorAction Stop).EnableSMB1Protocol } catch { $smb1 = $null }
+      if ($smb1 -eq $null) { Complete-CgStep @{ Outcome = 'error'; Reason = 'SMB server configuration could not be read [CSCRF-EA-07]' } 'ea-07' }
+      if ($smb1) { $bad += 'SMB1 enabled' }
+      $guest = Get-LocalUser -Name 'Guest' -ErrorAction SilentlyContinue
+      if ($guest -and $guest.Enabled) { $bad += 'Guest account enabled' }
+      $lua = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name EnableLUA -ErrorAction SilentlyContinue).EnableLUA
+      if ($lua -ne 1) { $bad += 'UAC disabled' }
+      if ($bad.Count -gt 0) { Complete-CgStep @{ Outcome = 'fail'; Reason = ('weak local configuration: ' + ($bad -join '; ') + ' [CSCRF-EA-07]') } 'ea-07' }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = 'SMB1 off, Guest disabled, UAC on [CSCRF-EA-07]' } 'ea-07'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:ProcessCreationGuid = '{0CCE922B-69AE-11D9-BED3-505054503030}'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgEndpointGate { return ($env:BAS_CONFIRM_ENDPOINT_CHANGE -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgProcessCreationSetting {
+      $csv = & auditpol.exe /get /subcategory:$script:ProcessCreationGuid /r 2>$null
+      $row = @($csv | ConvertFrom-Csv)
+      if ($row.Count -eq 0) { return $null }
+      switch ([string]$row[0].'Inclusion Setting') {
+      'No Auditing' { return 0 }
+      'Success' { return 1 }
+      'Failure' { return 2 }
+      'Success and Failure' { return 3 }
+      default { return $null }
+      }
+      }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: ea-08
+    name: "Application Control Policy Presence (CSCRF-EA-08)"
+    technique_id: T1082
+    action_key: cscrf_ea_app_control_status
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only query of the effective AppLocker policy."
+    telemetry:
+      - "Policy query"
+    detection:
+      - "Application control review"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:ProcessCreationGuid = '{0CCE922B-69AE-11D9-BED3-505054503030}'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgEndpointGate { return ($env:BAS_CONFIRM_ENDPOINT_CHANGE -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgProcessCreationSetting {
+      $csv = & auditpol.exe /get /subcategory:$script:ProcessCreationGuid /r 2>$null
+      $row = @($csv | ConvertFrom-Csv)
+      if ($row.Count -eq 0) { return $null }
+      switch ([string]$row[0].'Inclusion Setting') {
+      'No Auditing' { return 0 }
+      'Success' { return 1 }
+      'Failure' { return 2 }
+      'Success and Failure' { return 3 }
+      default { return $null }
+      }
+      }
+      try { $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop } catch { Complete-CgStep @{ Outcome = 'error'; Reason = 'effective AppLocker policy could not be read [CSCRF-EA-08]' } 'ea-08' }
+      $n = @($pol.RuleCollections).Count
+      $rules = 0
+      foreach ($c in $pol.RuleCollections) { $rules += $c.Count }
+      if ($rules -eq 0) { Complete-CgStep @{ Outcome = 'fail'; Reason = 'no effective AppLocker rules; application execution is not restricted [CSCRF-EA-08]' } 'ea-08' }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = "effective AppLocker policy present ($rules rule(s) in $n collection(s)) [CSCRF-EA-08]" } 'ea-08'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:ProcessCreationGuid = '{0CCE922B-69AE-11D9-BED3-505054503030}'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgEndpointGate { return ($env:BAS_CONFIRM_ENDPOINT_CHANGE -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgProcessCreationSetting {
+      $csv = & auditpol.exe /get /subcategory:$script:ProcessCreationGuid /r 2>$null
+      $row = @($csv | ConvertFrom-Csv)
+      if ($row.Count -eq 0) { return $null }
+      switch ([string]$row[0].'Inclusion Setting') {
+      'No Auditing' { return 0 }
+      'Success' { return 1 }
+      'Failure' { return 2 }
+      'Success and Failure' { return 3 }
+      default { return $null }
+      }
+      }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: ea-09
+    name: "Unauthorised Software Execution from a Temp Path (T1204.002, CSCRF-EA-09)"
+    technique_id: T1204.002
+    action_key: cscrf_ea_unauthorized_exec
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Copies cmd.exe to a per-run temp folder under a marker name and runs it once with a harmless echo. The folder is deleted in undo. Runs only with BAS_CONFIRM_ENDPOINT_CHANGE=true."
+    telemetry:
+      - "File creation in temp"
+      - "Unsigned or renamed binary execution"
+    detection:
+      - "Execution from temp path alert"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:ProcessCreationGuid = '{0CCE922B-69AE-11D9-BED3-505054503030}'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgEndpointGate { return ($env:BAS_CONFIRM_ENDPOINT_CHANGE -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgProcessCreationSetting {
+      $csv = & auditpol.exe /get /subcategory:$script:ProcessCreationGuid /r 2>$null
+      $row = @($csv | ConvertFrom-Csv)
+      if ($row.Count -eq 0) { return $null }
+      switch ([string]$row[0].'Inclusion Setting') {
+      'No Auditing' { return 0 }
+      'Success' { return 1 }
+      'Failure' { return 2 }
+      'Success and Failure' { return 3 }
+      default { return $null }
+      }
+      }
+      if (-not (Test-CgEndpointGate)) { Complete-CgStep @{ Outcome = 'skip'; Reason = 'BAS_CONFIRM_ENDPOINT_CHANGE not true; no file copied or run [CSCRF-EA-09]' } 'ea-09' }
+      $dir = Join-Path $env:TEMP ('bas-ea-' + $script:CgRun)
+      New-CgUndoRecord 'ea-09' @{ scenario = 'ea-09'; dir = $dir }
+      try { New-Item -ItemType Directory -Force -Path $dir -ErrorAction Stop | Out-Null } catch { Complete-CgStep @{ Outcome = 'error'; Reason = "temp folder could not be created: $($_.Exception.Message) [CSCRF-EA-09]" } 'ea-09' }
+      $marker = Join-Path $dir 'bas-ea-marker.exe'
+      try { Copy-Item -LiteralPath "$env:SystemRoot\System32\cmd.exe" -Destination $marker -ErrorAction Stop } catch {
+      Complete-CgStep @{ Outcome = 'pass'; Reason = "copy of a renamed binary to a temp path was refused: $($_.Exception.Message) [CSCRF-EA-09]" } 'ea-09'
+      }
+      $out = & $marker /c "echo BAS-EA-MARKER-$script:CgRun" 2>&1
+      if (($out | Out-String) -match "BAS-EA-MARKER-$script:CgRun") {
+      Complete-CgStep @{ Outcome = 'fail'; Reason = 'renamed binary ran from a temp path; no execution control applied [CSCRF-EA-09]' } 'ea-09'
+      }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = 'renamed binary did not run from the temp path [CSCRF-EA-09]' } 'ea-09'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:ProcessCreationGuid = '{0CCE922B-69AE-11D9-BED3-505054503030}'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgEndpointGate { return ($env:BAS_CONFIRM_ENDPOINT_CHANGE -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgProcessCreationSetting {
+      $csv = & auditpol.exe /get /subcategory:$script:ProcessCreationGuid /r 2>$null
+      $row = @($csv | ConvertFrom-Csv)
+      if ($row.Count -eq 0) { return $null }
+      switch ([string]$row[0].'Inclusion Setting') {
+      'No Auditing' { return 0 }
+      'Success' { return 1 }
+      'Failure' { return 2 }
+      'Success and Failure' { return 3 }
+      default { return $null }
+      }
+      }
+      $rec = Read-CgUndoRecord 'ea-09'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'PASS: Cleanup complete (no record)'; exit 0 }
+      Remove-Item -LiteralPath $rec.dir -Recurse -Force -ErrorAction SilentlyContinue
+      if (Test-Path -LiteralPath $rec.dir) { Write-Output "FAIL: residue folder $($rec.dir) survived undo"; exit 0 }
+      Remove-CgUndoRecord 'ea-09'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: ea-10
+    name: "Audit Policy Change Attempt (T1562.002, CSCRF-EA-10)"
+    technique_id: T1562.002
+    action_key: cscrf_ea_audit_policy_change
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Changes one audit subcategory (Process Creation) to No Auditing, then restores the recorded value in undo. Runs only with BAS_CONFIRM_ENDPOINT_CHANGE=true."
+    telemetry:
+      - "auditpol change"
+    detection:
+      - "Audit policy change alert (EID 4719)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:ProcessCreationGuid = '{0CCE922B-69AE-11D9-BED3-505054503030}'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgEndpointGate { return ($env:BAS_CONFIRM_ENDPOINT_CHANGE -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgProcessCreationSetting {
+      $csv = & auditpol.exe /get /subcategory:$script:ProcessCreationGuid /r 2>$null
+      $row = @($csv | ConvertFrom-Csv)
+      if ($row.Count -eq 0) { return $null }
+      switch ([string]$row[0].'Inclusion Setting') {
+      'No Auditing' { return 0 }
+      'Success' { return 1 }
+      'Failure' { return 2 }
+      'Success and Failure' { return 3 }
+      default { return $null }
+      }
+      }
+      if (-not (Test-CgEndpointGate)) { Complete-CgStep @{ Outcome = 'skip'; Reason = 'BAS_CONFIRM_ENDPOINT_CHANGE not true; audit policy not changed [CSCRF-EA-10]' } 'ea-10' }
+      $orig = Get-CgProcessCreationSetting
+      if ($orig -eq $null) { Complete-CgStep @{ Outcome = 'error'; Reason = 'Process Creation audit setting could not be read [CSCRF-EA-10]' } 'ea-10' }
+      if ($orig -eq 0) { Complete-CgStep @{ Outcome = 'error'; Reason = 'Process Creation auditing was already off before the test; the baseline is unusable, no change made [CSCRF-EA-10]' } 'ea-10' }
+      New-CgUndoRecord 'ea-10' @{ scenario = 'ea-10'; original = $orig }
+      & auditpol.exe /set /subcategory:$script:ProcessCreationGuid /success:disable /failure:disable 2>&1 | Out-Null
+      $after = Get-CgProcessCreationSetting
+      $sf = if ($orig -band 1) { 'enable' } else { 'disable' }
+      $ff = if ($orig -band 2) { 'enable' } else { 'disable' }
+      & auditpol.exe /set /subcategory:$script:ProcessCreationGuid /success:$sf /failure:$ff 2>&1 | Out-Null
+      if ($after -eq 0) { Complete-CgStep @{ Outcome = 'fail'; Reason = 'Process Creation auditing was disabled; the change was not refused and was restored; verify the EID 4719 alert [CSCRF-EA-10]' } 'ea-10' }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = 'disabling Process Creation auditing was refused [CSCRF-EA-10]' } 'ea-10'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:ProcessCreationGuid = '{0CCE922B-69AE-11D9-BED3-505054503030}'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-EA-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Test-CgEndpointGate { return ($env:BAS_CONFIRM_ENDPOINT_CHANGE -eq 'true') }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Get-CgProcessCreationSetting {
+      $csv = & auditpol.exe /get /subcategory:$script:ProcessCreationGuid /r 2>$null
+      $row = @($csv | ConvertFrom-Csv)
+      if ($row.Count -eq 0) { return $null }
+      switch ([string]$row[0].'Inclusion Setting') {
+      'No Auditing' { return 0 }
+      'Success' { return 1 }
+      'Failure' { return 2 }
+      'Success and Failure' { return 3 }
+      default { return $null }
+      }
+      }
+      $GUID = '{0CCE922B-69AE-11D9-BED3-505054503030}'
+      $rec = $null
+      try { $rec = Get-Content -LiteralPath (Join-Path $env:TEMP 'bas-cg-undo\ea-10.json') -Raw | ConvertFrom-Json } catch {}
+      if ($rec -eq $null) { Write-Output 'PASS: Cleanup complete (no record)'; exit 0 }
+      $sf = if ($rec.original -band 1) { 'enable' } else { 'disable' }
+      $ff = if ($rec.original -band 2) { 'enable' } else { 'disable' }
+      & auditpol.exe /set /subcategory:$GUID /success:$sf /failure:$ff 2>&1 | Out-Null
+      Remove-Item -LiteralPath (Join-Path $env:TEMP 'bas-cg-undo\ea-10.json') -Force -ErrorAction SilentlyContinue
+      Write-Output 'PASS: Cleanup complete'
+      exit 0

@@ -1,0 +1,125 @@
+swagger: "2.0"
+info:
+  title: Shop API
+  version: "2.1"
+host: api.example.test
+basePath: /v2/
+schemes: [https]
+consumes: [application/json]
+produces: [application/json]
+security:
+  - bearerAuth: []
+securityDefinitions:
+  bearerAuth: { type: apiKey, name: Authorization, in: header }
+parameters:
+  OrderId:
+    name: orderId
+    in: path
+    required: true
+    type: string
+paths:
+  /orders/{orderId}:
+    parameters:
+      - $ref: "#/parameters/OrderId"
+    get:
+      operationId: getOrder
+      tags: [orders]
+      responses:
+        "200":
+          description: ok
+          schema:
+            $ref: "#/definitions/Order"
+    patch:
+      operationId: patchOrder
+      parameters:
+        - name: body
+          in: body
+          schema:
+            type: object
+            properties:
+              amount: { type: number }
+              note: { type: string }
+      responses:
+        "200": { description: ok }
+  /orders/{orderId}/approve:
+    post:
+      operationId: approveOrder
+      parameters:
+        - $ref: "#/parameters/OrderId"
+      responses:
+        "200": { description: ok }
+  /orders:
+    get:
+      operationId: listOrders
+      parameters:
+        - { name: limit, in: query, type: integer }
+      responses:
+        "200": { description: ok }
+  /admin/users:
+    post:
+      operationId: createUser
+      parameters:
+        - name: body
+          in: body
+          schema:
+            type: object
+            properties:
+              email: { type: string }
+              role: { type: string, default: "hunter2-super-secret-example" }
+      responses:
+        "201": { description: created }
+  /webhooks:
+    post:
+      operationId: registerWebhook
+      parameters:
+        - name: body
+          in: body
+          schema:
+            $ref: "#/definitions/Hook"
+      responses:
+        "201": { description: created }
+  /files:
+    post:
+      operationId: upload
+      consumes: [multipart/form-data]
+      parameters:
+        - { name: file, in: formData, type: file }
+      responses:
+        "201": { description: created }
+  /signup:
+    post:
+      operationId: signup
+      parameters:
+        - { name: email, in: formData, type: string }
+        - { name: avatar, in: formData, type: file }
+      responses:
+        "201": { description: created }
+  /catalog:
+    get:
+      operationId: catalog
+      security: []
+      responses:
+        "200": { description: ok }
+definitions:
+  Order:
+    type: object
+    properties:
+      id: { type: string }
+      total: { type: number }
+      customer:
+        type: object
+        properties:
+          email: { type: string }
+          national_id: { type: string }
+      items:
+        type: array
+        items:
+          $ref: "#/definitions/Item"
+  Item:
+    type: object
+    properties:
+      sku: { type: string }
+  Hook:
+    type: object
+    properties:
+      callback_url: { type: string }

@@ -1,0 +1,112 @@
+id: collection-sensitive-discovery
+product_line: dlp
+name: Sensitive File and Database Discovery
+description: >
+  Telemetry-safe emulation of an adversary searching the user's profile for
+  sensitive file types and database files before choosing what to collect. The
+  scenario only counts matches by extension and lists database services. It opens
+  no file, reads no content, and makes no database connection. It covers the
+  discovery phase that precedes collection, which the review found missing from
+  the chain.
+
+  KILL CHAIN STAGES:
+    1. Sensitive Extension Search — count office, data and key-material extensions in the profile's document folders (T1083)
+    2. Database Discovery         — look for database files and running database services, read-only (T1083)
+
+  SAFETY: Read-only. Files are found by extension and counted. No file is opened
+  or read, and no database or service is changed. Searches are limited to the
+  current user's Documents and Desktop, with a depth of two and a 2,000-file cap.
+  Windows only. Telemetry mode.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - discovery
+  - sensitive-data
+  - database
+  - dlp
+  - data-theft
+  - t1083
+  - mitre
+mitre_phases:
+  - discovery
+
+live_policy:
+  block_on_domain_controller: true
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Sensitive Extension Search (T1083)
+  # ---------------------------------------------------------------------------
+  - name: "Sensitive Discovery 1 — Sensitive Extension Count in Profile Folders (T1083)"
+    technique_id: T1083
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Lists up to 2,000 file names in the current user's Documents and Desktop, to depth two, and counts those with office, data, or key-material extensions. No file is opened or read. Adversaries use this to pick collection targets."
+    telemetry:
+      - "Sysmon EID 1: powershell.exe with a recursive file search"
+      - "PowerShell EID 4104: Get-ChildItem script block"
+    detection:
+      - "EDR/DLP: broad file-extension search across document folders — collection precursor"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $exts = @('.docx','.xlsx','.pdf','.csv','.kdbx','.pfx','.key','.pem')
+      $roots = @((Join-Path $env:USERPROFILE 'Documents'), (Join-Path $env:USERPROFILE 'Desktop')) | Where-Object { Test-Path $_ }
+      $hits = @()
+      foreach ($r in $roots) {
+        $hits += Get-ChildItem -Path $r -File -Recurse -Depth 2 -ErrorAction SilentlyContinue | Select-Object -First 2000 | Where-Object { $exts -contains $_.Extension.ToLower() }
+      }
+      Write-Output "EXEC T1083: found $(@($hits).Count) file(s) with sensitive extensions in $($roots.Count) profile folder(s). No file content was read. Discovery Stage 1. [BAS-SIM-DSC-S1]"
+      if (@($hits).Count -gt 0) {
+        Write-Output "FAIL: A search for sensitive file types across document folders raised no alert. Discovery of this kind should precede a DLP or EDR alert, not follow the collection."
+      } else {
+        Write-Output "PASS: No sensitive-extension files were present to find."
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Database Discovery (T1083)
+  # ---------------------------------------------------------------------------
+  - name: "Sensitive Discovery 2 — Database File and Service Discovery, Read-Only (T1083)"
+    technique_id: T1083
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Counts database files by extension (.mdf, .ldf, .db, .sqlite, .accdb) in the profile folders, and lists running database services by name. Read-only. No database is opened or queried."
+    telemetry:
+      - "PowerShell EID 4104: Get-Service and Get-ChildItem script blocks"
+    detection:
+      - "EDR: enumeration of database services and files from a user context"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $dbExts = @('.mdf','.ldf','.db','.sqlite','.accdb')
+      $roots = @((Join-Path $env:USERPROFILE 'Documents'), (Join-Path $env:USERPROFILE 'Desktop')) | Where-Object { Test-Path $_ }
+      $dbFiles = @()
+      foreach ($r in $roots) {
+        $dbFiles += Get-ChildItem -Path $r -File -Recurse -Depth 2 -ErrorAction SilentlyContinue | Select-Object -First 2000 | Where-Object { $dbExts -contains $_.Extension.ToLower() }
+      }
+      $svc = @(Get-Service | Where-Object { $_.Name -match '^(MSSQL|MySQL|postgresql|Oracle)' -and $_.Status -eq 'Running' })
+      Write-Output "EXEC T1083: found $(@($dbFiles).Count) database file(s) and $($svc.Count) running database service(s). Nothing was opened or queried. Discovery Stage 2. [BAS-SIM-DSC-S2]"
+      if (@($dbFiles).Count + $svc.Count -gt 0) {
+        Write-Output "FAIL: Database files and services were enumerated with no alert. Database discovery from a user context is a precursor to collection."
+      } else {
+        Write-Output "PASS: No database files or running database services were visible."
+      }
+    cleanup: ""

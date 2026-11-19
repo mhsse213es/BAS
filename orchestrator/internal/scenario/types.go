@@ -123,10 +123,18 @@ type YAMLPayload struct {
 	Content string `yaml:"content" json:"content"` // base64-encoded file content
 }
 
+// AttackGapNoCleanTechnique marks a step that deliberately has no ATT&CK technique
+// because no technique describes its behavior. Such steps are excluded from
+// technique coverage but still executed and reported.
+const AttackGapNoCleanTechnique = "no_clean_attack_technique"
+
 // Step is one ATT&CK technique in a scenario YAML file — server-side definition.
 type Step struct {
 	Name        string `yaml:"name"                  json:"name"`
 	TechniqueID string `yaml:"technique_id"          json:"techniqueId"`
+	// AttackGap explains why a step has no ATT&CK technique_id. Only
+	// AttackGapNoCleanTechnique is accepted.
+	AttackGap string `yaml:"attack_gap,omitempty"  json:"attackGap,omitempty"`
 	// CheckID is a stable, ATT&CK-independent identifier for configuration/
 	// posture checks (e.g. "windows-firewall-enabled"). technique_id stays
 	// optional metadata for checks that genuinely map to a technique;
@@ -155,11 +163,16 @@ type Step struct {
 	// These document the risk and expected detection signal of a live step so
 	// operators see the blast radius before running and SOC teams know what to
 	// look for. Surfaced in the run results; ignored in posture mode.
-	Risk        string   `yaml:"risk,omitempty"         json:"risk,omitempty"`        // low | medium | high
-	BlastRadius string   `yaml:"blast_radius,omitempty" json:"blastRadius,omitempty"` // short human label, e.g. "spawns benign child process; no persistence"
-	Reversible  bool     `yaml:"reversible,omitempty"   json:"reversible,omitempty"`  // true = self-cleaning / no residual change
-	Telemetry   []string `yaml:"telemetry,omitempty"    json:"telemetry,omitempty"`   // expected events, e.g. "Security EID 4688", "Sysmon EID 1"
-	Detection   []string `yaml:"detection,omitempty"    json:"detection,omitempty"`   // detection objectives, e.g. "EDR: WmiPrvSE child process"
+	Risk        string `yaml:"risk,omitempty"         json:"risk,omitempty"`        // low | medium | high
+	BlastRadius string `yaml:"blast_radius,omitempty" json:"blastRadius,omitempty"` // short human label, e.g. "spawns benign child process; no persistence"
+	Reversible  bool   `yaml:"reversible,omitempty"   json:"reversible,omitempty"`  // true = self-cleaning / no residual change
+	// Irreversible is the author's explicit statement that this step's effect cannot be undone
+	// (for example, deleting shadow copies). It must carry a reason of at least 20 characters.
+	// It is documentation for the step contract only: it never changes the action's execution
+	// class, and it never bypasses lab-gating or authorization requirements.
+	Irreversible string   `yaml:"irreversible,omitempty" json:"irreversible,omitempty"`
+	Telemetry    []string `yaml:"telemetry,omitempty"    json:"telemetry,omitempty"` // expected events, e.g. "Security EID 4688", "Sysmon EID 1"
+	Detection    []string `yaml:"detection,omitempty"    json:"detection,omitempty"` // detection objectives, e.g. "EDR: WmiPrvSE child process"
 
 	// ActionKey selects which catalog entry (execclass.go) classifies this
 	// step's destructiveness, alongside TechniqueID. It is a LOOKUP KEY
@@ -278,6 +291,10 @@ type LivePolicy struct {
 	MaxSprayAttempts        int      `yaml:"max_spray_attempts,omitempty"          json:"maxSprayAttempts,omitempty"`
 	SprayAccountAllowlist   []string `yaml:"spray_account_allowlist,omitempty"     json:"sprayAccountAllowlist,omitempty"`
 	ExecutionWindow         string   `yaml:"execution_window,omitempty"            json:"executionWindow,omitempty"` // "HH:MM-HH:MM" local; empty = always
+	// LabException is NEVER read from a scenario file (yaml:"-"). The server sets
+	// it at dispatch only for the designated spray-lab agent and the lab spray
+	// scenario. See api.labExceptionFor.
+	LabException bool `yaml:"-" json:"labException,omitempty"`
 }
 
 // Scenario is a replayable named attack chain loaded from a YAML file.

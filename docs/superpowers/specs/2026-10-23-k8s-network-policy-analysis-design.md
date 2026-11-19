@@ -1,6 +1,6 @@
 # Kubernetes network-policy boundary analysis (scenario 9) — design
 
-Status: design only, not built. Read-only analysis. Active connection testing is a separate scenario and is not part of this document.
+Status: built as the discovery change (§9) and the evaluator (§5–6, `internal/cloudgraph/k8s_netpol*.go`). Not yet exposed through an HTTP API, and the expectations input format (§10.1) is still the owner's decision. Read-only analysis. Active connection testing is a separate scenario and is not part of this document.
 
 ## 1. Intent
 

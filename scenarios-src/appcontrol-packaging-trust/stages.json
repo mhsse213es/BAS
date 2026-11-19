@@ -1,0 +1,66 @@
+[
+  {
+    "id": "appctl-e01-appx-rules",
+    "n": 1,
+    "name": "Application control Packaged App Rules: Appx collection enforcement posture (T1553)",
+    "technique_id": "T1553",
+    "timeout_sec": 60,
+    "blast_radius": "Read-only: reads the AppLocker packaged-app (Appx) rule collection mode next to the other collections and counts installed packages. No package is installed or launched.",
+    "telemetry": [
+      "AppLocker effective policy (Appx collection)"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ],
+    "production_safe": true,
+    "risk": "low"
+  },
+  {
+    "id": "appctl-e02-sideloading",
+    "n": 2,
+    "name": "Application control Packaged App Trust: sideloading and developer mode while enforcing (T1553)",
+    "technique_id": "T1553",
+    "timeout_sec": 60,
+    "blast_radius": "Read-only: reads the AllowAllTrustedApps and AllowDevelopmentWithoutDevLicense settings and reports them only where application control is enforcing. Changes nothing.",
+    "telemetry": [
+      "Registry values under Appx policy and AppModelUnlock"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ],
+    "production_safe": true,
+    "risk": "low"
+  },
+  {
+    "id": "appctl-e03-always-install-elevated",
+    "n": 3,
+    "name": "Application control Installer Trust: AlwaysInstallElevated bypass (T1548)",
+    "technique_id": "T1548",
+    "timeout_sec": 60,
+    "blast_radius": "Read-only: reads the AlwaysInstallElevated policy for machine and user. When both are 1, any MSI installs with SYSTEM rights, so MSI rules are not a boundary. Changes nothing.",
+    "telemetry": [
+      "Registry values under Policies\\Microsoft\\Windows\\Installer"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ],
+    "production_safe": true,
+    "risk": "low"
+  },
+  {
+    "id": "appctl-e04-writable-allowed-paths",
+    "n": 4,
+    "name": "Application control Trusted Location Trust: user-writable directories under the Windows directory (T1553)",
+    "technique_id": "T1553",
+    "timeout_sec": 90,
+    "blast_radius": "Read-only: reads the ACLs of well-known directories under the Windows directory that the default AppLocker path rule trusts and reports any that ordinary users can write. Nothing is written.",
+    "telemetry": [
+      "File system ACLs under the Windows directory"
+    ],
+    "detection": [
+      "Block event (enforced) or audit event (audit mode) correlated to this test window and artifact; audit events are recorded but never counted as prevention"
+    ],
+    "production_safe": true,
+    "risk": "low"
+  }
+]

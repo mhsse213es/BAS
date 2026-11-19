@@ -1,0 +1,37 @@
+# CDE and ATM management isolation (pack: cde-atm).
+# Rules: fw/rules/cde-atm.sh. app-to-cde uses a REJECT rule, so this pack
+# exercises both DROP and REJECT decisions.
+#
+# Positive control: atm-local-control is same-zone (probe-atm -> atm-mgmt),
+# as with the SWIFT pack. No routed authorized path exists for ATM management.
+id: cde-atm-isolation
+name: CDE and ATM management isolation
+probes:
+  - id: corp-to-cde
+    src: corp
+    dst: cde
+    port: 8443
+    proto: tcp
+    expect: deny
+    note: Corporate IT must not reach the cardholder data environment.
+  - id: corp-to-atm
+    src: corp
+    dst: atm
+    port: 9000
+    proto: tcp
+    expect: deny
+    note: Corporate IT must not reach ATM management.
+  - id: app-to-cde
+    src: app
+    dst: cde
+    port: 8443
+    proto: tcp
+    expect: deny
+    note: Core banking app is not authorized into the CDE; enforced by REJECT.
+  - id: atm-local-control
+    src: atm
+    dst: atm
+    port: 9000
+    proto: tcp
+    expect: allow
+    note: Same-zone positive control; no firewall crossing.

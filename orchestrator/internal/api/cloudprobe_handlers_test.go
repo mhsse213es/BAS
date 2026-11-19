@@ -5,8 +5,10 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/cloudgraph"
@@ -38,8 +40,14 @@ func (p *probeRecorder) Probe(context.Context, cloudgraph.ProbeRequest) (cloudgr
 	return p.out, nil
 }
 
+// probeHandler builds a handler whose allow-list comes from CLOUD_ALLOWED_ACCOUNTS,
+// read through the same parser the server uses at startup.
 func probeHandler(rec *probeRecorder) *Handler {
-	h := &Handler{probeAudit: rec.audit}
+	allow, err := cloudgraph.ParseAccountAllowList(os.Getenv(cloudAllowedAccountsEnv))
+	if err != nil {
+		panic(err)
+	}
+	h := &Handler{probeAudit: rec.audit, cloud: &CloudSettings{allow: allow, gate: newCloudDiscoveryGate(4, 8, time.Second)}}
 	h.cloudProber = func(context.Context, string, string) (cloudgraph.Prober, error) { return rec, nil }
 	return h
 }
@@ -53,7 +61,7 @@ func postProbe(t *testing.T, h *Handler, body string) *httptest.ResponseRecorder
 // A request that carries a read-only label is refused by the decoder. Nothing is
 // audited and nothing runs.
 func TestCloudProbe_UnknownFieldRefusedBeforeAnyAction(t *testing.T) {
-	t.Setenv(cloudProbeAllowListEnv, "aws:111111111111")
+	t.Setenv(cloudAllowedAccountsEnv, "aws:111111111111")
 	rec := &probeRecorder{}
 	body := strings.Replace(probeBody, `"mode":"%s"`, `"mode":"live-readonly","readOnly":true`, 1)
 	res := postProbe(t, probeHandler(rec), body)
@@ -68,7 +76,7 @@ func TestCloudProbe_UnknownFieldRefusedBeforeAnyAction(t *testing.T) {
 // Without an authenticated actor, the audit entry cannot say who asked, so the
 // request is refused.
 func TestCloudProbe_NoActorRefused(t *testing.T) {
-	t.Setenv(cloudProbeAllowListEnv, "aws:111111111111")
+	t.Setenv(cloudAllowedAccountsEnv, "aws:111111111111")
 	rec := &probeRecorder{}
 	req := httptest.NewRequest(http.MethodPost, "/api/cloud-probes", strings.NewReader(probeBody))
 	res := httptest.NewRecorder()
@@ -84,7 +92,7 @@ func TestCloudProbe_NoActorRefused(t *testing.T) {
 // An account that is not allow-listed is rejected. The request is still audited,
 // and the outcome is recorded as rejected. No provider is contacted.
 func TestCloudProbe_UnlistedAccountRejectedAndAudited(t *testing.T) {
-	t.Setenv(cloudProbeAllowListEnv, "aws:111111111111")
+	t.Setenv(cloudAllowedAccountsEnv, "aws:111111111111")
 	rec := &probeRecorder{}
 	body := strings.Replace(probeBody, "111111111111", "999999999999", 1)
 	body = strings.Replace(body, `"mode":"%s"`, `"mode":"live-readonly"`, 1)
@@ -102,7 +110,7 @@ func TestCloudProbe_UnlistedAccountRejectedAndAudited(t *testing.T) {
 
 // An unset allow-list permits nothing.
 func TestCloudProbe_UnsetAllowListPermitsNothing(t *testing.T) {
-	t.Setenv(cloudProbeAllowListEnv, "")
+	t.Setenv(cloudAllowedAccountsEnv, "")
 	rec := &probeRecorder{}
 	res := postProbe(t, probeHandler(rec), strings.Replace(probeBody, `"mode":"%s"`, `"mode":"live-readonly"`, 1))
 	if res.Code != http.StatusBadRequest || rec.calls != 0 {
@@ -112,7 +120,7 @@ func TestCloudProbe_UnsetAllowListPermitsNothing(t *testing.T) {
 
 // If the requested entry cannot be written, the probe does not run.
 func TestCloudProbe_RequestedAuditFailureStopsProbe(t *testing.T) {
-	t.Setenv(cloudProbeAllowListEnv, "aws:111111111111")
+	t.Setenv(cloudAllowedAccountsEnv, "aws:111111111111")
 	rec := &probeRecorder{failOn: "cloud.probe.requested"}
 	res := postProbe(t, probeHandler(rec), strings.Replace(probeBody, `"mode":"%s"`, `"mode":"live-readonly"`, 1))
 	if res.Code != http.StatusServiceUnavailable {
@@ -125,7 +133,7 @@ func TestCloudProbe_RequestedAuditFailureStopsProbe(t *testing.T) {
 
 // Dry-run returns the plan and contacts no provider, even with a prober present.
 func TestCloudProbe_DryRunContactsNoProvider(t *testing.T) {
-	t.Setenv(cloudProbeAllowListEnv, "aws:111111111111")
+	t.Setenv(cloudAllowedAccountsEnv, "aws:111111111111")
 	rec := &probeRecorder{out: cloudgraph.ProbeOutcome{Outcome: "allowed", Evidence: cloudgraph.EvidenceObserved}}
 	res := postProbe(t, probeHandler(rec), strings.Replace(probeBody, "%s", "dry-run", 1))
 	if res.Code != http.StatusOK {
@@ -141,7 +149,7 @@ func TestCloudProbe_DryRunContactsNoProvider(t *testing.T) {
 
 // A live probe runs once, and both the request and the outcome are audited.
 func TestCloudProbe_LiveProbeRunsAndIsAudited(t *testing.T) {
-	t.Setenv(cloudProbeAllowListEnv, "aws:111111111111")
+	t.Setenv(cloudAllowedAccountsEnv, "aws:111111111111")
 	rec := &probeRecorder{out: cloudgraph.ProbeOutcome{Outcome: "allowed", Evidence: cloudgraph.EvidenceObserved}}
 	res := postProbe(t, probeHandler(rec), strings.Replace(probeBody, "%s", "live-readonly", 1))
 	if res.Code != http.StatusOK {
@@ -158,7 +166,7 @@ func TestCloudProbe_LiveProbeRunsAndIsAudited(t *testing.T) {
 // If the outcome entry cannot be written after the probe ran, the result is
 // withheld, because it could not be recorded.
 func TestCloudProbe_OutcomeAuditFailureWithholdsResult(t *testing.T) {
-	t.Setenv(cloudProbeAllowListEnv, "aws:111111111111")
+	t.Setenv(cloudAllowedAccountsEnv, "aws:111111111111")
 	rec := &probeRecorder{failOn: "cloud.probe.outcome", out: cloudgraph.ProbeOutcome{Outcome: "allowed", Evidence: cloudgraph.EvidenceObserved}}
 	res := postProbe(t, probeHandler(rec), strings.Replace(probeBody, "%s", "live-readonly", 1))
 	if res.Code != http.StatusInternalServerError {

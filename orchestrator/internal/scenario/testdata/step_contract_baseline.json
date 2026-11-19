@@ -1,0 +1,932 @@
+{
+  "acl-privilege-exposure-audit.yaml": {
+    "cleanup": 0,
+    "detection": 1,
+    "telemetry": 0
+  },
+  "ad-forced-auth-attempt.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "ad-forged-ticket-telemetry.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "ad-ntds-access-attempt.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "ad-ntlm-relay-posture.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "ad-pass-the-hash-telemetry.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "ad-pass-the-ticket-telemetry.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "ad-password-guessing-lab.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "ad-password-spray-lab.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "adcs-esc-template-exposure-audit.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "akira-double-extortion-assessment.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "akira-esxi-assessment.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "akira-kill-chain.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "appcontrol-advanced-loading.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "appcontrol-efficacy.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "appcontrol-file-enforcement.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "appcontrol-operational-reliability.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "appcontrol-packaging-trust.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "appcontrol-policy-integrity.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "appcontrol-proxy-execution.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "appcontrol-script-interpreter.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "apt29-cloud-identity.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "apt29-collection-staging.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "apt29-command-control.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "apt29-credential-access.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "apt29-execution-evasion.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "apt29-kill-chain-phase7.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "apt29-kill-chain.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "apt29-persistence.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "apt36-collection-credential.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "apt36-command-control.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "apt36-discovery.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "apt36-initial-execution.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "apt36-kill-chain.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "apt36-persistence-evasion.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "av-ngav-assessment.yaml": {
+    "cleanup": 0,
+    "detection": 16,
+    "telemetry": 16
+  },
+  "black-basta-kill-chain.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "blackcat-kill-chain.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "caldera-lateral-movement.yaml": {
+    "cleanup": 0,
+    "detection": 5,
+    "telemetry": 5
+  },
+  "carbanak-bfsi-amount-manipulation.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "carbanak-bfsi-app-discovery.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "carbanak-bfsi-beneficiary-creation.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "carbanak-bfsi-limit-modification.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "carbanak-bfsi-off-hours-transfer.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "carbanak-bfsi-session-misuse.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "carbanak-bfsi-unauthorized-approval.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "carbanak-kill-chain.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "clop-kill-chain.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cloud-vm-attack.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cloud-vm-aws-iam.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cloud-vm-azure-identity.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cloud-vm-credential-exposure.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cloud-vm-data-access.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cloud-vm-linux-aws-iam.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cloud-vm-linux-azure-identity.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cloud-vm-linux-credential-exposure.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cloud-vm-linux-data-access.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cloud-vm-linux-persistence-lateral.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cloud-vm-persistence-lateral.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cobalt-group-bfsi-access-execution.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cobalt-group-bfsi-c2-variants.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cobalt-group-bfsi-collection-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cobalt-group-bfsi-credential-access.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cobalt-group-bfsi-defense-evasion.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cobalt-group-bfsi-discovery.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cobalt-group-bfsi-financial-impact.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cobalt-group-bfsi-lateral-movement.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cobalt-group-bfsi-persistence-variants.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cobalt-group-bfsi-recon.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cobalt-group-kill-chain.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-archive-split-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-browser-cloud-email-discovery.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-channel-variants-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-clipboard-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-cloud-storage-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-database-export-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-email-mailbox-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-encrypted-archive-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-encrypted-blob-detection.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-hidden-staging-manifest-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-large-volume-transfer.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-low-and-slow-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-masquerade-cleanup-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-multidir-automated-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-network-share-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-pii-financial-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-remote-share-discovery.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-removable-media-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-sensitive-discovery.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-source-code-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "collection-staging-exfil.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "credential-access.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "credential-browser-store-access.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "credential-dpapi-store-discovery.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "credential-files-discovery.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "credential-keys-certs-discovery.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "credential-registry-discovery.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cscrf-mii-backup-dr.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cscrf-mii-data-protection.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cscrf-mii-drill.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cscrf-mii-endpoint-audit.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cscrf-mii-filecopy-recovery.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cscrf-mii-identity.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 1
+  },
+  "cscrf-mii-incident-response.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cscrf-mii-mii-controls.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cscrf-mii-network.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "cscrf-mii-siem.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dbsim-db01-auth-policy.yaml": {
+    "cleanup": 0,
+    "detection": 2,
+    "telemetry": 2
+  },
+  "dbsim-db02-excessive-grants.yaml": {
+    "cleanup": 0,
+    "detection": 2,
+    "telemetry": 2
+  },
+  "dbsim-db03-unauthorized-access.yaml": {
+    "cleanup": 0,
+    "detection": 1,
+    "telemetry": 1
+  },
+  "dbsim-db04-audit-coverage.yaml": {
+    "cleanup": 0,
+    "detection": 2,
+    "telemetry": 2
+  },
+  "dbsim-db05-suspicious-read.yaml": {
+    "cleanup": 0,
+    "detection": 1,
+    "telemetry": 1
+  },
+  "dbsim-db06-account-revocation.yaml": {
+    "cleanup": 0,
+    "detection": 1,
+    "telemetry": 1
+  },
+  "dbsim-db07-sensitive-classification.yaml": {
+    "cleanup": 0,
+    "detection": 1,
+    "telemetry": 1
+  },
+  "dbsim-db08-audit-tamper-resistance.yaml": {
+    "cleanup": 0,
+    "detection": 1,
+    "telemetry": 1
+  },
+  "dbsim-db09-bounded-bulk-read.yaml": {
+    "cleanup": 0,
+    "detection": 1,
+    "telemetry": 1
+  },
+  "dbsim-db10-write-delete-prevention.yaml": {
+    "cleanup": 0,
+    "detection": 1,
+    "telemetry": 1
+  },
+  "dbsim-db11-backup-export-permissions.yaml": {
+    "cleanup": 0,
+    "detection": 1,
+    "telemetry": 1
+  },
+  "dcsync-replication-rights-audit.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dcsync-replication-rights-live-verification.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dll-hijack-execution.yaml": {
+    "cleanup": 3,
+    "detection": 5,
+    "telemetry": 5
+  },
+  "dlp-exfiltration-ai-prompt.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dlp-exfiltration-browser-upload.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dlp-exfiltration-cloud-storage.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dlp-exfiltration-coderepo.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dlp-exfiltration-data-types.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dlp-exfiltration-db-export.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dlp-exfiltration-dns-tunnel.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dlp-exfiltration-file-carriers.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dlp-exfiltration-multichannel.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dlp-exfiltration-sftp.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dlp-exfiltration-sink-https.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dlp-exfiltration-smtp.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dlp-exfiltration-telnet.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dlp-exfiltration-validation.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dlp-exfiltration-webhook.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "endpoint-mastery/em-01-control-validation.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "endpoint-mastery/em-02-attack-behavioral-depth.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "endpoint-mastery/em-03-memory-attacks.yaml": {
+    "cleanup": 0,
+    "detection": 1,
+    "telemetry": 1
+  },
+  "endpoint-mastery/em-04-credential-theft.yaml": {
+    "cleanup": 0,
+    "detection": 1,
+    "telemetry": 0
+  },
+  "endpoint-mastery/em-05-persistence-validation.yaml": {
+    "cleanup": 0,
+    "detection": 1,
+    "telemetry": 0
+  },
+  "endpoint-mastery/em-06-defense-evasion.yaml": {
+    "cleanup": 0,
+    "detection": 1,
+    "telemetry": 1
+  },
+  "endpoint-mastery/em-07-ransomware-readiness.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "endpoint-mastery/em-08-exploit-mitigation.yaml": {
+    "cleanup": 0,
+    "detection": 2,
+    "telemetry": 2
+  },
+  "endpoint-mastery/em-09-browser-attack.yaml": {
+    "cleanup": 0,
+    "detection": 2,
+    "telemetry": 1
+  },
+  "endpoint-mastery/em-10-endpoint-exfiltration.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "endpoint-mastery/em-11-hardening-validation.yaml": {
+    "cleanup": 0,
+    "detection": 2,
+    "telemetry": 2
+  },
+  "endpoint-mastery/em-12-adversary-emulation.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "endpoint-mastery/em-13-product-validation.yaml": {
+    "cleanup": 0,
+    "detection": 1,
+    "telemetry": 1
+  },
+  "endpoint-mastery/em-14-continuous-validation.yaml": {
+    "cleanup": 0,
+    "detection": 1,
+    "telemetry": 1
+  },
+  "entra-hybrid-identity-attack.yaml": {
+    "cleanup": 0,
+    "detection": 1,
+    "telemetry": 1
+  },
+  "evasion-testing.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "exposure-validation.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "fin7-kill-chain.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "fin8-kill-chain.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "gpo-writable-linked-exposure-audit.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "hunters-international-kill-chain.yaml": {
+    "cleanup": 2,
+    "detection": 9,
+    "telemetry": 9
+  },
+  "insider-threat-kill-chain.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "kerberoasting-ad-drill.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "kerberos-delegation-exposure-audit.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "lazarus-swift-heist.yaml": {
+    "cleanup": 0,
+    "detection": 7,
+    "telemetry": 7
+  },
+  "linux-ransomware-drill.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "lockbit-kill-chain.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "lolbin-execution-coverage.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "lolbin-execution.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "lolbin-extended.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "medusa-kill-chain.yaml": {
+    "cleanup": 3,
+    "detection": 10,
+    "telemetry": 10
+  },
+  "outlook-rules-bec.yaml": {
+    "cleanup": 5,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "play-kill-chain.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "privileged-account-hygiene-audit.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "purplesharp-ad-drill.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "ransomhub-kill-chain.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "ransomware-backup-recovery-assurance.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "ransomware-drill.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "ransomware-lateral-containment-assessment.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "rbcd-configure-exposure-audit.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "rhysida-kill-chain.yaml": {
+    "cleanup": 2,
+    "detection": 11,
+    "telemetry": 11
+  },
+  "scattered-spider-kill-chain.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "silence-kill-chain.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "ta505-kill-chain.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "trust-direction-type-audit.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "trust-sid-history-exposure-audit.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "ubuntu-hardening-validation.yaml": {
+    "cleanup": 17,
+    "detection": 20,
+    "telemetry": 20
+  },
+  "upi-fraud-killchain.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "volt-typhoon-lotl.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "windows-discovery-validation.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  }
+}

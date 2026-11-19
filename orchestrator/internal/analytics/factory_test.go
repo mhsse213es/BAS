@@ -2,6 +2,7 @@ package analytics
 
 import (
 	"context"
+	"github.com/audspect/bas/internal/contentregistry"
 	"testing"
 	"time"
 
@@ -389,4 +390,65 @@ func seedPublishedContentVersion(t *testing.T, pool *pgxpool.Pool, contentID str
 		t.Fatalf("seedPublishedContentVersion: %v", err)
 	}
 	return vid
+}
+
+// A scenario that used up its validation attempts stays DRAFT and the validator never touches it again. The
+// operator has to be told, or it looks like the pipeline is simply slow.
+func TestDataQuality_ListsScenariosThatStoppedAfterMaxValidationAttempts(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		addAttempts := func(vid string, n int) {
+			for i := 0; i < n; i++ {
+				mustExec(t, pool, `INSERT INTO content_validations (content_version_id, level, outcome, validator, validator_version)
+					VALUES ($1, 'EXECUTION', 'FAIL', 'validationlab', '1')`, vid)
+			}
+		}
+		stalled := seedContentVersionWithLifecycle(t, pool, "cv-stalled", "DRAFT")
+		addAttempts(stalled, contentregistry.MaxValidationAttempts)
+		stillTrying := seedContentVersionWithLifecycle(t, pool, "cv-still-trying", "DRAFT")
+		addAttempts(stillTrying, contentregistry.MaxValidationAttempts-1)
+		validated := seedContentVersionWithLifecycle(t, pool, "cv-validated-many", "VALIDATED")
+		addAttempts(validated, contentregistry.MaxValidationAttempts+2)
+
+		got, err := dataQuality(context.Background(), pool, 7*24*time.Hour)
+		if err != nil {
+			t.Fatalf("dataQuality: %v", err)
+		}
+		if len(got.StalledValidations) != 1 || got.StalledValidations[0].ContentID != "cv-stalled" ||
+			got.StalledValidations[0].Attempts != contentregistry.MaxValidationAttempts {
+			t.Fatalf("StalledValidations = %+v, want only cv-stalled with %d attempts", got.StalledValidations, contentregistry.MaxValidationAttempts)
+		}
+	})
+}
+
+// Attempts refused because the lab agent was offline or busy say nothing about the scenario, and the validator
+// retries them. Listing such a scenario as stalled would tell the operator to act on a pipeline that is only waiting.
+func TestDataQuality_LabRefusalsAreNotStalledAttempts(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		addRefusals := func(vid, reason string, n int) {
+			for i := 0; i < n; i++ {
+				mustExec(t, pool, `INSERT INTO content_validations (content_version_id, level, outcome, validator, validator_version, detail)
+					VALUES ($1, 'EXECUTION', 'ERROR', 'validationlab', '1', jsonb_build_object('dispatch_failure', $2::text))`, vid, reason)
+			}
+		}
+		waiting := seedContentVersionWithLifecycle(t, pool, "cv-lab-offline", "DRAFT")
+		addRefusals(waiting, "offline", contentregistry.MaxValidationAttempts+2)
+		busy := seedContentVersionWithLifecycle(t, pool, "cv-lab-busy", "DRAFT")
+		addRefusals(busy, "agent busy", contentregistry.MaxValidationAttempts)
+		broken := seedContentVersionWithLifecycle(t, pool, "cv-content-refused", "DRAFT")
+		addRefusals(broken, "build steps: ART: no windows steps found", contentregistry.MaxValidationAttempts)
+
+		got, err := dataQuality(context.Background(), pool, 7*24*time.Hour)
+		if err != nil {
+			t.Fatalf("dataQuality: %v", err)
+		}
+		if len(got.StalledValidations) != 1 || got.StalledValidations[0].ContentID != "cv-content-refused" {
+			t.Fatalf("StalledValidations = %+v, want only cv-content-refused (a content-side refusal still counts)", got.StalledValidations)
+		}
+	})
 }

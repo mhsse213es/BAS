@@ -111,7 +111,6 @@ func svcUninstall() error {
 	_ = os.Remove(unitPath)
 	_ = exec.Command("systemctl", "daemon-reload").Run()
 	fmt.Println("[+] bas-agent.service removed.")
-	fmt.Printf("[!] Binary and config (%s) left in place — remove manually if no longer needed.\n", configDir)
 
 	// Best-effort: tell the server this endpoint is being decommissioned so
 	// it's hidden from the live Agents list instead of just showing
@@ -119,6 +118,9 @@ func svcUninstall() error {
 	if err := notifyServerUnenroll(serverURL, secret, agentID); err != nil {
 		fmt.Printf("[~] Could not notify server of uninstall: %v\n", err)
 	}
+
+	// Last: remove the data and the program itself (an installer replacing the agent keeps them).
+	platformPurgeLocalData()
 	return nil
 }
 

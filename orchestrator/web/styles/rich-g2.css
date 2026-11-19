@@ -1,0 +1,55 @@
+/* Rich page layouts, group 2: Coverage, Factory Health, Scheduled, Initiatives, Email, Variants, AD Coverage, Kubernetes.
+   Generic helpers only; every colour is a theme token. */
+
+.rg2-gap { margin-top: 12px; }
+.rg2-note { margin: 0; padding: 10px 16px 14px; font-size: 12px; color: var(--muted); }
+.rg2-mono { font-family: var(--font-mono); font-size: 12px; }
+.rg2-num { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--kc, var(--text)); }
+.rg2-rate { display: flex; align-items: center; gap: 10px; min-width: 130px; }
+.rg2-rate .rk-bar { flex: 1; }
+.rg2-rate span { font-variant-numeric: tabular-nums; font-size: 12px; min-width: 38px; text-align: right; }
+.rg2-tbl { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+.rg2-tbl table { width: 100%; }
+.rg2-tbl td.empty { padding: 22px 12px; text-align: center; color: var(--muted); }
+
+/* Section header above a block of cards */
+.rg2-sec { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 22px 0 12px; }
+.rg2-sec h2 { margin: 0 0 3px; font-family: var(--font-display); font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
+.rg2-sec p { margin: 0; font-size: 12.5px; color: var(--muted); max-width: 70ch; }
+.rg2-sec-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.rg2-sec.first { margin-top: 0; }
+.rg2-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.rg2-matrix { overflow-x: auto; padding-bottom: 4px; }
+.rg2-toolbar { margin-bottom: 4px; }
+.rg2-foot { margin-top: 10px; font-size: 12px; color: var(--muted); }
+.rg2-tabs-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.rg2-row-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.rg2-cell-sub { display: block; font-size: 11.5px; color: var(--muted); }
+.rg2-cell-main { font-weight: 500; }
+.rg2-flex1 { flex: 1; }
+
+/* kit card headers are <header> elements: undo the console top-bar rule for them */
+header.rk-hd { position: static; height: auto; z-index: auto; background: none; border-bottom: 0; padding: 0; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.rk-card.flush > header.rk-hd { padding: 14px 16px 0; }
+.rg2-progress { display: flex; justify-content: space-between; font-size: 12.5px; margin-bottom: 6px; color: var(--muted); }
+.rg2-progress b { color: var(--text); font-variant-numeric: tabular-nums; }
+.rg2-note-top { padding: 0 0 12px; }
+.rg2-split { display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 18px; align-items: center; }
+.rg2-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.rg2-metric { padding: 10px 0; border-bottom: 1px solid var(--row-line); }
+.rg2-metric:last-child { border-bottom: 0; }
+.rg2-metric-t { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
+@media (max-width: 700px) { .rg2-split { grid-template-columns: minmax(0, 1fr); } }
+.rg2-helpwrap { position: relative; }
+.rg2-help { position: absolute; top: 10px; right: 10px; width: 20px; height: 20px; padding: 0; line-height: 18px; text-align: center; border-radius: 50%; font-size: 11px; font-weight: 700; color: var(--muted); background: transparent; border: 1px solid var(--border); cursor: pointer; }
+.rg2-help:hover { color: var(--text); border-color: var(--accent); }
+.rg2-alert { margin-bottom: 14px; padding: 12px 16px; border: 1px solid color-mix(in srgb, var(--warning) 45%, var(--border)); border-left: 3px solid var(--warning); border-radius: var(--radius-lg); background: color-mix(in srgb, var(--warning) 8%, var(--surface)); font-size: 13px; line-height: 1.5; color: var(--text); }
+.rg2-filter-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 10px 16px; margin-bottom: 14px; }
+.rg2-filter-row { display: grid; grid-template-columns: 80px 1fr; gap: 10px; align-items: center; padding: 6px 0; font-size: 12.5px; }
+.rg2-filter-row > div { display: flex; flex-wrap: wrap; gap: 6px; }
+details.adc-cap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 12px 16px; margin-bottom: 8px; box-shadow: var(--shadow-sm); }
+details.adc-cap[open] { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+details.adc-cap > summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; }
+@media (max-width: 700px) { .rg2-filter-row { grid-template-columns: minmax(0, 1fr); } }
+#k8s-runs td.k8s-row-actions { white-space: normal; min-width: 150px; }
+#k8s-runs td.k8s-plan { min-width: 220px; }

@@ -29,11 +29,6 @@ func (h *Handler) SubmitRunHostEvents(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "unauthorized — check AGENT_SECRET", http.StatusUnauthorized)
 		return
 	}
-	store := h.killChainStore()
-	if store == nil {
-		jsonError(w, "database not configured", http.StatusServiceUnavailable)
-		return
-	}
 	r.Body = http.MaxBytesReader(w, r.Body, 8<<20)
 	var body struct {
 		AgentID string `json:"agentId"`
@@ -58,6 +53,14 @@ func (h *Handler) SubmitRunHostEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		jsonError(w, "invalid host events payload", http.StatusBadRequest)
+		return
+	}
+	if !agentMatchesCertificate(w, r, body.AgentID) {
+		return
+	}
+	store := h.killChainStore()
+	if store == nil {
+		jsonError(w, "database not configured", http.StatusServiceUnavailable)
 		return
 	}
 	if len(body.Events) > hostEventMaxBatch {

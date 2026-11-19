@@ -1,0 +1,90 @@
+[
+  {
+    "id": "pers-01",
+    "n": 1,
+    "name": "Persistence - Registry Run Key (Custom)",
+    "technique_id": "T1547.001",
+    "timeout_sec": 60,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "medium",
+    "blast_radius": "Creates one named value under HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run pointing at a harmless no-op command. Removes only that named value, never the Run key itself.",
+    "telemetry": [
+      "Registry value creation under HKCU Run key"
+    ],
+    "detection": [
+      "Registry Run Key / Startup Folder monitoring"
+    ],
+    "cleanup": "",
+    "action_key": "persistence_registry_run_key",
+    "no_default_cleanup": true,
+    "reversible": true
+  },
+  {
+    "id": "pers-02",
+    "n": 2,
+    "name": "Persistence - WMI Event Subscription (Custom)",
+    "technique_id": "T1546.003",
+    "timeout_sec": 90,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "medium",
+    "blast_radius": "Creates one synthetic __EventFilter, __EventConsumer, and __FilterToConsumerBinding under root\\subscription, filtering on a synthetic Win32_LocalTime interval class, never a sensitive event class. Removes all three in reverse creation order.",
+    "telemetry": [
+      "WMI subscription object creation under root\\subscription"
+    ],
+    "detection": [
+      "WMI event subscription monitoring (Sysmon event ID 19/20/21 or equivalent)"
+    ],
+    "cleanup": "",
+    "action_key": "persistence_wmi_event_subscription",
+    "no_default_cleanup": true,
+    "reversible": true
+  },
+  {
+    "id": "pers-03",
+    "n": 3,
+    "name": "Persistence - Local Account Creation (Custom)",
+    "technique_id": "T1136.001",
+    "timeout_sec": 60,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "medium",
+    "blast_radius": "Creates one local user account with a random password and a per-run synthetic name. Removed by undo; undo tolerates the account already being absent.",
+    "telemetry": [
+      "Local user account creation"
+    ],
+    "detection": [
+      "Local account creation monitoring (Windows event 4720 or equivalent)"
+    ],
+    "cleanup": "",
+    "action_key": "persistence_local_account_creation",
+    "no_default_cleanup": true,
+    "reversible": true
+  },
+  {
+    "id": "pers-04",
+    "n": 4,
+    "name": "Persistence - Account Manipulation via Group Membership (Custom)",
+    "technique_id": "T1098",
+    "timeout_sec": 60,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "medium",
+    "blast_radius": "Creates its own local user account (independent of pers-03) and adds it to the built-in Users group only -- never Administrators or any admin-equivalent group. Undo removes group membership then deletes the account; tolerates either already being absent.",
+    "telemetry": [
+      "Local group membership change"
+    ],
+    "detection": [
+      "Account manipulation / group membership change monitoring (Windows event 4732 or equivalent)"
+    ],
+    "cleanup": "",
+    "action_key": "persistence_account_manipulation",
+    "no_default_cleanup": true,
+    "reversible": true
+  }
+]

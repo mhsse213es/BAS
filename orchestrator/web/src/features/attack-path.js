@@ -2,21 +2,34 @@ import { state } from '../core/state.js';
 import { on } from '../core/actions.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { debCommand } from './deb-command.js';
 import { ago, fmtDate, showToast } from '../core/util.js';
-import { _templates, renderTemplateGrid } from './adversaries.js';
+import { _templates, _adversaries, renderTemplateGrid, syncAdversaryVisibility } from './adversaries.js';
 import { _agtDetailId, downloadAuditPack, downloadBoardScorecard, downloadFullReportCSV, downloadFullReportJSON, downloadFullReportPDF, downloadNavigatorLayer, loadAgtAttackPath, openAgentDetail, openFullReport, safeScan } from './agent-drawer.js';
-import { openRemoveAgentModal, openStopAgentModal, openUninstallAgentModal } from './agent-actions.js';
+import { openAllowReinstallModal, openReinstateAgentModal, openRemoveAgentModal, openRevokeAgentModal, openStopAgentModal, openUninstallAgentModal } from './agent-actions.js';
 import { loadAuditLogs, loadBackups, loadLicenseInfo } from './audit-logs.js';
 import { loadCalderaStatus } from './compliance.js';
+import { syncDisplayPrefControls } from './display-prefs.js';
 import { loadUsers } from './evidence.js';
 import { loadOpenAEVConfig, renderAttackPath } from './openaev.js';
-import { loadRuns, loadSIEMCorrelationPanel, openModal } from './reports.js';
+import { setHeroStat } from './shell-ui.js';
+import { heroValues } from './dash-model.js';
+import { seg } from '../core/kit.js';
+import { loadRuns, loadSIEMCorrelationPanel, openModal, viewRunResults } from './reports.js';
 import { SCHED, renderScheduledAssessmentsList } from './scheduled.js';
 import { describePhishingRun } from './phishing-run-view.js';
-import { LIBRARY_TYPE_PHISHING, buildDispatchFields, buildPhishingRunRequest, libraryEntryRoute, phishingLibraryCounts, showNoScenariosMessage } from './scenario-library-route.js';
-import { ROLE, STRIPE_COLORS, scenarioSrcCollapsed, setAgentsView, showTab } from './shell.js';
+import { LIBRARY_TYPE_PHISHING, buildDispatchFields, buildPhishingRunRequest, withExecutionLink, libraryEntryRoute, phishingLibraryCounts, showNoScenariosMessage } from './scenario-library-route.js';
+import { ROLE, setAgentsView, showTab } from './shell.js';
+import { skippedNote as scnSkippedNote, allView as scnAllView, sourceOf as scnSourceOf, heroStats as scnHeroStats, filterList as scnFilterList, sortList as scnSortList, categoryRows as scnCategoryRows, showing as scnShowing, breakdownItems as scnBreakdownItems } from './scn-model.js';
+import { catsHtml as scnCatsHtml, toolbarHtml as scnToolbarHtml, gridHtml as scnGridHtml, emptyHtml as scnEmptyHtml, scnUi, setScenarioViewMode, setScenarioSortMode, setScenarioCatOffMode, hideFilterSelects, openDrawer as openScnDrawer, closeDrawer as closeScnDrawer, drawerTab, drawerScenarioId, paintDrawer, bindApproveButton, runById as scnRunById } from './scn-rich.js';
 import { loadARTContentStatus, loadConnectorStatus, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
 import { displayOf, setCssText, setDisplay } from '../core/inline-style.js';
+import { agentInsightsHtml, agentOperationalHtml, migrationPanelHtml } from './agents-insights.js';
+import { kpi, card, chip, empty as kitEmpty, icon as kitIcon } from '../core/kit.js';
+import { paintAgentTable, statusCellHtml, resetAgtFilters, agtOsFilter, setAgtOs } from './agt-view.js';
+import { osOptions as agtOsOptions, fleetCount as agtFleetCount, trayMenuEntries, fleetTrayLabel, fleetTrayConfirm } from './agt-model.js';
+import { renderExecAll, renderRangeSeg } from './dash-exec.js';
+import { recLimit, renderRecControls, renderRecError, renderRecLoading, setRecLimitState, showRecommendations } from './recommendations.js';
 
 
 // ── Attack Path Validation ─────────────────────────────────────────────────
@@ -75,482 +88,55 @@ export function apCard(label, val, col, sub) {
     '<div class="tiny muted">' + (sub || '') + '</div></div>';
 }
 
-export function loadExposureAssets() {
-  var body = document.getElementById('exp-table-body');
-  body.innerHTML = '<tr><td colspan="8" class="empty">Loading…</td></tr>';
-  apicall('/api/exposure/assets').then(function(assets) {
-    if (!assets || !assets.length) {
-      body.innerHTML = '<tr><td colspan="8" class="empty">No assets found — enroll an agent or run attack-path collection.</td></tr>';
-      return;
-    }
-    body.innerHTML = assets.map(function(a) {
-      return '<tr class="u-pointer"' + on('click', 'openExposureDetail', a.asset.hostKey) + '>' +
-        '<td class="u-fw600">' + x(a.asset.label) + '</td>' +
-        '<td>' + (a.asset.managed ? '<span class="badge">Managed</span>' : '<span class="badge u-muted">Discovered</span>') + '</td>' +
-        '<td style="color:' + apColor(a.exposureScore) + ';font-weight:700">' + a.exposureScore + '</td>' +
-        '<td>' + a.attackPathScore + '</td>' +
-        '<td>' + a.detectionCoverageScore + '</td>' +
-        '<td>' + (a.asset.crownJewel ? '<span class="badge" style="color:var(--warning);border-color:var(--warning)">' + x(a.asset.crownJewel) + '</span>' : '') + '</td>' +
-        '<td>' + a.openFindingsCount + '</td>' +
-        '<td>' + (a.kevExposed ? '<span class="badge" style="color:var(--danger);border-color:var(--danger)">KEV</span>' : '') + '</td>' +
-        '</tr>';
-    }).join('');
-  }).catch(function(e) {
-    body.innerHTML = '<tr><td colspan="8" class="empty u-danger">Failed to load: ' + x(e.message) + '</td></tr>';
-  });
-}
+// Exposure Explorer (table, charts and detail drawer) lives in exp-view.js; re-exported so existing imports keep working.
+export { loadExposureAssets, setExposureFilter, onExposureSearch, openExposureDetail, closeExposureDetail, closeExposureDetailOnBackdrop } from './exp-view.js';
+
+var EXEC_DAYS = '90';
+export function setExecRange(id) { EXEC_DAYS = id; renderRangeSeg(EXEC_DAYS); loadExecDashboard(); }
 
 export function loadExecDashboard() {
-  var rangeEl = document.getElementById('ed-range');
-  var days = rangeEl ? rangeEl.value : '90';
+  var days = EXEC_DAYS;
+  renderRangeSeg(days);
   Promise.all([
     apicall('/api/dashboard/current'),
     apicall('/api/dashboard/trends?days=' + encodeURIComponent(days)),
-    apicall('/api/predict/risk')
+    apicall('/api/predict/risk'),
+    apicall('/api/findings').catch(function() { return []; })
   ]).then(function(res) {
-    renderExecDashboard(res[0], res[1]);
-    renderForecast(res[2] && res[2].forecast);
-    renderExposure(res[2] && res[2].exposure);
+    var cur = res[0] || {};
+    var hero = heroValues(cur);
+    setHeroStat('hs-exec-risk', hero.risk);
+    setHeroStat('hs-exec-exposure', hero.exposure);
+    setHeroStat('hs-exec-detect', hero.detection);
+    setHeroStat('hs-exec-fleet', cur.assetCount != null ? cur.assetCount : '—');
+    renderExecAll({ current: cur, trends: res[1], predict: res[2], findings: Array.isArray(res[3]) ? res[3] : null, days: days });
   }).catch(function(e) { showToast(e.message, 'err'); });
-}
-
-function edSparkline(values) {
-  if (!values.length) return '';
-  var w = 140, h = 32;
-  var min = Math.min.apply(null, values), max = Math.max.apply(null, values);
-  var range = (max - min) || 1;
-  var pts = values.map(function(v, i) {
-    var px = values.length > 1 ? (i / (values.length - 1)) * w : w;
-    var y = h - ((v - min) / range) * h;
-    return px.toFixed(1) + ',' + y.toFixed(1);
-  }).join(' ');
-  return '<svg class="stat-spark" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' +
-    '<polyline points="' + pts + '" fill="none" stroke="var(--accent)" stroke-width="1.6"/></svg>';
-}
-
-function edTrendChip(values) {
-  if (values.length < 2) return '';
-  var cur = values[values.length - 1];
-  var priorIdx = Math.max(0, values.length - 8); // ~7 data points back
-  var delta = cur - values[priorIdx];
-  if (delta === 0) return '<span class="tiny muted">flat</span>';
-  var up = delta > 0;
-  var col = up ? 'var(--success)' : 'var(--danger)';
-  return '<span class="tiny" style="color:' + col + '">' + (up ? '▲' : '▼') + ' ' + Math.abs(delta) + '</span>';
-}
-
-// noDataYet suppresses the number/trend/sparkline in favor of a "No data
-// yet" note -- used for Exposure Score/Detection Coverage when
-// !hasAttackPathData, where the underlying computation reads a vacuous 100
-// (see dashboard.Snapshot.HasAttackPathData's doc comment) rather than a
-// real score, so showing that 100 as-is would misrepresent an unscanned
-// fleet as a perfectly-defended one.
-function edKpiCard(label, current, trendSeries, noDataYet) {
-  var valueBlock = noDataYet
-    ? '<div class="kpi-value u-muted">—</div><span class="tiny muted">No data yet</span>'
-    : '<div class="kpi-value">' + current + '</div>' + edTrendChip(trendSeries);
-  return '<div class="kpi-card stat-tile">' +
-    '<div class="stat-top"><div>' +
-      '<div class="kpi-label">' + label + '</div>' +
-      valueBlock +
-    '</div></div>' +
-    (noDataYet ? '' : edSparkline(trendSeries)) +
-  '</div>';
-}
-
-function renderExecDashboard(current, trends) {
-  var el = document.getElementById('ed-kpi-row');
-  if (!el) return;
-  var risk = trends.map(function(p) { return p.avgRiskScore; });
-  var exp = trends.map(function(p) { return p.exposureScore; });
-  var det = trends.map(function(p) { return p.detectionCoverage; });
-  var cnt = trends.map(function(p) { return p.assetCount; });
-  var noAttackPathData = !current.hasAttackPathData;
-  el.innerHTML =
-    edKpiCard('Risk Score', current.avgRiskScore, risk) +
-    edKpiCard('Exposure Score', current.exposureScore, exp, noAttackPathData) +
-    edKpiCard('Detection Coverage', current.detectionCoverage, det, noAttackPathData) +
-    edKpiCard('Fleet Assets', current.assetCount, cnt);
-}
-
-function edForecastChart(fc) {
-  var hist = (fc && fc.history) || [];
-  var proj = (fc && fc.hasForecast && fc.projected) ? fc.projected : [];
-  var all = hist.concat(proj);
-  if (all.length < 2) return '';
-  var w = 520, h = 120, pad = 10;
-  var xs = all.map(function(p) { return p.dayIndex; });
-  var minX = Math.min.apply(null, xs), maxX = Math.max.apply(null, xs);
-  var rangeX = (maxX - minX) || 1;
-  var vals = [];
-  all.forEach(function(p) {
-    vals.push(p.score);
-    if (typeof p.high === 'number') vals.push(p.high);
-    if (typeof p.low === 'number') vals.push(p.low);
-  });
-  var minY = Math.min.apply(null, vals), maxY = Math.max.apply(null, vals);
-  var rangeY = (maxY - minY) || 1;
-  function sx(dx) { return pad + ((dx - minX) / rangeX) * (w - 2 * pad); }
-  function sy(v) { return (h - pad) - ((v - minY) / rangeY) * (h - 2 * pad); }
-  var svg = '<svg width="100%" height="' + h + '" viewBox="0 0 ' + w + ' ' + h +
-    '" preserveAspectRatio="none" style="max-width:100%;margin-top:0.5rem">';
-  if (proj.length) {
-    var top = proj.map(function(p) { return sx(p.dayIndex).toFixed(1) + ',' + sy(p.high).toFixed(1); });
-    var bot = proj.slice().reverse().map(function(p) { return sx(p.dayIndex).toFixed(1) + ',' + sy(p.low).toFixed(1); });
-    svg += '<polygon points="' + top.concat(bot).join(' ') + '" fill="var(--accent)" opacity="0.12"/>';
-  }
-  var histPts = hist.map(function(p) { return sx(p.dayIndex).toFixed(1) + ',' + sy(p.score).toFixed(1); }).join(' ');
-  svg += '<polyline points="' + histPts + '" fill="none" stroke="var(--accent)" stroke-width="1.8"/>';
-  if (proj.length && hist.length) {
-    var last = hist[hist.length - 1];
-    var projPts = [sx(last.dayIndex).toFixed(1) + ',' + sy(last.score).toFixed(1)]
-      .concat(proj.map(function(p) { return sx(p.dayIndex).toFixed(1) + ',' + sy(p.score).toFixed(1); })).join(' ');
-    svg += '<polyline points="' + projPts + '" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="4 3"/>';
-  }
-  svg += '</svg>';
-  return svg;
-}
-
-function edDirectionLabel(fc) {
-  var d = (fc && fc.direction) || 'unknown';
-  var col = 'var(--muted)';
-  if (d === 'improving') col = 'var(--success)';
-  else if (d === 'worsening') col = 'var(--danger)';
-  return '<span style="color:' + col + ';font-weight:700;text-transform:capitalize">' + x(d) + '</span>';
-}
-
-function renderForecast(fc) {
-  var el = document.getElementById('ed-forecast');
-  if (!el) return;
-  if (!fc) { el.innerHTML = ''; return; }
-  var conf = (fc.confidence && fc.confidence !== 'none')
-    ? '<span class="badge">' + x(fc.confidence) + ' confidence</span>' : '';
-  var chart = edForecastChart(fc);
-  var note = !fc.hasForecast
-    ? '<div class="tiny muted" style="margin-top:0.4rem">' + x(fc.note || 'Insufficient history for a forecast.') + '</div>'
-    : '';
-  el.innerHTML = '<div class="card" style="margin-top:1rem;padding:1rem">' +
-    '<div style="display:flex;justify-content:space-between;align-items:center">' +
-      '<div><span class="kpi-label">Risk-score forecast</span> &nbsp;' + edDirectionLabel(fc) + '</div>' +
-      conf +
-    '</div>' +
-    (chart || '<div class="tiny muted" style="margin-top:0.4rem">Not enough data to chart yet.</div>') +
-    note +
-  '</div>';
-}
-
-function renderExposure(exp) {
-  var el = document.getElementById('ed-exposure');
-  if (!el) return;
-  if (!exp || !exp.hasData) {
-    el.innerHTML = '<div class="card" style="margin-top:1rem;padding:1rem">' +
-      '<span class="kpi-label">Open exposure windows</span>' +
-      '<div class="tiny muted" style="margin-top:0.4rem">No open findings.</div></div>';
-    return;
-  }
-  function stat(l, v) { return '<div><div class="kpi-label">' + l + '</div><div class="kpi-value">' + v + '</div></div>'; }
-  var strip = '<div style="display:flex;gap:1.75rem;margin:0.5rem 0 0.75rem">' +
-    stat('Open', exp.openCount) + stat('Worst days', exp.worstDaysOpen) +
-    stat('Median days', exp.medianDaysOpen) + stat('Over ' + exp.thresholdDays + 'd', exp.overThreshold) + '</div>';
-  var rows = (exp.worst || []).map(function(it) {
-    var over = it.daysOpen > exp.thresholdDays;
-    return '<tr>' +
-      '<td><div class="u-fw600">' + x(it.techniqueId) + '</div>' +
-        '<div class="tiny muted">' + x(it.techniqueName) + '</div></td>' +
-      '<td class="tiny">' + x(it.severity) + '</td>' +
-      '<td style="' + (over ? 'color:var(--danger);font-weight:700' : '') + '">' + it.daysOpen + '</td>' +
-      '<td class="tiny">' + x(it.firstSeen) + '</td>' +
-      '<td>' + (it.reopenedCount
-        ? '<span class="badge" style="color:var(--warning);border-color:var(--warning)">&times;' + it.reopenedCount + '</span>'
-        : '<span class="tiny muted">&mdash;</span>') + '</td>' +
-      '</tr>';
-  }).join('');
-  el.innerHTML = '<div class="card" style="margin-top:1rem;padding:1rem">' +
-    '<span class="kpi-label">Open exposure windows</span>' + strip +
-    '<div class="tbl-wrap"><table><thead><tr>' +
-      '<th>Technique</th><th>Severity</th><th>Days open</th><th>First seen</th><th>Reopened</th>' +
-    '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
-  '</div>';
 }
 
 var REC_SCENARIO = null;
 
-function recTierColor(tier) {
-  return tier === 'Critical' ? 'var(--danger)'
-       : tier === 'High'     ? '#f0883e'
-       : tier === 'Medium'   ? 'var(--warning)'
-       : 'var(--muted)';
-}
+// Technique Coverage (actor card, charts, table) lives in tcv-view.js; re-exported so existing imports keep working.
+export { loadCoverageActors, loadCoverageMatrix, setCoverageFilter } from './tcv-view.js';
 
-function recCoverageBadge(coverage) {
-  if (coverage === 'never-tested') return '<span class="badge" style="color:var(--danger);border-color:var(--danger)">Never tested</span>';
-  if (coverage === 'stale')        return '<span class="badge" style="color:var(--warning);border-color:var(--warning)">Stale</span>';
-  return '<span class="badge u-muted">Recent</span>';
-}
-
-function covStatusCell(val) {
-  if (val === null) return '<span class="tiny muted">N/A</span>';
-  return val ? '<span class="u-success">&#10003;</span>' : '<span class="tiny muted">&mdash;</span>';
-}
-
-export function loadCoverageActors() {
-  var sel = document.getElementById('cov-actor-select');
-  apicall('/api/coverage/actors')
-    .then(function(data) {
-      var actors = (data && data.actors) || [];
-      actors.forEach(function(name) {
-        var opt = document.createElement('option');
-        opt.value = name;
-        opt.textContent = name;
-        sel.appendChild(opt);
-      });
-    })
-    .catch(function(e) { console.error('loadCoverageActors failed', e); });
-}
-
-export function loadCoverageMatrix() {
-  var sel = document.getElementById('cov-actor-select');
-  var actor = sel ? sel.value : '';
-  var body = document.getElementById('cov-matrix-body');
-  var empty = document.getElementById('cov-matrix-empty');
-  body.innerHTML = '<tr><td colspan="6" class="empty">Loading&hellip;</td></tr>';
-  var url = '/api/coverage/matrix' + (actor ? '?actor=' + encodeURIComponent(actor) : '');
-  apicall(url)
-    .then(function(rows) {
-      rows = rows || [];
-      if (!rows.length) {
-        body.innerHTML = '';
-        setDisplay(empty, '');
-        return;
-      }
-      setDisplay(empty, 'none');
-      body.innerHTML = rows.map(function(r) {
-        return '<tr>' +
-          '<td class="u-fw600">' + x(r.techniqueId) + '</td>' +
-          '<td>' + covStatusCell(r.simulationExists) + '</td>' +
-          '<td>' + covStatusCell(r.detectionProfileExists) + '</td>' +
-          '<td>' + covStatusCell(r.purpleExerciseExists) + '</td>' +
-          '<td>' + covStatusCell(r.complianceMappingExists) + '</td>' +
-          '<td>' + covStatusCell(r.responsePlaybookExists) + '</td>' +
-          '</tr>';
-      }).join('');
-    })
-    .catch(function(e) {
-      body.innerHTML = '<tr><td colspan="6" class="empty u-danger">Failed to load: ' + x(e.message) + '</td></tr>';
-    });
-}
-
-var TP_ACTOR_CACHE = [];
-
-export function showThreatPriorityList() {
-  setDisplay(document.getElementById('tp-list-view'), '');
-  setDisplay(document.getElementById('tp-detail-view'), 'none');
-}
-
-export function tpTierBadge(tier) {
-  var color = tier === 'Critical' ? 'var(--danger)' : tier === 'High' ? 'var(--warning)' : tier === 'Medium' ? 'var(--accent)' : 'var(--muted)';
-  return '<span class="badge" style="color:' + color + ';border-color:' + color + '">' + x(tier || 'Low') + '</span>';
-}
-
-function tpTrendCell(trend, delta) {
-  if (trend === 'up') return '<span class="u-success">&#9650; +' + delta + '</span>';
-  if (trend === 'down') return '<span class="u-danger">&#9660; ' + delta + '</span>';
-  if (trend === 'stable') return '<span class="tiny muted">&mdash;</span>';
-  return '<span class="tiny muted">New</span>';
-}
-
-export function loadThreatPriorityActors() {
-  var body = document.getElementById('tp-list-body');
-  var empty = document.getElementById('tp-list-empty');
-  body.innerHTML = '<tr><td colspan="5" class="empty">Loading&hellip;</td></tr>';
-  apicall('/api/threat-priority/actors')
-    .then(function(actors) {
-      TP_ACTOR_CACHE = actors || [];
-      if (!TP_ACTOR_CACHE.length) {
-        body.innerHTML = '';
-        setDisplay(empty, '');
-        return;
-      }
-      setDisplay(empty, 'none');
-      body.innerHTML = TP_ACTOR_CACHE.map(function(a) {
-        return '<tr class="u-pointer"' + on('click', 'showThreatPriorityDetail', a.actorName) + '>' +
-          '<td class="u-fw600">' + x(a.actorName) + '</td>' +
-          '<td>' + tpTierBadge(a.tier) + '</td>' +
-          '<td>' + x(a.score) + '</td>' +
-          '<td>' + tpTrendCell(a.trend, a.trendDelta) + '</td>' +
-          '<td>' + x(a.coverageGapCount) + ' of ' + x(a.techniqueCount) + '</td>' +
-          '</tr>';
-      }).join('');
-    })
-    .catch(function(e) {
-      body.innerHTML = '<tr><td colspan="5" class="empty u-danger">Failed to load: ' + x(e.message) + '</td></tr>';
-    });
-}
-
-export function showThreatPriorityDetail(actorName) {
-  setDisplay(document.getElementById('tp-list-view'), 'none');
-  setDisplay(document.getElementById('tp-detail-view'), '');
-  document.getElementById('tp-detail-title').textContent = actorName;
-
-  apicall('/api/threat-priority/actors/' + encodeURIComponent(actorName))
-    .then(function(d) { renderThreatPriorityDetail(d); })
-    .catch(function(e) {
-      document.getElementById('tp-detail-factors').innerHTML = '<div class="empty u-danger">Failed to load: ' + x(e.message) + '</div>';
-    });
-}
-
-function renderThreatPriorityDetail(d) {
-  document.getElementById('tp-detail-title').innerHTML = x(d.actorName) +
-    (d.canonicalGroupId ? '  <span class="tiny muted" style="font-weight:400">&middot; MITRE ' + x(d.canonicalGroupId) + '</span>' : '');
-
-  document.getElementById('tp-detail-summary').innerHTML =
-    '<div class="kpi-card"><div class="kpi-label">Score</div><div class="kpi-value">' + x(d.score) + '</div></div>' +
-    '<div class="kpi-card"><div class="kpi-label">Tier</div><div class="kpi-value">' + tpTierBadge(d.tier) + '</div></div>' +
-    '<div class="kpi-card"><div class="kpi-label">Techniques</div><div class="kpi-value">' + x(d.techniqueCount) + '</div></div>' +
-    '<div class="kpi-card"><div class="kpi-label">Coverage Gap</div><div class="kpi-value">' + x(d.coverageGapCount) + '</div></div>';
-
-  var factors = (d.factors || []).map(function(f) {
-    var val = f.available ? f.rawScore.toFixed(0) + '%' : 'Not yet validated';
-    return '<div style="display:flex;justify-content:space-between;padding:0.4rem 0;border-bottom:1px solid var(--border)">' +
-      '<div><div class="u-fw600">' + x(f.name) + '</div><div class="tiny muted">' + x(f.explanation) + '</div></div>' +
-      '<div style="font-weight:700">' + x(val) + '</div>' +
-      '</div>';
-  }).join('');
-  document.getElementById('tp-detail-factors').innerHTML = factors || '<div class="empty">No factor data.</div>';
-
-  var uncovered = (d.uncoveredTechniques || []);
-  document.getElementById('tp-detail-uncovered').innerHTML = uncovered.length
-    ? uncovered.map(function(t) { return '<span class="tool-tag">' + x(t) + '</span>'; }).join(' ')
-    : '<span class="muted">No coverage gaps.</span>';
-
-  var techSourceLabel = {
-    mitre: 'Techniques: MITRE-authoritative',
-    connector: 'Techniques: connector-derived (not yet MITRE-confirmed)'
-  }[d.techniqueSource] || '';
-  document.getElementById('tp-detail-technique-source').textContent = techSourceLabel;
-
-  var techCoverage = (d.techniqueCoverage || []);
-  document.getElementById('tp-detail-coverage').innerHTML = techCoverage.length
-    ? '<table class="u-w100"><thead><tr><th>Technique</th><th>Content</th><th>Prevention</th><th>Detection</th></tr></thead><tbody>' +
-      techCoverage.map(function(tc) {
-        var content = [
-          tc.hasSimulation ? '<span class="tool-tag">Sim</span>' : '',
-          tc.hasDetection ? '<span class="tool-tag">Detect</span>' : '',
-          tc.hasCompliance ? '<span class="tool-tag">Compliance</span>' : ''
-        ].filter(Boolean).join(' ') || '<span class="muted">&mdash;</span>';
-        var label = tc.techniqueName ? tc.techniqueName + ' (' + tc.techniqueId + ')' : tc.techniqueId;
-        var prevention = tc.preventionVerdict ? x(tc.preventionVerdict) : '<span class="muted">&mdash;</span>';
-        var detection = tc.detectionVerdict ? x(tc.detectionVerdict) : '<span class="muted">&mdash;</span>';
-        return '<tr><td>' + x(label) + '</td><td>' + content + '</td><td>' + prevention + '</td><td>' + detection + '</td></tr>';
-      }).join('') +
-      '</tbody></table>'
-    : '<span class="muted">No technique data.</span>';
-
-  var sources = (d.sources || []);
-  document.getElementById('tp-detail-sources').innerHTML = sources.length
-    ? '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:0.75rem">' +
-      sources.map(function(s) {
-        // "Unknown" (never "None"): an empty field here means this source
-        // never supplied it -- e.g. OpenCTI never reports sectors/regions,
-        // MISP never reports aliases. Rendering it as "None" would read as
-        // a positive assertion the source never made.
-        var unknown = '<span class="muted">Unknown</span>';
-        function list(arr) {
-          return (arr && arr.length)
-            ? arr.map(function(v) { return '<span class="tool-tag">' + x(v) + '</span>'; }).join(' ')
-            : unknown;
-        }
-        function row(label, val) {
-          return '<div style="display:flex;gap:0.5rem;padding:0.14rem 0">' +
-            '<span style="min-width:5.5rem;color:var(--muted);flex-shrink:0">' + label + '</span>' +
-            '<span class="u-flex1">' + val + '</span></div>';
-        }
-        return '<div style="border:1px solid var(--border);border-radius:var(--radius);padding:0.6rem 0.75rem">' +
-          '<div style="font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--accent);margin-bottom:0.4rem">' + x(s.source) + '</div>' +
-          row('Name', x(s.name)) +
-          row('Aliases', list(s.aliases)) +
-          row('Sectors', list(s.sectors)) +
-          row('Regions', list(s.regions)) +
-          row('Confidence', s.confidence ? x(s.confidence) : unknown) +
-          row('Techniques', x(s.techniqueCount)) +
-          row('Last seen', s.lastSeen ? x(fmtDate(s.lastSeen)) : unknown) +
-          '</div>';
-      }).join('') + '</div>'
-    : '<span class="muted">No per-source records yet — populated by the next threat-intel sync.</span>';
-
-  var techEvidence = (d.techniqueEvidence || []);
-  var evidenceCard = document.getElementById('tp-detail-evidence-card');
-  if (techEvidence.length) {
-    setDisplay(evidenceCard, '');
-    document.getElementById('tp-detail-evidence').innerHTML =
-      '<table class="u-w100"><thead><tr><th>Technique</th><th>Via</th><th>Confidence</th><th>Since</th></tr></thead><tbody>' +
-      techEvidence.map(function(e) {
-        var via = e.via ? (e.via + (e.viaName ? ' (' + x(e.viaName) + ')' : '')) : '<span class="muted">direct</span>';
-        var since = e.startTime ? x(fmtDate(e.startTime)) : '<span class="muted">&mdash;</span>';
-        return '<tr><td>' + x(e.techniqueId) + '</td><td>' + via + '</td><td>' + x(e.confidence) + '%</td><td>' + since + '</td></tr>';
-      }).join('') +
-      '</tbody></table>';
-  } else {
-    setDisplay(evidenceCard, 'none');
-  }
-
-  var hist = (d.history || []);
-  document.getElementById('tp-detail-history').innerHTML = hist.length
-    ? '<table class="u-w100"><thead><tr><th>Date</th><th>Score</th></tr></thead><tbody>' +
-      hist.map(function(h) { return '<tr><td>' + x(new Date(h.recordedAt).toLocaleDateString()) + '</td><td>' + x(h.score) + '</td></tr>'; }).join('') +
-      '</tbody></table>'
-    : '<span class="muted">No history yet.</span>';
-
-  var techSet = {};
-  (d.techniqueIds || []).forEach(function(t) { techSet[t] = true; });
-  apicall('/api/recommend/simulations?limit=100').then(function(recData) {
-    var matches = ((recData && recData.techniques) || []).filter(function(t) { return techSet[t.techniqueId]; });
-    document.getElementById('tp-detail-recs').innerHTML = matches.length
-      ? matches.map(function(t) { return '<div style="padding:0.3rem 0">' + x(t.techniqueId) + ' — ' + x(t.name) + ' <span class="tiny muted">(score ' + x(t.score) + ')</span></div>'; }).join('')
-      : '<span class="muted">No open recommendations for this actor\'s techniques.</span>';
-  }).catch(function() {
-    document.getElementById('tp-detail-recs').innerHTML = '<span class="muted">Could not load recommendations.</span>';
-  });
-}
+// Threat Prioritization (tier tiles, actor table and detail drawer) lives in tp-view.js; re-exported so existing imports keep working.
+export { loadThreatPriorityActors, setThreatPriorityTier, showThreatPriorityDetail, showThreatPriorityList } from './tp-view.js';
 
 export function loadRecommendations() {
-  var limEl = document.getElementById('rec-limit');
-  var limit = limEl ? limEl.value : '20';
-  var body = document.getElementById('rec-table-body');
-  body.innerHTML = '<tr><td colspan="7" class="empty">Loading…</td></tr>';
-  apicall('/api/recommend/simulations?limit=' + encodeURIComponent(limit))
+  renderRecControls();
+  renderRecLoading();
+  apicall('/api/recommend/simulations?limit=' + encodeURIComponent(recLimit()))
     .then(function(data) { renderRecommendations(data); })
-    .catch(function(e) {
-      body.innerHTML = '<tr><td colspan="7" class="empty u-danger">Failed to load: ' + x(e.message) + '</td></tr>';
-    });
+    .catch(function(e) { renderRecError(e.message); });
+}
+
+export function setRecLimit(v) {
+  setRecLimitState(v);
+  loadRecommendations();
 }
 
 function renderRecommendations(data) {
-  var body = document.getElementById('rec-table-body');
-  REC_SCENARIO = data.suggestedScenario || null;
-  var list = (data && data.techniques) || [];
-  if (!list.length) {
-    body.innerHTML = '<tr><td colspan="7" class="empty">No recommendations yet — seed ATT&CK/ART content to rank techniques.</td></tr>';
-    return;
-  }
-  body.innerHTML = list.map(function(t) {
-    var threat = [];
-    if (t.kev) threat.push('<span class="badge" style="color:var(--danger);border-color:var(--danger)">KEV</span>');
-    if (t.epssPercentile) threat.push('<span class="badge">EPSS ' + Math.round(t.epssPercentile) + '</span>');
-    if (t.threatActors) threat.push('<span class="badge">' + t.threatActors + ' group' + (t.threatActors === 1 ? '' : 's') + '</span>');
-    return '<tr>' +
-      '<td><div class="u-fw600">' + x(t.techniqueId) + '</div>' +
-        '<div class="tiny muted">' + x(t.name) + '</div></td>' +
-      '<td class="tiny">' + x(t.tactic) + '</td>' +
-      '<td><span style="color:' + recTierColor(t.tier) + ';font-weight:700">' + t.score + '</span>' +
-        '<div class="tiny" style="color:' + recTierColor(t.tier) + '">' + x(t.tier) + '</div></td>' +
-      '<td>' + recCoverageBadge(t.coverageState) + '</td>' +
-      '<td>' + (threat.join(' ') || '<span class="tiny muted">—</span>') + '</td>' +
-      '<td>' + (t.environmentRisk ? '<span class="badge" style="color:var(--accent);border-color:var(--accent)">' + t.environmentRisk + '</span>'
-                                  : '<span class="tiny muted">—</span>') + '</td>' +
-      '<td class="tiny muted">' + x((t.reasons || []).join(' · ')) + '</td>' +
-      '</tr>';
-  }).join('');
+  REC_SCENARIO = (data && data.suggestedScenario) || null;
+  showRecommendations(data);
 }
 
 export function copyRecommendedScenario() {
@@ -568,89 +154,6 @@ export function copyRecommendedScenario() {
   }
 }
 
-function _expGapPriorityColor(p) {
-  return p === 'Critical' ? 'var(--danger)' : p === 'High' ? '#f0883e' : p === 'Medium' ? 'var(--warning)' : 'var(--success)';
-}
-
-export function openExposureDetail(hostKey) {
-  document.getElementById('exp-detail-title').textContent = hostKey;
-  var body = document.getElementById('exp-detail-body');
-  body.innerHTML = '<div class="empty" style="padding:2rem">Loading…</div>';
-  document.getElementById('exposure-detail-overlay').classList.add('open');
-  apicall('/api/exposure/assets/' + encodeURIComponent(hostKey)).then(function(p) {
-    // Each of these is a pure-deficit score (100 - risk), so an asset with
-    // nothing collected scores a flawless 100 across the board. Show "no
-    // data" instead when the backend says it wasn't measurable — on a
-    // "higher is safer" card, an unmeasured 100 is the most misleading
-    // value we could print.
-    var sc = p.scores || {};
-    function expCard(label, val, measurable, note) {
-      return measurable
-        ? apCard(label, val, apColor(typeof val === 'number' ? val : parseInt(val, 10)), note)
-        : apCard(label, '<span style="color:var(--muted);font-size:1.1rem">— no data</span>', 'var(--muted)', 'not collected yet');
-    }
-    var h = '<div class="kpi-row u-mb-1">' +
-      expCard('Exposure Score', sc.exposureScore + '<span style="font-size:0.9rem;color:var(--muted)">/100</span>', sc.exposureMeasurable, 'higher is safer') +
-      expCard('Attack Path', sc.attackPathScore, sc.attackPathMeasurable, '') +
-      expCard('Detection', sc.detectionCoverageScore, sc.detectionMeasurable, '') +
-      expCard('Vulnerability', sc.vulnerabilityScore, sc.vulnerabilityMeasurable, '') +
-      '</div>';
-
-    h += '<div style="font-weight:700;color:var(--text);margin-bottom:0.4rem">Prioritized Recommendations</div>';
-    if (p.recommendations && p.recommendations.length) {
-      h += '<div class="tbl-wrap u-mb-1"><table><thead><tr><th>From</th><th>Via</th><th>To</th><th>Priority</th><th>Reason</th></tr></thead><tbody>';
-      p.recommendations.forEach(function(g) {
-        h += '<tr><td>' + x(g.edge.from) + '</td><td>' + x(g.edge.kind) + '</td><td>' + x(g.edge.to) + '</td>' +
-          '<td style="font-weight:700;color:' + _expGapPriorityColor(g.priority) + '">' + x(g.priority) + '</td>' +
-          '<td style="color:var(--muted);font-size:0.8rem">' + x(g.reason) + '</td></tr>';
-      });
-      h += '</tbody></table></div>';
-    } else {
-      h += '<div class="tiny muted u-mb-1">No gaps on this asset&apos;s attack paths.</div>';
-    }
-
-    h += '<div style="font-weight:700;color:var(--text);margin-bottom:0.4rem">Vulnerabilities</div>';
-    if (p.vulnerabilities && p.vulnerabilities.length) {
-      h += '<div class="tbl-wrap u-mb-1"><table><thead><tr><th>CVE</th><th>CVSS</th><th>KEV</th><th>EPSS</th><th>Technique</th></tr></thead><tbody>';
-      p.vulnerabilities.forEach(function(v) {
-        h += '<tr><td>' + x(v.cveId) + '</td><td>' + (v.cvss || '—') + '</td><td>' + (v.kev ? 'Yes' : '') + '</td>' +
-          '<td>' + (v.epssScore || '—') + '</td><td>' + x(v.techniqueId) + '</td></tr>';
-      });
-      h += '</tbody></table></div>';
-    } else {
-      h += '<div class="tiny muted u-mb-1">No mapped CVEs.</div>';
-    }
-
-    h += '<div style="font-weight:700;color:var(--text);margin-bottom:0.4rem">Findings</div>';
-    if (!p.findings.collected) {
-      h += '<div class="tiny muted u-mb-1">Not enrolled — no scan history.</div>';
-    } else if (p.findings.findings && p.findings.findings.length) {
-      h += '<div class="tbl-wrap u-mb-1"><table><thead><tr><th>Technique</th><th>Severity</th><th>State</th></tr></thead><tbody>';
-      p.findings.findings.forEach(function(f) {
-        h += '<tr><td>' + x(f.techniqueName || f.techniqueId) + '</td><td>' + x(f.severity) + '</td><td>' + x(f.exposureState) + '</td></tr>';
-      });
-      h += '</tbody></table></div>';
-    } else {
-      h += '<div class="tiny muted u-mb-1">No open findings.</div>';
-    }
-
-    h += '<div style="font-weight:700;color:var(--text);margin-bottom:0.4rem">Threat Groups</div>';
-    if (p.threatIntel && p.threatIntel.length) {
-      h += p.threatIntel.map(function(g) { return '<span class="badge" style="margin:2px">' + x(g.groupName) + '</span>'; }).join('');
-    } else {
-      h += '<div class="tiny muted">No attributed threat groups.</div>';
-    }
-
-    body.innerHTML = h;
-  }).catch(function(e) {
-    body.innerHTML = '<div class="empty u-danger">Failed to load: ' + x(e.message) + '</div>';
-  });
-}
-
-export function closeExposureDetail() {
-  document.getElementById('exposure-detail-overlay').classList.remove('open');
-}
-export function closeExposureDetailOnBackdrop(el, event) { if (event.target === el) closeExposureDetail(); }
 // ── Attack Path Collection — job-based execution with full state machine ────────
 
 var _apCollectAgentId = null; // agentId currently being collected (for WS matching)
@@ -1137,7 +640,7 @@ export function saveAPSchedule() {
 // Settings sub-section switcher — toggles the body panels + lazily loads each.
 export function showSettingsSection(name) {
   state.SETTINGS_SECTION = name;
-  ['users', 'engine', 'intel', 'art', 'audit', 'theme', 'dashprefs', 'license', 'backup'].forEach(function(s) {
+  ['users', 'engine', 'intel', 'taxii', 'art', 'audit', 'theme', 'dashprefs', 'license', 'backup'].forEach(function(s) {
     var el = document.getElementById('set-' + s);
     if (el) setDisplay(el, s === name ? '' : 'none');
     var nav = document.querySelector('[data-set="' + s + '"]');
@@ -1146,9 +649,11 @@ export function showSettingsSection(name) {
   if (name === 'users') loadUsers();
   else if (name === 'engine') loadCalderaStatus();
   else if (name === 'intel') { loadConnectorStatus(); loadThreatIntelConfig('misp'); loadThreatIntelConfig('opencti'); loadThreatIntelConfig('otx'); loadTAXIIConnectors(); loadOpenAEVConfig(); }
+  else if (name === 'taxii') loadTAXIIConnectors();
   else if (name === 'art') loadARTContentStatus();
   else if (name === 'audit') loadAuditLogs();
   else if (name === 'license') loadLicenseInfo();
+  else if (name === 'theme') syncDisplayPrefControls();
   else if (name === 'dashprefs') syncDashPrefCards();
   else if (name === 'backup') loadBackups();
 }
@@ -1168,7 +673,9 @@ function syncDashPrefCards() {
 }
 
 export function selectTheme(themeName) {
-  document.body.classList.remove('theme-light', 'theme-cyberpunk', 'theme-slate');
+  // Only Dark and Light exist; a theme saved by an older build (cyberpunk, slate) falls back to Dark.
+  if (themeName !== 'light') themeName = 'dark';
+  document.body.classList.remove('theme-light');
   if (themeName !== 'dark') {
     document.body.classList.add('theme-' + themeName);
   }
@@ -1206,8 +713,10 @@ export function loadAgentGroupTree() {
 function renderAgentGroupTree() {
   var root = document.getElementById('agent-tree-root');
   if (!root) return;
+  var fleet = state.agentTotals ? agtFleetCount(state.agentTotals) : 0;
   var allRow = '<div class="at-node' + (activeAgentGroupId === null ? ' active' : '') + '"' + on('click', 'selectAgentGroup', null) + '>' +
-    '<span class="at-caret"></span><span class="at-name">All</span></div>';
+    '<span class="at-caret"></span><span class="at-ico">' + kitIcon('layers') + '</span><span class="at-name">All agents</span>' +
+    (fleet ? '<span class="at-count">' + fleet + '</span>' : '') + '</div>';
   root.innerHTML = allRow + agentGroupTree.map(renderAgentGroupNode).join('');
 }
 
@@ -1217,6 +726,7 @@ function renderAgentGroupNode(node) {
   var active = activeAgentGroupId === node.id ? ' active' : '';
   var html = '<div class="at-node' + active + '"' + on('click', 'selectAgentGroup', node.id) + '>' +
     '<span class="at-caret">' + caret + '</span>' +
+    '<span class="at-ico">' + kitIcon('server') + '</span>' +
     '<span class="at-name">' + x(node.name) + '</span>' +
     '<span class="at-count">' + node.totalAgentCount + '</span>' +
     '<span class="at-menu"' + on('click', 'openAgentGroupMenuStop', node.id) + '>&#8942;</span>' +
@@ -1383,31 +893,50 @@ export function loadAgents() {
     state.agentsHasMore = !!(page && page.has_more);
     state.agentsPagesLoaded = 1;
     state.agentTotals = (page && page.totals) || { online: 0, degraded: 0, offline: 0, retired: 0 };
-    document.getElementById('agent-cnt').textContent = state.agentTotals.online + state.agentTotals.degraded + state.agentTotals.offline;
-    renderAgentTiles(); renderAgentToolbar(); renderAgentRows();
+    renderAgentHero(); renderAgentInsights(); renderAgentToolbar(); renderAgentRows(); renderAgentGroupTree();
     renderLegacyMigrationPanel();
+    loadFleetTrayState();
   }).catch(function(e) { showToast(e.message, 'err'); });
+}
+// The fleet-wide tray-icon default labels the System Tree button and decides each agent's Action-menu wording.
+// A failed read leaves the last known value; it never blocks the agent list.
+// The fleet minimum agent version (P2). "" means no minimum. Only the toolbar label reads it.
+export function minAgentVersionLabel(v, source) {
+  if (!v) return 'Min agent: none';
+  return 'Min agent ' + v + (source === 'previous-release' ? ' (previous release)' : '');
+}
+function loadFleetMinAgentVersion() {
+  apicall('/api/fleet/min-agent-version').then(function(r) {
+    var v = (r && r.version) || '', src = (r && r.source) || '', def = (r && r.default) || '';
+    if (v === (state.minAgentVersion || '') && src === (state.minAgentVersionSource || '') && def === (state.minAgentVersionDefault || '')) return;
+    state.minAgentVersion = v; state.minAgentVersionSource = src; state.minAgentVersionDefault = def;
+    renderAgentToolbar();
+  }).catch(function() {});
+}
+// Revoked agent binaries, by hash: {source: 'console'|'release', reversible}. The drawer reads it to offer Revoke or
+// Un-revoke. A failed read leaves the last known list; it never blocks the agent list.
+function loadBinaryRevocations() {
+  apicall('/api/agent-binaries/revocations').then(function(r) {
+    var map = {};
+    ((r && r.items) || []).forEach(function(it) { map[it.sha256] = { source: it.source, reversible: !!it.reversible }; });
+    state.revokedBinaries = map;
+  }).catch(function() {});
+}
+function loadFleetTrayState() {
+  loadFleetMinAgentVersion();
+  loadBinaryRevocations();
+  apicall('/api/fleet/tray-icon').then(function(r) {
+    var hidden = !!(r && r.hidden);
+    if (hidden === !!state.fleetTrayHidden && state.fleetTrayLoaded) return;
+    state.fleetTrayHidden = hidden; state.fleetTrayLoaded = true;
+    renderAgentToolbar(); renderAgentRows();
+  }).catch(function() {});
 }
 function renderLegacyMigrationPanel() {
   var el = document.getElementById('legacy-migration-panel');
   if (!el) return;
   apicall('/api/agents/legacy-migration-status').then(function(status) {
-    var blockingHtml = (status.blockingAgents || []).map(function(a) {
-      return '<div class="legacy-blocking-row"><span>' + x(a.hostname || a.agentId) + '</span>' +
-             '<span class="legacy-blocking-time">' + new Date(a.lastSeen).toLocaleString() + '</span></div>';
-    }).join('');
-    var unattributedHtml = status.unattributedRequests
-      ? '<div class="legacy-unattributed-warning">&#9888; Unattributed legacy activity: ' +
-        status.unattributedRequests.count + ' request(s) — retirement blocked</div>'
-      : '';
-    el.innerHTML =
-      '<div class="legacy-migration-header">Legacy Transport Migration</div>' +
-      '<div class="legacy-migration-days">Days clean: ' + status.daysClean + ' / ' + status.daysRequired + '</div>' +
-      '<div class="legacy-migration-status ' + (status.eligible ? 'eligible' : 'not-eligible') + '">' +
-        (status.eligible ? 'ELIGIBLE FOR REVIEW' : 'NOT YET ELIGIBLE') +
-      '</div>' +
-      unattributedHtml +
-      (blockingHtml ? '<div class="legacy-blocking-list">' + blockingHtml + '</div>' : '');
+    el.innerHTML = migrationPanelHtml(status, function(t) { return new Date(t).toLocaleString(); });
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
 export function loadMoreAgents() {
@@ -1426,7 +955,7 @@ export function loadMoreAgents() {
     // totals intentionally NOT updated here -- they were already
     // fleet-wide-accurate from the first page's response, and appending
     // more rows to `agents` doesn't change the true totals.
-    renderAgentRows();
+    renderAgentRows(); renderAgentInsights(); renderAgentToolbar();
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
 export function onAgentSearchInput() {
@@ -1454,16 +983,21 @@ export function statTileCard(lbl, val, col) {
   return '<div class="kpi-card stat-tile"><div class="stat-top"><div><div class="kpi-label">' + lbl +
     '</div><div class="kpi-value" style="color:' + col + '">' + val + '</div></div></div></div>';
 }
-function renderAgentTiles() {
+// renderAgentHero fills the chips in the page banner from the server's own bucket totals.
+function renderAgentHero() {
   var b = state.agentTotals;
-  var tile = statTileCard;
-  var el = document.getElementById('agent-tiles');
-  if (el) el.innerHTML =
-    tile('Total agents', b.online + b.degraded + b.offline, 'var(--text)') +
-    tile('Online', b.online, b.online ? 'var(--success)' : 'var(--muted)') +
-    tile('Degraded', b.degraded, b.degraded ? 'var(--warning)' : 'var(--muted)') +
-    tile('Offline', b.offline, b.offline ? 'var(--danger)' : 'var(--muted)') +
-    tile('Retired', b.retired, 'var(--muted)');
+  setHeroStat('hs-agents-total', b.online + b.degraded + b.offline);
+  setHeroStat('hs-agents-online', b.online);
+  setHeroStat('hs-agents-degraded', b.degraded);
+  setHeroStat('hs-agents-offline', b.offline);
+  setHeroStat('hs-agents-retired', b.retired);
+}
+// renderAgentInsights fills the KPI strip and distribution cards from the same page response the table uses.
+function renderAgentInsights() {
+  var el = document.getElementById('agent-insights');
+  if (el) el.innerHTML = agentInsightsHtml(state.agents, state.agentTotals);
+  var op = document.getElementById('agent-operational-insights');
+  if (op) op.innerHTML = agentOperationalHtml(state.agents, state.agentTotals);
 }
 // covSegHtml renders the shared "cov-seg" toggle-button-group shape used by
 // several toolbars below (agent/campaign/coverage/findings/run-IOC
@@ -1477,65 +1011,123 @@ export function covSegHtml(items, activeVal, setterFnName, countFn) {
   }).join('') + '</div>';
 }
 function renderAgentToolbar() {
-  var c = function(k) {
-    if (k === 'all') return state.agentTotals.online + state.agentTotals.degraded + state.agentTotals.offline;
-    return state.agentTotals[k] || 0;
-  };
-  var el = document.getElementById('agent-toolbar');
-  if (el) el.innerHTML = covSegHtml(
-    [['all', 'All'], ['online', 'Online'], ['degraded', 'Degraded'], ['offline', 'Offline'], ['retired', 'Retired']],
-    AGENT_FILTER, 'setAgentFilter', c
-  );
+  var el = document.getElementById('agent-filter-selects');
+  if (!el) return;
+  var cur = AGENT_FILTER === 'all' ? '' : AGENT_FILTER;
+  var os = agtOsFilter();
+  var statuses = [['', 'All statuses'], ['online', 'Online'], ['degraded', 'Degraded'], ['offline', 'Offline'], ['retired', 'Retired']];
+  var oses = agtOsOptions(state.agents);
+  if (os && oses.indexOf(os) < 0) oses.push(os);
+  var searchEl = document.getElementById('agent-search');
+  var dirty = cur || os || (searchEl && searchEl.value.trim());
+  el.innerHTML =
+    '<select class="select" aria-label="Status"' + on('change', 'setAgentStatusSelect') + '>' + statuses.map(function(s) {
+      return '<option value="' + x(s[0]) + '"' + (s[0] === cur ? ' selected' : '') + '>' + x(s[1]) + '</option>';
+    }).join('') + '</select>' +
+    '<select class="select" aria-label="Operating system"' + on('change', 'setAgentOsSelect') + '><option value="">All OS</option>' + oses.map(function(o) {
+      return '<option value="' + x(o) + '"' + (o === os ? ' selected' : '') + '>' + x(o) + '</option>';
+    }).join('') + '</select>' +
+    (dirty ? '<button type="button" class="btn btn-ghost btn-sm"' + on('click', 'clearAgentFilters') + '>' + kitIcon('x') + 'Clear</button>' : '') +
+    (ROLE === 'admin' ? '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'toggleFleetTrayIcon') + ' title="Windows agents only. Agents with their own setting keep it.">' + x(fleetTrayLabel(state.fleetTrayHidden)) + '</button>' +
+    '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'toggleMinAgentVersion') + ' title="Agents below this version are flagged for upgrade. They keep running.">' + x(minAgentVersionLabel(state.minAgentVersion, state.minAgentVersionSource)) + '</button>' : '');
+}
+// Sends one tray-icon change and refreshes. `hidden` is true (hide), false (force visible) or null (follow the fleet).
+function putTrayIcon(url, hidden, okMsg) {
+  return apicall(url, { method: 'PUT', body: JSON.stringify({ hidden: hidden }) }).then(function(r) {
+    if (r && r.error) throw new Error(r.error);
+    showToast(okMsg, 'ok');
+    return loadAgents();
+  }).catch(function(e) { showToast(e.message, 'err'); });
+}
+export function toggleFleetTrayIcon() {
+  var hide = !state.fleetTrayHidden;
+  if (!confirm(fleetTrayConfirm(hide))) return;
+  putTrayIcon('/api/fleet/tray-icon', hide, hide ? 'Tray icon hidden on all Windows agents' : 'Tray icon shown on all Windows agents');
+}
+// Sets the fleet minimum agent version. Empty clears it. The server validates the format.
+export function toggleMinAgentVersion() {
+  var cur = state.minAgentVersion || '', def = state.minAgentVersionDefault || '';
+  var v = prompt('Minimum agent version, for example 1.9.7. Agents below it are flagged for upgrade; they keep running. Leave empty for no minimum' +
+    (def ? ', or type "default" to go back to the previous release (' + def + ').' : '.'), cur);
+  if (v === null) return;
+  v = v.trim();
+  var reset = v.toLowerCase() === 'default';
+  if (reset && !def) { showToast('This release does not name a previous release, so there is no default', 'warn'); return; }
+  apicall('/api/fleet/min-agent-version', reset ? { method: 'DELETE' } : { method: 'PUT', body: JSON.stringify({ version: v }) }).then(function(r) {
+    if (r && r.error) throw new Error(r.error);
+    state.minAgentVersion = (r && r.version) || ''; state.minAgentVersionSource = (r && r.source) || ''; state.minAgentVersionDefault = (r && r.default) || '';
+    showToast(state.minAgentVersion ? 'Minimum agent version set to ' + state.minAgentVersion : 'Minimum agent version cleared', 'ok');
+    return loadAgents();
+  }).catch(function(e) { showToast(e.message, 'err'); });
+}
+// Revokes an agent binary hash (admin). Every agent running that exact binary is quarantined at once. An admin can
+// reverse a console revocation (unrevokeAgentBinary); one written into the signed release needs a new release.
+export function revokeAgentBinary(sha256) {
+  if (!confirm('Revoke this agent binary? Every agent running this exact binary will be quarantined and stop receiving scenarios until it runs a current signed release.')) return;
+  apicall('/api/agent-binaries/revocations', { method: 'POST', body: JSON.stringify({ sha256: sha256, reason: 'Revoked from the agent drawer' }) }).then(function(r) {
+    if (r && r.error) throw new Error(r.error);
+    showToast('Binary revoked; ' + ((r && r.agentsQuarantined) || 0) + ' agent(s) quarantined', 'ok');
+    loadBinaryRevocations();
+    return loadAgents();
+  }).catch(function(e) { showToast(e.message, 'err'); });
+}
+// Reverses a console revocation (admin). It lifts the revocation only: agents stay quarantined until each is restored.
+export function unrevokeAgentBinary(sha256) {
+  if (!confirm('Un-revoke this agent binary? The binary is trusted again if it is a current or previous signed release. Agents that were quarantined because of the revocation stay quarantined until you restore each one.')) return;
+  apicall('/api/agent-binaries/revocations/' + encodeURIComponent(sha256), { method: 'DELETE' }).then(function(r) {
+    if (r && r.error) throw new Error(r.error);
+    showToast('Revocation lifted; ' + ((r && r.agentsStillQuarantined) || 0) + ' agent(s) still quarantined until restored', 'ok');
+    loadBinaryRevocations();
+    return loadAgents();
+  }).catch(function(e) { showToast(e.message, 'err'); });
+}
+export function rowMenuTrayIcon(id, hidden) {
+  closeAllRowMenus();
+  var msg = hidden === null ? 'Tray icon follows the fleet default' : hidden ? 'Tray icon will be hidden on this agent' : 'Tray icon will be shown on this agent';
+  putTrayIcon('/api/agents/' + encodeURIComponent(id) + '/tray-icon', hidden, msg);
+}
+export function setAgentStatusSelect(el) { setAgentFilter((el && el.value) || 'all'); }
+export function setAgentOsSelect(el) { setAgtOs(el); renderAgentToolbar(); }
+export function clearAgentFilters() {
+  AGENT_FILTER = 'all';
+  var searchEl = document.getElementById('agent-search');
+  if (searchEl) searchEl.value = '';
+  resetAgtFilters();
+  loadAgents();
 }
 export function setAgentFilter(v) { AGENT_FILTER = v; loadAgents(); }
 function renderAgentRows() {
-  // Server already scopes `agents` by bucket/search/group -- nothing left
-  // to filter client-side.
-  var list = state.agents;
+  // Server already scopes `agents` by bucket/search/group; the table layer only filters, sorts and pages
+  // the loaded rows (agt-view.js).
   var searchEl = document.getElementById('agent-search');
   var q = searchEl ? searchEl.value.trim() : '';
-  var tbody = document.getElementById('agents-body');
-  var loadMoreWrap = document.getElementById('agent-load-more-wrap');
-  if (loadMoreWrap) setDisplay(loadMoreWrap, state.agentsHasMore ? '' : 'none');
-  if (!list.length) {
-    var emptyMsg = q ? 'No agents match "' + x(q) + '".' : ('No agents' + (AGENT_FILTER === 'all' ? ' registered yet.' : ' in this state.'));
-    tbody.innerHTML = '<tr><td colspan="8" class="empty">' + emptyMsg + '</td></tr>';
-    return;
+  paintAgentTable({
+    agents: state.agents,
+    totals: state.agentTotals,
+    hasMore: state.agentsHasMore,
+    filtering: !!(q || AGENT_FILTER !== 'all' || activeAgentGroupId !== null),
+    cells: agentCell,
+  });
+}
+// One table cell. Column numbers follow agt-model.js COLUMNS; -1 is the trailing actions cell content.
+function agentCell(a, col, idx) {
+  var host = a.hostname || a.agentId;
+  switch (col) {
+    case 0:
+      return '<td><div class="agt-host mono" title="' + x(host) + '">' + x(host) + '</div>' +
+        '<div class="agt-sub muted" title="' + x(a.agentId) + '">' + x([a.ipAddress, a.agentId].filter(Boolean).join(' · ')) + '</div></td>';
+    case 1: return '<td>' + (a.groupName ? x(a.groupName) : '<span class="muted">Ungrouped</span>') + '</td>';
+    case 2: return '<td class="muted agt-os" title="' + x(a.osVersion || '') + '">' + x(a.osVersion || '—') + '</td>';
+    case 3: return '<td>' + statusCellHtml(a, apActiveJobs[a.agentId]) + '</td>';
+    case 4: return '<td class="muted agt-seen">' + ago(a.lastUpdate) + '</td>';
+    case 5: return '<td class="num">' + (a.sims || 0) + '</td>';
+    default: return agentRowMenu(a, idx);
   }
-  tbody.innerHTML = list.map(function(a, idx) {
-    var dot = agentDotColor(agentBucket(a));
-    var menuId = 'agent-menu-' + idx;
-    return '<tr>' +
-      '<td style="max-width:180px"><div style="display:flex;align-items:center;gap:0.5rem"><span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:' + dot + '"></span>' +
-        '<div style="min-width:0"><div class="cell-main" style="font-family:var(--font-mono);font-size:0.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px" title="' + x(a.hostname || a.agentId) + '">' + x(a.hostname || a.agentId) + '</div>' +
-        '<div class="tiny muted" style="font-family:var(--font-mono);font-size:0.6rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px" title="' + x(a.agentId) + '">' + x(a.agentId) + '</div></div></div></td>' +
-      '<td style="color:var(--muted);font-size:0.78rem;max-width:100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + x(a.osVersion || '') + '">' + x(a.osVersion || '—') + '</td>' +
-      '<td class="tiny muted" style="font-family:var(--font-mono);white-space:nowrap">' + x(a.ipAddress || '—') + '</td>' +
-      '<td><span class="tag">' + x(a.groupName || 'Ungrouped') + '</span></td>' +
-      '<td>' +
-        '<span class="sbadge s-' + x(a.status || 'idle') + '">' + x(a.status || 'idle') + '</span>' +
-        (a.state && a.state !== 'active' ? ' <span class="sbadge s-' + x(a.state) + '" title="Lifecycle state">' + x(a.state) + '</span>' : '') +
-        // Heartbeat (HTTP, every 30s) and the WebSocket task-delivery channel
-        // are separate connections -- a proxy/firewall can pass one and block
-        // the other, so a fresh heartbeat alone doesn't mean a run can reach
-        // this agent. Only shown when that gap is real: status already reads
-        // offline covers the "nothing at all" case on its own.
-        (a.status !== 'offline' && !a.wsConnected ? ' <span class="sbadge s-paused" title="Heartbeat is reaching the server, but the WebSocket task channel is down -- dispatching a run to this agent will fail until it reconnects. Often a proxy/firewall blocking the WS Upgrade handshake.">&#9888; Task channel down</span>' : '') +
-        // transport reflects what the agent's own heartbeat reports (see
-        // models.Agent.Transport). An agent stuck on 'legacy' past its
-        // first heartbeat never completed mTLS bootstrap -- it enrolls and
-        // heartbeats normally, so nothing else here signals a problem, but
-        // it silently rejects every scenario dispatch because it never
-        // received the command-signing trust cert. Usually means it was
-        // installed without --ca-root.
-        (a.status !== 'offline' && a.transport === 'legacy' ? ' <span class="sbadge s-paused" title="This agent is on legacy transport -- it never completed mTLS bootstrap and cannot receive signed commands. Scenario dispatch will fail. Usually means it was installed without --ca-root; see the Deploy agent page for the current install command, or fetch the CA root manually from /api/config/ca-root.">&#9888; Legacy transport</span>' : '') +
-        (apActiveJobs[a.agentId] ? ' <span class="sbadge s-running" title="Attack-path collection: ' + x(apActiveJobs[a.agentId].status) + '">&#128202; AP</span>' : '') +
-      '</td>' +
-      '<td style="color:var(--muted);font-size:0.78rem;white-space:nowrap">' + ago(a.lastUpdate) + '</td>' +
-      '<td class="tiny" style="font-family:var(--font-mono)">' + (a.sims || 0) + '</td>' +
-      '<td>' +
-        '<div class="row-menu-wrap">' +
-        '<button class="btn btn-outline btn-sm row-menu-btn"' + on('click', 'toggleRowMenuById', menuId) + ' title="Actions" aria-haspopup="true">&#8942;</button>' +
+}
+function agentRowMenu(a, idx) {
+  var menuId = 'agent-menu-' + idx;
+  return '<div class="row-menu-wrap">' +
+        '<button class="btn btn-ghost btn-sm row-menu-btn"' + on('click', 'toggleRowMenuById', menuId) + ' title="Actions" aria-label="Actions" aria-haspopup="true">' + kitIcon('more') + '</button>' +
         '<div class="row-menu-panel" id="' + menuId + '">' +
           '<button class="row-menu-item"' + on('click', 'rowMenuDetail', a.agentId) + '>&#128269; Detail</button>' +
           '<button class="row-menu-item"' + on('click', 'rowMenuRunSimulation', a.agentId) + '>&#9654; Run simulation</button>' +
@@ -1549,16 +1141,21 @@ function renderAgentRows() {
           '<button class="row-menu-item"' + on('click', 'rowMenuAuditPack', a.agentId) + '>&#8659; Download audit pack</button>' +
           (ROLE === 'admin' ?
             '<button class="row-menu-item"' + on('click', 'rowMenuMoveGroup', a.agentId) + '>&#128193; Move to group…</button>' : '') +
-          (ROLE === 'admin' && a.status !== 'offline' ?
+          (ROLE === 'admin' ? trayMenuEntries(a, state.fleetTrayHidden).map(function(e) {
+            return '<button class="row-menu-item"' + on('click', 'rowMenuTrayIcon', a.agentId, e.hidden) + '>&#128065; ' + x(e.label) + '</button>';
+          }).join('') : '') +
+          (ROLE === 'admin' && !a.forceRemoved && a.status !== 'offline' ?
             '<button class="row-menu-item row-menu-item-danger"' + on('click', 'rowMenuStopAgent', a.agentId, a.hostname || a.agentId) + '>&#9209; Stop agent</button>' : '') +
-          (ROLE === 'admin' ?
+          (ROLE === 'admin' && !a.forceRemoved ?
             '<button class="row-menu-item row-menu-item-danger"' + on('click', 'rowMenuUninstallAgent', a.agentId, a.hostname || a.agentId) + '>&#128465; Uninstall Agent</button>' : '') +
-          (ROLE === 'admin' ?
+          agentRevokeMenuItems(a, ROLE === 'admin') +
+          (ROLE === 'admin' && !a.forceRemoved ?
             '<button class="row-menu-item row-menu-item-danger"' + on('click', 'rowMenuRemoveAgent', a.agentId, a.hostname || a.agentId) + '>&#9888; Force Remove…</button>' : '') +
         '</div>' +
-        '</div>' +
-      '</td></tr>';
-  }).join('');
+        '</div>';
+}
+export function agentRowKeydown(id, el, event) {
+  if (event && (event.key === 'Enter' || event.key === ' ') && event.target === el) { event.preventDefault(); rowMenuDetail(id); }
 }
 // Row action menus (the "⋮" dropdown in the Agents table Actions column).
 // Only one panel is ever open at a time; toggling re-closes any other open
@@ -1581,6 +1178,20 @@ export function rowMenuNavigator(id) { closeAllRowMenus(); downloadNavigatorLaye
 export function rowMenuMoveGroup(id) { closeAllRowMenus(); moveAgentToGroupPrompt(id); }
 export function rowMenuStopAgent(id, hostname) { closeAllRowMenus(); openStopAgentModal(id, hostname); }
 export function rowMenuUninstallAgent(id, hostname) { closeAllRowMenus(); openUninstallAgentModal(id, hostname); }
+export function rowMenuAllowReinstall(id, hostname) { closeAllRowMenus(); openAllowReinstallModal(id, hostname); }
+export function rowMenuRevokeAgent(id, hostname) { closeAllRowMenus(); openRevokeAgentModal(id, hostname); }
+export function rowMenuReinstateAgent(id, hostname) { closeAllRowMenus(); openReinstateAgentModal(id, hostname); }
+
+// The Revoke / Reinstate entries of an agent's row menu. Admin only (the server enforces it too). A
+// retired or uninstalled agent has nothing to revoke; a revoked one can only be reinstated.
+export function agentRevokeMenuItems(a, isAdmin) {
+  if (!isAdmin || a.forceRemoved || a.state === 'retired' || a.state === 'uninstalled') return '';
+  if (a.state === 'revoked') {
+    return '<button class="row-menu-item"' + on('click', 'rowMenuReinstateAgent', a.agentId, a.hostname || a.agentId) + '>&#8617; Reinstate…</button>';
+  }
+  return '<button class="row-menu-item"' + on('click', 'rowMenuAllowReinstall', a.agentId, a.hostname || a.agentId) + '>&#8635; Allow reinstall…</button>' +
+    '<button class="row-menu-item row-menu-item-danger"' + on('click', 'rowMenuRevokeAgent', a.agentId, a.hostname || a.agentId) + '>&#128683; Revoke…</button>';
+}
 export function rowMenuRemoveAgent(id, hostname) { closeAllRowMenus(); openRemoveAgentModal(id, hostname); }
 
 export function toggleRowMenu(btn, id) {
@@ -1589,6 +1200,16 @@ export function toggleRowMenu(btn, id) {
   var wasOpen = panel.classList.contains('open');
   closeAllRowMenus();
   if (wasOpen) return;
+  panel.classList.add('open');
+  placeRowMenu(btn, panel);
+}
+
+// Places an open row menu under its trigger button, clamped to the viewport.
+// Called when it opens and again on every scroll, so it follows its button.
+function placeRowMenu(btn, panel) {
+  // Re-measuring below resets max-height, which makes the browser clamp the panel's scroll position back to the top.
+  // Keep it and put it back, so repositioning never undoes the user's scrolling inside a long menu.
+  var keepScroll = panel.scrollTop;
   // Position as fixed viewport coordinates from the trigger button's own
   // rect (see the .row-menu-panel CSS comment for why fixed instead of
   // absolute), right-aligned under the button like a standard menu.
@@ -1615,6 +1236,7 @@ export function toggleRowMenu(btn, id) {
       panel.style.maxHeight = Math.max(spaceBelow, 80) + 'px';
     }
   }
+  panel.scrollTop = keepScroll;
 }
 export function closeAllRowMenus() {
   document.querySelectorAll('.row-menu-panel.open').forEach(function(p) { p.classList.remove('open'); });
@@ -1625,20 +1247,60 @@ document.addEventListener('click', function(e) {
 });
 }
 
-// A fixed-position panel doesn't track its trigger button on scroll -- close
-// it instead of letting it visually drift away from the row it belongs to.
+// A fixed-position panel doesn't track its trigger button when the list scrolls,
+// so each open panel is re-placed under its button on every scroll. It closes only
+// when its button has scrolled out of view or is clipped by its list. Scrolling the
+// list is not a reason to close the menu.
 export function __init_L8490() {
-window.addEventListener('scroll', closeAllRowMenus, true);
+window.addEventListener('scroll', repositionOpenRowMenus, true);
 }
 
-// Deploy agent → reveal the in-page Connection Config / download section.
-export function showAgentDownload() {
+function triggerVisible(btn) {
+  var r = btn.getBoundingClientRect();
+  if (r.width === 0 && r.height === 0) return false;
+  if (r.bottom < 0 || r.top > window.innerHeight) return false;
+  for (var el = btn.parentElement; el && el !== document.body; el = el.parentElement) {
+    var cs = window.getComputedStyle(el);
+    if (/(auto|hidden|scroll)/.test(cs.overflowY + cs.overflowX)) {
+      var c = el.getBoundingClientRect();
+      if (r.bottom < c.top || r.top > c.bottom || r.right < c.left || r.left > c.right) return false;
+    }
+  }
+  return true;
+}
+
+export function repositionOpenRowMenus(e) {
+  // The scroll listener is registered in the capture phase, so it also hears the menu's own scrolling. Re-placing the
+  // panel on its own scroll reset it to the top every time, so a long action list could not be scrolled. Only scrolling
+  // of something else (the page or the table) moves the trigger button, and only that needs a re-place.
+  if (e && e.target && e.target.nodeType === 1 && e.target.closest('.row-menu-panel')) return;
+  document.querySelectorAll('.row-menu-panel.open').forEach(function(panel) {
+    var btn = panel.parentElement && panel.parentElement.querySelector('.row-menu-btn');
+    if (!btn || !triggerVisible(btn)) { panel.classList.remove('open'); return; }
+    placeRowMenu(btn, panel);
+  });
+}
+
+// Connection Config (hero button, admin only): open the Operational view at the connection settings.
+export function showConnectionConfig() {
   setAgentsView('operational');
   var w = document.getElementById('conn-cfg-wrap');
   if (!w) return;
   setDisplay(w, '');
   if (typeof loadConnectionConfig === 'function') loadConnectionConfig();
   w.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Deploy agent -> open the Operational view at the download / install section (the connection settings
+// above it are revealed too, as before).
+export function showAgentDownload() {
+  setAgentsView('operational');
+  var w = document.getElementById('conn-cfg-wrap');
+  if (!w) return;
+  setDisplay(w, '');
+  if (typeof loadConnectionConfig === 'function') loadConnectionConfig();
+  var d = document.getElementById('agent-deploy-section');
+  (d || w).scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // buildAgentInstallCommands returns the copy-paste install one-liners for each
@@ -1686,7 +1348,7 @@ export function buildAgentInstallCommands(origin, host, data) {
   var linuxEnv = 'BAS_SERVER_HOST=' + host + ' BAS_ENROLL_PORT=' + enrollPort + ' BAS_MTLS_PORT=' + mtlsPort + ' BAS_DASHBOARD_PORT=' + dashPort;
   // Every OS gets one line. The CA travels as base64 on that line, so nothing multi-line is pasted
   // into a shell or PowerShell (a heredoc or here-string loses its end marker when pasted).
-  var b64 = caRootPem ? btoa(caRootPem) : '';
+  var b64 = caRootPem ? window.btoa(caRootPem) : '';
 
   var linuxCaCmd = caRootPem
     ? 'echo ' + b64 + ' | base64 -d > deployment-ca.pem'
@@ -1724,9 +1386,18 @@ export function injectServerURL() {
     set('win-server-url', c.serverURL);
     set('win-cli-cmd', c.windows);
     set('linux-cli-cmd', c.linux);
+    set('linux-deb-cmd', debCommand(c.linux, 'amd64'));
     set('mac-cmd', c.mac);
   };
   apicall('/api/config/connection').then(apply).catch(function() { apply({}); });
+}
+
+// formatFingerprint groups a SHA-256 fingerprint (64 hex characters) in uppercase blocks of 8 so an
+// operator can compare it by eye with the one shown by the installer. Anything else returns '' so
+// a malformed value is never shown as if it were a fingerprint.
+export function formatFingerprint(hex) {
+  if (typeof hex !== 'string' || !/^[0-9a-fA-F]{64}$/.test(hex)) return '';
+  return hex.toUpperCase().match(/.{8}/g).join(' ');
 }
 
 export function loadConnectionConfig() {
@@ -1737,6 +1408,16 @@ export function loadConnectionConfig() {
     document.getElementById('cfg-server-url').textContent = window.location.origin;
     var secretEl = document.getElementById('cfg-agent-secret');
     secretEl.dataset.value = data.agentSecret || '';
+    // The deployment signing fingerprint is the trust anchor for the Windows MSI bundle: operators
+    // compare it with the one the installer shows. It comes from this authenticated call only.
+    var fpRow = document.getElementById('cfg-fingerprint-row');
+    var fpEl = document.getElementById('cfg-deployment-fingerprint');
+    var fpText = formatFingerprint(data.deploymentSigningFingerprint);
+    if (fpRow && fpEl) {
+      fpEl.textContent = fpText;
+      fpEl.dataset.value = fpText ? data.deploymentSigningFingerprint.toLowerCase() : '';
+      setDisplay(fpRow, fpText ? '' : 'none');
+    }
     // keep masked until user clicks Show
   }).catch(function(e) { showToast('Failed to load connection config: ' + (e.message || 'error'), 'err'); });
 }
@@ -1781,12 +1462,6 @@ export function copyText(elId, btn) {
   }
 }
 
-function stripeColor(id) {
-  var h = 0;
-  for (var i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) & 0xffff;
-  return STRIPE_COLORS[h % STRIPE_COLORS.length];
-}
-
 // loadCatalogs fetches the live ART + Caldera catalogs so sweep cards show a
 // real technique/ability count and the picker has data. Best-effort: a failure
 // (e.g. Caldera offline) just leaves that count blank — it never blocks the UI.
@@ -1815,6 +1490,7 @@ export function loadScenarios() {
         tags:               s.tags               || [],
         steps:              s.steps              || [],
         mitrePhases:        s.mitrePhases        || [],
+        productLine:        s.productLine        || '',
         source:             s.source             || 'builtin',
         executable:         !!s.executable,
         localCheck:         !!s.localCheck,
@@ -1844,22 +1520,6 @@ export function loadScenarios() {
     // re-renders it. Re-render now that scenarios is actually populated.
     if (SCHED.schedules.length) renderScheduledAssessmentsList();
   }).catch(function(e) { showToast(e.message, 'err'); });
-}
-
-// TCF Phase 1: registry lifecycle/trust badge. Only server-provided enum
-// strings and numbers, all escaped via x().
-function registryBadge(s) {
-  var r = s.registry;
-  if (!r) return '<span class="tag" title="Not registered — cannot run">unregistered</span> ';
-  if (r.executableVersion) {
-    var label = r.executableTrust === 'VENDOR_SIGNED' ? 'signed v' : (r.executableTrust === 'LOCAL_TRUSTED' ? 'approved v' : 'dev-unsigned v');
-    var pending = r.latestVersion > r.executableVersion
-      ? ' <span class="tag" title="Newer version awaiting approval">v' + x(String(r.latestVersion)) + ' ' + x(r.latestLifecycle) + '</span>'
-      : '';
-    return '<span class="tag tag-approved">' + label + x(String(r.executableVersion)) + '</span>' + pending + ' ';
-  }
-  return '<span class="tag tag-pending" title="Not executable until approved">v' +
-    x(String(r.latestVersion)) + ' ' + x(r.latestLifecycle) + '</span> ';
 }
 
 // Approvable: the latest version is a DRAFT/VALIDATED intel or custom one and
@@ -1994,10 +1654,10 @@ var SCENARIO_CATEGORIES = {
 // dashboard elsewhere).
 // Scenario section grouping by licensed product line. The server sends each scenario's productLine
 // (from its signed YAML). Threat-intel scenarios keep their own group, since they are split by source.
-export var PRODUCT_LINE_ORDER = ['av', 'waf', 'network', 'email', 'dlp', 'killchain', 'ransomware', 'webgw', 'cloud', 'apibas', 'ad', 'common'];
+export var PRODUCT_LINE_ORDER = ['av', 'waf', 'network', 'email', 'dlp', 'killchain', 'ransomware', 'webgw', 'cloud', 'apibas', 'ad', 'dbsim', 'common'];
 var PRODUCT_LINE_LABELS = {
-  av: 'Antivirus', waf: 'WAF', network: 'Network', email: 'Email', dlp: 'DLP', apibas: 'API BAS', ad: 'AD BAS',
-  ransomware: 'Ransomware', killchain: 'Kill Chain', webgw: 'Web Gateway', cloud: 'Cloud', common: 'Common'
+  av: 'Antivirus', waf: 'WAF', network: 'Network', email: 'Email', dlp: 'DLP', apibas: 'API BAS', ad: 'AD BAS', dbsim: 'DB Simulation',
+  ransomware: 'Ransomware', killchain: 'Kill Chain', webgw: 'Web Gateway', cloud: 'Cloud', common: 'Simulation Frameworks'
 };
 PRODUCT_LINE_ORDER.forEach(function(p) {
   SCENARIO_CATEGORIES[p] = { label: PRODUCT_LINE_LABELS[p], icon: SCENARIO_CATEGORIES.other.icon };
@@ -2006,7 +1666,7 @@ PRODUCT_LINE_ORDER.forEach(function(p) {
 // scenarioSectionOrder is the order the Scenarios landing shows its sections. Phishing is not a
 // scenario product line (its entries come from the phishing library), so it is placed here by key.
 export function scenarioSectionOrder() {
-  var keys = ['av', 'waf', 'network', 'email', 'dlp', 'phishing', 'killchain', 'ransomware', 'webgw', 'cloud', 'apibas', 'ad', 'common', 'intel'];
+  var keys = ['av', 'waf', 'network', 'email', 'dlp', 'phishing', 'killchain', 'ransomware', 'webgw', 'cloud', 'apibas', 'ad', 'dbsim', 'common', 'intel'];
   return keys.map(function(key) { return { key: key, label: SCENARIO_CATEGORIES[key].label }; });
 }
 
@@ -2021,530 +1681,173 @@ export function scenarioCategoryOf(s) {
   return 'other';
 }
 
-function scenarioCategoryCounts(list, key) {
-  var inCat = list.filter(function(s) { return scenarioProductOf(s) === key; });
-  var counts = { total: inCat.length, builtin: 0, custom: 0, intel: 0 };
-  inCat.forEach(function(s) { counts[scenarioSourceOf(s)]++; });
-  return counts;
-}
+// ── Scenarios page: sidebar + toolbar + grid/list + drawer (see scn-rich.js / scn-model.js) ──
+function scenarioSourceOf(s) { return scnSourceOf(s); }
 
-var TMPL_ICON = '<svg style="width:18px;height:18px;stroke:var(--accent)" viewBox="0 0 24 24" fill="none"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke-width="2" stroke-linejoin="round"/></svg>';
-
-// The landing's last inputs, so a library that loads after the landing can
-// re-draw the Phishing card without re-running the agent filters.
-var _lastLanding = null;
-
-function phishingLandingCardHTML() {
-  var c = phishingLibraryCounts(_libraryEntries);
-  if (c.total === 0) return '';
-  var breakdown = [c.runnable ? c.runnable + ' runnable here' : '',
-    c.unavailable ? c.unavailable + ' need a connector' : '',
-    c.catalogOnly ? c.catalogOnly + ' catalogued only' : '']
-    .filter(Boolean).join(' · ');
-  return '<div class="sc-cat-card sc-fade" tabindex="0" role="button" ' +
-    on('click', 'openScenarioCategory', 'phishing') + on('keydown', 'scenarioCategoryKeydown', 'phishing') + '>' +
-    '<h3>' + SCENARIO_CATEGORIES.phishing.icon + x(SCENARIO_CATEGORIES.phishing.label) + '</h3>' +
-    '<div class="sc-cat-count">' + c.total + ' scenario' + (c.total === 1 ? '' : 's') + '</div>' +
-    '<div class="sc-cat-breakdown">' + x(breakdown) + '</div>' +
-  '</div>';
-}
-
-function renderScenarioLanding(list, src) {
-  var el = document.getElementById('sc-landing');
-  if (!el) return;
-  _lastLanding = { list: list, src: src };
-  var html = scenarioSectionOrder().map(function(sec) {
-    var key = sec.key;
-    if (key === 'phishing') return phishingLandingCardHTML();
-    var cat = SCENARIO_CATEGORIES[key];
-    var c = scenarioCategoryCounts(list, key);
-    if (c.total === 0) return '';
-    // The intel category is single-source by construction (scenarioCategoryOf
-    // routes every threat-intel scenario here) -- a Built-in/Custom/Intel
-    // breakdown would just repeat "N Intel" next to the count above it.
-    var breakdown = key === 'intel' ? '' :
-      [c.builtin ? c.builtin + ' Built-in' : '', c.custom ? c.custom + ' Custom' : '', c.intel ? c.intel + ' Intel' : '']
-      .filter(Boolean).join(' · ');
-    return '<div class="sc-cat-card sc-fade" tabindex="0" role="button" ' +
-      on('click', 'openScenarioCategory', key) + on('keydown', 'scenarioCategoryKeydown', key) + '>' +
-      '<h3>' + cat.icon + x(cat.label) + '</h3>' +
-      '<div class="sc-cat-count">' + c.total + ' scenario' + (c.total === 1 ? '' : 's') + '</div>' +
-      '<div class="sc-cat-breakdown">' + x(breakdown) + '</div>' +
-    '</div>';
-  }).join('');
-  // The source filter (Threat intel / Custom) only narrows `list` -- it has
-  // no bearing on Adversary Templates below, which aren't drawn from
-  // `scenarios` at all (see the sc-filter-source display-toggle comment
-  // above). Without this message, filtering to a source with zero real
-  // scenarios left "BFSI Scenarios (0)" sitting directly above the
-  // Adversary Templates card with no explanation -- reading as if the
-  // filter had matched templates instead of correctly matching nothing.
-  if (!list.length && src && src !== 'all') {
-    var emptySrcLabel = { builtin: 'Built-in', custom: 'Custom', intel: 'Threat Intel' }[src] || src;
-    html = '<div class="tiny muted" style="width:100%;padding:0.5rem 0.1rem">There is no Scenarios for ' + x(emptySrcLabel) + ' yet</div>' + html;
-  }
-  if (_templates.length) {
-    html += '<div class="sc-cat-card sc-fade" tabindex="0" role="button" ' +
-      on('click', 'openScenarioCategory', 'templates') + on('keydown', 'scenarioCategoryKeydown', 'templates') + '>' +
-      '<h3>' + TMPL_ICON + 'Adversary Templates</h3>' +
-      '<div class="sc-cat-count">' + _templates.length + ' template' + (_templates.length === 1 ? '' : 's') + '</div>' +
-    '</div>';
-  }
-  el.innerHTML = html || '<p class="empty">No scenarios loaded.</p>';
-}
 
 export function scenarioCategoryKeydown(key, el, event) {
   if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openScenarioCategory(key); }
 }
 
 export function openScenarioCategory(key) {
+  if (key === 'all') key = 'landing';
   state.scenarioView = key;
   closeScenarioOverlay();
-  history.pushState({ scenarioView: key }, '', '#tab-scenarios/' + key);
-  renderScenarios();
-}
-export function closeScenarioCategoryView() {
-  if (state.scenarioView === 'search') {
-    var se = document.getElementById('sc-search');
-    if (se) se.value = '';
-  }
-  state.scenarioView = 'landing';
-  closeScenarioOverlay();
-  history.pushState({ scenarioView: 'landing' }, '', '#tab-scenarios');
-  renderScenarios();
+  history.pushState({ scenarioView: key }, '', key === 'landing' ? '#tab-scenarios' : '#tab-scenarios/' + key);
+  paintScenarios();
 }
 export function __init_L8723() {
 window.addEventListener('popstate', function(e) {
   var tab = document.getElementById('tab-scenarios');
   if (!tab || displayOf(tab) === 'none') return;
-  var view = (e.state && e.state.scenarioView) || 'landing';
-  if (view === 'landing') {
-    var se = document.getElementById('sc-search');
-    if (se) se.value = '';
-  }
-  state.scenarioView = view;
+  state.scenarioView = (e.state && e.state.scenarioView) || 'landing';
   closeScenarioOverlay();
-  renderScenarios();
+  paintScenarios();
 });
 }
 
+function scnFilters() {
+  var v = function(id) { var el = document.getElementById(id); return el ? el.value : 'all'; };
+  var q = document.getElementById('sc-search');
+  return { q: q ? q.value.trim() : '', source: v('sc-filter-source'), os: v('sc-filter-os'), product: v('sc-filter-product') };
+}
 
-// renderScenarios filters the loaded scenarios by the search box + source/OS
-// filters, then dispatches to either the category landing or a drilled-in
-// category's tile grid depending on scenarioView.
-export function renderScenarios() {
-  var landingEl = document.getElementById('sc-landing');
-  var catEl = document.getElementById('sc-category-view');
-  if (!landingEl || !catEl) return;
-  loadScenarioLibrary();
+var _scnProdSig = '';
+// "All Product Lines" lists the product lines that really have scenarios, labelled like the sidebar.
+function paintProductFilter(all) {
+  var sel = document.getElementById('sc-filter-product');
+  if (!sel) return;
+  var present = {};
+  all.forEach(function(s) { present[scenarioProductOf(s)] = 1; });
+  var opts = scenarioSectionOrder().filter(function(sec) { return present[sec.key]; });
+  var sig = opts.map(function(o) { return o.key; }).join(',');
+  if (sig === _scnProdSig) return;
+  _scnProdSig = sig;
+  var prev = sel.value;
+  sel.innerHTML = '<option value="all">All Product Lines</option>' + opts.map(function(o) { return '<option value="' + x(o.key) + '">' + x(o.label) + '</option>'; }).join('');
+  sel.value = present[prev] ? prev : 'all';
+}
 
-  if (showNoScenariosMessage(state.scenarios.length, _libraryEntries)) {
-    setDisplay(catEl, 'none');
-    setDisplay(landingEl, 'block');
-    landingEl.innerHTML = '<p class="empty">No scenarios loaded.</p>';
-    document.getElementById('sc-cnt').textContent = 0;
-    return;
-  }
+function paintHero(all) {
+  var st = scnHeroStats(all, scenarioProductOf);
+  setHeroStat('sc-hs-total', st.total);
+  setHeroStat('sc-hs-tech', st.techniques);
+  setHeroStat('sc-hs-fam', st.families);
+}
 
-  var searchEl = document.getElementById('sc-search');
-  var srcEl = document.getElementById('sc-filter-source');
-  var osEl = document.getElementById('sc-filter-os');
-  var q = (searchEl ? searchEl.value : '').trim().toLowerCase();
-  var src = srcEl ? srcEl.value : 'all';
-  var osFilter = osEl ? osEl.value : 'all';
-
-  var filtered = state.scenarios.filter(function(s) {
-    if (osFilter !== 'all' && (s.supportedOs || []).indexOf(osFilter) === -1) return false;
-    if (src !== 'all' && scenarioSourceOf(s) !== src) return false;
-    return true;
-  });
-  document.getElementById('sc-cnt').textContent = filtered.length;
+// paintScenarios redraws the whole page body from the loaded scenarios and the toolbar. It never
+// fetches, so the library loader can call it when its answer lands without looping.
+function paintScenarios() {
+  var grid = document.getElementById('sc-tile-grid'), cats = document.getElementById('sc-cats');
+  if (!grid || !cats) return;
+  var all = state.scenarios, ph = phishingLibraryCounts(_libraryEntries);
+  var view = state.scenarioView;
+  if (!view || view === 'landing' || view === 'search') view = 'all';
+  paintHero(all);
+  paintProductFilter(all);
+  paintDrawer(scnApproveFor);
+  document.getElementById('sc-layout').classList.toggle('cat-off', scnUi().catOff);
   setDisplay(document.getElementById('sc-tmpl-filters'), 'none');
-  // Adversary Templates aren't drawn from `scenarios` and carry no
-  // builtin/custom/intel source field, so this dropdown can't filter them --
-  // hide it in template view rather than let it show a stale/irrelevant
-  // count for an unrelated array. See sc-tmpl-filters above for the
-  // filter that actually applies to templates (category, not source).
-  setDisplay(document.getElementById('sc-filter-source'), '');
-  // Same reasoning as sc-filter-source above -- renderTemplateGrid() never
-  // reads this either, and templates carry no supportedOs field.
-  setDisplay(document.getElementById('sc-filter-os'), '');
+  var foot = document.getElementById('sc-foot'), tools = document.getElementById('sc-toolbar');
+  if (foot) foot.textContent = '';
 
-  if (q) { state.scenarioView = 'search'; }
-
-  // The agent source and OS filters apply to agent scenarios only, so they are
-  // hidden while the Phishing category is open.
-  if (state.scenarioView === 'phishing') {
-    setDisplay(srcEl, 'none');
-    setDisplay(osEl, 'none');
-    setDisplay(landingEl, 'none');
-    setDisplay(catEl, 'block');
-    document.getElementById('sc-backbar-title').textContent =
-      SCENARIO_CATEGORIES.phishing.label + ' (' + phishingLibraryCounts(_libraryEntries).total + ')';
-    renderPhishingLibrary();
+  if (showNoScenariosMessage(all.length, _libraryEntries)) {
+    cats.innerHTML = '';
+    tools.innerHTML = '';
+    grid.innerHTML = kitEmpty('mapped', 'No scenarios loaded');
     return;
   }
 
-  if (state.scenarioView === 'search') {
-    setDisplay(landingEl, 'none');
-    setDisplay(catEl, 'block');
-    var results = filtered.filter(function(s) {
-      var hay = [s.id, s.name, s.description, (s.tags || []).join(' '),
-                 (s.mitrePhases || []).join(' '), (s.artTechniques || []).join(' '),
-                 s.intelActor].join(' ').toLowerCase();
-      return hay.indexOf(q) !== -1;
-    });
-    document.getElementById('sc-backbar-title').textContent = 'Search results for: "' + x(searchEl.value.trim()) + '" (' + results.length + ')';
-    var sgrid = document.getElementById('sc-tile-grid');
-    sgrid.innerHTML = results.length
-      ? '<div class="sc-fade">' + renderScenarioTileGroup('search', results) + '</div>'
-      : '<p class="empty">No scenarios match your search.</p>';
-    return;
+  var pool = scnFilterList(all, scnFilters(), scenarioProductOf);
+  var subs = {};
+  if (ph.total) {
+    subs.phishing = [ph.runnable ? ph.runnable + ' runnable here' : '', ph.unavailable ? ph.unavailable + ' need a connector' : '', ph.catalogOnly ? ph.catalogOnly + ' catalogued only' : ''].filter(Boolean).join(' · ');
   }
+  var catList = scenarioSectionOrder().map(function(sec) { return { key: sec.key, label: sec.label, icon: sec.key }; });
+  if (_templates.length) catList.push({ key: 'templates', label: 'Adversary Templates' });
+  // The Threat Actor Library follows the Adversary Templates in the list; it opens as its own view.
+  if (_adversaries.length) catList.push({ key: 'actors', label: 'Threat Actor Library' });
+  var allList = scnAllView(pool, scnFilters().source);
+  var rows = scnCategoryRows(catList, allList.length, function(key) {
+    return key === 'phishing' ? ph.total : key === 'templates' ? _templates.length : key === 'actors' ? _adversaries.length : pool.filter(function(s) { return scenarioProductOf(s) === key; }).length;
+  }, subs);
+  cats.innerHTML = scnCatsHtml(rows, view);
 
-  if (state.scenarioView === 'landing') {
-    setDisplay(catEl, 'none');
-    setDisplay(landingEl, 'block');
-    renderScenarioLanding(filtered, src);
-    return;
-  }
+  var special = view === 'phishing' || view === 'templates' || view === 'actors';
+  syncAdversaryVisibility();
+  hideFilterSelects(special);
+  tools.innerHTML = scnToolbarHtml(special);
 
-  if (state.scenarioView === 'templates') {
-    setDisplay(landingEl, 'none');
-    setDisplay(catEl, 'block');
+  if (view === 'phishing') { renderPhishingLibrary(true); return; }
+  if (view === 'actors') { grid.innerHTML = ''; return; }
+  if (view === 'templates') {
     setDisplay(document.getElementById('sc-tmpl-filters'), 'flex');
-    setDisplay(document.getElementById('sc-filter-source'), 'none');
-    setDisplay(document.getElementById('sc-filter-os'), 'none');
     renderTemplateGrid();
     return;
   }
-
-  setDisplay(landingEl, 'none');
-  setDisplay(catEl, 'block');
-  var cat = SCENARIO_CATEGORIES[state.scenarioView];
-  var inCat = filtered.filter(function(s) { return scenarioProductOf(s) === state.scenarioView; });
-  document.getElementById('sc-backbar-title').textContent = cat.label + ' (' + inCat.length + ')';
-  var grid = document.getElementById('sc-tile-grid');
-  grid.innerHTML = inCat.length
-    ? '<div class="sc-fade">' + renderScenarioTileGroup(state.scenarioView, inCat) + '</div>'
-    : '<p class="empty">No scenarios match your filter.</p>';
-}
-export function scenarioSearchClear() {
-  if (!this.value.trim() && state.scenarioView === 'search') { state.scenarioView = 'landing'; }
-  renderScenarios();
-}
-
-// Collapsible description: shows a short preview with a "Read more" / "Read less"
-// toggle (WhatsApp style) so long scenario paragraphs don't bloat the cards.
-var descSeq = 0;
-function descHtml(desc, sid, opts) {
-  desc = (desc || '').trim();
-  opts = opts || {};
-  var limit = opts.limit || 140;
-  var style = opts.style || '';
-  if (desc.length <= limit) {
-    return '<p style="' + style + '">' + x(desc) + '</p>';
-  }
-  // trim the preview back to the last whole word so we don't cut mid-word
-  var preview = desc.substring(0, limit).replace(/\s+\S*$/, '');
-  var id = 'desc-' + String(sid || 'x').replace(/[^a-zA-Z0-9_-]/g, '') + '-' + (descSeq++);
-  return '<p style="' + style + '">' +
-    '<span id="' + id + '-s">' + x(preview) + '&hellip; </span>' +
-    '<span id="' + id + '-f" style="display:none">' + x(desc) + ' </span>' +
-    '<a href="#" class="desc-toggle"' + on('click', 'toggleDesc', id) + '>Read more</a>' +
-    '</p>';
-}
-export function toggleDesc(id, el) {
-  var sEl = document.getElementById(id + '-s');
-  var fEl = document.getElementById(id + '-f');
-  if (!sEl || !fEl) return;
-  var expanded = (displayOf(fEl) !== 'none');
-  setDisplay(sEl, expanded ? 'inline' : 'none');
-  setDisplay(fEl, expanded ? 'none' : 'inline');
-  el.textContent = expanded ? 'Read more' : 'Read less';
-}
-
-function scenarioSourceOf(s) {
-  return s.intelSource ? 'intel' : (s.source || 'builtin');
-}
-var SCENARIO_SOURCE_LABELS = { builtin: 'Built-in', custom: 'Custom', intel: 'Threat-Intel' };
-var SCENARIO_SOURCE_ORDER = ['builtin', 'custom', 'intel'];
-
-function scenarioTileOSBadges(s) {
-  var osArr = s.supportedOs || [];
-  if (!osArr.length) return '';
-  var osIcons = { windows: '<svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10"><path d="M3 3h8.5v8.5H3V3zm10.5 0H22v8.5h-8.5V3zM3 13.5h8.5V22H3v-8.5zm10.5 0H22V22h-8.5v-8.5z"/></svg>', linux: '🐧', darwin: '⌘' };
-  var osColors = {
-    windows: 'rgba(47,129,247,0.15);color:#58a6ff;border-color:rgba(47,129,247,0.4)',
-    linux:   'rgba(47,216,195,0.15);color:#5cead8;border-color:rgba(47,216,195,0.4)',
-    darwin:  'rgba(154,169,188,0.15);color:#9aa9bc;border-color:rgba(154,169,188,0.35)'
-  };
-  return osArr.map(function(os) {
-    var lc = os.toLowerCase();
-    var col = osColors[lc] || 'rgba(154,169,188,0.12);color:#9aa9bc;border-color:rgba(154,169,188,0.35)';
-    return '<span class="tag" style="background:' + col + ';font-size:0.6rem;padding:1px 5px" title="Supported OS: ' + x(os) + '">' + (osIcons[lc] || x(os)) + '</span>';
-  }).join('');
-}
-
-function scenarioTileMitreBadge(s) {
-  var phases = s.mitrePhases || [];
-  if (!phases.length) return '';
-  var extra = phases.length > 1 ? ' <span style="opacity:0.7">+' + (phases.length - 1) + '</span>' : '';
-  return '<span class="tag" style="font-size:0.6rem;padding:1px 5px" title="' + x(phases.join(', ')) + '">' + x(phases[0]) + extra + '</span>';
-}
-
-function scenarioTileHTML(s) {
-  var color = s.intelSource ? '#2f81f7' : stripeColor(s.id);
-  var sid = x(s.id);
-  return '<div class="sc-tile" tabindex="0" role="button" aria-expanded="false" data-sid="' + sid + '" ' +
-    on('mouseenter', 'previewScenarioOverlay', s.id) + on('mouseleave', 'unpreviewScenarioOverlay', s.id) + on('click', 'toggleScenarioPinFromEvent', s.id) + on('keydown', 'scenarioPinKeydown', s.id) + '>' +
-    '<div class="sc-tile-stripe" style="background:' + color + '"></div>' +
-    '<div class="sc-tile-name">' + x(s.name) + '</div>' +
-    '<div class="sc-tile-badges">' + scenarioTileOSBadges(s) + scenarioTileMitreBadge(s) + '</div>' +
-    '<div class="sc-tile-detail" id="scd-' + sid + '">' + scenarioDetailHTML(s) + '</div>' +
-  '</div>';
-}
-
-function renderScenarioTileGroup(viewKey, list) {
-  var bySrc = { builtin: [], custom: [], intel: [] };
-  list.forEach(function(s) { bySrc[scenarioSourceOf(s)].push(s); });
-  var activeSources = SCENARIO_SOURCE_ORDER.filter(function(k) { return bySrc[k].length; });
-  // A single active source (e.g. the Threat-Intel category, which is
-  // single-source by construction) would just repeat "X (N)" as a
-  // sub-header directly under the backbar title that already says the
-  // same thing -- render those tiles flat instead. Mixed-source views
-  // (search results, or a category that legitimately spans sources) keep
-  // the per-source grouping.
-  // Cards sit in the same grid as Adversary Templates, not as stacked rows.
-  if (activeSources.length <= 1) {
-    return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:0.85rem">' +
-      list.map(scenarioTileHTML).join('') + '</div>';
-  }
-  return activeSources.map(function(k) {
-    var collapsed = !!(scenarioSrcCollapsed[viewKey] && scenarioSrcCollapsed[viewKey][k]);
-    return '<div class="sc-src-group">' +
-      '<div class="sc-src-hdr' + (collapsed ? ' collapsed' : '') + '"' + on('click', 'toggleScenarioSrcGroup', viewKey, k) + '>' +
-        '<span class="chev">&#9660;</span>' + x(SCENARIO_SOURCE_LABELS[k]) + ' (' + bySrc[k].length + ')' +
-      '</div>' +
-      '<div class="sc-src-body' + (collapsed ? ' collapsed' : '') + '">' + bySrc[k].map(scenarioTileHTML).join('') + '</div>' +
-    '</div>';
-  }).join('');
-}
-
-export function toggleScenarioSrcGroup(viewKey, srcKey) {
-  if (!scenarioSrcCollapsed[viewKey]) scenarioSrcCollapsed[viewKey] = {};
-  scenarioSrcCollapsed[viewKey][srcKey] = !scenarioSrcCollapsed[viewKey][srcKey];
-  renderScenarios();
-}
-
-function _scOverlayEl(id) { return document.getElementById('scd-' + id); }
-function _scTileEl(id) {
-  var d = _scOverlayEl(id);
-  return d ? d.parentElement : null;
-}
-
-// Keeps the 420px overlay from clipping past the right edge of the viewport
-// for tiles that aren't in the leftmost grid column.
-function _scPositionOverlay(id) {
-  var detail = _scOverlayEl(id);
-  var tile = _scTileEl(id);
-  if (!detail || !tile) return;
-  detail.style.left = '';
-  detail.style.right = '';
-  var rect = tile.getBoundingClientRect();
-  if (rect.left + 420 > window.innerWidth - 16) {
-    detail.style.left = 'auto';
-    detail.style.right = '0';
+  // The footer's total must be the same set the sidebar count and the grid come from, not the whole catalogue.
+  var viewList = view === 'all' ? allList : pool.filter(function(s) { return scenarioProductOf(s) === view; });
+  var list = scnSortList(viewList, scnUi().sort);
+  var skipNote = view === 'intel' ? scnSkippedNote(_intelSkipped) : '';
+  grid.innerHTML = (skipNote ? '<div class="alert-info sc-skip-note" role="note">' + x(skipNote) + '</div>' : '') + (list.length ? scnGridHtml(list) : scnEmptyHtml());
+  if (foot && list.length) {
+    var bd = scnBreakdownItems(rows);
+    foot.innerHTML = x(scnShowing(list.length, viewList.length)) +
+      (bd.length ? '<div class="scn-breakdown">' + bd.map(function(i) { return '<span class="scn-bd-item">' + x(i.label) + ' <b>' + i.n + '</b></span>'; }).join('<span class="scn-bd-sep">·</span>') + '</div>' : '');
   }
 }
 
-export function previewScenarioOverlay(id) {
-  if (state.overlayPinned) return; // a pinned overlay is never disturbed by hovering elsewhere
-  var detail = _scOverlayEl(id);
-  if (!detail) return;
-  _scPositionOverlay(id);
-  detail.classList.add('show');
-}
-export function unpreviewScenarioOverlay(id) {
-  if (state.overlayPinned === id) return; // pinned overlays only close via toggle/ESC/outside-click
-  var detail = _scOverlayEl(id);
-  if (detail) detail.classList.remove('show');
-}
-export function toggleScenarioPinFromEvent(id, el, event) { toggleScenarioPin(event, id); }
-
-export function scenarioPinKeydown(id, el, event) {
-  if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleScenarioPin(event, id); }
+// renderScenarios reloads the phishing library and redraws; the toolbar and sidebar call paintScenarios
+// directly because they change nothing the library depends on.
+var _intelSkipped = null; // GET /api/scenarios/intel-skipped; null until read, or when it cannot be
+function loadIntelSkipped() {
+  return apicall('/api/scenarios/intel-skipped').then(function(d) { _intelSkipped = d && Array.isArray(d.actors) ? d : null; paintScenarios(); })
+    .catch(function() { _intelSkipped = null; });
 }
 
-function toggleScenarioPin(event, id) {
-  // A click on a button/link inside the already-open detail panel must not
-  // re-toggle the tile's own pin state — the panel is a DOM child of the
-  // tile, so such clicks bubble up to this same handler.
-  if (event.target.closest && event.target.closest('.sc-tile-detail')) return;
-  event.stopPropagation();
-  if (state.overlayPinned === id) { closeScenarioOverlay(); return; }
-  closeScenarioOverlay();
-  state.overlayPinned = id;
-  var tile = _scTileEl(id);
-  var detail = _scOverlayEl(id);
-  if (tile) { tile.classList.add('pinned'); tile.setAttribute('aria-expanded', 'true'); }
-  if (detail) { _scPositionOverlay(id); detail.classList.add('show'); }
+export function renderScenarios() {
+  if (!document.getElementById('sc-tile-grid')) return;
+  loadScenarioLibrary();
+  loadIntelSkipped();
+  paintScenarios();
 }
-export function closeScenarioOverlay() {
-  if (!state.overlayPinned) return;
-  var tile = _scTileEl(state.overlayPinned);
-  var detail = _scOverlayEl(state.overlayPinned);
-  if (tile) { tile.classList.remove('pinned'); tile.setAttribute('aria-expanded', 'false'); }
-  if (detail) detail.classList.remove('show');
-  state.overlayPinned = null;
-}
-export function __init_L8985() {
-document.addEventListener('click', function(e) {
-  if (!state.overlayPinned) return;
-  var detail = _scOverlayEl(state.overlayPinned);
-  var tile = _scTileEl(state.overlayPinned);
-  if ((detail && detail.contains(e.target)) || (tile && tile.contains(e.target))) return;
-  closeScenarioOverlay();
-});
-}
+export function refreshScenarioView() { paintScenarios(); }
+export function scenarioSearchClear() { paintScenarios(); }
 
+function scnApproveFor(s) { return canApproveForLocal(s) ? approveButton(s) : ''; }
+bindApproveButton(scnApproveFor);
+
+export function setScenarioView(v) { setScenarioViewMode(v); paintScenarios(); }
+export function setScenarioSort(el) { setScenarioSortMode(el && el.value); paintScenarios(); }
+export function setScenarioCatOff(v) { setScenarioCatOffMode(v); paintScenarios(); }
+export function clearScenarioFilters() {
+  var q = document.getElementById('sc-search'); if (q) q.value = '';
+  ['sc-filter-source', 'sc-filter-os', 'sc-filter-product'].forEach(function(id) { var el = document.getElementById(id); if (el) el.value = 'all'; });
+  state.scenarioView = 'landing';
+  paintScenarios();
+}
+export function openScenarioDrawer(id) { openScnDrawer(id); }
+export function closeScenarioDrawer() { closeScnDrawer(); }
+export function closeScenarioDrawerOnBackdrop(el, event) { if (event.target === el) closeScnDrawer(); }
+export function scenarioDrawerTab(id) { drawerTab(id); }
+export function scenarioCardKeydown(id, el, event) {
+  if (event.target !== el) return;
+  if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openScnDrawer(id); }
+}
+// The Run button sits inside the clickable card, so it must not also open the drawer.
+export function runScenarioCard(id, el, event) { event.stopPropagation(); openModal(id, null); }
+export function runScenarioFromDrawer(id) { closeScnDrawer(); openModal(id, null); }
+export function openScenarioRun(runId) {
+  var r = scnRunById(runId);
+  if (!r) return;
+  closeScnDrawer();
+  viewRunResults(r);
+}
+export function closeScenarioOverlay() { closeScnDrawer(); }
 export function __init_L8992() {
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape' && state.overlayPinned) {
-    var tile = _scTileEl(state.overlayPinned);
-    closeScenarioOverlay();
-    if (tile) tile.focus();
-  }
+  if (e.key === 'Escape' && drawerScenarioId()) closeScnDrawer();
 });
-}
-
-
-function scenarioDetailHTML(s) {
-      var visibleTags = (s.tags || []).filter(function(t) {
-        return t !== 'intel' && t !== 'auto-generated';
-      });
-      var tags = visibleTags.map(function(t) { return '<span class="tag">' + x(t) + '</span>'; }).join('');
-      var intelBadge = '';
-      if (s.intelSource) {
-        var confColor = s.intelConfidence === 'high' ? '#5cead8' : s.intelConfidence === 'medium' ? '#d29922' : '#9aa9bc';
-        intelBadge = '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(47,129,247,0.12);' +
-          'border:1px solid rgba(47,129,247,0.35);border-radius:4px;padding:2px 7px;font-size:0.72rem;color:#58a6ff;font-weight:600;margin-bottom:6px">' +
-          '&#128268; Intel &nbsp;·&nbsp; ' + x(s.intelActor) +
-          ' &nbsp;<span style="color:' + confColor + '">' + x(s.intelConfidence) + '</span>' +
-          ' &nbsp;·&nbsp; ' + x(s.intelSource.toUpperCase()) + '</span><br>';
-        var techCount = (s.artTechniques || []).length;
-        // No delete action here, deliberately -- auto-generated intel
-        // scenarios cannot be deleted by anyone, through any path (the
-        // backend enforces this too; see Engine.Delete's intel-source guard).
-        var footerMeta = techCount + ' techniques';
-        return '<div>' + registryBadge(s) + intelBadge + '</div>' +
-          '<h3>' + x(s.name) + '</h3>' +
-          descHtml(s.description, s.id, {limit:120, style:'font-size:0.78rem;color:var(--muted)'}) +
-          '<div class="tags">' + tags + '</div>' +
-          '<div class="card-footer">' +
-            '<div class="card-meta">' + footerMeta + '</div>' +
-            (canApproveForLocal(s) ? approveButton(s) : '') +
-            '<button class="btn btn-outline-green btn-sm"' + on('click', 'openModalForScenario', s.id) + '>&#9654; Run</button>' +
-          '</div>';
-      }
-      var canEdit = (ROLE === 'admin' || ROLE === 'analyst');
-      var customBadge = s.source === 'custom'
-        ? '<span class="tag" style="background:rgba(47,216,195,0.15);color:#5cead8;border-color:rgba(47,216,195,0.4)">custom</span> '
-        : '';
-      var editBtns = '';
-      if (canApproveForLocal(s)) editBtns += approveButton(s);
-      if (canEdit) {
-        editBtns += '<button class="btn btn-outline btn-sm"' + on('click', 'cloneScenario', s.id) + ' title="Clone into an editable custom scenario">&#9112; Clone</button> ';
-        if (s.source === 'custom') {
-          editBtns += '<button class="btn btn-outline btn-sm"' + on('click', 'openBuilder', s.id) + ' title="Edit">&#9998; Edit</button> ';
-          editBtns += '<button class="btn btn-sm" style="background:rgba(218,54,51,0.12);color:#f85149"' + on('click', 'deleteCustomScenario', s.id) + ' title="Delete">&#10005;</button> ';
-        }
-      }
-      // Mode label — describe what the scenario actually runs. Sweep scenarios
-      // carry an empty technique/ability list (the real set is resolved live on
-      // the server), so they must be detected by their flags, not list length —
-      // otherwise they fall through to a meaningless "0 steps". Live catalog
-      // counts get appended in Phase B.
-      var modeMeta;
-      var stepN = (s.steps || []).length;
-      if (s.localCheck) {
-        modeMeta = '<a href="#" class="desc-toggle" title="Choose which posture checks to run"' + on('click', 'openModalForScenario', s.id) + '>Posture check &#9881;</a>';
-      } else if (s.artAllWindows) {
-        modeMeta = 'Full ART sweep' + (state.artCatalog.length ? ' · ' + state.artCatalog.length + ' techniques' : '');
-      } else if (s.artAllPlatform) {
-        // artCatalog is the Windows-scoped catalog count -- not meaningful
-        // for a Linux/macOS full sweep, so no count is shown here (the
-        // read-only Detailed view has the real per-platform number).
-        modeMeta = 'Full ART sweep';
-      } else if (s.artSelectiveWindows) {
-        modeMeta = 'Selective ART sweep' + (state.artCatalog.length ? ' · up to ' + state.artCatalog.length + ' techniques' : '');
-      } else if (s.artSelectivePlatform) {
-        modeMeta = 'Selective ART sweep';
-      } else if (s.calderaAllWindows) {
-        modeMeta = 'Full Caldera sweep' + (state.calderaCatalog.length ? ' · ' + state.calderaCatalog.length + ' abilities' : '');
-      } else if ((s.artTechniques || []).length) {
-        modeMeta = s.artTechniques.length + ' ART techniques';
-      } else if ((s.calderaAbilities || []).length) {
-        modeMeta = s.calderaAbilities.length + ' Caldera abilities';
-      } else if (stepN) {
-        // The step count is a live entry point to the step picker — operators can
-        // click it to choose which steps to run (steps come straight from the YAML).
-        modeMeta = '<a href="#" class="desc-toggle" title="Choose which steps to run"' + on('click', 'openPicker', s.id, 'steps') + '>' +
-          stepN + (stepN === 1 ? ' step' : ' steps') + '</a>';
-      } else {
-        modeMeta = '—';
-      }
-
-      // OS platform badge
-      var osArr = s.supportedOs || [];
-      var osBadge = '';
-      if (osArr.length > 0) {
-        var osIcons = { windows: '<svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10"><path d="M3 3h8.5v8.5H3V3zm10.5 0H22v8.5h-8.5V3zM3 13.5h8.5V22H3v-8.5zm10.5 0H22V22h-8.5v-8.5z"/></svg>', linux: '🐧', darwin: '⌘' };
-        var osColors = {
-          windows: 'rgba(47,129,247,0.15);color:#58a6ff;border-color:rgba(47,129,247,0.4)',
-          linux:   'rgba(47,216,195,0.15);color:#5cead8;border-color:rgba(47,216,195,0.4)',
-          darwin:  'rgba(154,169,188,0.15);color:#9aa9bc;border-color:rgba(154,169,188,0.4)'
-        };
-        var osOnly = (osArr.length === 1);
-        osBadge = osArr.map(function(os) {
-          var lc = os.toLowerCase();
-          var col = osColors[lc] || 'rgba(154,169,188,0.12);color:#9aa9bc;border-color:rgba(154,169,188,0.35)';
-          var label = osOnly ? (os === 'darwin' ? 'macOS' : os.charAt(0).toUpperCase() + os.slice(1)) : (osIcons[lc] || os);
-          return '<span class="tag" style="background:' + col + ';font-size:0.62rem;padding:1px 6px" title="Supported OS: ' + os + '">' + label + '</span>';
-        }).join('') + ' ';
-      }
-
-      // Customize: ART/Caldera scenarios can be narrowed to a chosen subset of
-      // techniques/abilities before running. Detect the framework from the flags
-      // or the explicit list.
-      var fw = (s.artAllWindows || s.artAllPlatform || s.artSelectiveWindows || s.artSelectivePlatform || (s.artTechniques || []).length) ? 'art'
-             : (s.calderaAllWindows || (s.calderaAbilities || []).length) ? 'caldera'
-             : (!s.localCheck && stepN) ? 'steps'
-             : '';
-      var fwNoun = fw === 'art' ? 'techniques' : fw === 'caldera' ? 'abilities' : 'steps';
-      // art_all_windows/art_all_platform always run every atomic for every
-      // technique their platform supports -- no subset to choose, so a
-      // read-only Detailed view replaces the selectable Customize button
-      // here too (same reasoning as renderModalSelection for the Run modal).
-      var customizeBtn = (s.artAllWindows || s.artAllPlatform)
-        ? '<button class="btn btn-outline btn-sm"' + on('click', 'openDetailedViewForScenario', s.id) + ' ' +
-          'title="Every atomic test that will run">&#128269; Detailed view</button> '
-        : fw
-        ? '<button class="btn btn-outline btn-sm"' + on('click', 'openPicker', s.id, fw) + ' ' +
-          'title="Choose which ' + fwNoun + ' to run">&#9881; Customize</button> '
-        : '';
-
-      return '<div>' + registryBadge(s) + customBadge + '</div>' +
-        '<h3>' + x(s.name) + '</h3>' +
-        descHtml(s.description, s.id, {limit:140}) +
-        '<div class="tags">' + osBadge + tags + '</div>' +
-        '<div class="card-footer">' +
-          '<div class="card-meta">' + modeMeta + '</div>' +
-          '<div style="display:flex;gap:0.3rem;flex-wrap:wrap;justify-content:flex-end">' +
-            editBtns + customizeBtn +
-            '<button class="btn btn-outline-green btn-sm"' + on('click', 'openModalForScenario', s.id) + '>&#9654; Run</button>' +
-          '</div>' +
-        '</div>';
 }
 // ── Scenario Library: phishing entries from GET /api/scenarios/library ──
 // Phishing entries are listed beside the agent scenarios. A phishing entry gets
@@ -2574,16 +1877,9 @@ export function loadScenarioLibrary() {
   });
 }
 
-// Redraws whichever view shows phishing entries. Never calls renderScenarios,
-// which itself loads the library, so this cannot loop.
-function refreshLibraryViews() {
-  if (state.scenarioView === 'phishing') { renderPhishingLibrary(); return; }
-  if (state.scenarioView === 'landing') {
-    // With no agent scenarios the landing was never drawn, so fall back to an
-    // empty list. The landing then shows only the Phishing card, if any.
-    renderScenarioLanding(_lastLanding ? _lastLanding.list : [], _lastLanding ? _lastLanding.src : 'all');
-  }
-}
+// Redraws the page once the library answers (the Phishing count and tiles depend on it). Never calls
+// renderScenarios, which itself loads the library, so this cannot loop.
+function refreshLibraryViews() { paintScenarios(); }
 
 // The phishing category grid is the shared sc-tile-grid. Clicks on its tiles
 // and parameter form go to onPhishingLibraryClick, bound once.
@@ -2602,14 +1898,18 @@ function phishingLibraryTileHTML(entry, index) {
     : (LIBRARY_STATUS_LABEL[entry.status] || 'Not runnable');
   // Experimental stays visible in every state, not only when runnable.
   var tag = entry.experimental && entry.status !== 'experimental' ? ' · Experimental' : '';
-  return '<button type="button" class="sc-tile" data-entry-index="' + index + '"' +
-    (runnable ? '' : ' disabled') + '>' +
-    '<div class="sc-tile-name">' + x(entry.name) + '</div>' +
-    '<div class="sc-tile-badges">' + x(entry.id) + ' · ' + x(label) + x(tag) + '</div>' +
-    '</button>';
+  var pill = entry.status === 'available' ? 'ok' : entry.status === 'experimental' ? 'pending' : 'none';
+  return '<div class="sc-card src-builtin' + (runnable ? '' : ' unavail') + '" data-entry-index="' + index + '">' +
+    '<div class="sc-tags"><span class="sc-tag blue">Phishing</span>' + (entry.experimental ? '<span class="sc-tag amber">Experimental</span>' : '') + '</div>' +
+    '<h3>' + x(entry.name) + '</h3><p>' + x(entry.id) + ' · ' + x(label) + x(tag) + '</p>' +
+    '<div class="sc-actions"><span class="sc-avail ' + pill + '">&#9679; ' + x(label) + '</span>' +
+    '<button type="button" class="btn btn-primary btn-sm" data-entry-index="' + index + '"' + (runnable ? '' : ' disabled') + '>Run</button></div>' +
+    '</div>';
 }
 
-function renderPhishingLibrary() {
+// fresh is true only when the library is first shown. Clicks re-render without the
+// fade, so each click does not replay the fade-in animation on every tile.
+function renderPhishingLibrary(fresh) {
   if (state.scenarioView !== 'phishing') return;
   var grid = document.getElementById('sc-tile-grid');
   if (!grid) return;
@@ -2622,9 +1922,9 @@ function renderPhishingLibrary() {
   var open = _libraryEntries[_phishingFormIndex];
   var form = open && libraryEntryRoute(open).kind === LIBRARY_TYPE_PHISHING ? phishingFormHTML(open) : '';
   grid.innerHTML = tiles.length
-    ? '<div class="sc-fade"><div class="sc-tile-grid">' + tiles.join('') + '</div>' + form + '</div>'
+    ? '<div class="' + (fresh ? 'sc-fade' : '') + '"><div class="sc-grid">' + tiles.join('') + '</div>' + form + '</div>'
     : '<p class="empty">No phishing scenarios are catalogued.</p>';
-  renderPhishingRunResults(grid);
+  if (fresh) renderPhishingRunResults(grid);
 }
 
 // Recent phishing runs, below the library. Each run is described by
@@ -2671,7 +1971,9 @@ function phishingFormHTML(entry) {
     '<label class="sc-param">Test window ends<input type="datetime-local" data-dispatch="testWindowEnd"></label>' +
     '<label class="sc-param">Campaign (optional)<input type="text" data-dispatch="campaignId"></label>' +
     '</fieldset>';
-  return '<div class="sc-phishing-form" data-form-for="' + x(entry.id) + '">' + fields + dispatch +
+  // Optional: the exercise execution this run belongs to. Left empty, the run is unlinked.
+  var link = '<label class="sc-param">Test execution ID (optional)<input type="text" data-execution-link></label>';
+  return '<div class="sc-phishing-form" data-form-for="' + x(entry.id) + '">' + fields + link + dispatch +
     '<button type="button" data-library-submit>Run</button> ' +
     '<button type="button" data-library-cancel>Cancel</button></div>';
 }
@@ -2705,6 +2007,20 @@ function onPhishingLibraryClick(event) {
   renderPhishingLibrary();
 }
 
+// focusPhishingEntry opens the Phishing category and, when the scenario can run here, its parameter form (global search).
+// Returns false when no such library entry is loaded.
+export function focusPhishingEntry(id) {
+  var idx = -1;
+  _libraryEntries.forEach(function(e, i) { if (idx < 0 && e && e.type === LIBRARY_TYPE_PHISHING && e.id === id) idx = i; });
+  if (idx < 0) return false;
+  openScenarioCategory('phishing');
+  _phishingFormIndex = libraryEntryRoute(_libraryEntries[idx]).kind === LIBRARY_TYPE_PHISHING ? idx : null;
+  renderPhishingLibrary();
+  var entryCard = document.querySelector('#sc-tile-grid [data-entry-index="' + idx + '"]');
+  if (entryCard && entryCard.scrollIntoView) entryCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  return true;
+}
+
 function submitPhishingForm() {
   var entry = _libraryEntries[_phishingFormIndex];
   var el = document.getElementById('sc-tile-grid');
@@ -2713,7 +2029,8 @@ function submitPhishingForm() {
   el.querySelectorAll('[data-param]').forEach(function(input) {
     values[input.getAttribute('data-param')] = input.value;
   });
-  var built = buildPhishingRunRequest(entry, values);
+  var linkInput = el.querySelector('[data-execution-link]');
+  var built = withExecutionLink(buildPhishingRunRequest(entry, values), linkInput ? linkInput.value : '');
   if (!built.ok) {
     showToast('Check these fields: ' + built.errors.join(', '), 'err');
     return;
@@ -2736,7 +2053,7 @@ function submitPhishingForm() {
       showToast('Phishing run started: ' + built.body.scenarioId, 'ok');
       _dispatchKey = null;
       _phishingFormIndex = null;
-      renderPhishingLibrary();
+      renderPhishingLibrary(true);
     })
     .catch(function(err) {
       showToast('Phishing run failed: ' + (err && err.message ? err.message : String(err)), 'err');

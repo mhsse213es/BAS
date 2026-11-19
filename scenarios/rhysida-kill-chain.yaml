@@ -87,6 +87,17 @@ live_policy:
 steps:
   - name: Valid Accounts Initial Access
     technique_id: T1078
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      # Read-only: lists enabled local accounts that do not require a password. No logon is attempted.
+      try {
+        $noPw = @(Get-LocalUser -ErrorAction Stop | Where-Object { $_.Enabled -and -not $_.PasswordRequired } | ForEach-Object { $_.Name })
+      } catch {
+        Write-Output "SKIP: local account state could not be read; not scored. [BAS-SIM-RHYSIDA-S1]"
+        return
+      }
+      if ($noPw.Count -gt 0) { Write-Output "FAIL: enabled local account(s) do not require a password: $($noPw -join ', '). Require passwords or disable them. [BAS-SIM-RHYSIDA-S1]" }
+      else { Write-Output "PASS: no enabled local account is configured without a password requirement. Read-only check; no logon attempted. [BAS-SIM-RHYSIDA-S1]" }
     description: >
       Simulate compromised credentials without MFA enforcement. Documented
       in CISA AA23-319A as Rhysida's primary initial-access vector, distinct
@@ -106,6 +117,23 @@ steps:
 
   - name: RDP Lateral Movement
     technique_id: T1021.001
+    fidelity: lab-only
+    production_safe: false
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      # TCP reachability only to a configured lab system. No credentials are used and no session is opened.
+      $target = $env:BAS_RDP_TARGET
+      if (-not $target) { Write-Output "SKIP: BAS_RDP_TARGET is not set; no lab secondary system is configured. No connection attempted. Not scored. [BAS-SIM-RHYSIDA-S2]"; return }
+      $client = New-Object System.Net.Sockets.TcpClient
+      try {
+        $ar = $client.BeginConnect($target, 3389, $null, $null)
+        if ($ar.AsyncWaitHandle.WaitOne(3000) -and $client.Connected) { Write-Output "FAIL: RDP port 3389 on the configured lab system is reachable from this endpoint; the lateral path is not restricted. TCP only; no credentials used. [BAS-SIM-RHYSIDA-S2]" }
+        else { Write-Output "SKIP: no RDP connection to the configured lab system (timeout or refused); not scored. No credentials used. [BAS-SIM-RHYSIDA-S2]" }
+      } catch {
+        Write-Output "SKIP: RDP reachability probe raised an error; not scored. [BAS-SIM-RHYSIDA-S2]"
+      } finally {
+        $client.Close()
+      }
     description: >
       RDP-based lateral movement via compromised credentials, primary
       post-access movement vector documented in CISA AA23-319A and
@@ -125,6 +153,36 @@ steps:
 
   - name: LSASS Handle Access Probe
     technique_id: T1003.001
+    fidelity: lab-only
+    production_safe: false
+    command: |
+      $ErrorActionPreference = 'Continue'
+      # Opens a handle to LSASS with PROCESS_VM_READ, then closes it at once. Nothing is read, dumped or copied.
+      $lsass = Get-Process -Name lsass -ErrorAction SilentlyContinue | Select-Object -First 1
+      if (-not $lsass) { Write-Output "SKIP: lsass.exe not found; step not scored. [BAS-SIM-RHYSIDA-S3]"; return }
+      try {
+        Add-Type -TypeDefinition @"
+      using System;
+      using System.Runtime.InteropServices;
+      public static class BasRhysidaLsassProbe {
+        [DllImport("kernel32.dll", SetLastError = true)] public static extern IntPtr OpenProcess(uint access, bool inherit, int pid);
+        [DllImport("kernel32.dll", SetLastError = true)] public static extern bool CloseHandle(IntPtr handle);
+        public static int Probe(int pid) {
+          IntPtr h = OpenProcess(0x0010, false, pid);
+          if (h == IntPtr.Zero) return Marshal.GetLastWin32Error();
+          CloseHandle(h);
+          return 0;
+        }
+      }
+      "@ -ErrorAction Stop
+      } catch {
+        Write-Output "SKIP: access-check helper could not be compiled; outcome unverifiable, not scored. [BAS-SIM-RHYSIDA-S3]"
+        return
+      }
+      $rc = [BasRhysidaLsassProbe]::Probe($lsass.Id)
+      if ($rc -eq 0) { Write-Output "FAIL: a PROCESS_VM_READ handle to LSASS was granted to this process. No memory was read. Restrict LSASS access (RunAsPPL, Credential Guard). [BAS-SIM-RHYSIDA-S3]" }
+      elseif ($rc -eq 5) { Write-Output "PASS: access to LSASS was explicitly denied (access denied, error 5). Positive evidence of a control denial. [BAS-SIM-RHYSIDA-S3]" }
+      else { Write-Output "SKIP: LSASS probe returned error $rc; outcome unverifiable, not scored. [BAS-SIM-RHYSIDA-S3]" }
     description: >
       Non-invasive LSASS handle probe via P/Invoke OpenProcess (0x1010 mask),
       simulating credential-dumping intent without memory dump. Documented in
@@ -145,6 +203,11 @@ steps:
 
   - name: Domain Account Discovery
     technique_id: T1087.002
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      net group "Domain Admins" /domain 2>&1 | Out-Null
+      Write-Output "EXEC T1087.002: domain account enumeration executed (net group, read-only). Expect Sysmon EID 1 for net.exe. [BAS-SIM-RHYSIDA-S4]"
+      Write-Output "SKIP: discovery telemetry only; no control outcome to score. Not scored. [BAS-SIM-RHYSIDA-S4]"
     description: >
       Domain account enumeration via living-off-the-land tools (WMI, net group,
       dsquery). Documented in CISA AA23-319A as part of Rhysida's discovery
@@ -164,6 +227,13 @@ steps:
 
   - name: SILENTKILL Process Termination Simulation
     technique_id: T1562.001
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      # Read-only: reports whether known AV/EDR services are running. No service is stopped or changed.
+      $names = 'WinDefend','Sense','CSFalconService','SentinelAgent'
+      $running = @(Get-Service -Name $names -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Running' } | ForEach-Object { $_.Name })
+      if ($running.Count -eq 0) { Write-Output "FAIL: none of the known AV/EDR services ($($names -join ', ')) is running on this host. SILENTKILL-style defence disabling would meet no active defence. [BAS-SIM-RHYSIDA-S5]" }
+      else { Write-Output "PASS: known AV/EDR service(s) running: $($running -join ', '). Read-only check; no service was stopped. [BAS-SIM-RHYSIDA-S5]" }
     description: >
       Simulate AV/EDR service-termination attempts as first component of
       SILENTKILL integrated defense-disabling sequence. Trend Micro 2023
@@ -187,6 +257,19 @@ steps:
 
   - name: SILENTKILL Event Logging Disable Simulation
     technique_id: T1562.008
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      # Read-only: reads the enabled state of required log channels. No channel is disabled.
+      $chan = 'Security','Microsoft-Windows-PowerShell/Operational','Microsoft-Windows-Sysmon/Operational'
+      $disabled = @(); $unknown = @()
+      foreach ($c in $chan) {
+        $out = (wevtutil.exe gl "$c" 2>&1) | Out-String
+        if ($LASTEXITCODE -ne 0) { $unknown += $c }
+        elseif ($out -match 'enabled:\s*false') { $disabled += $c }
+      }
+      if ($disabled.Count -gt 0) { Write-Output "FAIL: required log channel(s) disabled: $($disabled -join ', '). Re-enable them. [BAS-SIM-RHYSIDA-S6]" }
+      elseif ($unknown.Count -gt 0) { Write-Output "SKIP: channel state unreadable or absent for: $($unknown -join ', '); not scored. [BAS-SIM-RHYSIDA-S6]" }
+      else { Write-Output "PASS: all required log channels report enabled. Read-only check; no channel was changed. [BAS-SIM-RHYSIDA-S6]" }
     description: >
       Simulate wevtutil.exe disable-channel for event logging as second
       component of SILENTKILL coordinated defense-disabling. Check Point
@@ -208,6 +291,16 @@ steps:
 
   - name: SILENTKILL Log Clearing Simulation
     technique_id: T1070.001
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      # Read-only: looks for a Security log clear (EID 1102) in the last 24 hours. Nothing is cleared.
+      try {
+        $ev = @(Get-WinEvent -FilterHashtable @{ LogName = 'Security'; Id = 1102; StartTime = (Get-Date).AddHours(-24) } -ErrorAction Stop)
+        Write-Output "FAIL: $($ev.Count) Security log clear event(s) (EID 1102) recorded in the last 24 hours. Investigate who cleared the log. [BAS-SIM-RHYSIDA-S7]"
+      } catch {
+        if ($_.Exception.Message -match 'No events were found') { Write-Output "SKIP: no log clear recorded in the last 24 hours; this read does not exercise clearing detection. Not scored. [BAS-SIM-RHYSIDA-S7]" }
+        else { Write-Output "SKIP: Security log history could not be read; not scored. [BAS-SIM-RHYSIDA-S7]" }
+      }
     description: >
       Simulate Event Log clearing (wevtutil.exe clear-log, PowerShell history
       deletion) as third component of SILENTKILL coordinated sequence. At-Bay
@@ -229,6 +322,15 @@ steps:
 
   - name: VSS and Backup Catalog Enumeration
     technique_id: T1490
+    command: |
+      $ErrorActionPreference = 'Continue'
+      $vssOut = & vssadmin.exe list shadows 2>&1 | Out-String
+      $rc = $LASTEXITCODE
+      $count = ([regex]::Matches($vssOut, 'Shadow Copy ID')).Count
+      if ($rc -eq 0 -and $count -gt 0) { Write-Output "FAIL: $count VSS shadow copy/copies are enumerable from the endpoint; an operator could delete them before encryption. Keep backups immutable and off-host. [BAS-SIM-RHYSIDA-S8]" }
+      elseif ($rc -eq 0) { Write-Output "PASS: vssadmin reports no shadow copies on this host. Positive read of the configuration. [BAS-SIM-RHYSIDA-S8]" }
+      elseif ($vssOut -match 'Access is denied') { Write-Output "PASS: vssadmin shadow listing was explicitly denied (Access is denied). Positive evidence of a control denial. [BAS-SIM-RHYSIDA-S8]" }
+      else { Write-Output "SKIP: vssadmin listing failed (exit=$rc); shadow state unknown, not scored. [BAS-SIM-RHYSIDA-S8]" }
     description: >
       Read-only enumeration of VSS shadow copies and Windows backup catalogs.
       This step is safe reconnaissance; actual deletion follows in Step 9
@@ -249,6 +351,8 @@ steps:
 
   - name: Destructive Recovery Inhibition (Lab-Gated)
     technique_id: T1490
+    command: |
+      Write-Output "SKIP: destructive shadow deletion is not run from this step. Shadow deletion is already covered by the BAS_CONFIRM_VSS_DELETE-gated steps in ransomware-drill and akira-kill-chain, and a second destructive path would duplicate that risk. Not scored. [BAS-SIM-RHYSIDA-S9]"
     description: >
       Destructive deletion of VSS shadow copies and Windows backup catalogs.
       Lab-gated only; never executed on production systems. Separately gated
@@ -275,6 +379,23 @@ steps:
 
   - name: Automated Exfiltration via RClone/Ligolo
     technique_id: T1020
+    fidelity: lab-only
+    production_safe: false
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      # TCP connect only to a lab test host. No data is sent. Nothing is contacted unless BAS_EXFIL_TEST_HOST is set.
+      $target = $env:BAS_EXFIL_TEST_HOST
+      if (-not $target) { Write-Output "SKIP: BAS_EXFIL_TEST_HOST is not set; no lab test host is configured. No connection attempted. Not scored. [BAS-SIM-RHYSIDA-S10]"; return }
+      $client = New-Object System.Net.Sockets.TcpClient
+      try {
+        $ar = $client.BeginConnect($target, 443, $null, $null)
+        if ($ar.AsyncWaitHandle.WaitOne(3000) -and $client.Connected) { Write-Output "FAIL: outbound TCP 443 to the configured lab test host is open from this endpoint; egress is not restricted. No data was sent. [BAS-SIM-RHYSIDA-S10]" }
+        else { Write-Output "SKIP: no outbound connection to the configured lab test host (timeout or refused); not scored. [BAS-SIM-RHYSIDA-S10]" }
+      } catch {
+        Write-Output "SKIP: egress probe raised an error; not scored. [BAS-SIM-RHYSIDA-S10]"
+      } finally {
+        $client.Close()
+      }
     description: >
       Simulate exfiltration-endpoint connectivity via TCP probes to attacker
       C2 addresses. Recorded Future and Picus analyses document RClone and
@@ -295,6 +416,44 @@ steps:
 
   - name: ChaCha20+RSA-4096 Encryption (Lab, Full Cleanup)
     technique_id: T1486
+    command: |
+      $ErrorActionPreference = 'Continue'
+      # AES-256 stands in for ChaCha20 and RSA-4096 key wrapping is omitted. The per-file encryption behaviour is what is tested.
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $ws = Join-Path $env:TEMP "bas_rhysida_ws_$runId"
+      $created = $false
+      $enc = 0; $denied = $false; $other = $false
+      try {
+        if (Test-Path -LiteralPath $ws) {
+          Write-Output "SKIP: dedicated workspace already exists; refusing to reuse it. Not scored. [BAS-SIM-RHYSIDA-S11]"
+        } else {
+          New-Item -ItemType Directory -Path $ws -ErrorAction Stop | Out-Null
+          $created = $true
+          $aes = [System.Security.Cryptography.Aes]::Create()
+          $aes.KeySize = 256
+          $aes.GenerateKey(); $aes.GenerateIV()
+          $encryptor = $aes.CreateEncryptor()
+          foreach ($name in 'finance_q4.txt','customer_export.txt','swift_ops.txt') {
+            try {
+              $plain = [System.Text.Encoding]::UTF8.GetBytes("[BAS-SIM-RHYSIDA] synthetic $name run-id=$runId")
+              $cipher = $encryptor.TransformFinalBlock($plain, 0, $plain.Length)
+              [System.IO.File]::WriteAllBytes((Join-Path $ws ($name + '.bas_locked')), $cipher)
+              $enc++
+            } catch {
+              if ($_.Exception.Message -match 'virus|malicious|blocked|denied|policy|Access to the path') { $denied = $true } else { $other = $true }
+            }
+          }
+          $encryptor.Dispose(); $aes.Dispose()
+          if ($enc -gt 0) { Write-Output "FAIL: $enc synthetic file(s) were encrypted in the dedicated workspace without a block; encryption behaviour was not stopped. The key was held in memory only and discarded. [BAS-SIM-RHYSIDA-S11]" }
+          elseif ($denied -and -not $other) { Write-Output "PASS: synthetic file writes were explicitly denied by a security control. [BAS-SIM-RHYSIDA-S11]" }
+          else { Write-Output "SKIP: encryption simulation outcome ambiguous; not scored. [BAS-SIM-RHYSIDA-S11]" }
+        }
+      } catch {
+        if ($_.Exception.Message -match 'virus|malicious|blocked|denied|policy|Access to the path') { Write-Output "PASS: workspace creation explicitly denied by a security control. [BAS-SIM-RHYSIDA-S11]" }
+        else { Write-Output "SKIP: unexpected error during the encryption simulation; not scored. [BAS-SIM-RHYSIDA-S11]" }
+      } finally {
+        if ($created) { Remove-Item -LiteralPath $ws -Recurse -Force -ErrorAction SilentlyContinue }
+      }
     description: >
       Full-fidelity sandboxed ChaCha20+RSA-4096 encryption simulation with
       guaranteed cleanup. Creates isolated temporary directory, encrypts

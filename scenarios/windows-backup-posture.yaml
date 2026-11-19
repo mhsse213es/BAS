@@ -1,5 +1,5 @@
 id: windows-backup-posture
-product_line: common
+product_line: ransomware
 name: Windows Backup and Shadow Copy Posture
 description: >
   Read-only posture audit of the host-level recovery prerequisites: the Volume Shadow

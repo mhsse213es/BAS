@@ -46,7 +46,7 @@ Every contract has the same fields: family, control under test, prerequisites, e
 - **Prerequisites.** AppLocker available; Script collection readable; `cscript.exe` present.
 - **Expected-result source.** Effective Script collection mode captured immediately before the attempt.
 - **Expected outcome.** `blocked_as_expected` when Script is `Enabled` and the policy covers the file.
-- **Evidence requirements.** `APPCTL_EVIDENCE`. Attribution: exactly one `Microsoft-Windows-AppLocker/MSI and Script` event 8006 naming the unique `.vbs` file.
+- **Evidence requirements.** `APPCTL_EVIDENCE`. Attribution: exactly one `Microsoft-Windows-AppLocker/MSI and Script` event 8007 (8006 is the audit-mode event and is not prevention evidence) naming the unique `.vbs` file.
 - **Cleanup.** Removes the `.vbs` and the temp output file.
 - **Unsupported conditions.** AppLocker unavailable; event log unreadable.
 - **Known blind spots.** Covers `cscript` with `.vbs` only. Not `wscript`, `.js`, `.ps1`, or other script hosts.
@@ -66,7 +66,7 @@ Every contract has the same fields: family, control under test, prerequisites, e
 ## parent_child_asr
 
 - **Control under test.** The Attack Surface Reduction rule that blocks Office applications from creating child processes (`D4F940AB-401B-4EFC-AADC-AD5F3C50688A`).
-- **Technique.** T1204.002.
+- **Technique.** T1036.005 (match legitimate name). Previously tagged T1204.002 and described as a spoofed parent; the step copies `cmd.exe` to a file named `winword.exe`, which is name masquerading, not parent-process-ID spoofing.
 - **Prerequisites.** Microsoft Defender preferences readable; `Set-MpPreference` ASR state present; administrative rights to create the test copy.
 - **Expected-result source.** The ASR rule's action (Block, Audit, or not configured) read from Defender preferences immediately before the attempt.
 - **Expected outcome.** `blocked_as_expected` when the rule is in Block mode and the child process is not launched. `not_applicable` when Defender preferences are unavailable.

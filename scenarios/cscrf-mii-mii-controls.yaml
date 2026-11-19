@@ -1,0 +1,231 @@
+id: "cscrf-mii-mii-controls"
+product_line: common
+name: "CSCRF-MII Trading, Clearing and Settlement Host Controls (P2)"
+description: >
+  Internal control-validation checks for host-side controls on MII trading, clearing and settlement systems.
+  Verdicts are internal control references (CSCRF-MII-*), not SEBI clause identifiers. This pack does not
+  connect to any market, exchange, clearing corporation or settlement system; it checks only the host
+  configuration and files an operator names through environment variables. All steps are read only, and each
+  SKIPs when its input is unset. Overlapping checks (ledger backup, privileged access, clock accuracy,
+  settlement-path ACLs) live in the existing BDR, ID, SIEM and DP packs. Deferred: any check that needs a live
+  MII connection, order flow or SOC receipt.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cscrf-mii
+  - mii
+  - trading
+  - clearing
+  - settlement
+  - p2
+mitre_phases:
+  - impact
+
+steps:
+
+  # -------------------------------------------------------------------------
+  - id: mii-01
+    name: "Sealed Trade Log Manifests (T1565.001, internal ref CSCRF-MII-01)"
+    technique_id: T1565.001
+    action_key: cscrf_mii_log_manifest
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only hashing of files under BAS_MII_LOG_PATH; skipped when unset."
+    telemetry:
+      - "File read"
+    detection:
+      - "Log integrity review"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-MII-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgSha256 { param([string]$Path) return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() }
+      $dir = $env:BAS_MII_LOG_PATH
+      if (-not $dir) { Complete-CgStep @{ Outcome = 'skip'; Reason = 'BAS_MII_LOG_PATH not set; no trade log checked [CSCRF-MII-01]' } 'mii-01' }
+      if (-not (Test-Path -LiteralPath $dir)) { Complete-CgStep @{ Outcome = 'error'; Reason = "BAS_MII_LOG_PATH does not exist [CSCRF-MII-01]" } 'mii-01' }
+      $sealed = @(Get-ChildItem -LiteralPath $dir -Filter '*.sealed' -File)
+      if ($sealed.Count -eq 0) { Complete-CgStep @{ Outcome = 'fail'; Reason = 'no sealed trade logs found; logs are not closed with a manifest [CSCRF-MII-01]' } 'mii-01' }
+      $bad = @()
+      foreach ($f in $sealed) {
+      $m = "$($f.FullName).sha256"
+      if (-not (Test-Path -LiteralPath $m)) { $bad += "$($f.Name): no manifest"; continue }
+      $want = ((Get-Content -LiteralPath $m -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
+      if ((Get-CgSha256 $f.FullName) -ne $want) { $bad += "$($f.Name): hash differs from manifest" }
+      }
+      if ($bad.Count -gt 0) { Complete-CgStep @{ Outcome = 'fail'; Reason = (($bad -join '; ') + ' [CSCRF-MII-01]') } 'mii-01' }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = "$($sealed.Count) sealed trade log(s) match their manifests [CSCRF-MII-01]" } 'mii-01'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-MII-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgSha256 { param([string]$Path) return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: mii-02
+    name: "Settlement File Integrity Baseline (T1565.001, internal ref CSCRF-MII-02)"
+    technique_id: T1565.001
+    action_key: cscrf_mii_settlement_integrity
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only hashing of files listed in SHA256SUMS under BAS_MII_SETTLEMENT_PATH; skipped when unset."
+    telemetry:
+      - "File read"
+    detection:
+      - "Settlement integrity review"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-MII-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgSha256 { param([string]$Path) return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() }
+      $dir = $env:BAS_MII_SETTLEMENT_PATH
+      if (-not $dir) { Complete-CgStep @{ Outcome = 'skip'; Reason = 'BAS_MII_SETTLEMENT_PATH not set; no settlement files checked [CSCRF-MII-02]' } 'mii-02' }
+      $sums = Join-Path $dir 'SHA256SUMS'
+      if (-not (Test-Path -LiteralPath $sums)) { Complete-CgStep @{ Outcome = 'fail'; Reason = 'no SHA256SUMS baseline in the settlement path [CSCRF-MII-02]' } 'mii-02' }
+      $bad = @(); $n = 0
+      foreach ($line in (Get-Content -LiteralPath $sums)) {
+      if (-not $line.Trim()) { continue }
+      $parts = $line.Trim() -split '\s+', 2
+      if ($parts.Count -ne 2) { $bad += "malformed line"; continue }
+      $p = Join-Path $dir $parts[1]; $n++
+      if (-not (Test-Path -LiteralPath $p)) { $bad += "$($parts[1]): missing"; continue }
+      if ((Get-CgSha256 $p) -ne $parts[0].ToLowerInvariant()) { $bad += "$($parts[1]): hash differs from baseline" }
+      }
+      if ($n -eq 0) { Complete-CgStep @{ Outcome = 'fail'; Reason = 'SHA256SUMS lists no files [CSCRF-MII-02]' } 'mii-02' }
+      if ($bad.Count -gt 0) { Complete-CgStep @{ Outcome = 'fail'; Reason = (($bad -join '; ') + ' [CSCRF-MII-02]') } 'mii-02' }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = "$n settlement file(s) match the SHA256SUMS baseline [CSCRF-MII-02]" } 'mii-02'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-MII-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgSha256 { param([string]$Path) return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: mii-03
+    name: "Named MII Services Running (T1007, internal ref CSCRF-MII-03)"
+    technique_id: T1007
+    action_key: cscrf_mii_service_running
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only service lookup for the comma-separated names in BAS_MII_SERVICES; skipped when unset."
+    telemetry:
+      - "Service query"
+    detection:
+      - "Service availability review"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-MII-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgSha256 { param([string]$Path) return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() }
+      $names = $env:BAS_MII_SERVICES
+      if (-not $names) { Complete-CgStep @{ Outcome = 'skip'; Reason = 'BAS_MII_SERVICES not set; no MII service named [CSCRF-MII-03]' } 'mii-03' }
+      $bad = @(); $ok = 0
+      foreach ($n in ($names -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) {
+      $s = Get-Service -Name $n -ErrorAction SilentlyContinue
+      if (-not $s) { $bad += "$n not installed"; continue }
+      if ($s.Status -ne 'Running') { $bad += "$n is $($s.Status)"; continue }
+      $ok++
+      }
+      if ($bad.Count -gt 0) { Complete-CgStep @{ Outcome = 'fail'; Reason = (($bad -join '; ') + ' [CSCRF-MII-03]') } 'mii-03' }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = "$ok named MII service(s) running [CSCRF-MII-03]" } 'mii-03'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-MII-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgSha256 { param([string]$Path) return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: mii-04
+    name: "Reconciliation Evidence Recency (T1005, internal ref CSCRF-MII-04)"
+    technique_id: T1005
+    action_key: cscrf_mii_recon_recency
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only listing of files under BAS_MII_RECON_PATH; skipped when unset."
+    telemetry:
+      - "Directory listing"
+    detection:
+      - "Reconciliation evidence review"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-MII-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgSha256 { param([string]$Path) return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() }
+      $dir = $env:BAS_MII_RECON_PATH
+      if (-not $dir) { Complete-CgStep @{ Outcome = 'skip'; Reason = 'BAS_MII_RECON_PATH not set; no reconciliation evidence checked [CSCRF-MII-04]' } 'mii-04' }
+      if (-not (Test-Path -LiteralPath $dir)) { Complete-CgStep @{ Outcome = 'fail'; Reason = 'reconciliation evidence path does not exist [CSCRF-MII-04]' } 'mii-04' }
+      $newest = Get-ChildItem -LiteralPath $dir -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+      if (-not $newest) { Complete-CgStep @{ Outcome = 'fail'; Reason = 'no reconciliation report found [CSCRF-MII-04]' } 'mii-04' }
+      $age = [math]::Round(((Get-Date) - $newest.LastWriteTime).TotalHours, 1)
+      if ($age -gt 24) { Complete-CgStep @{ Outcome = 'fail'; Reason = "newest reconciliation report is $age h old (limit 24 h) [CSCRF-MII-04]" } 'mii-04' }
+      Complete-CgStep @{ Outcome = 'pass'; Reason = "newest reconciliation report is $age h old [CSCRF-MII-04]" } 'mii-04'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-MII-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgSha256 { param([string]$Path) return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() }
+      Write-Output 'PASS: Cleanup complete'
+      exit 0

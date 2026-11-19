@@ -1,10 +1,17 @@
 #!/bin/bash
 # install-agent-linux.sh: installs or upgrades the BAS agent on this Linux host.
 #
-#   sudo ./install-agent-linux.sh [<agent-secret>] [--ca-file ./deployment-ca.pem]
+#   sudo ./install-agent-linux.sh [--ca-file ./deployment-ca.pem] [--token-file <path> | --token-stdin]
 #
-# Without a secret argument it asks for the secret. --ca-file uses a CA the console already embedded
-# in the install command, so the CA is not fetched over the network at all.
+# Credentials never go on a command line, where any local user can read them from the process list:
+#   agent secret        asked for interactively, or BAS_AGENT_SECRET in the environment
+#                       (a positional <agent-secret> is still accepted for old command lines but is discouraged)
+#   enrolment token     (servers in token mode) asked for interactively, or --token-file <path> (the file is
+#                       deleted once it is read), or --token-stdin (first line of stdin; then give the
+#                       secret through BAS_AGENT_SECRET), or BAS_ENROLLMENT_TOKEN in the environment.
+#                       The token is single use and bound to this host; never put one in a shared script.
+# --ca-file uses a CA the console already embedded in the install command, so the CA is not fetched
+# over the network at all.
 #
 # Only the agent secret is needed. The server address, ports and agent binary default to this
 # server's values and can be overridden with environment variables or options:
@@ -23,17 +30,29 @@
 # --ca-fingerprint is strongly recommended: without it the first contact is trusted as-is.
 set -euo pipefail
 
-AGENT=""; SECRET=""; FINGERPRINT=""; CA_SRC=""
+AGENT=""; SECRET="${BAS_AGENT_SECRET:-}"; FINGERPRINT=""; CA_SRC=""; TOKEN_FILE=""; TOKEN_STDIN=0
 HOST="${BAS_SERVER_HOST:-192.168.10.78}"
 PORT="${BAS_ENROLL_PORT:-9445}"
 DASH_PORT="${BAS_DASHBOARD_PORT:-9543}"
 MTLS_PORT="${BAS_MTLS_PORT:-9443}"
 ENV="${BAS_ENV_LABEL:-Production}"
 CERT_DIR="${BAS_CERT_DIR:-/etc/audspect/certs}"
-CA_FILE="/etc/audspect-agent/deployment-ca.pem"
+CA_FILE="${BAS_CA_FILE:-/etc/audspect-agent/deployment-ca.pem}"
 IDENTITY_FILES="agent-cert.pem agent-key.pem enrollment-state"
 
-usage() { echo "usage: sudo $0 <agent-secret> [--agent <binary>] [--ca-fingerprint <sha256>]" >&2; exit 2; }
+# describe_rc <exit code of the agent's -preflight>: the failure in plain words.
+describe_rc() {
+  case "$1" in
+    20) echo "the agent rejected its inputs as invalid." ;;
+    21) echo "the Audspect server could not be reached (${HOST}:${MTLS_PORT}). Check the network, the firewall and the server address; nothing was changed." ;;
+    22) echo "the server rejected the agent secret. Check the secret and try again; nothing was changed." ;;
+    23) echo "the server's certificate is not trusted by the deployment CA; nothing was changed." ;;
+    24) echo "the deployment CA is invalid; nothing was changed." ;;
+    *) echo "the pre-install check failed (exit code $1); nothing was changed." ;;
+  esac
+}
+
+usage() { echo "usage: sudo $0 [--agent <binary>] [--ca-fingerprint <sha256>] [--token-file <path> | --token-stdin]" >&2; exit 2; }
 
 # clear_stale_identity <new-ca-pem>: moves the agent's identity aside when it was issued under a different CA.
 clear_stale_identity() {
@@ -67,6 +86,8 @@ while [ $# -gt 0 ]; do
     --agent) AGENT="${2:-}"; shift 2 ;;
     --ca-fingerprint) FINGERPRINT="${2:-}"; shift 2 ;;
     --ca-file) CA_SRC="${2:-}"; shift 2 ;;
+    --token-file) TOKEN_FILE="${2:-}"; shift 2 ;;
+    --token-stdin) TOKEN_STDIN=1; shift ;;
     -h|--help) usage ;;
     -*) echo "unknown option: $1" >&2; usage ;;
     *) if [ -z "$SECRET" ]; then SECRET="$1"; shift; else echo "unexpected argument: $1" >&2; usage; fi ;;
@@ -78,6 +99,44 @@ if [ -z "$SECRET" ]; then
     echo
   fi
   [ -n "$SECRET" ] || usage
+fi
+
+# The enrolment token, if the server is in token mode. It is written to a private file (umask 077) that the
+# agent reads once and deletes; it is never placed on a command line.
+umask 077
+TOKEN_DIR="$(mktemp -d)"
+TOKEN_PATH=""
+if [ "$TOKEN_STDIN" -eq 1 ] && [ -n "$TOKEN_FILE" ]; then
+  echo "use --token-file or --token-stdin, not both" >&2; exit 2
+fi
+if [ "$TOKEN_STDIN" -eq 1 ]; then
+  IFS= read -r TOKEN_VALUE || true
+  [ -n "${TOKEN_VALUE:-}" ] || { echo "no enrolment token was provided on stdin" >&2; exit 2; }
+  printf '%s\n' "$TOKEN_VALUE" > "$TOKEN_DIR/token"; unset TOKEN_VALUE
+  TOKEN_PATH="$TOKEN_DIR/token"
+elif [ -n "$TOKEN_FILE" ]; then
+  [ -f "$TOKEN_FILE" ] || { echo "token file not found: $TOKEN_FILE" >&2; exit 1; }
+  TOKEN_PATH="$TOKEN_FILE"
+elif [ -n "${BAS_ENROLLMENT_TOKEN:-}" ]; then
+  printf '%s\n' "$BAS_ENROLLMENT_TOKEN" > "$TOKEN_DIR/token"; unset BAS_ENROLLMENT_TOKEN
+  TOKEN_PATH="$TOKEN_DIR/token"
+elif [ -t 0 ]; then
+  if [ "${BAS_TOKEN_REQUIRED:-}" = "1" ]; then
+    read -r -s -p "Enrolment token (required by this server): " TOKEN_VALUE
+  else
+    read -r -s -p "Enrolment token (press Enter to skip if this server uses the shared secret only): " TOKEN_VALUE
+  fi
+  echo
+  if [ -n "$TOKEN_VALUE" ]; then
+    printf '%s\n' "$TOKEN_VALUE" > "$TOKEN_DIR/token"; TOKEN_PATH="$TOKEN_DIR/token"
+  fi
+  unset TOKEN_VALUE
+fi
+
+if [ "${BAS_TOKEN_REQUIRED:-}" = "1" ] && [ -z "$TOKEN_PATH" ]; then
+  rm -rf "$TOKEN_DIR"
+  echo "ERROR: this server issues single-use enrolment tokens and none was provided. Ask the administrator for a token for this host, then run the setup again (it asks for it, or use --token-file / --token-stdin)." >&2
+  exit 2
 fi
 
 if [ -z "$AGENT" ]; then
@@ -98,7 +157,7 @@ fi
 command -v openssl >/dev/null || { echo "openssl is required" >&2; exit 1; }
 
 TMP_CA="$(mktemp)"
-trap 'rm -f "$TMP_CA"' EXIT
+trap 'rm -f "$TMP_CA"; rm -rf "$TOKEN_DIR"' EXIT
 
 CA_URL="https://${HOST}:${DASH_PORT}/api/config/ca-root"
 echo "==> Fetching deployment CA from ${CA_URL}"
@@ -122,13 +181,26 @@ else
   echo "    warning: no --ca-fingerprint given; trusting this CA on first contact" >&2
 fi
 
+# Check the server and the secret BEFORE anything on this host is touched: a wrong secret must not cost the host
+# its working agent.
+chmod +x "$AGENT"
+echo "==> Checking the server and the agent secret"
+set +e
+printf '%s\n' "$SECRET" | "$AGENT" -preflight -server "https://${HOST}:${MTLS_PORT}" -enroll-port "$PORT" -ca-root "$TMP_CA" --secret-stdin
+PRE_RC=$?
+set -e
+if [ "$PRE_RC" -ne 0 ]; then
+  echo "ERROR: $(describe_rc "$PRE_RC")" >&2
+  exit "$PRE_RC"
+fi
+
 echo "==> Checking the existing agent identity"
 clear_stale_identity "$TMP_CA"
 
 if systemctl cat bas-agent >/dev/null 2>&1 || [ -x /usr/local/bin/bas-agent ]; then
   echo "==> Removing the previously installed agent service"
   chmod +x "$AGENT"
-  "$AGENT" -uninstall || echo "    warning: previous uninstall reported errors; continuing"
+  BAS_UNINSTALL_KEEP_DATA=1 "$AGENT" -uninstall || echo "    warning: previous uninstall reported errors; continuing"
 fi
 
 install -d -m 0755 "$(dirname "$CA_FILE")"
@@ -136,5 +208,18 @@ install -m 0644 "$TMP_CA" "$CA_FILE"
 
 echo "==> Installing the agent"
 chmod +x "$AGENT"
-"$AGENT" -install -server "https://${HOST}:${MTLS_PORT}" -enroll-port "$PORT" \
-  -secret "$SECRET" -ca-root "$CA_FILE" -env "$ENV"
+AGENT_ARGS=(-install -server "https://${HOST}:${MTLS_PORT}" -enroll-port "$PORT" -ca-root "$CA_FILE" -env "$ENV" --secret-stdin)
+if [ -n "$TOKEN_PATH" ]; then AGENT_ARGS+=(--enrollment-token-file "$TOKEN_PATH"); fi
+# The secret goes in on stdin (printf is a shell builtin, so it never appears in a process list).
+set +e
+printf '%s\n' "$SECRET" | "$AGENT" "${AGENT_ARGS[@]}"
+RC=$?
+set -e
+unset SECRET
+case "$RC" in
+  0) ;;
+  26) echo "ERROR: the server refused the enrolment token (invalid, expired, already used, or issued for a different host). Ask the administrator for a new token for this host." >&2; exit 26 ;;
+  27) echo "ERROR: could not reach the server to enrol (${HOST}, enrolment port ${PORT}). This is a connection problem, not a token problem: check the network, firewall and port." >&2; exit 27 ;;
+  28) echo "ERROR: the server already has an active agent for this host and will not replace it on the shared secret alone. Ask the administrator to use Force Remove Agent for this host in the console, or to issue an enrolment token for it, then run the install again." >&2; exit 28 ;;
+  *) exit "$RC" ;;
+esac

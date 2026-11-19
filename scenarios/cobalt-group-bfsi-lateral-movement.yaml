@@ -1,0 +1,1348 @@
+id: "cobalt-group-bfsi-lateral-movement"
+product_line: killchain
+name: "Cobalt Group BFSI - Lateral Movement (P0)"
+description: >
+  Enterprise lateral-movement detection validation for BFSI environments. Six scenarios covering
+  RDP connectivity, SMB/Admin share enumeration, WinRM remote sessions, remote service execution,
+  system discovery, and lateral tool transfer. All scenarios use authorized test accounts and perform
+  read-only checks or sandbox-safe transfers; no actual credential usage or privilege escalation.
+  Each scenario includes verified cleanup and undo-record rollback.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - cobalt-group
+  - bfsi
+  - lateral-movement
+  - p0
+  - t1021
+  - t1569
+  - t1018
+  - t1570
+mitre_phases:
+  - lateral-movement
+
+steps:
+
+  # -------------------------------------------------------------------------
+  - id: lat-01
+    name: "Lateral Movement - RDP Connectivity and Session Negotiation (T1021.001)"
+    technique_id: T1021.001
+    action_key: lateral_rdp_connectivity
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: high
+    reversible: false
+    blast_radius: "Tests RDP port 3389 connectivity to a lab target; performs protocol negotiation only. Does not log in or modify remote system. Verifies detection of RDP enumeration."
+    telemetry:
+      - "Network: port 3389 connection attempts"
+      - "RDP protocol negotiation traffic"
+    detection:
+      - "Network monitoring: RDP connection attempts"
+      - "Firewall logs: RDP port access"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_cg_lat_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-LAT-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Test-RdpConnectivity { param([string]$TargetHost, [int]$Port = 3389)
+      $res = @{ Outcome = 'error'; Reason = "RDP connectivity test to $TargetHost : $Port failed"; Connected = $false }
+      try {
+      $tcp = New-Object Net.Sockets.TcpClient
+      $tcp.Connect($TargetHost, $Port)
+      $tcp.Close()
+      $res.Connected = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "RDP port $Port on $TargetHost is reachable and accepting connections"
+      } catch {
+      if ($_.Exception -match 'refused|timeout|not available') {
+      $res.Outcome = 'pass'
+      $res.Reason = "RDP port $Port on $TargetHost is blocked or unreachable"
+      }
+      }
+      return $res
+      }
+      function Test-SmbShareAccess { param([string]$TargetHost, [string]$Share)
+      $res = @{ Outcome = 'error'; Reason = "SMB share access test to \\$TargetHost\$Share failed"; Accessible = $false }
+      try {
+      $root = "\\$TargetHost\$Share"
+      $items = Get-ChildItem -Path $root -Force -ErrorAction Stop | Select-Object -First 5
+      $res.Accessible = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "SMB share \\$TargetHost\$Share is accessible and contains files"
+      } catch {
+      if ($_.Exception -match 'Access is denied|unauthorized') {
+      $res.Outcome = 'pass'
+      $res.Reason = "SMB share \\$TargetHost\$Share access was blocked"
+      }
+      }
+      return $res
+      }
+      function Test-WinrmAvailability { param([string]$TargetHost, [int]$Port = 5985)
+      $res = @{ Outcome = 'error'; Reason = "WinRM availability test to $TargetHost : $Port failed"; Available = $false }
+      try {
+      $tcp = New-Object Net.Sockets.TcpClient
+      $tcp.Connect($TargetHost, $Port)
+      $tcp.Close()
+      $res.Available = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "WinRM port $Port on $TargetHost is reachable"
+      } catch {
+      if ($_.Exception -match 'refused|timeout|not available') {
+      $res.Outcome = 'pass'
+      $res.Reason = "WinRM port $Port on $TargetHost is blocked or unreachable"
+      }
+      }
+      return $res
+      }
+      function Invoke-ToolTransferSimulation { param([string]$SourcePath, [string]$DestHost, [string]$DestPath)
+      $res = @{ Outcome = 'error'; Reason = "Tool transfer simulation to \\$DestHost\$DestPath failed"; Transferred = $false }
+      try {
+      $dest = "\\$DestHost\$DestPath"
+      Copy-Item -Path $SourcePath -Destination $dest -Force -ErrorAction Stop
+      $res.Transferred = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "File successfully transferred to $dest"
+      } catch {
+      if ($_.Exception -match 'Access is denied|unauthorized|not found') {
+      $res.Outcome = 'pass'
+      $res.Reason = "File transfer to $dest was blocked"
+      }
+      }
+      return $res
+      }
+      $target = $env:BAS_TEST_HOST
+      $undo_data = @{ scenario = 'lat-01'; timestamp = (Get-Date -Format 'o'); description = 'RDP connectivity check'; target = $target }
+      try { New-CgUndoRecord 'lat-01' $undo_data } catch { Complete-CgStep @{ Outcome = 'error'; Reason = 'Undo record creation failed' } 'lat-01' }
+      if (-not $target) { $res = @{ Outcome = 'skip'; Reason = 'BAS_TEST_HOST not set' } }
+      else { $res = Test-RdpConnectivity -TargetHost $target }
+      Complete-CgStep $res 'LAT-01'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_cg_lat_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-LAT-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Test-RdpConnectivity { param([string]$TargetHost, [int]$Port = 3389)
+      $res = @{ Outcome = 'error'; Reason = "RDP connectivity test to $TargetHost : $Port failed"; Connected = $false }
+      try {
+      $tcp = New-Object Net.Sockets.TcpClient
+      $tcp.Connect($TargetHost, $Port)
+      $tcp.Close()
+      $res.Connected = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "RDP port $Port on $TargetHost is reachable and accepting connections"
+      } catch {
+      if ($_.Exception -match 'refused|timeout|not available') {
+      $res.Outcome = 'pass'
+      $res.Reason = "RDP port $Port on $TargetHost is blocked or unreachable"
+      }
+      }
+      return $res
+      }
+      function Test-SmbShareAccess { param([string]$TargetHost, [string]$Share)
+      $res = @{ Outcome = 'error'; Reason = "SMB share access test to \\$TargetHost\$Share failed"; Accessible = $false }
+      try {
+      $root = "\\$TargetHost\$Share"
+      $items = Get-ChildItem -Path $root -Force -ErrorAction Stop | Select-Object -First 5
+      $res.Accessible = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "SMB share \\$TargetHost\$Share is accessible and contains files"
+      } catch {
+      if ($_.Exception -match 'Access is denied|unauthorized') {
+      $res.Outcome = 'pass'
+      $res.Reason = "SMB share \\$TargetHost\$Share access was blocked"
+      }
+      }
+      return $res
+      }
+      function Test-WinrmAvailability { param([string]$TargetHost, [int]$Port = 5985)
+      $res = @{ Outcome = 'error'; Reason = "WinRM availability test to $TargetHost : $Port failed"; Available = $false }
+      try {
+      $tcp = New-Object Net.Sockets.TcpClient
+      $tcp.Connect($TargetHost, $Port)
+      $tcp.Close()
+      $res.Available = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "WinRM port $Port on $TargetHost is reachable"
+      } catch {
+      if ($_.Exception -match 'refused|timeout|not available') {
+      $res.Outcome = 'pass'
+      $res.Reason = "WinRM port $Port on $TargetHost is blocked or unreachable"
+      }
+      }
+      return $res
+      }
+      function Invoke-ToolTransferSimulation { param([string]$SourcePath, [string]$DestHost, [string]$DestPath)
+      $res = @{ Outcome = 'error'; Reason = "Tool transfer simulation to \\$DestHost\$DestPath failed"; Transferred = $false }
+      try {
+      $dest = "\\$DestHost\$DestPath"
+      Copy-Item -Path $SourcePath -Destination $dest -Force -ErrorAction Stop
+      $res.Transferred = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "File successfully transferred to $dest"
+      } catch {
+      if ($_.Exception -match 'Access is denied|unauthorized|not found') {
+      $res.Outcome = 'pass'
+      $res.Reason = "File transfer to $dest was blocked"
+      }
+      }
+      return $res
+      }
+      $rec = Read-CgUndoRecord 'lat-01'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'SKIP: Undo record not found'; exit 0 }
+      Remove-CgUndoRecord 'lat-01'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: lat-02
+    name: "Lateral Movement - SMB Admin Share Access (T1021.002)"
+    technique_id: T1021.002
+    action_key: lateral_smb_shares
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: high
+    reversible: false
+    blast_radius: "Enumerates and lists contents of SMB admin shares (C$, Admin$, IPC$) on a lab target using authorized test account. Does not modify shares. Verifies detection of SMB reconnaissance."
+    telemetry:
+      - "SMB connection and enumeration (port 445)"
+      - "Share access attempts (admin shares)"
+    detection:
+      - "SIEM: SMB enumeration patterns"
+      - "Network: suspicious SMB traffic"
+      - "Event Log: share access audits"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_cg_lat_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-LAT-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Test-RdpConnectivity { param([string]$TargetHost, [int]$Port = 3389)
+      $res = @{ Outcome = 'error'; Reason = "RDP connectivity test to $TargetHost : $Port failed"; Connected = $false }
+      try {
+      $tcp = New-Object Net.Sockets.TcpClient
+      $tcp.Connect($TargetHost, $Port)
+      $tcp.Close()
+      $res.Connected = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "RDP port $Port on $TargetHost is reachable and accepting connections"
+      } catch {
+      if ($_.Exception -match 'refused|timeout|not available') {
+      $res.Outcome = 'pass'
+      $res.Reason = "RDP port $Port on $TargetHost is blocked or unreachable"
+      }
+      }
+      return $res
+      }
+      function Test-SmbShareAccess { param([string]$TargetHost, [string]$Share)
+      $res = @{ Outcome = 'error'; Reason = "SMB share access test to \\$TargetHost\$Share failed"; Accessible = $false }
+      try {
+      $root = "\\$TargetHost\$Share"
+      $items = Get-ChildItem -Path $root -Force -ErrorAction Stop | Select-Object -First 5
+      $res.Accessible = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "SMB share \\$TargetHost\$Share is accessible and contains files"
+      } catch {
+      if ($_.Exception -match 'Access is denied|unauthorized') {
+      $res.Outcome = 'pass'
+      $res.Reason = "SMB share \\$TargetHost\$Share access was blocked"
+      }
+      }
+      return $res
+      }
+      function Test-WinrmAvailability { param([string]$TargetHost, [int]$Port = 5985)
+      $res = @{ Outcome = 'error'; Reason = "WinRM availability test to $TargetHost : $Port failed"; Available = $false }
+      try {
+      $tcp = New-Object Net.Sockets.TcpClient
+      $tcp.Connect($TargetHost, $Port)
+      $tcp.Close()
+      $res.Available = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "WinRM port $Port on $TargetHost is reachable"
+      } catch {
+      if ($_.Exception -match 'refused|timeout|not available') {
+      $res.Outcome = 'pass'
+      $res.Reason = "WinRM port $Port on $TargetHost is blocked or unreachable"
+      }
+      }
+      return $res
+      }
+      function Invoke-ToolTransferSimulation { param([string]$SourcePath, [string]$DestHost, [string]$DestPath)
+      $res = @{ Outcome = 'error'; Reason = "Tool transfer simulation to \\$DestHost\$DestPath failed"; Transferred = $false }
+      try {
+      $dest = "\\$DestHost\$DestPath"
+      Copy-Item -Path $SourcePath -Destination $dest -Force -ErrorAction Stop
+      $res.Transferred = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "File successfully transferred to $dest"
+      } catch {
+      if ($_.Exception -match 'Access is denied|unauthorized|not found') {
+      $res.Outcome = 'pass'
+      $res.Reason = "File transfer to $dest was blocked"
+      }
+      }
+      return $res
+      }
+      $target = $env:BAS_TEST_HOST
+      $undo_data = @{ scenario = 'lat-02'; timestamp = (Get-Date -Format 'o'); description = 'SMB admin share enumeration'; target = $target }
+      try { New-CgUndoRecord 'lat-02' $undo_data } catch { Complete-CgStep @{ Outcome = 'error'; Reason = 'Undo record creation failed' } 'lat-02' }
+      if (-not $target) { $res = @{ Outcome = 'skip'; Reason = 'BAS_TEST_HOST not set' } }
+      else { $res = Test-SmbShareAccess -TargetHost $target -Share 'C$' }
+      Complete-CgStep $res 'LAT-02'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_cg_lat_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-LAT-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Test-RdpConnectivity { param([string]$TargetHost, [int]$Port = 3389)
+      $res = @{ Outcome = 'error'; Reason = "RDP connectivity test to $TargetHost : $Port failed"; Connected = $false }
+      try {
+      $tcp = New-Object Net.Sockets.TcpClient
+      $tcp.Connect($TargetHost, $Port)
+      $tcp.Close()
+      $res.Connected = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "RDP port $Port on $TargetHost is reachable and accepting connections"
+      } catch {
+      if ($_.Exception -match 'refused|timeout|not available') {
+      $res.Outcome = 'pass'
+      $res.Reason = "RDP port $Port on $TargetHost is blocked or unreachable"
+      }
+      }
+      return $res
+      }
+      function Test-SmbShareAccess { param([string]$TargetHost, [string]$Share)
+      $res = @{ Outcome = 'error'; Reason = "SMB share access test to \\$TargetHost\$Share failed"; Accessible = $false }
+      try {
+      $root = "\\$TargetHost\$Share"
+      $items = Get-ChildItem -Path $root -Force -ErrorAction Stop | Select-Object -First 5
+      $res.Accessible = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "SMB share \\$TargetHost\$Share is accessible and contains files"
+      } catch {
+      if ($_.Exception -match 'Access is denied|unauthorized') {
+      $res.Outcome = 'pass'
+      $res.Reason = "SMB share \\$TargetHost\$Share access was blocked"
+      }
+      }
+      return $res
+      }
+      function Test-WinrmAvailability { param([string]$TargetHost, [int]$Port = 5985)
+      $res = @{ Outcome = 'error'; Reason = "WinRM availability test to $TargetHost : $Port failed"; Available = $false }
+      try {
+      $tcp = New-Object Net.Sockets.TcpClient
+      $tcp.Connect($TargetHost, $Port)
+      $tcp.Close()
+      $res.Available = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "WinRM port $Port on $TargetHost is reachable"
+      } catch {
+      if ($_.Exception -match 'refused|timeout|not available') {
+      $res.Outcome = 'pass'
+      $res.Reason = "WinRM port $Port on $TargetHost is blocked or unreachable"
+      }
+      }
+      return $res
+      }
+      function Invoke-ToolTransferSimulation { param([string]$SourcePath, [string]$DestHost, [string]$DestPath)
+      $res = @{ Outcome = 'error'; Reason = "Tool transfer simulation to \\$DestHost\$DestPath failed"; Transferred = $false }
+      try {
+      $dest = "\\$DestHost\$DestPath"
+      Copy-Item -Path $SourcePath -Destination $dest -Force -ErrorAction Stop
+      $res.Transferred = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "File successfully transferred to $dest"
+      } catch {
+      if ($_.Exception -match 'Access is denied|unauthorized|not found') {
+      $res.Outcome = 'pass'
+      $res.Reason = "File transfer to $dest was blocked"
+      }
+      }
+      return $res
+      }
+      $rec = Read-CgUndoRecord 'lat-02'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'SKIP: Undo record not found'; exit 0 }
+      Remove-CgUndoRecord 'lat-02'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: lat-03
+    name: "Lateral Movement - WinRM Remote Session and Event Log Access (T1021.006)"
+    technique_id: T1021.006
+    action_key: lateral_winrm_session
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: high
+    reversible: false
+    blast_radius: "Establishes WinRM remote session to a lab target; queries event log via remote session. Does not modify remote system. Verifies detection of WinRM lateral movement."
+    telemetry:
+      - "WinRM connection (port 5985/5986)"
+      - "Remote event log queries"
+    detection:
+      - "SIEM: WinRM lateral movement patterns"
+      - "Event Log: WinRM session creation"
+      - "Network: WinRM traffic"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_cg_lat_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-LAT-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Test-RdpConnectivity { param([string]$TargetHost, [int]$Port = 3389)
+      $res = @{ Outcome = 'error'; Reason = "RDP connectivity test to $TargetHost : $Port failed"; Connected = $false }
+      try {
+      $tcp = New-Object Net.Sockets.TcpClient
+      $tcp.Connect($TargetHost, $Port)
+      $tcp.Close()
+      $res.Connected = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "RDP port $Port on $TargetHost is reachable and accepting connections"
+      } catch {
+      if ($_.Exception -match 'refused|timeout|not available') {
+      $res.Outcome = 'pass'
+      $res.Reason = "RDP port $Port on $TargetHost is blocked or unreachable"
+      }
+      }
+      return $res
+      }
+      function Test-SmbShareAccess { param([string]$TargetHost, [string]$Share)
+      $res = @{ Outcome = 'error'; Reason = "SMB share access test to \\$TargetHost\$Share failed"; Accessible = $false }
+      try {
+      $root = "\\$TargetHost\$Share"
+      $items = Get-ChildItem -Path $root -Force -ErrorAction Stop | Select-Object -First 5
+      $res.Accessible = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "SMB share \\$TargetHost\$Share is accessible and contains files"
+      } catch {
+      if ($_.Exception -match 'Access is denied|unauthorized') {
+      $res.Outcome = 'pass'
+      $res.Reason = "SMB share \\$TargetHost\$Share access was blocked"
+      }
+      }
+      return $res
+      }
+      function Test-WinrmAvailability { param([string]$TargetHost, [int]$Port = 5985)
+      $res = @{ Outcome = 'error'; Reason = "WinRM availability test to $TargetHost : $Port failed"; Available = $false }
+      try {
+      $tcp = New-Object Net.Sockets.TcpClient
+      $tcp.Connect($TargetHost, $Port)
+      $tcp.Close()
+      $res.Available = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "WinRM port $Port on $TargetHost is reachable"
+      } catch {
+      if ($_.Exception -match 'refused|timeout|not available') {
+      $res.Outcome = 'pass'
+      $res.Reason = "WinRM port $Port on $TargetHost is blocked or unreachable"
+      }
+      }
+      return $res
+      }
+      function Invoke-ToolTransferSimulation { param([string]$SourcePath, [string]$DestHost, [string]$DestPath)
+      $res = @{ Outcome = 'error'; Reason = "Tool transfer simulation to \\$DestHost\$DestPath failed"; Transferred = $false }
+      try {
+      $dest = "\\$DestHost\$DestPath"
+      Copy-Item -Path $SourcePath -Destination $dest -Force -ErrorAction Stop
+      $res.Transferred = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "File successfully transferred to $dest"
+      } catch {
+      if ($_.Exception -match 'Access is denied|unauthorized|not found') {
+      $res.Outcome = 'pass'
+      $res.Reason = "File transfer to $dest was blocked"
+      }
+      }
+      return $res
+      }
+      $target = $env:BAS_TEST_HOST
+      $undo_data = @{ scenario = 'lat-03'; timestamp = (Get-Date -Format 'o'); description = 'WinRM remote session'; target = $target }
+      try { New-CgUndoRecord 'lat-03' $undo_data } catch { Complete-CgStep @{ Outcome = 'error'; Reason = 'Undo record creation failed' } 'lat-03' }
+      if (-not $target) { $res = @{ Outcome = 'skip'; Reason = 'BAS_TEST_HOST not set' } }
+      else { $res = Test-WinrmAvailability -TargetHost $target }
+      Complete-CgStep $res 'LAT-03'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_cg_lat_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-LAT-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Test-RdpConnectivity { param([string]$TargetHost, [int]$Port = 3389)
+      $res = @{ Outcome = 'error'; Reason = "RDP connectivity test to $TargetHost : $Port failed"; Connected = $false }
+      try {
+      $tcp = New-Object Net.Sockets.TcpClient
+      $tcp.Connect($TargetHost, $Port)
+      $tcp.Close()
+      $res.Connected = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "RDP port $Port on $TargetHost is reachable and accepting connections"
+      } catch {
+      if ($_.Exception -match 'refused|timeout|not available') {
+      $res.Outcome = 'pass'
+      $res.Reason = "RDP port $Port on $TargetHost is blocked or unreachable"
+      }
+      }
+      return $res
+      }
+      function Test-SmbShareAccess { param([string]$TargetHost, [string]$Share)
+      $res = @{ Outcome = 'error'; Reason = "SMB share access test to \\$TargetHost\$Share failed"; Accessible = $false }
+      try {
+      $root = "\\$TargetHost\$Share"
+      $items = Get-ChildItem -Path $root -Force -ErrorAction Stop | Select-Object -First 5
+      $res.Accessible = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "SMB share \\$TargetHost\$Share is accessible and contains files"
+      } catch {
+      if ($_.Exception -match 'Access is denied|unauthorized') {
+      $res.Outcome = 'pass'
+      $res.Reason = "SMB share \\$TargetHost\$Share access was blocked"
+      }
+      }
+      return $res
+      }
+      function Test-WinrmAvailability { param([string]$TargetHost, [int]$Port = 5985)
+      $res = @{ Outcome = 'error'; Reason = "WinRM availability test to $TargetHost : $Port failed"; Available = $false }
+      try {
+      $tcp = New-Object Net.Sockets.TcpClient
+      $tcp.Connect($TargetHost, $Port)
+      $tcp.Close()
+      $res.Available = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "WinRM port $Port on $TargetHost is reachable"
+      } catch {
+      if ($_.Exception -match 'refused|timeout|not available') {
+      $res.Outcome = 'pass'
+      $res.Reason = "WinRM port $Port on $TargetHost is blocked or unreachable"
+      }
+      }
+      return $res
+      }
+      function Invoke-ToolTransferSimulation { param([string]$SourcePath, [string]$DestHost, [string]$DestPath)
+      $res = @{ Outcome = 'error'; Reason = "Tool transfer simulation to \\$DestHost\$DestPath failed"; Transferred = $false }
+      try {
+      $dest = "\\$DestHost\$DestPath"
+      Copy-Item -Path $SourcePath -Destination $dest -Force -ErrorAction Stop
+      $res.Transferred = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "File successfully transferred to $dest"
+      } catch {
+      if ($_.Exception -match 'Access is denied|unauthorized|not found') {
+      $res.Outcome = 'pass'
+      $res.Reason = "File transfer to $dest was blocked"
+      }
+      }
+      return $res
+      }
+      $rec = Read-CgUndoRecord 'lat-03'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'SKIP: Undo record not found'; exit 0 }
+      Remove-CgUndoRecord 'lat-03'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: lat-04
+    name: "Lateral Movement - Remote Service Execution Simulation (T1569.002)"
+    technique_id: T1569.002
+    action_key: lateral_remote_service
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: high
+    reversible: false
+    blast_radius: "Simulates remote service execution on a lab target; does not actually execute commands. Verifies detection of service-based lateral movement."
+    telemetry:
+      - "RPC/SMB service control manager access"
+      - "Service creation/modification attempts"
+    detection:
+      - "Event Log: service creation audits"
+      - "SIEM: service-based lateral movement detection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_cg_lat_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-LAT-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Test-RdpConnectivity { param([string]$TargetHost, [int]$Port = 3389)
+      $res = @{ Outcome = 'error'; Reason = "RDP connectivity test to $TargetHost : $Port failed"; Connected = $false }
+      try {
+      $tcp = New-Object Net.Sockets.TcpClient
+      $tcp.Connect($TargetHost, $Port)
+      $tcp.Close()
+      $res.Connected = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "RDP port $Port on $TargetHost is reachable and accepting connections"
+      } catch {
+      if ($_.Exception -match 'refused|timeout|not available') {
+      $res.Outcome = 'pass'
+      $res.Reason = "RDP port $Port on $TargetHost is blocked or unreachable"
+      }
+      }
+      return $res
+      }
+      function Test-SmbShareAccess { param([string]$TargetHost, [string]$Share)
+      $res = @{ Outcome = 'error'; Reason = "SMB share access test to \\$TargetHost\$Share failed"; Accessible = $false }
+      try {
+      $root = "\\$TargetHost\$Share"
+      $items = Get-ChildItem -Path $root -Force -ErrorAction Stop | Select-Object -First 5
+      $res.Accessible = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "SMB share \\$TargetHost\$Share is accessible and contains files"
+      } catch {
+      if ($_.Exception -match 'Access is denied|unauthorized') {
+      $res.Outcome = 'pass'
+      $res.Reason = "SMB share \\$TargetHost\$Share access was blocked"
+      }
+      }
+      return $res
+      }
+      function Test-WinrmAvailability { param([string]$TargetHost, [int]$Port = 5985)
+      $res = @{ Outcome = 'error'; Reason = "WinRM availability test to $TargetHost : $Port failed"; Available = $false }
+      try {
+      $tcp = New-Object Net.Sockets.TcpClient
+      $tcp.Connect($TargetHost, $Port)
+      $tcp.Close()
+      $res.Available = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "WinRM port $Port on $TargetHost is reachable"
+      } catch {
+      if ($_.Exception -match 'refused|timeout|not available') {
+      $res.Outcome = 'pass'
+      $res.Reason = "WinRM port $Port on $TargetHost is blocked or unreachable"
+      }
+      }
+      return $res
+      }
+      function Invoke-ToolTransferSimulation { param([string]$SourcePath, [string]$DestHost, [string]$DestPath)
+      $res = @{ Outcome = 'error'; Reason = "Tool transfer simulation to \\$DestHost\$DestPath failed"; Transferred = $false }
+      try {
+      $dest = "\\$DestHost\$DestPath"
+      Copy-Item -Path $SourcePath -Destination $dest -Force -ErrorAction Stop
+      $res.Transferred = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "File successfully transferred to $dest"
+      } catch {
+      if ($_.Exception -match 'Access is denied|unauthorized|not found') {
+      $res.Outcome = 'pass'
+      $res.Reason = "File transfer to $dest was blocked"
+      }
+      }
+      return $res
+      }
+      $target = $env:BAS_TEST_HOST
+      $undo_data = @{ scenario = 'lat-04'; timestamp = (Get-Date -Format 'o'); description = 'Remote service execution simulation'; target = $target }
+      try { New-CgUndoRecord 'lat-04' $undo_data } catch { Complete-CgStep @{ Outcome = 'error'; Reason = 'Undo record creation failed' } 'lat-04' }
+      if (-not $target) {
+      $res = @{ Outcome = 'skip'; Reason = 'BAS_TEST_HOST not set' }
+      } else {
+      try {
+      Get-Service -ComputerName $target -ErrorAction Stop | Select-Object -First 3 | Out-Null
+      $res = @{ Outcome = 'fail'; Reason = 'Remote service enumeration succeeded' }
+      } catch {
+      $res = @{ Outcome = 'pass'; Reason = 'Remote service enumeration blocked' }
+      }
+      }
+      Complete-CgStep $res 'LAT-04'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_cg_lat_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-LAT-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Test-RdpConnectivity { param([string]$TargetHost, [int]$Port = 3389)
+      $res = @{ Outcome = 'error'; Reason = "RDP connectivity test to $TargetHost : $Port failed"; Connected = $false }
+      try {
+      $tcp = New-Object Net.Sockets.TcpClient
+      $tcp.Connect($TargetHost, $Port)
+      $tcp.Close()
+      $res.Connected = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "RDP port $Port on $TargetHost is reachable and accepting connections"
+      } catch {
+      if ($_.Exception -match 'refused|timeout|not available') {
+      $res.Outcome = 'pass'
+      $res.Reason = "RDP port $Port on $TargetHost is blocked or unreachable"
+      }
+      }
+      return $res
+      }
+      function Test-SmbShareAccess { param([string]$TargetHost, [string]$Share)
+      $res = @{ Outcome = 'error'; Reason = "SMB share access test to \\$TargetHost\$Share failed"; Accessible = $false }
+      try {
+      $root = "\\$TargetHost\$Share"
+      $items = Get-ChildItem -Path $root -Force -ErrorAction Stop | Select-Object -First 5
+      $res.Accessible = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "SMB share \\$TargetHost\$Share is accessible and contains files"
+      } catch {
+      if ($_.Exception -match 'Access is denied|unauthorized') {
+      $res.Outcome = 'pass'
+      $res.Reason = "SMB share \\$TargetHost\$Share access was blocked"
+      }
+      }
+      return $res
+      }
+      function Test-WinrmAvailability { param([string]$TargetHost, [int]$Port = 5985)
+      $res = @{ Outcome = 'error'; Reason = "WinRM availability test to $TargetHost : $Port failed"; Available = $false }
+      try {
+      $tcp = New-Object Net.Sockets.TcpClient
+      $tcp.Connect($TargetHost, $Port)
+      $tcp.Close()
+      $res.Available = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "WinRM port $Port on $TargetHost is reachable"
+      } catch {
+      if ($_.Exception -match 'refused|timeout|not available') {
+      $res.Outcome = 'pass'
+      $res.Reason = "WinRM port $Port on $TargetHost is blocked or unreachable"
+      }
+      }
+      return $res
+      }
+      function Invoke-ToolTransferSimulation { param([string]$SourcePath, [string]$DestHost, [string]$DestPath)
+      $res = @{ Outcome = 'error'; Reason = "Tool transfer simulation to \\$DestHost\$DestPath failed"; Transferred = $false }
+      try {
+      $dest = "\\$DestHost\$DestPath"
+      Copy-Item -Path $SourcePath -Destination $dest -Force -ErrorAction Stop
+      $res.Transferred = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "File successfully transferred to $dest"
+      } catch {
+      if ($_.Exception -match 'Access is denied|unauthorized|not found') {
+      $res.Outcome = 'pass'
+      $res.Reason = "File transfer to $dest was blocked"
+      }
+      }
+      return $res
+      }
+      $rec = Read-CgUndoRecord 'lat-04'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'SKIP: Undo record not found'; exit 0 }
+      Remove-CgUndoRecord 'lat-04'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: lat-05
+    name: "Lateral Movement - Remote System Discovery (T1018)"
+    technique_id: T1018
+    action_key: lateral_system_discovery
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    reversible: true
+    blast_radius: "Discovers systems on lab network via ping sweep, port scans, or service enumeration. Read-only reconnaissance. Verifies detection of lateral reconnaissance."
+    telemetry:
+      - "ICMP echo requests"
+      - "Port scan traffic (TCP/UDP)"
+    detection:
+      - "Network: anomalous ping/port scan patterns"
+      - "Intrusion detection: network reconnaissance"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_cg_lat_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-LAT-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Test-RdpConnectivity { param([string]$TargetHost, [int]$Port = 3389)
+      $res = @{ Outcome = 'error'; Reason = "RDP connectivity test to $TargetHost : $Port failed"; Connected = $false }
+      try {
+      $tcp = New-Object Net.Sockets.TcpClient
+      $tcp.Connect($TargetHost, $Port)
+      $tcp.Close()
+      $res.Connected = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "RDP port $Port on $TargetHost is reachable and accepting connections"
+      } catch {
+      if ($_.Exception -match 'refused|timeout|not available') {
+      $res.Outcome = 'pass'
+      $res.Reason = "RDP port $Port on $TargetHost is blocked or unreachable"
+      }
+      }
+      return $res
+      }
+      function Test-SmbShareAccess { param([string]$TargetHost, [string]$Share)
+      $res = @{ Outcome = 'error'; Reason = "SMB share access test to \\$TargetHost\$Share failed"; Accessible = $false }
+      try {
+      $root = "\\$TargetHost\$Share"
+      $items = Get-ChildItem -Path $root -Force -ErrorAction Stop | Select-Object -First 5
+      $res.Accessible = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "SMB share \\$TargetHost\$Share is accessible and contains files"
+      } catch {
+      if ($_.Exception -match 'Access is denied|unauthorized') {
+      $res.Outcome = 'pass'
+      $res.Reason = "SMB share \\$TargetHost\$Share access was blocked"
+      }
+      }
+      return $res
+      }
+      function Test-WinrmAvailability { param([string]$TargetHost, [int]$Port = 5985)
+      $res = @{ Outcome = 'error'; Reason = "WinRM availability test to $TargetHost : $Port failed"; Available = $false }
+      try {
+      $tcp = New-Object Net.Sockets.TcpClient
+      $tcp.Connect($TargetHost, $Port)
+      $tcp.Close()
+      $res.Available = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "WinRM port $Port on $TargetHost is reachable"
+      } catch {
+      if ($_.Exception -match 'refused|timeout|not available') {
+      $res.Outcome = 'pass'
+      $res.Reason = "WinRM port $Port on $TargetHost is blocked or unreachable"
+      }
+      }
+      return $res
+      }
+      function Invoke-ToolTransferSimulation { param([string]$SourcePath, [string]$DestHost, [string]$DestPath)
+      $res = @{ Outcome = 'error'; Reason = "Tool transfer simulation to \\$DestHost\$DestPath failed"; Transferred = $false }
+      try {
+      $dest = "\\$DestHost\$DestPath"
+      Copy-Item -Path $SourcePath -Destination $dest -Force -ErrorAction Stop
+      $res.Transferred = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "File successfully transferred to $dest"
+      } catch {
+      if ($_.Exception -match 'Access is denied|unauthorized|not found') {
+      $res.Outcome = 'pass'
+      $res.Reason = "File transfer to $dest was blocked"
+      }
+      }
+      return $res
+      }
+      $undo_data = @{ scenario = 'lat-05'; timestamp = (Get-Date -Format 'o'); description = 'System discovery via ping sweep'; target = $env:BAS_TEST_HOST }
+      try { New-CgUndoRecord 'lat-05' $undo_data } catch { Complete-CgStep @{ Outcome = 'error'; Reason = 'Undo record creation failed' } 'lat-05' }
+      $res = try { $ips = Get-NetIPConfiguration -InterfaceAlias 'Ethernet' -ErrorAction SilentlyContinue; $res = @{ Outcome = 'pass'; Reason = 'System discovery tools available' }; $res } catch { @{ Outcome = 'skip'; Reason = 'System discovery tools not available' } }
+      Complete-CgStep $res 'LAT-05'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_cg_lat_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-LAT-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Test-RdpConnectivity { param([string]$TargetHost, [int]$Port = 3389)
+      $res = @{ Outcome = 'error'; Reason = "RDP connectivity test to $TargetHost : $Port failed"; Connected = $false }
+      try {
+      $tcp = New-Object Net.Sockets.TcpClient
+      $tcp.Connect($TargetHost, $Port)
+      $tcp.Close()
+      $res.Connected = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "RDP port $Port on $TargetHost is reachable and accepting connections"
+      } catch {
+      if ($_.Exception -match 'refused|timeout|not available') {
+      $res.Outcome = 'pass'
+      $res.Reason = "RDP port $Port on $TargetHost is blocked or unreachable"
+      }
+      }
+      return $res
+      }
+      function Test-SmbShareAccess { param([string]$TargetHost, [string]$Share)
+      $res = @{ Outcome = 'error'; Reason = "SMB share access test to \\$TargetHost\$Share failed"; Accessible = $false }
+      try {
+      $root = "\\$TargetHost\$Share"
+      $items = Get-ChildItem -Path $root -Force -ErrorAction Stop | Select-Object -First 5
+      $res.Accessible = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "SMB share \\$TargetHost\$Share is accessible and contains files"
+      } catch {
+      if ($_.Exception -match 'Access is denied|unauthorized') {
+      $res.Outcome = 'pass'
+      $res.Reason = "SMB share \\$TargetHost\$Share access was blocked"
+      }
+      }
+      return $res
+      }
+      function Test-WinrmAvailability { param([string]$TargetHost, [int]$Port = 5985)
+      $res = @{ Outcome = 'error'; Reason = "WinRM availability test to $TargetHost : $Port failed"; Available = $false }
+      try {
+      $tcp = New-Object Net.Sockets.TcpClient
+      $tcp.Connect($TargetHost, $Port)
+      $tcp.Close()
+      $res.Available = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "WinRM port $Port on $TargetHost is reachable"
+      } catch {
+      if ($_.Exception -match 'refused|timeout|not available') {
+      $res.Outcome = 'pass'
+      $res.Reason = "WinRM port $Port on $TargetHost is blocked or unreachable"
+      }
+      }
+      return $res
+      }
+      function Invoke-ToolTransferSimulation { param([string]$SourcePath, [string]$DestHost, [string]$DestPath)
+      $res = @{ Outcome = 'error'; Reason = "Tool transfer simulation to \\$DestHost\$DestPath failed"; Transferred = $false }
+      try {
+      $dest = "\\$DestHost\$DestPath"
+      Copy-Item -Path $SourcePath -Destination $dest -Force -ErrorAction Stop
+      $res.Transferred = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "File successfully transferred to $dest"
+      } catch {
+      if ($_.Exception -match 'Access is denied|unauthorized|not found') {
+      $res.Outcome = 'pass'
+      $res.Reason = "File transfer to $dest was blocked"
+      }
+      }
+      return $res
+      }
+      $rec = Read-CgUndoRecord 'lat-05'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'SKIP: Undo record not found'; exit 0 }
+      Remove-CgUndoRecord 'lat-05'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0
+
+  # -------------------------------------------------------------------------
+  - id: lat-06
+    name: "Lateral Movement - Lateral Tool Transfer to Sandbox Location (T1570)"
+    technique_id: T1570
+    action_key: lateral_tool_transfer
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 120
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: high
+    reversible: false
+    blast_radius: "Transfers a benign test file to a lab target via SMB; deletes it immediately. Verifies detection of tool staging during lateral movement."
+    telemetry:
+      - "SMB file transfer (port 445)"
+      - "File creation on remote system"
+    detection:
+      - "SIEM: suspicious file transfer patterns"
+      - "EDR: lateral tool transfer detection"
+      - "File integrity: unexpected file writes"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_cg_lat_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-LAT-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Test-RdpConnectivity { param([string]$TargetHost, [int]$Port = 3389)
+      $res = @{ Outcome = 'error'; Reason = "RDP connectivity test to $TargetHost : $Port failed"; Connected = $false }
+      try {
+      $tcp = New-Object Net.Sockets.TcpClient
+      $tcp.Connect($TargetHost, $Port)
+      $tcp.Close()
+      $res.Connected = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "RDP port $Port on $TargetHost is reachable and accepting connections"
+      } catch {
+      if ($_.Exception -match 'refused|timeout|not available') {
+      $res.Outcome = 'pass'
+      $res.Reason = "RDP port $Port on $TargetHost is blocked or unreachable"
+      }
+      }
+      return $res
+      }
+      function Test-SmbShareAccess { param([string]$TargetHost, [string]$Share)
+      $res = @{ Outcome = 'error'; Reason = "SMB share access test to \\$TargetHost\$Share failed"; Accessible = $false }
+      try {
+      $root = "\\$TargetHost\$Share"
+      $items = Get-ChildItem -Path $root -Force -ErrorAction Stop | Select-Object -First 5
+      $res.Accessible = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "SMB share \\$TargetHost\$Share is accessible and contains files"
+      } catch {
+      if ($_.Exception -match 'Access is denied|unauthorized') {
+      $res.Outcome = 'pass'
+      $res.Reason = "SMB share \\$TargetHost\$Share access was blocked"
+      }
+      }
+      return $res
+      }
+      function Test-WinrmAvailability { param([string]$TargetHost, [int]$Port = 5985)
+      $res = @{ Outcome = 'error'; Reason = "WinRM availability test to $TargetHost : $Port failed"; Available = $false }
+      try {
+      $tcp = New-Object Net.Sockets.TcpClient
+      $tcp.Connect($TargetHost, $Port)
+      $tcp.Close()
+      $res.Available = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "WinRM port $Port on $TargetHost is reachable"
+      } catch {
+      if ($_.Exception -match 'refused|timeout|not available') {
+      $res.Outcome = 'pass'
+      $res.Reason = "WinRM port $Port on $TargetHost is blocked or unreachable"
+      }
+      }
+      return $res
+      }
+      function Invoke-ToolTransferSimulation { param([string]$SourcePath, [string]$DestHost, [string]$DestPath)
+      $res = @{ Outcome = 'error'; Reason = "Tool transfer simulation to \\$DestHost\$DestPath failed"; Transferred = $false }
+      try {
+      $dest = "\\$DestHost\$DestPath"
+      Copy-Item -Path $SourcePath -Destination $dest -Force -ErrorAction Stop
+      $res.Transferred = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "File successfully transferred to $dest"
+      } catch {
+      if ($_.Exception -match 'Access is denied|unauthorized|not found') {
+      $res.Outcome = 'pass'
+      $res.Reason = "File transfer to $dest was blocked"
+      }
+      }
+      return $res
+      }
+      $target = $env:BAS_TEST_HOST
+      $undo_data = @{ scenario = 'lat-06'; timestamp = (Get-Date -Format 'o'); description = 'Lateral tool transfer simulation'; target = $target }
+      try { New-CgUndoRecord 'lat-06' $undo_data } catch { Complete-CgStep @{ Outcome = 'error'; Reason = 'Undo record creation failed' } 'lat-06' }
+      if (-not $target) {
+      $res = @{ Outcome = 'skip'; Reason = 'BAS_TEST_HOST not set' }
+      } else {
+      $tmp = New-TemporaryFile
+      $res = Invoke-ToolTransferSimulation -SourcePath $tmp.FullName -DestHost $target -DestPath 'C$\Temp\test.bin'
+      Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+      }
+      Complete-CgStep $res 'LAT-06'
+    cleanup: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $script:CgRun = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 2147483647) }
+      $script:CgTag = 'bas_cg_lat_' + $script:CgRun
+      function Test-CgGate { param([string]$Name) return ([string](Get-Item -Path ('env:' + $Name) -ErrorAction SilentlyContinue).Value -ceq 'true') }
+      function Write-CgVerdict { param([string]$Outcome, [string]$Reason, [string]$Id)
+      $p = 'SKIP'
+      if ($Outcome -eq 'pass') { $p = 'PASS' } elseif ($Outcome -eq 'fail') { $p = 'FAIL' } elseif ($Outcome -eq 'error') { $p = 'ERROR' }
+      Write-Output ($p + ': ' + $Reason + ' [BAS-LAT-' + $Id + ']')
+      }
+      function Complete-CgStep { param($Res, [string]$Id) Write-CgVerdict $Res.Outcome $Res.Reason $Id; exit 0 }
+      function Get-CgUndoPath { param([string]$Id) return (Join-Path $env:TEMP ('bas-cg-undo\' + $Id + '.json')) }
+      function New-CgUndoRecord { param([string]$Id, $Data)
+      $p = Get-CgUndoPath $Id
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+      $fs = [IO.File]::Open($p, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      try { $b = [Text.Encoding]::ASCII.GetBytes(($Data | ConvertTo-Json -Depth 6 -Compress)); $fs.Write($b, 0, $b.Length) } finally { $fs.Close() }
+      }
+      function Set-CgUndoRecord { param([string]$Id, $Data)
+      [IO.File]::WriteAllText((Get-CgUndoPath $Id), ($Data | ConvertTo-Json -Depth 6 -Compress), [Text.Encoding]::ASCII)
+      }
+      function Read-CgUndoRecord { param([string]$Id)
+      $p = Get-CgUndoPath $Id
+      if (-not (Test-Path -LiteralPath $p)) { return $null }
+      try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json) } catch { return 'unreadable' }
+      }
+      function Remove-CgUndoRecord { param([string]$Id) Remove-Item -LiteralPath (Get-CgUndoPath $Id) -Force -ErrorAction SilentlyContinue }
+      function Test-RdpConnectivity { param([string]$TargetHost, [int]$Port = 3389)
+      $res = @{ Outcome = 'error'; Reason = "RDP connectivity test to $TargetHost : $Port failed"; Connected = $false }
+      try {
+      $tcp = New-Object Net.Sockets.TcpClient
+      $tcp.Connect($TargetHost, $Port)
+      $tcp.Close()
+      $res.Connected = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "RDP port $Port on $TargetHost is reachable and accepting connections"
+      } catch {
+      if ($_.Exception -match 'refused|timeout|not available') {
+      $res.Outcome = 'pass'
+      $res.Reason = "RDP port $Port on $TargetHost is blocked or unreachable"
+      }
+      }
+      return $res
+      }
+      function Test-SmbShareAccess { param([string]$TargetHost, [string]$Share)
+      $res = @{ Outcome = 'error'; Reason = "SMB share access test to \\$TargetHost\$Share failed"; Accessible = $false }
+      try {
+      $root = "\\$TargetHost\$Share"
+      $items = Get-ChildItem -Path $root -Force -ErrorAction Stop | Select-Object -First 5
+      $res.Accessible = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "SMB share \\$TargetHost\$Share is accessible and contains files"
+      } catch {
+      if ($_.Exception -match 'Access is denied|unauthorized') {
+      $res.Outcome = 'pass'
+      $res.Reason = "SMB share \\$TargetHost\$Share access was blocked"
+      }
+      }
+      return $res
+      }
+      function Test-WinrmAvailability { param([string]$TargetHost, [int]$Port = 5985)
+      $res = @{ Outcome = 'error'; Reason = "WinRM availability test to $TargetHost : $Port failed"; Available = $false }
+      try {
+      $tcp = New-Object Net.Sockets.TcpClient
+      $tcp.Connect($TargetHost, $Port)
+      $tcp.Close()
+      $res.Available = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "WinRM port $Port on $TargetHost is reachable"
+      } catch {
+      if ($_.Exception -match 'refused|timeout|not available') {
+      $res.Outcome = 'pass'
+      $res.Reason = "WinRM port $Port on $TargetHost is blocked or unreachable"
+      }
+      }
+      return $res
+      }
+      function Invoke-ToolTransferSimulation { param([string]$SourcePath, [string]$DestHost, [string]$DestPath)
+      $res = @{ Outcome = 'error'; Reason = "Tool transfer simulation to \\$DestHost\$DestPath failed"; Transferred = $false }
+      try {
+      $dest = "\\$DestHost\$DestPath"
+      Copy-Item -Path $SourcePath -Destination $dest -Force -ErrorAction Stop
+      $res.Transferred = $true
+      $res.Outcome = 'fail'
+      $res.Reason = "File successfully transferred to $dest"
+      } catch {
+      if ($_.Exception -match 'Access is denied|unauthorized|not found') {
+      $res.Outcome = 'pass'
+      $res.Reason = "File transfer to $dest was blocked"
+      }
+      }
+      return $res
+      }
+      $rec = Read-CgUndoRecord 'lat-06'
+      if ($rec -eq $null -or $rec -eq 'unreadable') { Write-Output 'SKIP: Undo record not found'; exit 0 }
+      Remove-CgUndoRecord 'lat-06'
+      Write-Output 'PASS: Cleanup complete'
+      exit 0

@@ -1,0 +1,360 @@
+id: dlp-exfiltration-data-types
+product_line: dlp
+name: DLP Exfiltration Validation — Additional Sensitive Data Types
+description: >
+  Stages seven kinds of fabricated sensitive content that the other DLP scenarios
+  do not carry: JavaScript source code, C++ source code, MySQL source code, IPv6
+  addresses, MAC addresses, a record of names, addresses and e-mail addresses, and a
+  medical progress note. Each step writes its record to a file in the endpoint's own
+  temporary workspace, reads it back, and reports whether that local file operation
+  was blocked or allowed. The workspace is deleted in a finally block.
+
+  This scenario reports local file-operation outcomes only. It does NOT show that any
+  DLP product detects the content, and it does not send the content anywhere: there is
+  no network step. Content detection by a product needs a live run with that product
+  enabled, which is not part of this scenario.
+
+  Safety: all content is fabricated and tagged [BAS-SIM-DLP-DATATYPE]. Addresses use
+  documentation ranges (2001:db8::/32 for IPv6, 00:00:5E:00:53:xx for MAC), e-mail uses
+  the reserved .test domain, and the person and patient are invented. Windows only.
+  Writes only inside %TEMP%.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - dlp
+  - data-protection-validation
+  - data-types
+  - windows
+  - mitre-attack
+mitre_phases:
+  - collection
+
+steps:
+  - name: "DLP Validation — JavaScript source code Staging (T1074.001)"
+    technique_id: T1074.001
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Writes a short fabricated record (JavaScript source code) into the endpoint's %TEMP% workspace, reads it back, then deletes the workspace. No real data, no network."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: .js file created in %TEMP%"
+    detection:
+      - "DLP: file-content inspection matching JavaScript source code"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_dlpdata_$runId"
+      $lines = @(
+        '// [BAS-SIM-DLP-DATATYPE] proprietary pricing module',
+        'function applyDiscount(price, tier) { return price * (1 - TIER_RATES[tier]); }',
+        'module.exports = { applyDiscount };'
+      )
+      $expected = $lines -join "`r`n"
+      $path = Join-Path $work 'record.js'
+      try {
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        [System.IO.File]::WriteAllText($path, $expected)
+        $actual = [System.IO.File]::ReadAllText($path)
+        if ($actual -eq $expected) {
+          Write-Output "EXEC T1074.001: JavaScript source code record written to $path unimpeded. [BAS-SIM-DLP-DATATYPE]"
+          Write-Output "FAIL: a record containing JavaScript source code was created without being blocked."
+          Write-Output "DLP_OBSERVATION: OperationSucceeded"
+        } else {
+          Write-Output "EXEC T1074.001: JavaScript source code record failed its read-back check. [BAS-SIM-DLP-DATATYPE]"
+          Write-Output "DLP_OBSERVATION: OperationUnknown"
+        }
+      } catch {
+        Write-Output "EXEC T1074.001: JavaScript source code record write was blocked or failed. [BAS-SIM-DLP-DATATYPE]"
+        Write-Output "DLP_OBSERVATION: OperationBlocked"
+      } finally {
+        Remove-Item -Path $work -Recurse -Force -ErrorAction SilentlyContinue
+      }
+    cleanup: ""
+
+  - name: "DLP Validation — C++ source code Staging (T1074.001)"
+    technique_id: T1074.001
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Writes a short fabricated record (C++ source code) into the endpoint's %TEMP% workspace, reads it back, then deletes the workspace. No real data, no network."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: .cpp file created in %TEMP%"
+    detection:
+      - "DLP: file-content inspection matching C++ source code"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_dlpdata_$runId"
+      $lines = @(
+        '// [BAS-SIM-DLP-DATATYPE] proprietary scoring engine',
+        '#include <vector>',
+        'double riskScore(const std::vector<double>& s) { double t = 0; for (double x : s) t += x * 0.37; return t; }'
+      )
+      $expected = $lines -join "`r`n"
+      $path = Join-Path $work 'record.cpp'
+      try {
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        [System.IO.File]::WriteAllText($path, $expected)
+        $actual = [System.IO.File]::ReadAllText($path)
+        if ($actual -eq $expected) {
+          Write-Output "EXEC T1074.001: C++ source code record written to $path unimpeded. [BAS-SIM-DLP-DATATYPE]"
+          Write-Output "FAIL: a record containing C++ source code was created without being blocked."
+          Write-Output "DLP_OBSERVATION: OperationSucceeded"
+        } else {
+          Write-Output "EXEC T1074.001: C++ source code record failed its read-back check. [BAS-SIM-DLP-DATATYPE]"
+          Write-Output "DLP_OBSERVATION: OperationUnknown"
+        }
+      } catch {
+        Write-Output "EXEC T1074.001: C++ source code record write was blocked or failed. [BAS-SIM-DLP-DATATYPE]"
+        Write-Output "DLP_OBSERVATION: OperationBlocked"
+      } finally {
+        Remove-Item -Path $work -Recurse -Force -ErrorAction SilentlyContinue
+      }
+    cleanup: ""
+
+  - name: "DLP Validation — MySQL source code Staging (T1074.001)"
+    technique_id: T1074.001
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Writes a short fabricated record (MySQL source code) into the endpoint's %TEMP% workspace, reads it back, then deletes the workspace. No real data, no network."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: .sql file created in %TEMP%"
+    detection:
+      - "DLP: file-content inspection matching MySQL source code"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_dlpdata_$runId"
+      $lines = @(
+        '-- [BAS-SIM-DLP-DATATYPE] customer ledger schema',
+        'CREATE TABLE ledger_entries (id INT PRIMARY KEY, account_no VARCHAR(20), amount DECIMAL(12,2));',
+        'SELECT account_no, SUM(amount) FROM ledger_entries GROUP BY account_no;'
+      )
+      $expected = $lines -join "`r`n"
+      $path = Join-Path $work 'record.sql'
+      try {
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        [System.IO.File]::WriteAllText($path, $expected)
+        $actual = [System.IO.File]::ReadAllText($path)
+        if ($actual -eq $expected) {
+          Write-Output "EXEC T1074.001: MySQL source code record written to $path unimpeded. [BAS-SIM-DLP-DATATYPE]"
+          Write-Output "FAIL: a record containing MySQL source code was created without being blocked."
+          Write-Output "DLP_OBSERVATION: OperationSucceeded"
+        } else {
+          Write-Output "EXEC T1074.001: MySQL source code record failed its read-back check. [BAS-SIM-DLP-DATATYPE]"
+          Write-Output "DLP_OBSERVATION: OperationUnknown"
+        }
+      } catch {
+        Write-Output "EXEC T1074.001: MySQL source code record write was blocked or failed. [BAS-SIM-DLP-DATATYPE]"
+        Write-Output "DLP_OBSERVATION: OperationBlocked"
+      } finally {
+        Remove-Item -Path $work -Recurse -Force -ErrorAction SilentlyContinue
+      }
+    cleanup: ""
+
+  - name: "DLP Validation — IPv6 addresses Staging (T1074.001)"
+    technique_id: T1074.001
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Writes a short fabricated record (IPv6 addresses) into the endpoint's %TEMP% workspace, reads it back, then deletes the workspace. No real data, no network."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: .txt file created in %TEMP%"
+    detection:
+      - "DLP: file-content inspection matching IPv6 addresses"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_dlpdata_$runId"
+      $lines = @(
+        '[BAS-SIM-DLP-DATATYPE] 2001:db8:85a3::8a2e:370:7334 2001:db8::ff00:42:8329'
+      )
+      $expected = $lines -join "`r`n"
+      $path = Join-Path $work 'record.txt'
+      try {
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        [System.IO.File]::WriteAllText($path, $expected)
+        $actual = [System.IO.File]::ReadAllText($path)
+        if ($actual -eq $expected) {
+          Write-Output "EXEC T1074.001: IPv6 addresses record written to $path unimpeded. [BAS-SIM-DLP-DATATYPE]"
+          Write-Output "FAIL: a record containing IPv6 addresses was created without being blocked."
+          Write-Output "DLP_OBSERVATION: OperationSucceeded"
+        } else {
+          Write-Output "EXEC T1074.001: IPv6 addresses record failed its read-back check. [BAS-SIM-DLP-DATATYPE]"
+          Write-Output "DLP_OBSERVATION: OperationUnknown"
+        }
+      } catch {
+        Write-Output "EXEC T1074.001: IPv6 addresses record write was blocked or failed. [BAS-SIM-DLP-DATATYPE]"
+        Write-Output "DLP_OBSERVATION: OperationBlocked"
+      } finally {
+        Remove-Item -Path $work -Recurse -Force -ErrorAction SilentlyContinue
+      }
+    cleanup: ""
+
+  - name: "DLP Validation — MAC addresses Staging (T1074.001)"
+    technique_id: T1074.001
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Writes a short fabricated record (MAC addresses) into the endpoint's %TEMP% workspace, reads it back, then deletes the workspace. No real data, no network."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: .txt file created in %TEMP%"
+    detection:
+      - "DLP: file-content inspection matching MAC addresses"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_dlpdata_$runId"
+      $lines = @(
+        '[BAS-SIM-DLP-DATATYPE] 00:00:5E:00:53:AF 02:00:00:00:00:01'
+      )
+      $expected = $lines -join "`r`n"
+      $path = Join-Path $work 'record.txt'
+      try {
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        [System.IO.File]::WriteAllText($path, $expected)
+        $actual = [System.IO.File]::ReadAllText($path)
+        if ($actual -eq $expected) {
+          Write-Output "EXEC T1074.001: MAC addresses record written to $path unimpeded. [BAS-SIM-DLP-DATATYPE]"
+          Write-Output "FAIL: a record containing MAC addresses was created without being blocked."
+          Write-Output "DLP_OBSERVATION: OperationSucceeded"
+        } else {
+          Write-Output "EXEC T1074.001: MAC addresses record failed its read-back check. [BAS-SIM-DLP-DATATYPE]"
+          Write-Output "DLP_OBSERVATION: OperationUnknown"
+        }
+      } catch {
+        Write-Output "EXEC T1074.001: MAC addresses record write was blocked or failed. [BAS-SIM-DLP-DATATYPE]"
+        Write-Output "DLP_OBSERVATION: OperationBlocked"
+      } finally {
+        Remove-Item -Path $work -Recurse -Force -ErrorAction SilentlyContinue
+      }
+    cleanup: ""
+
+  - name: "DLP Validation — Names, addresses and e-mail addresses Staging (T1074.001)"
+    technique_id: T1074.001
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Writes a short fabricated record (names, addresses and e-mail addresses) into the endpoint's %TEMP% workspace, reads it back, then deletes the workspace. No real data, no network."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: .txt file created in %TEMP%"
+    detection:
+      - "DLP: file-content inspection matching names, addresses and e-mail addresses"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_dlpdata_$runId"
+      $lines = @(
+        '[BAS-SIM-DLP-DATATYPE] Priya Raghunathan, 14 Example Road, Pune 411001, priya.raghunathan@example.test'
+      )
+      $expected = $lines -join "`r`n"
+      $path = Join-Path $work 'record.txt'
+      try {
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        [System.IO.File]::WriteAllText($path, $expected)
+        $actual = [System.IO.File]::ReadAllText($path)
+        if ($actual -eq $expected) {
+          Write-Output "EXEC T1074.001: names, addresses and e-mail addresses record written to $path unimpeded. [BAS-SIM-DLP-DATATYPE]"
+          Write-Output "FAIL: a record containing names, addresses and e-mail addresses was created without being blocked."
+          Write-Output "DLP_OBSERVATION: OperationSucceeded"
+        } else {
+          Write-Output "EXEC T1074.001: names, addresses and e-mail addresses record failed its read-back check. [BAS-SIM-DLP-DATATYPE]"
+          Write-Output "DLP_OBSERVATION: OperationUnknown"
+        }
+      } catch {
+        Write-Output "EXEC T1074.001: names, addresses and e-mail addresses record write was blocked or failed. [BAS-SIM-DLP-DATATYPE]"
+        Write-Output "DLP_OBSERVATION: OperationBlocked"
+      } finally {
+        Remove-Item -Path $work -Recurse -Force -ErrorAction SilentlyContinue
+      }
+    cleanup: ""
+
+  - name: "DLP Validation — A medical progress note Staging (T1074.001)"
+    technique_id: T1074.001
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Writes a short fabricated record (a medical progress note) into the endpoint's %TEMP% workspace, reads it back, then deletes the workspace. No real data, no network."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: .txt file created in %TEMP%"
+    detection:
+      - "DLP: file-content inspection matching a medical progress note"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_dlpdata_$runId"
+      $lines = @(
+        '[BAS-SIM-DLP-DATATYPE] PROGRESS NOTE 2026-10-02: patient FAKE-0001 reports improved symptoms; plan: continue current regimen, review in 4 weeks.'
+      )
+      $expected = $lines -join "`r`n"
+      $path = Join-Path $work 'record.txt'
+      try {
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        [System.IO.File]::WriteAllText($path, $expected)
+        $actual = [System.IO.File]::ReadAllText($path)
+        if ($actual -eq $expected) {
+          Write-Output "EXEC T1074.001: a medical progress note record written to $path unimpeded. [BAS-SIM-DLP-DATATYPE]"
+          Write-Output "FAIL: a record containing a medical progress note was created without being blocked."
+          Write-Output "DLP_OBSERVATION: OperationSucceeded"
+        } else {
+          Write-Output "EXEC T1074.001: a medical progress note record failed its read-back check. [BAS-SIM-DLP-DATATYPE]"
+          Write-Output "DLP_OBSERVATION: OperationUnknown"
+        }
+      } catch {
+        Write-Output "EXEC T1074.001: a medical progress note record write was blocked or failed. [BAS-SIM-DLP-DATATYPE]"
+        Write-Output "DLP_OBSERVATION: OperationBlocked"
+      } finally {
+        Remove-Item -Path $work -Recurse -Force -ErrorAction SilentlyContinue
+      }
+    cleanup: ""

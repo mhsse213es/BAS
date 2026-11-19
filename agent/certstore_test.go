@@ -311,3 +311,43 @@ func TestSaveCommandSigningCert_IdenticalRedeliveryIsNoop(t *testing.T) {
 		t.Errorf("expected re-delivering the identical certificate to succeed as a no-op, got: %v", err)
 	}
 }
+
+// An explicit install is operator action, so it must be able to drop a stale pin; routine renewal still
+// refuses (see the pin-once test above). Without this, an agent whose pinned signing certificate no longer
+// matches the server's rejects every scenario with "signature verification failed" until someone finds
+// and deletes command-signing.pem by hand.
+func TestClearCommandSigningPin_LetsInstallRepinToTheServersCurrentCert(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BAS_CERT_DIR", dir)
+	first := newTestCA(t)
+	second := newTestCA(t) // a different serial: the server's signing key moved on
+	firstPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: first.cert.Raw})
+	secondPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: second.cert.Raw})
+
+	if err := saveCommandSigningCert(firstPEM); err != nil {
+		t.Fatalf("pin first: %v", err)
+	}
+	if err := saveCommandSigningCert(secondPEM); err == nil {
+		t.Fatal("precondition: a different cert must be refused while the first is pinned")
+	}
+
+	cleared, err := clearCommandSigningPin()
+	if err != nil || !cleared {
+		t.Fatalf("clearCommandSigningPin = (%v, %v), want (true, nil)", cleared, err)
+	}
+	if err := saveCommandSigningCert(secondPEM); err != nil {
+		t.Fatalf("after clearing, the new cert must pin: %v", err)
+	}
+	loaded, err := loadCommandSigningCert()
+	if err != nil || loaded.SerialNumber.Cmp(second.cert.SerialNumber) != 0 {
+		t.Fatalf("pinned cert after clear+save is not the new one (err=%v)", err)
+	}
+}
+
+func TestClearCommandSigningPin_NothingPinnedIsNotAnError(t *testing.T) {
+	t.Setenv("BAS_CERT_DIR", t.TempDir())
+	cleared, err := clearCommandSigningPin()
+	if err != nil || cleared {
+		t.Fatalf("clearCommandSigningPin with no pin = (%v, %v), want (false, nil)", cleared, err)
+	}
+}

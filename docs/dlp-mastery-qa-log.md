@@ -121,3 +121,69 @@ This is the single place to check before claiming either DLP vendor connector is
 - `TestAllFixtures_TotalOccurrenceCountMatchesRealStepCount`: 62 → 75 real steps (62 previously catalogued + 5 carrier steps + the 8 drift repairs above).
 - `TestRealDLPScenarioIDs_ReturnsExactlyTheElevenRealIDs`: 10 → 11 IDs.
 - `TestBuiltinScenarios_AllHaveValidProductLine`: 107 → 108 built-in scenarios.
+
+## Additional data types and carriers (dlp-exfiltration-data-types, PPTX and ZIP carriers) — 2026-10-28
+
+From `docs/cymulate-comparison-gap-analysis.md`, DLP gap 2.
+
+- **New scenario `scenarios/dlp-exfiltration-data-types.yaml`** (Windows, PowerShell, signed): seven steps, one per type the other
+  scenarios do not carry: JavaScript source code, C++ source code, MySQL source code, IPv6 addresses, MAC addresses, a record of
+  names, addresses and e-mail addresses, and a medical progress note. Each step writes its fabricated record to `%TEMP%`, reads it
+  back, reports `OperationSucceeded`, `OperationBlocked` or `OperationUnknown`, and deletes its workspace. There is no network step.
+- **Two carriers added to `dlp-exfiltration-file-carriers`:** a PowerPoint PPTX and a plain ZIP, as deterministic SHA-256-pinned
+  templates like the existing four. The PPTX was built with python-pptx and re-opened with it to read the text back; the ZIP was
+  built with `zipfile`. Both regenerate to identical bytes. The scenario now has seven steps (it was five).
+- **Fixtures:** seven new (36 in total) and two new occurrences on the carrier fixture. The drift tests tie each value to its step.
+- **Fabricated on purpose:** IPv6 values are in `2001:db8::/32`, MAC values are RFC 7042 documentation or locally administered
+  addresses, the mailbox uses the reserved `.test` domain, and the person and patient are invented. `datatypes_test.go` enforces all
+  of this and that no step has a network or process call.
+- **Verified:** `dlpfixture`, `dlpprofile`, `dlpreport`, `dlpcorrelate`, `integrity`, `scenario` (now 120 scenarios) and the
+  `internal/api` scenario and library tests pass; `signer verify-all` reports 149 ok, 0 failed. Both changed files were re-signed.
+
+**Still open:** these report local file operations only. Whether a DLP product detects the content in any of the seven records or
+nine carriers needs a live run with that product enabled (the staging validation). The plain ZIP and the PPTX were checked by
+parsers, not opened in Office. OCR (text inside an image) and the range of HTTP content types are still not covered.
+
+## Browser-style upload, and the channels not built — 2026-10-28
+
+From `docs/cymulate-comparison-gap-analysis.md`, DLP gap 1 (the four missing channels) and the HTTP content types.
+
+**Built: browser-style multipart upload.**
+- **Sink (`internal/api/dlp_sink.go`, `parseSinkRequest`):** the sink used to decode every body as JSON. It now also reads
+  `multipart/form-data` (the file part named `payload` is the payload), urlencoded fields, and raw bodies (text, CSV, XML,
+  octet-stream) with the token and channel in `X-Sink-Token` and `X-Sink-Channel`. JSON is read exactly as before, including a JSON body
+  labelled `text/plain` or sent with no Content-Type. A header token wins. The body is capped at 1 MiB (the excess is dropped, not
+  rejected), and garbage yields an empty token and never panics. Ten unit tests plus one database test (a multipart upload leaves a
+  receipt whose hash and size are the uploaded file's) pin this.
+- **Scenario `dlp-exfiltration-browser-upload` (signed, Windows):** one step uploads the same fabricated record as a multipart file
+  `customer-records.csv` with a desktop Chrome User-Agent, verified by the sink receipt like `dlp-exfiltration-sink-https`.
+  It is deliberately a single step in its own scenario (see below). Fixture registered under `bfsi-india-anchor`.
+
+**Not built, with the reason:**
+- **HTTP content-type matrix** (the export has about 20 content types). The sink now accepts the types, but verification results are keyed
+  by technique ID (`verifysync.annotateSinkReceipts` writes `observed[techniqueID]`, and `SimulationResult.ID` is the technique), so
+  several sink steps with the same technique in one run cannot be reported separately. A matrix would give one blended verdict, which would
+  be misleading. This is a pre-existing limit that also affects the seven cloud-storage steps (all T1567.002). A per-step result key is a data-model
+  change and needs its own decision.
+- **ICMP tunneling:** still deferred. Receiving ICMP needs raw-socket privileges the sink does not have; the earlier decision stands.
+- **Open ports (raw TCP to an arbitrary port) and Gmail append (IMAP APPEND):** each needs a new listener, a new port and a firewall decision, or an IMAP
+  server, none of which this repo has. These are architecture decisions, not code gaps.
+
+**Verified:** the `internal/api` sink, DLP, scenario and library tests, `dlpfixture`, `dlpprofile` and `scenario` pass (121 scenarios);
+`signer verify-all` reports 150 ok, 0 failed. **Not verified:** a run against a real DLP proxy; the PowerShell step has not been executed
+on a Windows endpoint here, so please run it once on staging.
+
+## PNG carrier regenerated for OCR readability — 2026-11-16
+
+- Finding: the PNG carrier's text was about 10 px tall (480x80). OCR engines need roughly 20 px or more, so a DLP "not detected" result on that file could not be told apart from an unreadable image.
+- Change: regenerated the PNG with the same text (`[BAS-SIM-DLP-CARRIER] ABCDE1234F 123456789012`) at a 40 px font. Text is about 37 px tall; image 1089x97. The content is fabricated and unchanged.
+- New SHA-256: `bd40522f2657e703a549dd27d17d6927acbfcc62f416b0e86ba1fb6c03080480` (updated in the step's `$sha` and in the step's base64). Go test bounds updated to 1089x97.
+- Verified: `internal/dlpfixture` (SHA-256 and text tests), `dlpprofile`, `dlpreport`, `dlpcorrelate`, `scenario` pass. `signer verify-all` ok=159 fail=0 after re-signing.
+- Still NOT done: OCR positive control. Tesseract is not installed on the build host (install needs approval). The image has been checked visually only. Detection by any DLP product is still not shown.
+
+### OCR positive control for the PNG carrier — 2026-11-16 (closes the OCR item above)
+
+- Tool installed on the build host: Tesseract OCR 5.4.0.20240606 (UB Mannheim Windows build), installed silently to C:\Program Files\Tesseract-OCR. Installer: tesseract-ocr-w64-setup-5.4.0.20240606.exe, SHA-256 c885fff6998e0608ba4bb8ab51436e1c6775c2bafc2559a19b423e18678b60c9. The release page publishes no digest, so this value is recorded here for the record.
+- New PNG (sha256 bd40522f2657e703a549dd27d17d6927acbfcc62f416b0e86ba1fb6c03080480, 40 px text): OCR output `[BAS-SIM-DLP-CARRIER] ABCDE1234F 123456789012`. Exact match to the planted text. PASS.
+- Old PNG (sha256 cdddf4d0580a8ca69910cdda0f08ce7b3946330bab588f639b5559763e59bdba, 10 px text): OCR output `[BAS SIM-DLP-CARRIER] ABODE1234F 123456789012`. Misread. This confirms the regeneration was needed.
+- Still NOT done: any DLP product has not been run against the PNG, so detection is not shown.

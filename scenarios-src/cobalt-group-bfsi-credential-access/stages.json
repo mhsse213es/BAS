@@ -1,0 +1,196 @@
+[
+  {
+    "id": "cred-01",
+    "n": 1,
+    "name": "Credential Access - LSASS Credential Dumping Simulation (T1003.001)",
+    "technique_id": "T1003.001",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "high",
+    "blast_radius": "Simulates LSASS credential dumping attempt on a synthetic test user; does not extract or log credentials. Failure is expected and recorded as ERROR (control concern) or FAIL (control blocked access).",
+    "telemetry": [
+      "Process access attempts to lsass.exe",
+      "Potential credential dumping tool execution"
+    ],
+    "detection": [
+      "EDR/SIEM: suspicious process access to lsass",
+      "Windows Defender: credential dumping detection",
+      "Event Log: Security audit events (if enabled)"
+    ],
+    "cleanup": "",
+    "action_key": "credential_lsass_simulation",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "cred-02",
+    "n": 2,
+    "name": "Credential Access - SAM Database Access Simulation (T1003.002)",
+    "technique_id": "T1003.002",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "high",
+    "blast_radius": "Simulates SAM database access attempt; does not extract hashes. Verifies file access detection and resource-access control.",
+    "telemetry": [
+      "File access attempts to %windir%\\System32\\config\\SAM",
+      "Registry hive access attempts"
+    ],
+    "detection": [
+      "EDR: suspicious file access to system hives",
+      "Event Log: file access audits"
+    ],
+    "cleanup": "",
+    "action_key": "credential_sam_simulation",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "cred-03",
+    "n": 3,
+    "name": "Credential Access - Windows Credential Manager Discovery (T1555.004)",
+    "technique_id": "T1555.004",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "high",
+    "blast_radius": "Discovers and enumerates Credential Manager entries; does not extract secrets. Tests detection of unauthorized credential access.",
+    "telemetry": [
+      "Process execution: cmdkey, vaultcli, or credential enumeration tools",
+      "Registry access to Credential Manager hives"
+    ],
+    "detection": [
+      "EDR: credential manager enumeration attempts",
+      "SIEM: suspicious credential access patterns"
+    ],
+    "cleanup": "",
+    "action_key": "credential_manager_discovery",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "cred-04",
+    "n": 4,
+    "name": "Credential Access - Browser Credential Discovery (T1555.003)",
+    "technique_id": "T1555.003",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "high",
+    "blast_radius": "Accesses browser credential stores (Chrome, Edge, Firefox); does not extract passwords. Validates detection of browser-based credential theft.",
+    "telemetry": [
+      "File access to browser profile directories (%APPDATA%\\...\\Default\\Login Data)",
+      "Potential credential extraction tool execution"
+    ],
+    "detection": [
+      "EDR: browser credential store access",
+      "File integrity monitoring: suspicious browser profile access"
+    ],
+    "cleanup": "",
+    "action_key": "credential_browser_discovery",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "cred-05",
+    "n": 5,
+    "name": "Credential Access - Cached Kerberos Ticket Check (T1558.003, not a live Kerberoast)",
+    "technique_id": "T1558.003",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "high",
+    "blast_radius": "Requests Kerberos service ticket for synthetic test SPN; does not extract or crack ticket. Verifies detection of TGS-REQ enumeration.",
+    "telemetry": [
+      "Kerberos TGS-REQ events (Event ID 4769)",
+      "Service ticket requests against test accounts"
+    ],
+    "detection": [
+      "SIEM: anomalous Kerberos service ticket requests",
+      "Event Log: Kerberoasting detection rules"
+    ],
+    "cleanup": "",
+    "action_key": "credential_kerberoasting",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "cred-06",
+    "n": 6,
+    "name": "Credential Access - AS-REP Roasting Against Test Account (T1558.004)",
+    "technique_id": "T1558.004",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "high",
+    "blast_radius": "Requests Kerberos AS-REP from synthetic test account with preauth disabled; does not crack ticket. Verifies detection of AS-REQ enumeration.",
+    "telemetry": [
+      "Kerberos AS-REQ events without preauth",
+      "AS-REP responses for test accounts"
+    ],
+    "detection": [
+      "SIEM: AS-REP roasting detection rules",
+      "Event Log: unusual AS-REQ patterns"
+    ],
+    "cleanup": "",
+    "action_key": "credential_asrep_roasting",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "cred-07",
+    "n": 7,
+    "name": "Credential Access - Password Spraying Against Lab Accounts (T1110.003)",
+    "technique_id": "T1110.003",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "high",
+    "blast_radius": "Attempts low-volume password spray against synthetic test accounts; uses credentials known to fail. Verifies detection of brute-force patterns.",
+    "telemetry": [
+      "Failed authentication attempts (Event ID 4625)",
+      "Logon failure patterns"
+    ],
+    "detection": [
+      "SIEM: password spray detection rules",
+      "Account lockout policies",
+      "Event Log: brute-force detection"
+    ],
+    "cleanup": "",
+    "action_key": "credential_password_spray",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "cred-08",
+    "n": 8,
+    "name": "Credential Access - Unsecured Credential File Discovery (T1552.001)",
+    "technique_id": "T1552.001",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "high",
+    "blast_radius": "Searches for unsecured credential files (env vars, config files, scripts with hardcoded creds); uses synthetic test data. Validates detection of credential enumeration.",
+    "telemetry": [
+      "File search and access patterns",
+      "Process execution: findstr, grep-like tools"
+    ],
+    "detection": [
+      "EDR: credential file search patterns",
+      "SIEM: suspicious file enumeration"
+    ],
+    "cleanup": "",
+    "action_key": "credential_unsecured_discovery",
+    "no_default_cleanup": true,
+    "reversible": false
+  }
+]

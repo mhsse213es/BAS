@@ -119,36 +119,12 @@ var (
 	iamPrincipalARN     = regexp.MustCompile(`^arn:aws:iam::([0-9]{12}):(role|user)/[^\s]+$`)
 )
 
-// ProbeAllowList is the server's set of accounts that may be probed. It is
-// configured on the server, never taken from a request, and an empty list
-// permits nothing.
-type ProbeAllowList struct {
-	allowed map[string]bool
-}
-
-// ParseProbeAllowList parses "provider:accountID" entries separated by commas.
-// An empty string yields an empty list that permits nothing. A malformed entry
-// is an error, so a typo cannot silently widen or narrow the scope.
-func ParseProbeAllowList(s string) (ProbeAllowList, error) {
-	list := ProbeAllowList{allowed: map[string]bool{}}
-	for _, raw := range strings.Split(s, ",") {
-		entry := strings.TrimSpace(raw)
-		if entry == "" {
-			continue
-		}
-		provider, account, ok := strings.Cut(entry, ":")
-		provider, account = strings.TrimSpace(provider), strings.TrimSpace(account)
-		if !ok || provider == "" || account == "" {
-			return ProbeAllowList{}, fmt.Errorf("probe allow-list entry %q must be provider:accountId", entry)
-		}
-		list.allowed[provider+"|"+account] = true
-	}
-	return list, nil
-}
-
-// Permits reports whether the provider and account are on the list.
-func (l ProbeAllowList) Permits(provider, accountID string) bool {
-	return provider != "" && accountID != "" && l.allowed[provider+"|"+accountID]
+// IsRegisteredProbe reports whether provider and operation name an operation in
+// the registry. Telemetry uses it so a client-supplied operation name never
+// becomes a metric label.
+func IsRegisteredProbe(provider, operation string) bool {
+	_, ok := lookupProbe(provider, operation)
+	return ok
 }
 
 // lookupProbe returns the registry entry for a provider and operation.
@@ -163,7 +139,7 @@ func lookupProbe(provider, operation string) (probeDescriptor, bool) {
 
 // ValidateProbe applies layers 1 to 4 and returns the registry entry it matched.
 // It makes no provider call. Every failure wraps ErrProbeRejected.
-func ValidateProbe(req ProbeRequest, allow ProbeAllowList) (probeDescriptor, error) {
+func ValidateProbe(req ProbeRequest, allow AccountAllowList) (probeDescriptor, error) {
 	reject := func(format string, args ...any) (probeDescriptor, error) {
 		return probeDescriptor{}, fmt.Errorf("%w: "+format, append([]any{ErrProbeRejected}, args...)...)
 	}
@@ -207,7 +183,7 @@ func ValidateProbe(req ProbeRequest, allow ProbeAllowList) (probeDescriptor, err
 // RunProbe validates a request and, for live mode, executes it through prober.
 // Dry-run returns the plan and never touches prober. A rejected request returns
 // an error wrapping ErrProbeRejected, and prober is not called.
-func RunProbe(ctx context.Context, req ProbeRequest, allow ProbeAllowList, prober Prober) (ProbeResult, error) {
+func RunProbe(ctx context.Context, req ProbeRequest, allow AccountAllowList, prober Prober) (ProbeResult, error) {
 	desc, err := ValidateProbe(req, allow)
 	if err != nil {
 		return ProbeResult{}, err

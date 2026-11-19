@@ -133,7 +133,7 @@ func (f *FakeDataProtectionLookup) LookupDataProtection(_ context.Context, key A
 // StepDependencies is fine for a step that classifyRansomwareStep already
 // resolved without needing any of them (recon, unmodeled, gated, etc).
 type StepDependencies struct {
-	Prevention     controlval.Provider
+	Prevention     PreventionObserver
 	Recovery       RecoveryObserver
 	Containment    ContainmentObserver
 	Detection      DetectionLookup
@@ -226,8 +226,7 @@ func evaluateApplicableCapability(cap Capability, tech Technique, key AttemptKey
 	ctx := context.Background()
 	switch cap {
 	case CapabilityPrevention:
-		ck := controlval.CorrelationKey{RunID: key.RunID, Action: key.Action}
-		obs, err := deps.Prevention.Observe(ctx, ck)
+		obs, err := deps.Prevention.ObservePrevention(ctx, key)
 		return PreventionFromValidation(tech, controlval.Evaluate(PreventionExpectationFor(tech), &obs, err))
 	case CapabilityRecovery:
 		result, err := deps.Recovery.ObserveSurvival(ctx, key)

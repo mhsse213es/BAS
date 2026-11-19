@@ -24,15 +24,15 @@ import (
 // sides independently, so a hop is only permitted when neither side
 // denies it.
 type CloudHopResult struct {
-	FromSubnet        string                                 `json:"fromSubnet"`
-	ToSubnet          string                                 `json:"toSubnet"`
-	State             cloudgraph.PathState                   `json:"state"`
-	Limitations       string                                 `json:"limitations,omitempty"`
-	Provenance        cloudgraph.Provenance                  `json:"provenance"`
-	Observation       *networkgraph.NetworkObservation       `json:"observation,omitempty"`
-	SourceEvaluation  *cloudtopology.SecurityGroupEvaluation `json:"sourceEvaluation,omitempty"`
-	DestEvaluation    *cloudtopology.SecurityGroupEvaluation `json:"destEvaluation,omitempty"`
-	RouteFound        bool                                   `json:"routeFound"`
+	FromSubnet       string                                 `json:"fromSubnet"`
+	ToSubnet         string                                 `json:"toSubnet"`
+	State            cloudgraph.PathState                   `json:"state"`
+	Limitations      string                                 `json:"limitations,omitempty"`
+	Provenance       cloudgraph.Provenance                  `json:"provenance"`
+	Observation      *networkgraph.NetworkObservation       `json:"observation,omitempty"`
+	SourceEvaluation *cloudtopology.SecurityGroupEvaluation `json:"sourceEvaluation,omitempty"`
+	DestEvaluation   *cloudtopology.SecurityGroupEvaluation `json:"destEvaluation,omitempty"`
+	RouteFound       bool                                   `json:"routeFound"`
 }
 
 // ComposeCloudHop classifies one hop, in priority order -- identical

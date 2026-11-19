@@ -1,0 +1,299 @@
+# API BAS scenario binding
+
+Status: first tranche, 9 November 2026. Code: `orchestrator/internal/apibas/binding`, `runner.NoState`, route
+`POST /api/apibas/targets/{id}/binding/plan`. Builds on [OpenAPI import and inventory](api-bas-openapi-import.md).
+
+## Why
+
+Catalogue scenarios are written against the lab's routes and fixtures. A customer's API has other routes, so an imported
+inventory lists the API but cannot assess it. Binding writes concrete scenarios from an inventory operation, identities the
+customer supplies credentials for, and objects each identity owns.
+
+## What it does
+
+Given an inventory and test data (`Spec`), `binding.Bind` generates, for each object-level `GET` operation that has objects owned by
+two or more identities, one cross-identity read scenario per object: the owner reads their object (baseline), another identity
+requests the same object (attack). It also builds the fixture the runner needs. Each scenario passes `contract.Scenario.Validate`,
+is `READ_ONLY`, takes an id from `API-BAS-AUTHZ-901` to `999`, and is graded by the existing grader: the attack must be refused
+(403 or 404) and return none of the protected values the customer supplied.
+
+The plan also lists every object-level operation it did **not** bind, with the reason, and the limits of what a bound result means.
+
+The preview route returns that plan for the target's stored inventory. It stores nothing, starts no job, contacts nothing, and
+receives only credential *names*.
+
+## What it does not do
+
+- **Writes are limited and opt-in.** Only PUT and PATCH on objects the customer lists with a write block are bound; see "Binding writes" below. DELETE, POST and every other state-changing operation are skipped with a reason.
+- **Response evidence only.** A pass proves the attack was refused and leaked none of the protected values supplied. It cannot see a
+  leak of a value the customer did not supply, and says nothing about other objects, roles or parameters.
+- Running a plan as a job is covered in "Running stored test data as a job" below.
+- No function-level, property-level, data-exposure, resource or SSRF binding. List endpoints and multi-step flows are not bound.
+- No detection and no regulatory mapping on bound scenarios.
+
+## Safety
+
+- Path parameter values are limited to `[A-Za-z0-9._~-]`, 1 to 128 characters, so a value cannot add a segment, a query or a
+  traversal. Identity names and credential references are validated; two identities may not share a credential.
+- Protected values are 4 to 200 characters on one line (the contract's distinctiveness rule).
+- The binder never sees a credential value, reads no database and uses no network.
+- At most 99 scenarios per plan.
+
+## Calls made (the owner delegated design calls; change if wrong)
+
+1. Read-only object-level only, because that is the one class gradable honestly without target-side state.
+2. The attacker is the first other identity (by name) that owns an object on the same operation, so it is a real user of that route.
+3. The preview uses the existing "view API BAS" permission since it changes nothing.
+4. Bound ids use 901-999 so they cannot collide with the catalogue.
+
+## Next steps
+
+1. (Done) Persist a binding spec on a target, and run it through the orchestrator's job path.
+3. (Done, limited) Writes: PUT and PATCH with a read-back state check and an owner restore.
+4. Console: (done) store, run and follow bound jobs; past-jobs list and write-block form done.
+
+
+## Stored test data (added 10 November 2026)
+
+A target keeps one binding spec, so the test data is entered once. Table `apibas_target_bindings` (one row per target, removed with the
+target), routes `PUT|GET|DELETE /api/apibas/targets/{id}/binding`, all requiring the manage-targets permission.
+
+- **Saving validates.** The spec is bound against the newest inventory before it is stored; a spec that does not bind (unknown owner,
+  bad path value, unknown operation, shared credential, unknown field) is refused and nothing changes. The inventory version it was
+  checked against is stored.
+- **Stale is reported, not hidden.** If a newer inventory has been imported since, `GET` returns `stale: true` with both versions.
+  The spec is not re-validated or edited automatically; saving it again re-checks it against the newest inventory.
+- **Reading needs the manage permission**, not the view permission, because the protected values can themselves be sensitive
+  (a name, an address). The preview route still needs only view.
+- **Preview from stored data:** `POST .../binding/plan` with an empty body uses the stored spec; with a body it previews that
+  body without storing it. With neither it answers 400 saying so.
+- **Audit** records `apibas.binding.save` (inventory version, counts of identities, objects, scenarios, skipped) and
+  `apibas.binding.delete`. It never records names or values.
+- Credential values are still never stored; the spec holds credential names only.
+
+Not built: history of spec versions (saving replaces), and editing in the console (the page still previews a spec typed into it).
+
+## Running stored test data as a job (added 10 November 2026)
+
+`POST /api/apibas/targets/{id}/binding/jobs` with `{"key": "...", "approval_id": "..."}` (the run permission, like any job). It queues a
+job from the target's stored test data and newest inventory and starts it in the background, through the same submission path as other
+jobs: the target must be enabled, its environment permitted (production stays refused in this release), its host registered, only one
+active job per target, and an approval for production. The caller chooses only the key; scenarios, fixture, credentials and scope come
+from the target, its inventory and its stored test data.
+
+- **Scenarios are generated, not catalogued.** The job's scenario ids are the bound ids (901 and up) and its fixture is
+  `bound:<sha256 of the plan>`. The plan is the inventory and test data as they were at submission; it is stored with the job
+  (`apibas_job_plans`), so a later edit of either cannot change what ran. Because an approval binds the fixture name, a production
+  approval would bind the exact test data and inventory.
+- **The runner rebuilds the scenarios itself.** The request carries the plan; the runner calls the same `binding.Bind`, checks the plan
+  hashes to the fixture name and produces exactly the requested scenario ids, and refuses otherwise. A plan altered after submission,
+  or a request whose fixture and plan disagree, fails the job with no report. Schema version is now 2.
+- **Graded on the response alone.** Bound jobs run with `NoState` and no lab endpoints; only read-only scenarios exist in a plan.
+- **Scope.** The target's registered allowed paths bound a bound job like any other (checked per scenario by the runner); a staging or
+  production target must have them. The registered scenario list does not apply (bound scenarios are not in the catalogue).
+- **Credentials.** Each identity's credential name must be one of the target's registered credential names, or the job is refused as
+  outside the target's scope. The job reads secrets only through the target's existing secret-store references.
+- **Stale data is refused (409).** If a newer inventory has been imported since the test data was saved, save it again first.
+- **Audit** is the existing `apibas.job.submit` / `apibas.job.refused` / `apibas.job.finish` records, with the bound fixture and scenario ids.
+
+Verified end to end with the real runner binary and a real database: a vulnerable spec-shaped API grades FAIL and a fixed one PASS for the
+same bound scenarios; an unregistered credential, a path outside scope, an altered plan and a missing plan row are each refused with no
+report. Not run on staging or against a real customer API.
+
+Not built: results are in the job as for any job but the console does not show them; no scheduling; no write operations.
+
+## Binding writes (added 10 November 2026)
+
+A customer API has no administrative view of its records, so a write is judged the one way its own interface allows: the object is
+read back through its normal read route, as its owner, before and after the other identity's attempt. A difference means the attempt
+changed it (graded FAIL, exploited); a refusal (403 or 404) with no difference is PASS; an accepted write with no visible difference
+is SKIPPED as inconclusive, never PASS; a probe that fails or returns a server error is ERROR.
+
+**Test data.** Set `allow_writes: true` (the customer's acknowledgement that the listed objects may change during the test) and give
+each PUT/PATCH object a `write` block:
+
+    {"operation": "PATCH /v2/orders/{orderId}", "params": {"orderId": "ORD-A1"}, "owner": "alice",
+     "write": {"attack_body": "{\"status\":\"hacked\"}", "restore_body": "{\"status\":\"open\"}",
+               "read_operation": "GET /v2/orders/{orderId}", "ignore_fields": ["updated_at"]}}
+
+`read_operation` defaults to the GET with the same path. `ignore_fields` drops values that change on every read (timestamps, request
+ids). Both bodies must be JSON objects of at most 4 KiB and must differ. The read operation must be a GET, not declared public, and
+take the same path parameters.
+
+**Restore.** A write that succeeds changes the customer's object. The runner sends the owner's `restore_body` (same method and path)
+before the run, which proves the restore works and starts from a known state, and again after. A restore the target refuses is an
+ERROR: the object's state is unknown and must be checked by hand. The runner never reports PASS in that case.
+
+**Safeguards.**
+- Only PUT and PATCH are bound. DELETE destroys the object and POST effects cannot be undone by repeating a request, so both are
+  skipped with a reason.
+- Without `allow_writes`, no write is bound, and a write block without it is refused.
+- Write jobs need the target to register allowed paths (even a lab target), and the state reads and restores are held to them.
+- Write jobs are refused against production, even once production execution is enabled.
+- Reads and restores do not follow redirects, so they stay on the registered host.
+
+**What this does not show.** A change to anything the read route does not return, or to a field listed as ignored, is invisible. It
+says nothing about other objects, roles or methods. Restore is the customer's request; the platform cannot confirm the object is
+byte-for-byte as it was.
+
+## Console: stored test data and bound jobs (added 10 November 2026)
+
+The API Inventory page's Binding card now covers the whole flow for the selected target:
+
+- **Stored test data.** The box is prefilled with the target's stored spec (shown only to roles that may manage targets; for others the read is refused and the page says none is stored). A line under the box says who saved it, when, and whether a newer inventory has made it stale.
+- **Fill examples.** "Fill a read example" and "Fill a write example" propose test data from the inventory (the write example starts from the first authenticated PUT or PATCH and holds only placeholders, including a restore body to replace).
+- **Preview** shows the scenarios (marked read or write), the operations not bound and why, the limits of a result, and a warning when any scenario writes. With the box empty it previews the stored data.
+- **Save** stores the typed data after the server checks it against the newest inventory. **Remove stored data** deletes it (no confirmation step, since it can be typed again).
+- **Run stored test data** queues a job from the stored data with a fresh idempotency key and follows it every 3 seconds (up to 10 minutes) until it ends. The page refuses to run stale data and says to save it again. Results show each scenario's grade with a plain sentence; an error or a skip is stated as not a pass.
+
+Everything the server returns is escaped before it reaches the page, including the stored values (the textarea cannot be broken out of). The page never takes or shows a credential value. Tested in jsdom with hostile strings in target names, stored values and result reasons.
+
+Not built: a list of past bound jobs per target (the page follows the job it just started), editing write blocks with a form (they are JSON), and a browser run of the page against a live server.
+
+## Past jobs per target (added 10 November 2026)
+
+`GET /api/apibas/targets/{id}/jobs?limit=N` (view permission; default 25, at most 100) lists a target's jobs, newest first. Each row has the
+status and failure reason, whether it was a bound job, the scenario count, the times, and how many scenarios graded pass, fail, error and
+skipped. It carries no report bodies, run tags or credential references; one job's reports are read with `GET /api/apibas/jobs/{id}`.
+
+The API Inventory page shows this as a Recent jobs card: created, requester, kind (bound or catalogue), status, and a result pill coloured by
+the worst grade (a failure outranks an error, an error outranks a skip, and a skip is never green). View opens the job's results in the
+card's own panel and follows it until it ends; the run panel above is not disturbed. When a followed job ends, the list refreshes.
+Selecting another target stops any following.
+
+Not built: pagination beyond 100, filtering by status or kind, and listing jobs across targets.
+
+Note: while building this I found the bound-job route (`POST /api/apibas/targets/{id}/binding/jobs`) missing from `routes.go` and the RBAC
+matrix on main. A concurrent commit (`7c59851c`, WAF) had removed exactly those two lines, most likely from a stale copy of both files. This
+change restores them, and `TestAPIBASRoutesAreRegistered` now names the API BAS routes the console and runbook depend on, because the RBAC
+matrix check cannot notice a route that is missing from both the router and the matrix.
+
+## Console: write-block form (added 10 November 2026)
+
+Under the test-data box the Binding card has a Write objects form. It edits the box; the box stays the source of truth, and the form stores
+nothing. Choose a PUT or PATCH operation from the inventory (authenticated, with a path parameter), enter the value of each path parameter for
+the test object, pick the owner from the identities already in the box, and give the attack body, the restore body, the read-back and any
+ignored fields. Add to test data checks the values the way the server will (JSON objects of at most 4 KiB that differ, a safe value for each
+path parameter, a read-back that is an authenticated GET with the same path parameters, at most 20 ignored fields), merges the object into
+the JSON, and turns on `allow_writes`. An object with the same operation and values is replaced, not duplicated. The list above the form shows
+each write object with Edit (loads it into the form) and Remove.
+
+The form refuses to touch a box that is not valid JSON, refuses an owner who is not an identity in the box, and never reads or writes a
+credential value. Adding, replacing or removing changes the box only: use Preview to check and Save to store.
+
+Not built: editing identities and read-only objects with a form (they stay in the JSON), and field-level editing of the bodies.
+
+## Scheduled runs (added 10 November 2026)
+
+A target can run its stored test data on a fixed interval. `PUT|GET|DELETE /api/apibas/targets/{id}/schedule` (save and remove need the manage-targets permission, read needs view). The body is `{"every_hours": 1-720, "include_writes": false, "enabled": true}`; one schedule per target. The console has a Schedule card under the binding card.
+
+- **Same checks as a manual run.** A due run builds the plan the same way as `POST .../binding/jobs` (shared `buildBoundPlan`) and submits through `SubmitForTarget`: the target must be enabled, its host, scope and registered credentials must match, write runs need allowed paths, and only one assessment may be active on a target. The job is audited as submitted by `schedule:<creator>` with `scheduled: true`, and the job key is `sched-<target>-<due time>`, so one due run can produce only one job.
+- **Lab and staging only.** Saving a schedule for a production target is refused: a production run needs a fresh approval by a second person each time, which a schedule cannot give.
+- **Writes are off by default.** Scheduled runs leave out write scenarios unless `include_writes` is set, because nobody is watching a scheduled run and a write that succeeds changes the customer's object. The stored test data is not changed; a copy of the spec with `allow_writes` cleared is used. Including writes needs the target to register allowed paths.
+- **Timing.** The first run is one interval after saving. The server checks once a minute. A run missed while the server was down is run once, and the next run is one interval from then; missed runs are not made up. Two orchestrators never claim the same run (`FOR UPDATE SKIP LOCKED`).
+- **Skips and failures.** If another assessment is running on the target, the run is skipped and recorded (not a fault). If a job cannot be queued (stale test data, a disabled target, a missing credential, audit failure), the attempt is recorded as `not run: <reason>` and counts as a failure. After 5 failures in a row the schedule pauses itself (`paused_for_failures`); saving it again resumes it. A queued job that later fails or finds problems is a normal job result and does not count.
+- **Not built:** time-of-day or weekday schedules (the interval is in hours), run-now from the schedule card (use Run stored test data), notifications when a schedule pauses, and schedules for catalogue (non-bound) jobs.
+
+Tests: `internal/db/apibas_schedule_store_test.go`, `internal/api/apibas_schedule_test.go`, and the Schedule card tests in `api-inventory-dom.test.mjs` and `api-inventory-model.test.mjs`.
+
+## Function-level and property-level checks (added 10 November 2026)
+
+The test data can carry two more kinds of read-only check next to `objects`. Both are optional; a spec may now hold only these (`objects` can be empty or absent).
+
+**Function level, `functions`.** A privileged read-only route that an ordinary identity must not be able to call.
+
+```json
+{ "operation": "GET /v2/admin/reports/{reportId}", "params": {"reportId": "R-1"},
+  "privileged": "admin", "ordinary": "alice", "protected_values": ["a value only the admin response contains"] }
+```
+
+The scenario calls the route as `privileged` (the baseline, which shows the route works; if it fails the result is SKIPPED, not a pass), then as `ordinary`. It passes when the ordinary call is refused (403 or 404) and carries none of the protected values; it fails when a protected value comes back. A 2xx without a protected value is reported as inconclusive, which is why at least one value is required.
+
+**Property level, `properties`.** An object whose response must not contain values its owner should not see.
+
+```json
+{ "operation": "GET /v2/profiles/{pid}", "params": {"pid": "P-ALICE"}, "owner": "alice",
+  "forbidden_values": ["a value alice must never receive"] }
+```
+
+The scenario reads the object as `owner` twice (baseline, then the checked read). It passes when the response is a clean 2xx with none of the forbidden values, and fails when one appears.
+
+Rules checked when saving: identities must be listed (and differ for a function), the operation must be a GET in the inventory that the specification does not declare public, path values must match the route, and at least one value (4 to 200 characters, one line, at most 20) is required. Duplicates are refused. The plan marks each check with its `kind` (`function` or `property`), and the console shows the kind and a plain description of who does what. "Fill a function and property example" starts from placeholders.
+
+**What this does not test.** Both checks are graded on the response alone and only for the routes, identities and values supplied. Writing a field that should be read-only (mass assignment) is not tested; neither are function-level checks on routes that change state, because a repeated request could not put the state back. The plan's limits say so.
+
+Tests: `internal/apibas/binding/function_property_test.go` (plan shape, 21 refusals, round trip, and the real runner against a flawed server, where both checks FAIL as exploited, and a fixed one, where both PASS), the API test `TestAPIBASFunctionAndPropertyChecksSaveAndRun`, and the web model and page tests.
+
+## Job list paging and status filter (added 10 November 2026)
+
+`GET /api/apibas/targets/{id}/jobs` now takes `status` (one of `queued`, `running`, `completed`, `failed`, `cancelled`) and `before`. When more jobs follow the page, the response carries `next`; pass it back unchanged as `before` for the next page. The order is newest first, with the job id breaking ties, so two jobs created at the same instant are neither skipped nor repeated. `limit` is still 1 to 100 (default 25), and `next` is present only when a further job really exists. Bad `status` or `before` values are refused with 400 and never reach the query. The Recent jobs card has a Status choice and a Load more button; changing the status starts again from the newest job, and a page that arrives after the status changed is dropped.
+
+Not built: a list across all targets, and filtering by date or requester.
+
+## GraphQL queries in the bound test data (added 10 November 2026)
+
+A target whose inventory came from a GraphQL schema can now be bound and run. Only **queries** are bound: they read, so a repeated request leaves nothing to put back. Mutations and subscriptions are skipped with a reason, as are queries that return a union (they need fragments), take list or input-object arguments, or come from an inventory imported before argument types were recorded (import the schema again).
+
+An object names the operation as `QUERY /graphql#field`. `params` holds the field's argument values, and `selection` lists the fields to request from the returned object (required when the field returns an object, refused when it returns a scalar):
+
+```json
+{ "operation": "QUERY /graphql#order", "params": {"id": "ORD-A1"}, "owner": "alice",
+  "selection": "id total customer { email }", "protected_values": ["alice-private-note"] }
+```
+
+- **How the query is written.** The runner sends `POST /graphql` with `{"query": "query { order(id: \"ORD-A1\") { id total } }"}`. Argument values are checked against the argument's declared type and written as literals (strings and IDs quoted, Int, Float and Boolean bare, enums by name), so a value cannot add to the query. The selection is re-emitted token by token and accepts field names and nested braces only; arguments, aliases, fragments, directives, variables and `__` fields are refused.
+- **Grading.** A GraphQL API usually answers a refused query with HTTP 200 and an `errors` entry, so a status code cannot decide the result. The owner sends the query (baseline), then the other identity sends the same query. The scenario fails if the other identity's response contains a protected value, and passes if it does not (a 403 or 404 also passes). At least one protected value is required for every GraphQL object.
+- **A baseline that is itself an error.** A server that answers every query with an error would look clean to the attacker too. The scenario therefore sets `require_baseline_evidence`: the owner's own response must contain a protected value, otherwise the result is SKIPPED (precondition missing), never a pass.
+- **Read-only is checked, not trusted.** The contract refuses a POST in a READ_ONLY scenario unless the step is marked `graphql_query` and its body is a JSON object whose only key is `query`, whose document starts with `query`, and which contains neither `mutation` nor `subscription`.
+- **Limits.** A pass says nothing about values the customer did not supply, and a GraphQL path must be inside the target's allowed paths for the run to be sent. The plan states these.
+
+Tests: `internal/apibas/binding/graphql_bind_test.go` (typed literals, 28 refusals, selection normalisation, and the real runner against a GraphQL-style server: vulnerable FAILs, fixed PASSes with a 200 refusal, erroring baseline is SKIPPED), `internal/apibas/contract/graphql_step_test.go`, `TestAPIBASGraphQLQueriesBindAndRun`, and the web example tests.
+
+## Mass assignment checks (added 10 November 2026)
+
+A mass-assignment check asks whether an owner can set fields on their own object that the API should never let them set (a role, a price, an owner id). It goes in `mass_assignments` in the test data and needs `allow_writes: true`, because it changes the owner's object.
+
+```json
+{ "allow_writes": true,
+  "mass_assignments": [{
+    "operation": "PATCH /v2/profiles/{pid}", "params": {"pid": "P-1"}, "owner": "alice",
+    "attack_body": "{\"name\":\"New\",\"role\":\"admin\"}",
+    "forbidden_fields": ["role"],
+    "restore_body": "{\"name\":\"Old\",\"role\":\"user\"}" }] }
+```
+
+- **What runs.** The owner reads their object (baseline), sends `attack_body` with the forbidden fields set, then the object is read back as the owner. `attack_body` must set every forbidden field, or the attempt would not test it. The object is read through the GET on the same path, or `read_operation`.
+- **Grading.** Only the forbidden fields are compared, before and after, so the update's ordinary changes are not mistaken for the flaw. A refusal (400, 403, 404, 422) or an accepted update that leaves those fields unchanged PASSES. A changed forbidden field FAILS.
+- **Never a pass by blindness.** If the read route returns none of the forbidden fields, a change could not be seen, so the result is ERROR, not PASS.
+- **Cleanup.** `restore_body` is sent as the owner before the run and again after. If the API accepted a forbidden field, the restore must set it back too; the plan states this. Production is refused and the job needs registered allowed paths, as for any write.
+- **Limits.** Top-level fields only; nested fields, fields the read route does not return, and effects elsewhere in the system are not seen.
+- **Schedules.** A scheduled run without `include_writes` now leaves out both write objects and mass-assignment checks and builds the rest, instead of only clearing `allow_writes`.
+
+## Time-of-day schedules (added 10 November 2026)
+
+`PUT /api/apibas/targets/{id}/schedule` now takes either an interval or a time of day, not both:
+
+```json
+{ "at": "02:30", "timezone": "Asia/Kolkata", "days": ["mon", "fri"], "include_writes": false }
+```
+
+- `at` is HH:MM on a 24 hour clock. `timezone` is an IANA name (default `UTC`; zone data is built into the server binary). `days` are `sun`..`sat`; empty means every day. `timezone` and `days` are refused without `at`. The first run is the next time the clock reaches `at` on an allowed day.
+- After each run the next run is the next clock occurrence, not "now plus 24 hours", so a run does not drift and follows daylight-saving changes. A local time skipped by a clock change runs just after the jump; one that happens twice runs at its first occurrence. A run missed while the server was down is run once, as for interval schedules.
+- If the stored clock settings can no longer be read (for example a timezone name that was removed), the schedule pauses itself with a reason instead of running at a guessed time. Saving it again resumes it.
+- The view returns `at`, `timezone` and `days` instead of `every_hours` for a time-of-day schedule. Existing interval schedules are unchanged. Everything else (lab and staging only, same submission checks, writes off by default, audit as `schedule:<creator>`) is as before.
+
+## Notification when a schedule pauses (added 10 November 2026)
+
+When a schedule turns itself off, one `apibas_schedule_paused` notification is raised (severity `error`, so webhooks filtered at warning or above receive it). It is stored, pushed to connected console sessions and sent to enabled webhooks, like the approval events. It is a broadcast, not addressed to a person.
+
+- **When.** Once, by the run that makes the fifth failure in a row, or at the moment a time-of-day schedule's stored clock settings cannot be read. Failures one to four raise nothing; a schedule that is already paused is never claimed, so it cannot announce itself again. Saving the schedule resumes it, and a later pause announces again.
+- **Content.** `target_id`, `consecutive_failures` (0 for an unreadable clock) and `reason`, and a message that says the schedule will not run again until it is saved again. The reason is the same text a viewer sees as the schedule's last result, cut to 200 characters. It can name a credential reference or a stale-inventory condition, never a credential value. Webhooks leave the platform, so review where they point before relying on this.
+- **Not covered.** A run that was skipped because another assessment was running, or a job that ran and found problems, is not a pause and raises nothing here.
+
+## Jobs across all targets (added 10 November 2026)
+
+`GET /api/apibas/jobs` lists jobs of every target, newest first, with the same permission as one target's list (view API BAS runs) and the same summary per job (counts of each grade, no report bodies, no credential references). Each job also carries `target_id` and `scheduled` (true when a schedule queued it).
+
+Parameters, all optional: `target_id`, `environment` (`lab`, `staging`, `production`), `source` (`scheduled` or `manual`), `status` (as for a target's list), `limit` (1 to 100, default 25) and `before` (the `next` value of the previous page, passed back unchanged). An unknown parameter value is a 400. A `target_id` that matches nothing, including a deleted target, gives an empty list, not an error. The per-target list is the same code with the target fixed.
+
+The console shows this as a "Jobs across all targets" card under the target table, with target, environment, source and status choices, Refresh, Load more and View (the same job view as a target's own list). It loads when the page loads; a failure is shown in the card and does not stop the rest of the page.

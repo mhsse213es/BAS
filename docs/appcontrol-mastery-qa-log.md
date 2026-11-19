@@ -164,3 +164,49 @@ These need a lab, a tenant, or a decision that only you can make. Nothing here c
 9. **Limitations wording.** Review the four limitation statements in Section 18a before a client sees them. Soften only if the lab run supports it.
 10. **Fix the `internal/api` build.** Another session's uncommitted `phishingrun` files stop the package compiling. Resolve that, then run its tests so the report handlers are covered.
 11. **Regenerate existing reports on staging.** Existing runs get Section 18a only when their report is regenerated. Check a run with application-control steps on staging.
+
+## Application Control Mastery expansion (2026-11-18)
+
+Scope: 34 new steps in four scenarios (`appcontrol-proxy-execution` 9, `appcontrol-script-interpreter` 8, `appcontrol-file-enforcement` 10, `appcontrol-policy-integrity` 7) next to the unchanged six in `appcontrol-efficacy`, from the approved proposal. Contracts: `docs/appcontrol-mastery-contracts.md`. Sources: `scenarios-src/appcontrol-*`, shared oracle `scenarios-src/appcontrol-common/lib.ps1`, generator `orchestrator/scripts/appctlgen`.
+
+### What changed and why
+- One shared oracle (AppLocker and WDAC) replaces per-step copies. New outcome `audited_only`: audit mode records but does not prevent. Reporting parser, comparator and the AV validation adapter know it; mastery families show in a run's report only when that run produced them, so the six-family legacy view is unchanged.
+- **Defect fixed in the shipped scenario.** `appcontrol-efficacy` script_host_proxy attributed blocks to AppLocker event 8006, which is the audit-mode event; the enforced Script/MSI block event is 8007 (Microsoft documentation). Under enforced Script rules the old step could not have reported `blocked_as_expected`. It now reads 8007 and the contract text says 8006 is not prevention evidence. Its own scenario was re-signed.
+- Merged two overlapping list items (mshta and HTA are the same technique) and used the freed slot for Windows Script Files. The alternate-interpreter step never installs anything. The Control Panel step is tested against WDAC only because AppLocker does not evaluate .cpl.
+
+### Verified on this host (Windows 10 Pro 19045, AppLocker service stopped, no WDAC user-mode policy)
+- Every one of the 34 attempts was run for real through the shipped, generated YAML text and produced its benign marker (executed path), with cleanup verified and no leftover directories, certificates, products or processes. This host enforces nothing, so the execution steps reported `not_enforced`/FAIL (correct) or a not-applicable/inconclusive reason. Final tally of the 34 generated steps: 27 not_enforced, 4 not_applicable, 1 inconclusive (no drift baseline), 2 blocked_as_expected. The two passes are read-only permission checks on the policy-integrity scenario (AppIDSvc stop rights and the WDAC policy directory ACL), which are real findings about this host, not block events.
+- Oracle decision table (21 cases), fixture runs of the shipped steps for every verdict class (including a realistic Get-WinEvent that throws when nothing matches), the ConstrainedLanguage path, integrity-step branches and the drift hash round trip all pass. `verify-all` ok=167, step-contract ledger regenerated with zero gaps for the new scenarios, destructive guard classifies every step non-destructive.
+
+### NOT verified (read before relying on this)
+- **No block was observed on a real host.** The block and audit paths are verified against stubs only. Event IDs come from Microsoft documentation (8004/8003, 8007/8006, 3077/3076, 8029/8028), not from a live enforced host; the AppLocker/WDAC message text that carries the file name is assumed to contain the unique file or binary name.
+- WDAC user-mode state is read from `Win32_DeviceGuard`; its behaviour with multiple policies, signed policies and kernel-only policies is unverified.
+- The gated paths (AppIDSvc stop/restore, identical-policy re-apply, WDAC canary file) have never run. The domain-independent integrity steps were only exercised in their read-only default.
+- RLL modules, packaged apps (MSIX/APPX), COM activation, DLL search order/side-loading, scheduled-task/service launches and the operational-reliability tests (categories E to G) are not built.
+- Some steps depend on the .NET Framework compiler (InstallUtil, unsigned executables, DLL) or on WMIC; they report not applicable where absent.
+- Not run through a real agent and orchestrator; ten of the new steps compile code on the host and could be flagged by endpoint products themselves.
+- Reported parent-spoofing mapping on the existing step 5 (T1204.002) is unchanged and still questionable (see the proposal); not touched.
+
+### Code review findings fixed (2026-11-17, review of `main..appcontrol-mastery`)
+Ten findings; all verified against the code. Fixed: (1) script steps b01 to b06 matched the host executable name, but AppLocker 8007 / WDAC 8029 name the script, so a working control could never score blocked; needles are now the unique script file names and the test stub emits events that name only that file. (2) the oracle swallowed non-result output from an attempt, hiding restore warnings; they are now printed. (3) gated admin actions no longer override the static verdict. (4) the report name fallback covers all 34 steps (new test). (5) c02 flipped a header byte; it now alters a resource or data section and accepts any non-Valid status (system binaries are catalog-signed, so the result reads NotSigned). (6) compile-dependent steps now say when ConstrainedLanguage is the cause. (7) b07 compared ASR GUIDs case-sensitively. (8) c03 left the CNG key container; it is now deleted and key file counts are printed (134 before, 134 after on this host). (9) c10 runs the installer in a child process with a 60 s kill; no product registration was observed. (10) the per-step cleanup sweep now covers APPDATA, Downloads, TEMP root files and the temporary certificate.
+Documented, not fixable in the test itself: steps run from a user-writable temp directory cannot separate a signature rule from a location rule (see contracts); gated paths are still never run.
+
+## Categories E to G (2026-11-17): packaging-trust (4), advanced-loading (4), operational-reliability (3)
+
+Built from the same oracle and generator; 11 new steps, 45 across the pack, scenario pin 140, 170 signed scenarios verified.
+
+### Verified
+- Every step was executed for real on this host through its shipped, generated YAML text. Read-only steps return not_applicable (no enforcement) or a real finding (e3 AlwaysInstallElevated: unset, pass). f1 executed the DLL resolved by name and reported not_enforced.
+- The gated COM scriptlet (f2) and scheduled-task (f3) paths were actually run with their flags set: each executed, removed what it created, and left no registry keys or tasks behind (checked afterwards).
+- Fixture tests drive every verdict class of the direct-verdict steps (appx enforced, audit, missing; AlwaysInstallElevated both, one, unset; identity service running, stopped, disabled; allow rules over a drive, a user path, a protected path; log healthy, disabled, tiny, no policy) and prove each gate skips for unset, `True`, `1` and `yes`.
+
+### NOT verified
+- No enforced AppLocker or WDAC host was available: no block, audit or log-health verdict on a real policy has been observed, and the packaged-app, sideloading and writable-path branches are fixture-only.
+- f4 (service launch) was never run, not even gated, because it creates a system service on the build host. Its create, start and delete sequence is untested; cleanup depends on `sc.exe delete`.
+- Whether the Windows Installer, scheduled task or service manager paths are blocked by real rules is unobserved; the only evidence is that the launch worked on an unenforcing host.
+- The writable-path list is fixed (six directories), not a complete ACL sweep; no package is installed, so packaged-app results are posture only.
+- Policy update latency and audit-to-enforce transition timing are not tested.
+
+### Code review of E to G (2026-11-17): 8 findings, all fixed
+(1) e04 matched ACL identities by English name, so a localized host would pass a world-writable directory; it now matches SIDs, as do d02 and d04, and it only reports a bypass when a path allow rule covers the Windows directory. (2) f04 passed a quoted path through sc.exe, which Windows PowerShell 5.1 mangles for paths with spaces; it now uses New-Service and a short timeout on sc start (still not run on this host). (3) g03 counted paths under rule Exceptions as risky and ignored any-publisher rules; it reads only a rule's own conditions and flags wildcard publishers. (4) e02 let the local default overwrite the policy value and failed any enforced host for AllowAllTrustedApps, which is on by default; policy now wins and only developer mode fails. (5) the COM, task and service sweeps were in the cleanup of every step; they are now only on the three gated steps. (6) e03 read HKCU of whatever identity runs the step; under SYSTEM it is now inconclusive. (7) f02 broke on a quote or space in the profile path; both are escaped. (8) the ledger class for the task and service steps came from an empty action key; they now declare `schtask_create_delete` and `service_create_start_stop_delete`. The packaging-trust steps are classed destructive because the catalog fails closed for an unknown technique and action pair; they all declare a cleanup, so no gap results.
+Added regression fixtures for each of the logic fixes.

@@ -102,3 +102,14 @@ type ErrIllegalTransition struct {
 func (e *ErrIllegalTransition) Error() string {
 	return fmt.Sprintf("illegal lifecycle transition %s -> %s: %s", e.From, e.To, e.Reason)
 }
+
+// MaxValidationAttempts is how many times the validation lab will run one version before leaving it DRAFT for a
+// person to change. Shared so the console can report exactly the threshold the lab enforces.
+const MaxValidationAttempts = 3
+
+// CountsAsValidationAttemptSQL is a SQL condition over an alias v of content_validations that is true for a row that
+// uses up one of the MaxValidationAttempts. An EXECUTION attempt the lab agent refused because it was offline, busy or
+// otherwise not taking work says nothing about the content, so it does not count and the validator retries it. The Go
+// form of the same rule is validationlab.isEnvironmentalDispatchFailure: keep the two in step.
+const CountsAsValidationAttemptSQL = `NOT (v.outcome = 'ERROR' AND (v.detail->>'dispatch_failure' = 'offline'
+		                 OR v.detail->>'dispatch_failure' LIKE 'agent %'))`

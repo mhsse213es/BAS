@@ -34,7 +34,7 @@ func scenariosFrom(engine *scenario.Engine) []Document {
 // to scenario_id when name is empty, matching the existing UI convention
 // (e.g. cmd/server/wwwroot/index.html's `r.name || r.scenarioId`).
 func runsFrom(ctx context.Context, pool *pgxpool.Pool, allowed func(scenarioID string) bool) ([]Document, error) {
-	rows, err := pool.Query(ctx, `SELECT id, scenario_id, name, status FROM scenario_runs`)
+	rows, err := pool.Query(ctx, `SELECT id, scenario_id, name, status FROM scenario_runs WHERE execution_kind <> 'factory_validation'`)
 	if err != nil {
 		return nil, err
 	}

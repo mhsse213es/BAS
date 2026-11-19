@@ -4,7 +4,7 @@ import "testing"
 
 func TestNormalizeDestination(t *testing.T) {
 	cases := map[string]string{
-		"https://Hooks.Partner.Example/cb":  "https://hooks.partner.example:443",
+		"https://Hooks.Partner.Example/cb":   "https://hooks.partner.example:443",
 		"HTTP://Attacker.Example:8080/steal": "http://attacker.example:8080",
 		"https://attacker.example":           "https://attacker.example:443",
 		"/orders/ORD-2001":                   "", // relative: same origin, no destination

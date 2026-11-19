@@ -1,0 +1,486 @@
+// Pure helpers behind the redesigned Dashboard (operational + executive views).
+//
+// Every function derives its numbers from rows the dashboard loaders already fetched
+// (/api/scenarios/runs, /api/findings, /api/agents, ...). Nothing here invents a value, reads the
+// DOM or talks to the server, so it is unit-testable (tests/unit/dash-model.test.mjs).
+
+export var ENTERPRISE_TACTICS = ['reconnaissance', 'resource-development', 'initial-access', 'execution',
+  'persistence', 'privilege-escalation', 'defense-evasion', 'credential-access', 'discovery',
+  'lateral-movement', 'collection', 'command-and-control', 'exfiltration', 'impact'];
+
+var arr = function(a) { return Array.isArray(a) ? a : []; };
+var isPrevented = function(c) { return c && (c.result === 'pass' || c.result === 'blocked'); };
+
+// verdict of one technique result: prevented | detected (failed but the blue team still saw it) | missed | other.
+export function verdict(c, detected) {
+  if (isPrevented(c)) return 'prevented';
+  if (c && c.result === 'fail') {
+    var id = c.technique && c.technique.id;
+    return (id && detected && detected[id]) ? 'detected' : 'missed';
+  }
+  return 'other';
+}
+
+// effectiveness tallies every technique result across the runs.
+export function effectiveness(runs) {
+  var e = { prevented: 0, detected: 0, missed: 0, other: 0, total: 0 };
+  arr(runs).forEach(function(r) {
+    arr(r.results).forEach(function(c) { e[verdict(c, r.detectedTechs)]++; e.total++; });
+  });
+  return e;
+}
+
+// A run counts toward the posture score only when it has at least one scoreable (pass or fail) result.
+export function scoredRuns(runs) {
+  return arr(runs).filter(function(r) {
+    if (!r.score) return false;
+    if (r.score.preventionScore == null && r.score.riskScore == null) return false;
+    return (r.score.passedTechniques || 0) + (r.score.failedTechniques || 0) > 0;
+  });
+}
+export function prevPctOf(r) {
+  return Math.round(r.score.preventionScore != null ? r.score.preventionScore : r.score.preventionEffectiveness || 0);
+}
+// postureWindow: the Prevention score over the newest `n` scored runs. Every value is the BACKEND's own
+// per-run preventionScore (severity-weighted pass rate, models/score.go). The window figure is the unweighted
+// mean of those run values, so it never silently re-weights them. The trend is the backend's own trend on the
+// newest scored run (its comparison with the previous run, 5-point threshold). Runs arrive newest first.
+export function postureWindow(runs, n) {
+  var scored = scoredRuns(runs);
+  if (!scored.length) return null;
+  var win = scored.slice(0, n || 8);
+  var sum = 0;
+  win.forEach(function(r) { sum += prevPctOf(r); });
+  var pct = Math.round(sum / win.length);
+  var trend = (win[0].score && win[0].score.trend) || 'Baseline';
+  return { pct: pct, count: win.length, trend: trend, series: win.map(prevPctOf).reverse(), runs: win.slice().reverse() };
+}
+
+// testedTactics: how many of the 14 Enterprise tactics any run has exercised.
+export function testedTactics(runs) {
+  var seen = {};
+  arr(runs).forEach(function(r) { arr(r.results).forEach(function(c) {
+    var t = c.technique && c.technique.tactic;
+    if (t) seen[t] = true;
+  }); });
+  return ENTERPRISE_TACTICS.filter(function(t) { return seen[t]; }).length;
+}
+
+// coverage: share of distinct exercised techniques prevented at least once; series = per-run prevention rate (oldest first).
+export function coverage(runs) {
+  var tech = {};
+  arr(runs).forEach(function(r) { arr(r.results).forEach(function(c) {
+    var id = c.technique && c.technique.id;
+    if (!id) return;
+    if (isPrevented(c)) tech[id] = { prevented: true };
+    else if (c.result === 'fail') tech[id] = tech[id] || { prevented: false };
+  }); });
+  var ids = Object.keys(tech);
+  var prev = ids.filter(function(k) { return tech[k].prevented; }).length;
+  var series = arr(runs).slice(0, 8).map(function(r) {
+    var p = 0, f = 0;
+    arr(r.results).forEach(function(c) { if (isPrevented(c)) p++; else if (c.result === 'fail') f++; });
+    return (p + f) ? Math.round(p / (p + f) * 100) : 0;
+  }).reverse();
+  return { pct: ids.length ? Math.round(prev / ids.length * 100) : 0, tested: ids.length, prevented: prev, series: series };
+}
+
+function techTally(runs) {
+  var m = {};
+  arr(runs).forEach(function(r) { arr(r.results).forEach(function(c) {
+    var id = (c.technique && c.technique.id) || c.name;
+    if (!id) return;
+    var t = m[id] || (m[id] = { id: id, name: (c.technique && c.technique.name) || c.name || id, fail: 0, prevented: 0 });
+    if (c.result === 'fail') t.fail++;
+    else if (isPrevented(c)) t.prevented++;
+  }); });
+  return Object.keys(m).map(function(k) { return m[k]; });
+}
+
+// topFailing: techniques with the most failures; pct = share of attempts that were prevented.
+export function topFailing(runs, n) {
+  return techTally(runs).filter(function(t) { return t.fail > 0; })
+    .sort(function(a, b) { return b.fail - a.fail || (a.id < b.id ? -1 : 1); })
+    .slice(0, n || 5)
+    .map(function(t) { return { id: t.id, name: t.name, fail: t.fail, pct: Math.round(t.prevented / (t.fail + t.prevented) * 100) }; });
+}
+
+// coverageGaps: techniques with the lowest prevention rate (only those that failed at least once).
+export function coverageGaps(runs, n) {
+  return techTally(runs).filter(function(t) { return t.fail > 0; })
+    .map(function(t) { return { id: t.id, name: t.name, pct: Math.round(t.prevented / (t.fail + t.prevented) * 100) }; })
+    .sort(function(a, b) { return a.pct - b.pct || (a.id < b.id ? -1 : 1); })
+    .slice(0, n || 5);
+}
+
+function tacticOrder(t) { var i = ENTERPRISE_TACTICS.indexOf(t); return i < 0 ? 99 : i; }
+export function tacticLabel(t) { return String(t || 'other').replace(/-/g, ' ').replace(/\b\w/g, function(m) { return m.toUpperCase(); }); }
+
+// tacticRows: prevention rate per tactic (prevented / (prevented + failed)).
+export function tacticRows(runs) {
+  var m = {};
+  arr(runs).forEach(function(r) { arr(r.results).forEach(function(c) {
+    var t = (c.technique && c.technique.tactic) || 'other';
+    var d = m[t] || (m[t] = { tactic: t, pass: 0, fail: 0 });
+    if (isPrevented(c)) d.pass++; else if (c.result === 'fail') d.fail++;
+  }); });
+  return Object.keys(m).map(function(k) {
+    var d = m[k], tot = d.pass + d.fail;
+    return { tactic: k, pass: d.pass, fail: d.fail, pct: tot ? Math.round(d.pass / tot * 100) : 0, tested: tot };
+  }).filter(function(d) { return d.tested > 0; }).sort(function(a, b) { return tacticOrder(a.tactic) - tacticOrder(b.tactic); });
+}
+
+// flowByTactic: prevented / detected-only / missed per tactic, in kill-chain order.
+export function flowByTactic(runs) {
+  var m = {};
+  arr(runs).forEach(function(r) { arr(r.results).forEach(function(c) {
+    var v = verdict(c, r.detectedTechs);
+    if (v === 'other') return;
+    var t = (c.technique && c.technique.tactic) || 'other';
+    var d = m[t] || (m[t] = { tactic: t, prevented: 0, detected: 0, missed: 0 });
+    d[v]++;
+  }); });
+  return Object.keys(m).map(function(k) { return m[k]; }).sort(function(a, b) { return tacticOrder(a.tactic) - tacticOrder(b.tactic); });
+}
+
+function dayKey(d) { return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// dailySeries: technique validations per day over the last `days` days (ending at nowMs).
+// rate = detection rate (prevented + detected over all scored results) or null on a day with no results.
+export function dailySeries(runs, days, nowMs) {
+  var end = new Date(nowMs == null ? Date.now() : nowMs);
+  var slots = [], idx = {};
+  for (var i = days - 1; i >= 0; i--) {
+    var d = new Date(end.getFullYear(), end.getMonth(), end.getDate() - i);
+    idx[dayKey(d)] = slots.length;
+    slots.push({ label: d.getDate() + ' ' + MON[d.getMonth()], prevented: 0, detected: 0, missed: 0 });
+  }
+  arr(runs).forEach(function(r) {
+    var ts = new Date(r.startedAt || r.completedAt);
+    if (isNaN(ts)) return;
+    var k = idx[dayKey(ts)];
+    if (k == null) return;
+    arr(r.results).forEach(function(c) {
+      var v = verdict(c, r.detectedTechs);
+      if (v !== 'other') slots[k][v]++;
+    });
+  });
+  slots.forEach(function(s) {
+    var tot = s.prevented + s.detected + s.missed;
+    s.total = tot;
+    s.rate = tot ? Math.round((s.prevented + s.detected) / tot * 100) : null;
+  });
+  return slots;
+}
+
+// groupHealth: share of each agent group that is online (retired agents are left out).
+// isAgentOnline: the backend reports a connected agent as 'online', 'idle' or 'busy' and a stale one as 'offline'
+// (models.EffectiveAgentStatus), so online means anything that is not offline or retired. Matches the posture API.
+export function isAgentOnline(a) {
+  var st = a && a.status;
+  return !!st && st !== 'offline' && st !== 'retired' && (a.state !== 'retired');
+}
+export function groupHealth(agents) {
+  var m = {};
+  arr(agents).filter(function(a) { return a.state !== 'retired' && a.status !== 'retired'; }).forEach(function(a) {
+    var n = a.groupName || 'Ungrouped';
+    var g = m[n] || (m[n] = { name: n, online: 0, total: 0 });
+    g.total++;
+    if (isAgentOnline(a)) g.online++;
+  });
+  return Object.keys(m).map(function(k) {
+    var g = m[k]; g.pct = g.total ? Math.round(g.online / g.total * 100) : 0; return g;
+  }).sort(function(a, b) { return b.total - a.total || (a.name < b.name ? -1 : 1); });
+}
+
+export function shortAgo(ms, nowMs) {
+  var s = Math.floor(((nowMs == null ? Date.now() : nowMs) - ms) / 1000);
+  if (!isFinite(s) || s < 0) return '';
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  return Math.floor(s / 86400) + 'd ago';
+}
+
+// activityFeed: newest run events and newly seen open findings, newest first.
+export function activityFeed(runs, findings, n) {
+  var items = [];
+  arr(runs).forEach(function(r) {
+    var ms = new Date(r.completedAt || r.startedAt).getTime();
+    if (isNaN(ms)) return;
+    var st = r.status || 'completed';
+    var tone = st === 'failed' ? 'bad' : st === 'running' ? 'info' : st === 'partial' ? 'warn' : 'ok';
+    items.push({ ms: ms, tone: tone, icon: st === 'failed' ? 'alert' : st === 'running' ? 'play' : 'check',
+      title: (r.name || r.scenarioId || 'Run') + ' ' + (st === 'running' ? 'started' : st),
+      desc: [r.hostname || r.agentId, r.initiatedBy ? 'by ' + r.initiatedBy : ''].filter(Boolean).join(' · '),
+      action: 'openDashRun', arg: r.id });
+  });
+  arr(findings).filter(function(f) { return f.status === 'open'; }).forEach(function(f) {
+    var ms = new Date(f.firstSeen).getTime();
+    if (isNaN(ms)) return;
+    items.push({ ms: ms, tone: 'bad', icon: 'alert', title: 'New finding — ' + (f.techniqueName || f.techniqueId),
+      desc: [f.severity, f.hostname || f.agentId].filter(Boolean).join(' · '), action: 'openFindingFromDashboard', arg: f.id });
+  });
+  return items.sort(function(a, b) { return b.ms - a.ms; }).slice(0, n || 6);
+}
+
+export function initials(name) {
+  var p = String(name || '?').split(/[\s-]+/).filter(Boolean);
+  return (p.length > 1 ? p[0][0] + p[1][0] : String(name || '?').slice(0, 2)).toUpperCase();
+}
+
+// preventionSeries: mean prevention per recording day across every actor's history (oldest first).
+export function preventionSeries(trends) {
+  var byDay = {};
+  arr(trends).forEach(function(t) { arr(t.history).forEach(function(h) {
+    var d = new Date(h.recordedAt);
+    if (isNaN(d)) return;
+    var k = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+    var s = byDay[k] || (byDay[k] = { sum: 0, n: 0, d: d });
+    s.sum += Number(h.prevention) || 0; s.n++;
+  }); });
+  var keys = Object.keys(byDay).sort();
+  return {
+    labels: keys.map(function(k) { var d = byDay[k].d; return d.getDate() + ' ' + MON[d.getMonth()]; }),
+    data: keys.map(function(k) { return Math.round(byDay[k].sum / byDay[k].n); }),
+  };
+}
+
+// actorHistory: one actor's prevention values, oldest -> newest.
+export function actorHistory(t) {
+  return arr(t && t.history).slice().sort(function(a, b) { return new Date(a.recordedAt) - new Date(b.recordedAt); })
+    .map(function(h) { return Number(h.prevention) || 0; });
+}
+
+// Counts of open findings per expected control class, largest first.
+// kevDetailRows: the per-technique rows behind the KEV card. kevCount is that technique's own CVE count, so a CVE
+// linked to several techniques appears in each row; the rows therefore do not sum to the card's unique-CVE total.
+export function kevDetailRows(k) {
+  return arr(k && k.techniques).map(function(t) {
+    return { id: t.techniqueId, name: t.name || t.techniqueId, tactic: t.tactic || '', cves: Number(t.kevCount) || 0, ransomware: !!t.ransomwareLinked };
+  }).sort(function(a, b) { return b.cves - a.cves || (b.ransomware - a.ransomware) || (a.id < b.id ? -1 : 1); });
+}
+
+// ceBreakdown: the numbers behind the Control effectiveness donut, each with its numerator and the denominator
+// it is a share of (all scored results). "Not tested" results are listed but are not part of the donut's base.
+export function ceBreakdown(e, runCount) {
+  var base = e.prevented + e.detected + e.missed;
+  var pct = function(n) { return base ? Math.round(n / base * 100) : null; };
+  return { runs: runCount || 0, results: e.total, base: base, rows: [
+    { key: 'prevented', label: 'Prevented', n: e.prevented, pct: pct(e.prevented) },
+    { key: 'detected', label: 'Detected only', n: e.detected, pct: pct(e.detected) },
+    { key: 'missed', label: 'Missed', n: e.missed, pct: pct(e.missed) },
+    { key: 'other', label: 'Not tested', n: e.other, pct: null },
+  ] };
+}
+
+export function openByControl(findings) {
+  var m = {};
+  arr(findings).filter(function(f) { return f.status === 'open'; }).forEach(function(f) {
+    var k = f.controlClass || 'Unclassified';
+    m[k] = (m[k] || 0) + 1;
+  });
+  return Object.keys(m).map(function(k) { return [k, m[k]]; }).sort(function(a, b) { return b[1] - a[1] || (a[0] < b[0] ? -1 : 1); });
+}
+
+// riskBand: presentation band for a 0-100 risk score (higher = worse).
+export function riskBand(score) {
+  var s = Number(score) || 0;
+  return s < 40 ? { label: 'Low', tone: 'ok' } : s < 70 ? { label: 'Moderate', tone: 'warn' } : { label: 'High', tone: 'bad' };
+}
+
+// execInsights: "what changed this period" sentences computed from the trend series, the current snapshot
+// and the exposure forecast block. Every sentence states numbers that appear in those inputs.
+export function execInsights(trends, current, exposure) {
+  var out = [];
+  var t = arr(trends);
+  var first = t[0], last = t[t.length - 1];
+  var plural = function(n, w) { return n + ' ' + (n === 1 ? w : w === 'open weakness' ? 'open weaknesses' : w + 's'); };
+  // Detection coverage and exposure history are deliberately NOT narrated: stored daily points for them
+  // predate measurability tracking (placeholder 100s, all-asset averages), so no comparison is trustworthy.
+  var rp = riskPoints(t);
+  if (current && current.riskMeasurable === true && rp.length >= 2) {
+    first = rp[0]; last = rp[rp.length - 1];
+    var dr = last.avgRiskScore - first.avgRiskScore;
+    out.push({ icon: dr > 0 ? 'alert' : 'check', tab: 'findings',
+      title: dr === 0 ? 'Risk score is unchanged at ' + last.avgRiskScore : 'Risk score ' + (dr > 0 ? 'rose ' : 'fell ') + plural(Math.abs(dr), 'point'),
+      desc: 'From ' + first.avgRiskScore + ' to ' + last.avgRiskScore + (dr > 0 ? ' — lower is better.' : '.') });
+  }
+  if (exposure && exposure.hasData) {
+    out.push({ icon: exposure.overThreshold ? 'clock' : 'check', tab: 'findings',
+      title: exposure.overThreshold ? plural(exposure.overThreshold, 'open weakness') + ' older than ' + exposure.thresholdDays + ' days' : 'No weakness has been open longer than ' + exposure.thresholdDays + ' days',
+      desc: exposure.openCount + ' open · longest ' + exposure.worstDaysOpen + ' days · median ' + exposure.medianDaysOpen + ' days.' });
+  }
+  if (t.length >= 2 && t[0].assetCount !== t[t.length - 1].assetCount) {
+    first = t[0]; last = t[t.length - 1];
+    out.push({ icon: 'agents', tab: 'agents', title: 'Fleet ' + (last.assetCount > first.assetCount ? 'grew' : 'shrank') + ' from ' + first.assetCount + ' to ' + last.assetCount + ' assets',
+      desc: 'Assets with an enrolled agent or discovered by the platform.' });
+  }
+  return out;
+}
+
+// Open findings as business risks: critical and high first.
+export function topRisks(findings, n) {
+  var rank = { critical: 0, high: 1, medium: 2, low: 3 };
+  return arr(findings).filter(function(f) { return f.status === 'open' && rank[String(f.severity || '').toLowerCase()] < 2; })
+    .sort(function(a, b) { return rank[String(a.severity).toLowerCase()] - rank[String(b.severity).toLowerCase()]; })
+    .slice(0, n || 4);
+}
+
+// domainBreakdown: open findings grouped by their control class (Identity, Network, DNS, Cloud, Endpoint, set by
+// findings.ControlClass from each technique's data sources). Largest open count first, then the worst severity
+// present, then name. A finding with no control class is shown as Unclassified, so no open finding is dropped.
+export function domainBreakdown(findings) {
+  var rank = { critical: 0, high: 1, medium: 2, low: 3 };
+  var by = {};
+  arr(findings).forEach(function(f) {
+    if (f.status !== 'open') return;
+    var d = f.controlClass || 'Unclassified';
+    var s = String(f.severity || '').toLowerCase();
+    var r = by[d] || (by[d] = { domain: d, open: 0, worst: 'unknown', worstRank: 99 });
+    r.open++;
+    var rk = rank[s] !== undefined ? rank[s] : 4;
+    if (rk < r.worstRank) { r.worstRank = rk; r.worst = s || 'unknown'; }
+  });
+  return Object.keys(by).map(function(k) { return by[k]; })
+    .sort(function(a, b) { return (b.open - a.open) || (a.worstRank - b.worstRank) || a.domain.localeCompare(b.domain); })
+    .map(function(r) { return { domain: r.domain, open: r.open, worst: r.worst }; });
+}
+
+// ── Weekly trend series for the KPI tiles ───────────────────────────────────
+// weekBoundaries: n timestamps, one per week, oldest first; the last one is `nowMs`.
+function weekBoundaries(nowMs, n) {
+  var out = [];
+  for (var i = n - 1; i >= 0; i--) out.push(nowMs - i * 7 * 86400000);
+  return out;
+}
+// wasOpenAt: the finding existed at `t` and had not been resolved by then.
+function wasOpenAt(f, t) {
+  var first = Date.parse(f.firstSeen);
+  if (!isFinite(first) || first > t) return false;
+  if (f.status === 'open') return true;
+  var res = Date.parse(f.resolvedAt);
+  return isFinite(res) && res > t;
+}
+function anyPositive(series) { return series.some(function(v) { return v > 0; }); }
+
+// openFindingsSeries: how many findings were open at each weekly boundary (null when there is nothing to draw).
+export function openFindingsSeries(findings, nowMs, weeks) {
+  if (!findings || !findings.length) return null;
+  var s = weekBoundaries(nowMs, weeks || 8).map(function(t) { return findings.filter(function(f) { return wasOpenAt(f, t); }).length; });
+  return anyPositive(s) ? s : null;
+}
+// oldestOpenAgeSeries: age in days of the oldest open finding at each weekly boundary.
+export function oldestOpenAgeSeries(findings, nowMs, weeks) {
+  if (!findings || !findings.length) return null;
+  var s = weekBoundaries(nowMs, weeks || 8).map(function(t) {
+    var oldest = null;
+    findings.forEach(function(f) { if (wasOpenAt(f, t)) { var a = Date.parse(f.firstSeen); if (oldest == null || a < oldest) oldest = a; } });
+    return oldest == null ? 0 : Math.max(0, Math.floor((t - oldest) / 86400000));
+  });
+  return anyPositive(s) ? s : null;
+}
+// startedPerWeek: campaigns started in each of the last `weeks` weekly buckets, oldest first.
+export function startedPerWeek(campaigns, nowMs, weeks) {
+  if (!campaigns || !campaigns.length) return null;
+  var b = weekBoundaries(nowMs, weeks || 8);
+  var s = b.map(function(t) {
+    return campaigns.filter(function(c) { var st = Date.parse(c.startedAt); return isFinite(st) && st <= t && st > t - 7 * 86400000; }).length;
+  });
+  return anyPositive(s) ? s : null;
+}
+
+// trendDelta: the week-over-week change shown under a KPI. invertGood marks metrics where a rise is bad
+// (risk score); a rise then reads red and a fall green. Metrics where a rise is good pass invertGood=false.
+export function trendDelta(values, invertGood) {
+  var v = arr(values);
+  if (v.length < 2) return { text: '', tone: 'muted' };
+  var d = v[v.length - 1] - v[Math.max(0, v.length - 8)];
+  if (d === 0) return { text: 'flat over the last week', tone: 'muted' };
+  var up = d > 0;
+  return { text: (up ? '▲ ' : '▼ ') + Math.abs(d) + ' vs a week ago', tone: (invertGood ? !up : up) ? 'ok' : 'bad' };
+}
+
+// Stored daily history for exposure and detection coverage cannot be trusted: older rows hold placeholder 100s
+// and all-asset averages, and the schema does not record which. Until measurement validity is stored per point,
+// neither metric shows a trend line, a delta or a narrated change. Current values are still shown when valid.
+export var LEGACY_TREND_NOTE = 'Historical trend unavailable due to legacy measurement data.';
+
+// exposureKpi: the Exposure score tile. Higher is better (100 minus weighted risk). The figure is the mean over
+// MEASURED assets only; the sub-line states how many of the fleet that is. No trend is drawn.
+// riskKpi: the Risk score tile (lower is better). With no scored run in the window the backend average is a bare
+// 0, which would read as a perfect score, so it is shown as not measurable. Points flagged false (no scored run
+// that day) are dropped from the trend; legacy points (null) cannot be told apart and are kept.
+function riskPoints(trends) {
+  return (trends || []).filter(function(p) { return p && p.riskMeasurable !== false && typeof p.avgRiskScore === 'number'; });
+}
+export function riskKpi(current, trends) {
+  if (!current || current.riskMeasurable !== true) {
+    return { value: '—', sub: 'Not measurable: no scored runs in the last 30 days', tone: 'muted', spark: null, measurable: false };
+  }
+  var series = riskPoints(trends).map(function(p) { return p.avgRiskScore; });
+  var d = trendDelta(series, true);
+  return { value: current.avgRiskScore, sub: d.text, tone: d.tone === 'muted' ? 'accent' : d.tone, spark: series.length >= 2 ? series : null, measurable: true };
+}
+
+// A trend is drawn only from daily points stamped as measured (flag === true). Legacy rows (null) and
+// unmeasurable days (false) are never interpolated or counted; fewer than two measured points means no trend.
+function measuredSeries(trends, valueKey, flagKey) {
+  return (trends || []).filter(function(p) { return p && p[flagKey] === true && typeof p[valueKey] === 'number'; })
+    .map(function(p) { return p[valueKey]; });
+}
+export function exposureKpi(current, trends) {
+  if (!current || current.exposureMeasurable !== true) {
+    return { value: '—', sub: 'Not measurable: no asset has measured exposure', tone: 'muted', spark: null, measurable: false };
+  }
+  var measured = current.exposureMeasuredAssets, total = current.assetCount;
+  var scope = (typeof measured === 'number' && typeof total === 'number') ? 'from ' + measured + ' of ' + total + ' assets' : '';
+  var series = measuredSeries(trends, 'exposureScore', 'exposureMeasurable');
+  var d = series.length >= 2 ? trendDelta(series, false) : null;
+  return { value: current.exposureScore, sub: [scope, d ? d.text : LEGACY_TREND_NOTE].filter(Boolean).join(' · '),
+    tone: d && d.tone !== 'muted' ? d.tone : 'accent', spark: d ? series : null, measurable: true, label: 'Exposure score (higher is better)' };
+}
+export function detectionKpi(current, trends) {
+  if (!current || current.detectionMeasurable !== true) {
+    return { value: '—', sub: 'Not measurable: no weighted attack paths', tone: 'muted', spark: null, measurable: false };
+  }
+  var series = measuredSeries(trends, 'detectionCoverage', 'detectionMeasurable');
+  var d = series.length >= 2 ? trendDelta(series, false) : null;
+  return { value: current.detectionCoverage + '%', sub: d ? d.text : LEGACY_TREND_NOTE,
+    tone: d && d.tone !== 'muted' ? d.tone : 'accent', spark: d ? series : null, measurable: true };
+}
+
+// heroValues: the two header figures on the Executive page. Same rule as the tiles: unmeasurable is a dash.
+export function heroValues(current) {
+  var c = current || {};
+  return {
+    risk: c.riskMeasurable === true ? c.avgRiskScore : '—',
+    exposure: c.exposureMeasurable === true ? c.exposureScore : '—',
+    detection: c.detectionMeasurable === true ? c.detectionCoverage + '%' : '—',
+  };
+}
+
+// orgReadinessTrends: turns the organisation readiness response (/api/ti/readiness/org) into the trend shape
+// the readiness cards render. Each actor's prevention is pooled across its agents' latest assessments; the
+// count shown is the number of agents behind it, not a number of runs.
+export function orgReadinessTrends(org) {
+  var actors = arr(org && org.actors);
+  return {
+    scope: 'organisation',
+    total: actors.length,
+    agentCount: org && typeof org.agentCount === 'number' ? org.agentCount : 0,
+    trends: actors.map(function(a) {
+      return {
+        actorName: a.actorName,
+        latestPrevention: a.latestPrevention,
+        preventionDelta: a.preventionDelta,
+        direction: a.direction,
+        dataPoints: a.agentCount,
+        testedTechniques: a.testedTechniques,
+        preventedTechniques: a.preventedTechniques,
+        history: arr(a.history).map(function(p) { return { recordedAt: p.date, prevention: p.prevention, tested: p.tested }; }),
+      };
+    }),
+  };
+}

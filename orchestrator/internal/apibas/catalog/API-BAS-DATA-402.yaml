@@ -1,0 +1,53 @@
+id: "API-BAS-DATA-402"
+name: "TEL-003: subscriber reads another subscriber's record and national ID"
+category: DATA
+claim: cross_identity
+attack_objective: "Subscriber A reads subscriber B's record and receives the national ID."
+threat_model:
+  attacker: "authenticated subscriber A"
+  identity: subscriber-a
+  access_level: "subscriber, valid token, owns SUBR-A-001 only"
+  objective: "Subscriber A reads subscriber B's record and receives the national ID."
+preconditions:
+  fixture: commerce-telecom-two-tenant
+  identities: [subscriber-a, subscriber-b]
+  object: SUBR-B-001
+steps:
+  - id: "baseline-owner"
+    role: baseline
+    identity: subscriber-b
+    auth: valid
+    method: GET
+    path: "/api/telecom/subscribers/SUBR-B-001"
+    hypothesis: "Subscriber B, the owner, reads their own record. If this fails, the scenario is not testable."
+  - id: "attack-data-402"
+    role: attack
+    identity: subscriber-a
+    auth: valid
+    method: GET
+    path: "/api/telecom/subscribers/SUBR-B-001"
+    hypothesis: "Subscriber A's read of SUBR-B-001 is refused, and no national ID comes back."
+denied_statuses: [403, 404]
+forbidden_values: ["BAS-SIM-NID-B"]
+expected_control: "A subscriber cannot read another subscriber's record. The read is refused and no national ID is returned."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The response to subscriber A's read of SUBR-B-001 carries no national ID of subscriber B.
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high
+detection_assertion:
+  status: fixture_validated
+  reason: "The read names SUBR-B-001, owned by subscriber B, from subscriber A. Graded against the access event by APIBAS-REL-004. Fixture-validated, not live-SIEM-validated."
+side_effect_class: READ_ONLY
+evidence:
+  - sanitized_request
+  - sanitized_response
+industry_mapping:
+  - "Telecom: subscriber data exposure"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-DATA-402 against the fixed build must PASS"
+  - "API-BAS-DATA-402 against the vulnerable build must FAIL (exploited)"

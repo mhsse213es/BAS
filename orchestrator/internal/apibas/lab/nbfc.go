@@ -226,17 +226,17 @@ func (s *Server) nbfcAdminRead(w http.ResponseWriter, r *http.Request, kind, per
 		Permission: permission, Outcome: outcome, Reason: reason})
 	switch reason {
 	case "not_found":
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		writeNBFCJSON(w, r, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	case "policy":
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "administrative access not granted"})
+		writeNBFCJSON(w, r, http.StatusForbidden, map[string]string{"error": "administrative access not granted"})
 		return
 	}
 	if kind == "kyc" {
-		writeJSON(w, http.StatusOK, kycBody(rec, s.vulnerable()))
+		writeNBFCJSON(w, r, http.StatusOK, kycBody(rec, s.vulnerable()))
 		return
 	}
-	writeJSON(w, http.StatusOK, s.loanBody(rec, caller))
+	writeNBFCJSON(w, r, http.StatusOK, s.loanBody(rec, caller))
 }
 
 // nbfcAuditLog returns the administrative audit trail for the run. It is a lab administration route.
@@ -268,7 +268,7 @@ func (s *Server) nbfcGetLoan(w http.ResponseWriter, r *http.Request) {
 	}
 	rec, found := s.nbfc.get(r.PathValue("id"))
 	if !found || rec.Kind != "loan" || (!s.vulnerable() && !visibleTo(rec, caller)) {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		writeNBFCJSON(w, r, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
 	body := s.loanBody(rec, caller)
@@ -277,7 +277,7 @@ func (s *Server) nbfcGetLoan(w http.ResponseWriter, r *http.Request) {
 			body["kyc"] = kycBody(kyc, true)
 		}
 	}
-	writeJSON(w, http.StatusOK, body)
+	writeNBFCJSON(w, r, http.StatusOK, body)
 }
 
 // findKYC returns the KYC record of a borrower.
@@ -333,7 +333,7 @@ func (s *Server) nbfcListLoans(w http.ResponseWriter, r *http.Request) {
 	}
 	// The list discloses these owners' records, so the access event names them (REL-004 reads the owners a request reaches).
 	noteResponseOwners(r, disclosed...)
-	writeJSON(w, http.StatusOK, map[string]any{"loans": out})
+	writeNBFCJSON(w, r, http.StatusOK, map[string]any{"loans": out})
 }
 
 // nbfcPatchLoan changes a loan's amount. The vulnerable build lets any authenticated caller change it. The fixed build lets
@@ -345,7 +345,7 @@ func (s *Server) nbfcPatchLoan(w http.ResponseWriter, r *http.Request) {
 	}
 	var req map[string]string
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req["amount"] == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "amount is required"})
+		writeNBFCJSON(w, r, http.StatusBadRequest, map[string]string{"error": "amount is required"})
 		return
 	}
 	id := r.PathValue("id")
@@ -353,15 +353,15 @@ func (s *Server) nbfcPatchLoan(w http.ResponseWriter, r *http.Request) {
 	defer s.nbfc.mu.Unlock()
 	rec, found := s.nbfc.recs[id]
 	if !found || rec.Kind != "loan" {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		writeNBFCJSON(w, r, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
 	if !s.vulnerable() && (caller != rec.OwnerID || rec.Status != "submitted") {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		writeNBFCJSON(w, r, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
 	rec.Public["amount"] = req["amount"]
-	writeJSON(w, http.StatusOK, map[string]string{"id": id, "status": "updated"})
+	writeNBFCJSON(w, r, http.StatusOK, map[string]string{"id": id, "status": "updated"})
 }
 
 // nbfcGetKYC answers the KYC read. The vulnerable build returns the identity evidence to anyone who names the record. The
@@ -373,14 +373,14 @@ func (s *Server) nbfcGetKYC(w http.ResponseWriter, r *http.Request) {
 	}
 	rec, found := s.nbfc.get(r.PathValue("id"))
 	if !found || rec.Kind != "kyc" {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		writeNBFCJSON(w, r, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
 	if !s.vulnerable() && caller != rec.OwnerID {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		writeNBFCJSON(w, r, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
-	writeJSON(w, http.StatusOK, kycBody(rec, true))
+	writeNBFCJSON(w, r, http.StatusOK, kycBody(rec, true))
 }
 
 // nbfcPrepare records the officer who prepares a loan decision. The fixed build lets only the assigned officer prepare it.
@@ -394,11 +394,11 @@ func (s *Server) nbfcPrepare(w http.ResponseWriter, r *http.Request) {
 	defer s.nbfc.mu.Unlock()
 	rec, found := s.nbfc.recs[id]
 	if !found || rec.Kind != "loan" || (!s.vulnerable() && (rec.Assignee == "" || caller != rec.Assignee)) {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		writeNBFCJSON(w, r, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
 	rec.PreparedBy = caller
-	writeJSON(w, http.StatusOK, map[string]string{"id": id, "status": "prepared"})
+	writeNBFCJSON(w, r, http.StatusOK, map[string]string{"id": id, "status": "prepared"})
 }
 
 // nbfcDecision approves a loan. The vulnerable build approves for any caller. The fixed build requires the assigned officer
@@ -413,25 +413,25 @@ func (s *Server) nbfcDecision(w http.ResponseWriter, r *http.Request) {
 	defer s.nbfc.mu.Unlock()
 	rec, found := s.nbfc.recs[id]
 	if !found || rec.Kind != "loan" {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		writeNBFCJSON(w, r, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
 	if !s.vulnerable() {
 		if rec.Assignee == "" || caller != rec.Assignee {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			writeNBFCJSON(w, r, http.StatusNotFound, map[string]string{"error": "not found"})
 			return
 		}
 		if rec.PreparedBy == "" {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": "decision not prepared"})
+			writeNBFCJSON(w, r, http.StatusConflict, map[string]string{"error": "decision not prepared"})
 			return
 		}
 		if rec.PreparedBy == caller {
-			writeJSON(w, http.StatusForbidden, map[string]string{"error": "an officer cannot approve their own decision"})
+			writeNBFCJSON(w, r, http.StatusForbidden, map[string]string{"error": "an officer cannot approve their own decision"})
 			return
 		}
 	}
 	rec.Status = "approved"
-	writeJSON(w, http.StatusOK, map[string]string{"id": id, "status": "approved", "approver": caller})
+	writeNBFCJSON(w, r, http.StatusOK, map[string]string{"id": id, "status": "approved", "approver": caller})
 }
 
 // nbfcPatchRepayment changes a repayment's status or amount. The vulnerable build lets any authenticated caller change it.
@@ -443,7 +443,7 @@ func (s *Server) nbfcPatchRepayment(w http.ResponseWriter, r *http.Request) {
 	}
 	var req map[string]string
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || (req["status"] == "" && req["amount"] == "") {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "status or amount is required"})
+		writeNBFCJSON(w, r, http.StatusBadRequest, map[string]string{"error": "status or amount is required"})
 		return
 	}
 	id := r.PathValue("id")
@@ -451,17 +451,17 @@ func (s *Server) nbfcPatchRepayment(w http.ResponseWriter, r *http.Request) {
 	defer s.nbfc.mu.Unlock()
 	rec, found := s.nbfc.recs[id]
 	if !found || rec.Kind != "repayment" {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		writeNBFCJSON(w, r, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
 	if !s.vulnerable() {
 		parent := s.nbfc.recs[rec.Parent]
 		if caller == rec.OwnerID {
-			writeJSON(w, http.StatusForbidden, map[string]string{"error": "borrowers cannot change repayments"})
+			writeNBFCJSON(w, r, http.StatusForbidden, map[string]string{"error": "borrowers cannot change repayments"})
 			return
 		}
 		if parent == nil || parent.Assignee == "" || caller != parent.Assignee {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			writeNBFCJSON(w, r, http.StatusNotFound, map[string]string{"error": "not found"})
 			return
 		}
 	}
@@ -471,7 +471,7 @@ func (s *Server) nbfcPatchRepayment(w http.ResponseWriter, r *http.Request) {
 	if req["amount"] != "" {
 		rec.Public["amount"] = req["amount"]
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"id": id, "status": "updated"})
+	writeNBFCJSON(w, r, http.StatusOK, map[string]string{"id": id, "status": "updated"})
 }
 
 // nbfcStatement is the loan statement: the loan and its repayments, with the debit mandate on each repayment. It is a fixture
@@ -484,7 +484,7 @@ func (s *Server) nbfcStatement(w http.ResponseWriter, r *http.Request) {
 	}
 	rec, found := s.nbfc.get(r.PathValue("id"))
 	if !found || rec.Kind != "loan" || (!s.vulnerable() && !visibleTo(rec, caller)) {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		writeNBFCJSON(w, r, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
 	reps := []map[string]any{}
@@ -500,5 +500,19 @@ func (s *Server) nbfcStatement(w http.ResponseWriter, r *http.Request) {
 		reps = append(reps, item)
 	}
 	s.nbfc.mu.Unlock()
-	writeJSON(w, http.StatusOK, map[string]any{"loan": s.loanBody(rec, caller), "repayments": reps})
+	writeNBFCJSON(w, r, http.StatusOK, map[string]any{"loan": s.statementLoanBody(rec), "repayments": reps})
+}
+
+// statementLoanBody is the loan object a statement carries. The statement's policy allows the debit mandate, not the
+// disbursement account (see detect/disclosure.go), so the fixed build returns the loan's public fields only. The vulnerable
+// build keeps every field, which is the weakness the statement scenarios test.
+func (s *Server) statementLoanBody(r nbfcRecord) map[string]any {
+	if s.vulnerable() {
+		return s.loanBody(r, r.OwnerID)
+	}
+	body := map[string]any{"id": r.ID, "owner_id": r.OwnerID, "status": r.Status, "assignee": r.Assignee}
+	for k, v := range r.Public {
+		body[k] = v
+	}
+	return body
 }

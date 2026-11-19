@@ -1,0 +1,111 @@
+[
+  {
+    "id": "cv-d27",
+    "n": 1,
+    "name": "Cloud VM Lateral 27 - Role Assumption of a Test Role (T1098)",
+    "technique_id": "T1098",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "medium",
+    "blast_radius": "Gated (BAS_CONFIRM_CLOUD_ROLE_ASSUME). One sts assume-role call against a designated test role. Returned credentials are discarded unrecorded.",
+    "telemetry": [
+      "CloudTrail: AssumeRole (cloud side)"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "cloud_role_assume",
+    "no_default_cleanup": true,
+    "reversible": false,
+    "irreversible": "temporary STS session credentials expire on their own; the role assumption changes no state in the cloud"
+  },
+  {
+    "id": "cv-d28",
+    "n": 2,
+    "name": "Cloud VM Lateral 28 - Access Key Creation Attempt for a Test User (T1098.001)",
+    "technique_id": "T1098.001",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "high",
+    "blast_radius": "Gated (BAS_CONFIRM_CLOUD_IAM_WRITE). Creates one access key for a designated test user, deletes it, and verifies deletion. The secret is never recorded.",
+    "telemetry": [
+      "CloudTrail: CreateAccessKey / DeleteAccessKey (cloud side)"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "cloud_access_key_create",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "cv-d29",
+    "n": 3,
+    "name": "Cloud VM Lateral 29 - Service Principal Client Secret Addition on a Test App (T1098.001)",
+    "technique_id": "T1098.001",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": false,
+    "risk": "high",
+    "blast_radius": "Gated (BAS_CONFIRM_CLOUD_IAM_WRITE). Adds one client secret to a designated test application, removes it, and verifies removal. The secret text is never recorded.",
+    "telemetry": [
+      "Entra audit: Update application - Certificates and secrets (cloud side)"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "cloud_client_secret_add",
+    "no_default_cleanup": true,
+    "reversible": false
+  },
+  {
+    "id": "cv-d30",
+    "n": 4,
+    "name": "Cloud VM Lateral 30 - Remote Management Exposure (T1021)",
+    "technique_id": "T1021",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Read-only WinRM listener and inbound firewall-rule check. Never starts, stops or reconfigures WinRM or firewall rules.",
+    "telemetry": [
+      "Sysmon EID 1: Get-NetFirewallRule / WSMan read"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "remote_mgmt_exposure_read",
+    "no_default_cleanup": false
+  },
+  {
+    "id": "cv-d31",
+    "n": 5,
+    "name": "Cloud VM Lateral 31 - Startup Location Writability (T1574)",
+    "technique_id": "T1574",
+    "timeout_sec": 120,
+    "requires_priv": "user",
+    "fidelity": "telemetry-safe",
+    "production_safe": true,
+    "risk": "low",
+    "blast_radius": "Read-only ACL check of the Startup folders. Nothing is written.",
+    "telemetry": [
+      "Security EID 4663 is not generated (read-only ACL check)"
+    ],
+    "detection": [
+      "Cloud-side audit (Azure Activity Log / Entra / CloudTrail) must be collected separately; this endpoint step is not proof of cloud detection"
+    ],
+    "cleanup": "",
+    "action_key": "startup_location_read",
+    "no_default_cleanup": false
+  }
+]

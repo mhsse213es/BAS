@@ -5,6 +5,7 @@ import { showToast } from '../core/util.js';
 import { loadAdversaries, loadAdversaryTemplates } from './adversaries.js';
 import { initComplianceTab, openAgentDetail, showAgentTab } from './agent-drawer.js';
 import { on } from '../core/actions.js';
+import { checkRecoveryForm } from './recovery-model.js';
 import { closeScenarioOverlay, injectServerURL, loadAgentGroupTree, loadAgents, loadAttackPath, loadCatalogs, loadConnectionConfig, loadCoverageActors, loadCoverageMatrix, loadExecDashboard, loadExposureAssets, loadRecommendations, loadScenarios, loadThreatPriorityActors, renderScenarios, selectTheme, showSettingsSection, showThreatPriorityList } from './attack-path.js';
 import { loadAuditLogs } from './audit-logs.js';
 import { closeCampaignDetail } from './campaigns.js';
@@ -12,27 +13,37 @@ import { loadCalderaStatus, refreshDashboardCampaigns } from './compliance.js';
 import { loadCoverage, loadCoverageAnalytics, loadUnifiedTechniques, loadThreatExposure } from './coverage.js';
 import { loadVerificationTab } from './detection-verification.js';
 import { loadEmTab } from './endpoint-mastery.js';
+import { initNavExtras, navTabActivated, startBadgeDataRefresh } from './nav-extras.js';
 import { loadADCoverage } from './ad-coverage.js';
 import { loadEmailTab } from './email.js';
 import { connectWS, loadDashboard, openCmdk } from './evidence.js';
 import { loadFindings, loadRemediations, loadSLAReport } from './findings.js';
+import { loadComplianceCards } from './rpt-view.js';
 import { loadInitiatives } from './initiatives.js';
 import { loadIntegrations, loadResponseConnectors, renderResponseConnectorList } from './integrations.js';
 import { loadIOCRegistry } from './iocs.js';
 import { loadExercisesTab } from './openaev.js';
 import { loadFactoryHealth } from './factory-health.js';
+import { loadApiInventory } from './api-inventory.js';
+import { loadSegmentation } from './segmentation.js';
 import { loadReports, loadRuns } from './reports.js';
 import { loadScheduledAssessments } from './scheduled.js';
 import { loadARTContentStatus, loadConnectorStatus, loadSimCoverage, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
 import { loadExecutionPolicyDefault } from './execution-policy.js';
 import { loadK8sRuns } from './k8s-scenarios.js';
+import { loadCloudScenarios } from './cloud-scenarios.js';
+import { isTyping, openPageHelp } from './page-help.js';
+import { initAleefNav, loadAleef, resetAleefState, stopAleefPolling } from './aleef.js';
 import { loadVariantTab } from './variant-executor.js';
 import { displayOf, replaceClasses, setCssText, setDisplay } from '../core/inline-style.js';
 import { cssVars } from '../core/css-vars.js';
+import { renderBreadcrumb, setHeroStat } from './shell-ui.js';
+import { applyDisplayPrefs } from './display-prefs.js';
 export function __init_L5162() {
 (function() {
-  var t = localStorage.getItem('audspect_theme') || 'dark';
-  if (t !== 'dark') document.body.classList.add('theme-' + t);
+  var t = localStorage.getItem('audspect_theme') === 'light' ? 'light' : 'dark';
+  if (t === 'light') document.body.classList.add('theme-light');
+  applyDisplayPrefs();
   try {
     if (localStorage.getItem('bas_sidebar_collapsed') === '1') {
       document.getElementById('app').classList.add('sidebar-collapsed');
@@ -46,11 +57,16 @@ export function __init_L5162() {
 // so the choice survives a reload (same bas_-prefixed localStorage pattern
 // used for theme/role/last-tab elsewhere in this file).
 export function toggleSidebarCollapsed() {
+  // Below 900px the sidebar is an off-canvas drawer: the same button opens and closes it.
+  if (window.matchMedia && window.matchMedia('(max-width: 900px)').matches) {
+    document.getElementById('app').classList.toggle('sidebar-open');
+    return;
+  }
   var collapsed = document.getElementById('app').classList.toggle('sidebar-collapsed');
   try { localStorage.setItem('bas_sidebar_collapsed', collapsed ? '1' : '0'); } catch (e) {}
   document.getElementById('sidebar-collapse-btn').title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
 }
-var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', 'k8s-scenarios':'Kubernetes Scenarios', 'scheduled-assessments':'Scheduled Assessments', initiatives:'Initiatives', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', 'ad-coverage':'AD Coverage', email:'Email', exposure:'Exposure Explorer', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage', 'threat-priority':'Threat Prioritization', iocs:'IOC Registry', profile:'My Profile', 'sla-report':'SLA Compliance' };
+var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', 'api-inventory':'API Inventory', segmentation:'Segmentation', runs:'Live Runs', 'k8s-scenarios':'Kubernetes Scenarios', 'cloud-scenarios':'Cloud Scenarios', aleef:'Aleef API discovery', 'scheduled-assessments':'Scheduled Assessments', initiatives:'Initiatives', campaigns:'Campaigns', coverage:'MITRE ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports & Analytics', verification:'Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variants', em:'Endpoint Mastery', 'ad-coverage':'AD Coverage', email:'Email', exposure:'Exposure Explorer', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage', 'threat-priority':'Threat Prioritization', iocs:'IOC Registry', profile:'My Profile', 'sla-report':'SLA Compliance', 'factory-health':'Factory Health', attackpath:'Attack Paths', integrations:'Integrations' };
 export var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#e0609e','#8957e5','#2fd8c3'];
 
 var TOKEN    = ''; // kept in memory only — never persisted to localStorage
@@ -224,6 +240,17 @@ function maybeShowLicenseGraceModal(info) {
   });
 }
 
+export function togglePasswordVisibility() {
+  var input = document.getElementById('inp-pass');
+  var btn = document.getElementById('inp-pass-toggle');
+  var show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  var label = show ? 'Hide password' : 'Show password';
+  btn.setAttribute('aria-pressed', show ? 'true' : 'false');
+  btn.setAttribute('aria-label', label);
+  btn.title = label;
+}
+
 export function doLogin() {
   var username = document.getElementById('inp-user').value.trim();
   var password = document.getElementById('inp-pass').value;
@@ -251,14 +278,64 @@ export function doLogin() {
   .catch(function(e) { document.getElementById('login-err').textContent = e.message; });
 }
 
+// ── Forgotten administrator password ──────────────────────────────────────────────────────────────
+// Needs the RECOVERY_PASSPHRASE from setup.conf. The server only recovers local, enabled administrator accounts.
+export function showRecovery() {
+  document.getElementById('login-main').hidden = true;
+  document.getElementById('recovery-panel').hidden = false;
+  document.getElementById('rec-err').textContent = '';
+  var user = document.getElementById('inp-user').value.trim();
+  if (user && !document.getElementById('rec-user').value) document.getElementById('rec-user').value = user;
+  document.getElementById('rec-user').focus();
+}
+
+export function hideRecovery() {
+  ['rec-pass', 'rec-new', 'rec-new2'].forEach(function(id) { document.getElementById(id).value = ''; });
+  document.getElementById('recovery-panel').hidden = true;
+  document.getElementById('login-main').hidden = false;
+  document.getElementById('login-err').textContent = '';
+}
+
+export function doRecover() {
+  var err = document.getElementById('rec-err');
+  var form = {
+    username: document.getElementById('rec-user').value,
+    passphrase: document.getElementById('rec-pass').value,
+    next: document.getElementById('rec-new').value,
+    again: document.getElementById('rec-new2').value
+  };
+  var problem = checkRecoveryForm(form);
+  if (problem) { err.textContent = problem; return; }
+  err.textContent = '';
+  fetch('/api/auth/recover', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: form.username.trim(), passphrase: form.passphrase, newPassword: form.next })
+  })
+  .then(function(r) { return r.json().catch(function() { return {}; }).then(function(d) { return { ok: r.ok, status: r.status, d: d }; }); })
+  .then(function(res) {
+    if (res.status === 404) throw new Error('Password recovery is not set up on this server. Ask whoever installed it to add RECOVERY_PASSPHRASE to setup.conf and run the upgrade.');
+    if (res.status === 429) throw new Error('Too many failed attempts. Wait 15 minutes and try again.');
+    if (!res.ok) throw new Error(res.d.error || 'Could not reset the password.');
+    var typed = form.username.trim();
+    hideRecovery();
+    document.getElementById('inp-user').value = typed;
+    document.getElementById('inp-pass').value = '';
+    document.getElementById('login-err').textContent = 'Password reset. Sign in with the new password.';
+  })
+  .catch(function(e) { err.textContent = e.message; });
+}
+
 export function doLogout() {
   TOKEN = ''; ROLE = '';
+  state._findings = undefined; // the next person who signs in must not see this person's count
+  resetAleefState(); // stop the run poll and drop the previous session's Aleef data
   localStorage.removeItem('bas_role');
   try { localStorage.removeItem('bas_user_id'); } catch (e) {}
   if (state.socket) state.socket.close();
   fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(function(){});
   setDisplay(document.getElementById('app'), 'none');
-  setDisplay(document.getElementById('login-screen'), 'flex');
+  setDisplay(document.getElementById('login-screen'), 'grid');
   document.getElementById('inp-pass').value = '';
 }
 
@@ -279,6 +356,9 @@ function bootApp() {
   // Kubernetes scenarios belong to the Enterprise cloud product: hidden unless the licence grants it.
   var k8sLicensed = !!(LICENSE_INFO && LICENSE_INFO.kubernetesScenarios);
   if (navK8s) setDisplay(navK8s, (k8sLicensed && (ROLE === 'admin' || ROLE === 'analyst')) ? '' : 'none');
+  var navCloud = document.getElementById('nav-cloud-scenarios');
+  if (navCloud) setDisplay(navCloud, (ROLE === 'admin' || ROLE === 'analyst') ? '' : 'none');
+  initAleefNav(ROLE); // shown only when the licence lists the aleef special add-on
   if (ROLE === 'admin') {
     document.querySelectorAll('.settings-nav a').forEach(function(el) {
       if (el.getAttribute('data-set') !== 'theme') setDisplay(el, '');
@@ -300,10 +380,14 @@ function bootApp() {
     var nb = document.getElementById('sc-new-btn');     if (nb) setDisplay(nb, 'none');
     var ub = document.getElementById('sc-upload-btn');  if (ub) setDisplay(ub, 'none');
   }
+  // Agents banner: Connection Config (server URL, agent secret, enrollment tokens) is admin only.
+  var agtCfgBtn = document.getElementById('agt-conn-cfg-btn');
+  if (agtCfgBtn) setDisplay(agtCfgBtn, ROLE === 'admin' ? '' : 'none');
   // Remediation bulk ticket actions — analyst+
   var remTicketActions = document.getElementById('rem-ticket-actions');
   if (remTicketActions) setDisplay(remTicketActions, (ROLE === 'admin' || ROLE === 'analyst') ? 'flex' : 'none');
   connectWS();
+  startBadgeDataRefresh(apicall);
   loadAgents();
   loadAgentGroupTree();
   loadCatalogs();
@@ -327,6 +411,7 @@ function bootApp() {
     state._cmdkBound = true;
     document.addEventListener('keydown', function(e) {
       if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); openCmdk(); }
+      else if (e.key === '?' && !e.metaKey && !e.ctrlKey && !e.altKey && !isTyping(e.target) && !document.getElementById('cmdk-input')) { e.preventDefault(); openPageHelp(); }
     });
   }
 }
@@ -406,6 +491,8 @@ export function goToProfile() {
     document.getElementById('profile-created').textContent = u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—';
     document.getElementById('profile-last-login').textContent = u.lastLogin ? new Date(u.lastLogin).toLocaleString() : 'Never';
     document.getElementById('profile-auth-source').textContent = u.authSource === 'sso' ? 'Single sign-on (SSO)' : 'Username & password';
+    setHeroStat('hs-profile-last', u.lastLogin ? new Date(u.lastLogin).toLocaleString() : 'Never');
+    setHeroStat('hs-profile-role', u.role ? u.role.charAt(0).toUpperCase() + u.role.slice(1) : '—');
     setDisplay(document.getElementById('profile-admin-shortcut'), u.role === 'admin' ? '' : 'none');
   }).catch(function() {
     document.getElementById('profile-username').textContent = 'Failed to load profile';
@@ -415,7 +502,7 @@ export function goToProfile() {
     if (!d || !Array.isArray(d.permissions)) { el.textContent = 'Unable to load permissions.'; return; }
     if (!d.permissions.length) { el.textContent = 'No permissions granted.'; return; }
     el.innerHTML = d.permissions.slice().sort().map(function(p) {
-      return '<span class="tag g1-display-inline-block g1-s-cbab8d6c">' + x(p) + '</span>';
+      return '<span class="rk-chip tone-info">' + x(p) + '</span>';
     }).join('');
   }).catch(function() {
     document.getElementById('profile-permissions').textContent = 'Unable to load permissions.';
@@ -429,14 +516,20 @@ export function doLogoutFromMenu() { closeUserMenu(); doLogout(); }
 // data loaders — so callers like openCampaignDetail can switch to a tab and then
 // render their own sub-view without the tab's loader resetting it.
 export function activateTab(name) {
-  ['dashboard','agents','scenarios','runs','k8s-scenarios','scheduled-assessments','initiatives','campaigns','factory-health','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','ad-coverage','email','attackpath','exposure','recommendations','integrations','exercises','attack-coverage','threat-priority','iocs','profile','sla-report'].forEach(function(t) {
+  var appEl = document.getElementById('app');
+  if (appEl) appEl.classList.remove('sidebar-open');
+  ['dashboard','agents','scenarios','runs','k8s-scenarios','cloud-scenarios','aleef','scheduled-assessments','initiatives','campaigns','factory-health','api-inventory','segmentation','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','ad-coverage','email','attackpath','exposure','recommendations','integrations','exercises','attack-coverage','threat-priority','iocs','profile','sla-report'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) setDisplay(el, t === name ? '' : 'none');
     var nav = document.querySelector('[data-tab="' + t + '"]');
     if (nav) nav.classList.toggle('active', t === name);
   });
+  if (name !== 'aleef') stopAleefPolling(); // clean up the run poll timer on any tab switch
   var titleEl = document.getElementById('header-page-title');
   if (titleEl) titleEl.textContent = TAB_TITLES[name] || name;
+  renderBreadcrumb(name, TAB_TITLES[name] || name);
+  initNavExtras();
+  navTabActivated(name);
 }
 
 // Unified Dashboard shell (Sub-project B) -- one Dashboard tab, two views.
@@ -455,6 +548,8 @@ export function setDashView(view) {
   DASH_VIEW = view;
   setDisplay(document.getElementById('dash-view-operational'), view === 'operational' ? '' : 'none');
   setDisplay(document.getElementById('dash-view-executive'), view === 'executive' ? '' : 'none');
+  setDisplay(document.getElementById('dash-exec-tools'), view === 'executive' ? '' : 'none');
+  setDisplay(document.getElementById('dash-op-note'), view === 'operational' ? '' : 'none');
   document.querySelectorAll('.dash-view-btn').forEach(function(b) {
     b.classList.toggle('active', b.getAttribute('data-view') === view);
   });
@@ -545,6 +640,8 @@ export function showTab(name) {
   if (name === 'campaigns') closeCampaignDetail();
   if (name === 'scheduled-assessments') loadScheduledAssessments();
   if (name === 'k8s-scenarios') loadK8sRuns();
+  if (name === 'cloud-scenarios') loadCloudScenarios();
+  if (name === 'aleef') loadAleef();
   if (name === 'initiatives') loadInitiatives();
   if (name === 'coverage') { loadCoverage(); loadUnifiedTechniques(); loadCoverageAnalytics(); loadThreatExposure(); }
   if (name === 'attack-coverage') { loadCoverageActors(); loadCoverageMatrix(); }
@@ -560,6 +657,8 @@ export function showTab(name) {
   if (name === 'recommendations') loadRecommendations();
   if (name === 'exercises') loadExercisesTab();
   if (name === 'factory-health') loadFactoryHealth();
+  if (name === 'api-inventory') loadApiInventory();
+  if (name === 'segmentation') loadSegmentation();
   if (name === 'variants') loadVariantTab();
   if (name === 'em') loadEmTab();
   if (name === 'ad-coverage') loadADCoverage();
@@ -569,7 +668,7 @@ export function showTab(name) {
     setDashView(resolveDashView());
   }
   if (name === 'integrations') { loadIntegrations(); loadResponseConnectors(renderResponseConnectorList); }
-  if (name === 'compliance') initComplianceTab();
+  if (name === 'compliance') { initComplianceTab(); loadComplianceCards(); }
   if (name === 'settings') {
     if (ROLE === 'admin') {
       showSettingsSection(state.SETTINGS_SECTION);

@@ -155,10 +155,10 @@ steps:
     executor: powershell
     requires_priv: user
     timeout_sec: 30
-    fidelity: telemetry-safe
-    production_safe: true
-    risk: low
-    blast_radius: "Submits a synthetic multi-type sensitive record to the default printer's spool queue if one is configured, then removes the job immediately. No persistence, no real regulated data."
+    fidelity: lab-only
+    production_safe: false
+    risk: medium
+    blast_radius: "Submits a synthetic multi-type sensitive record to the default printer's spool queue if one is configured. Removes only its own job, matched by this run's unique document name; no other job is touched. If the job is not found, the step is SKIPped and no job is removed. Lab mailbox/printer only. No persistence, no real regulated data."
     reversible: true
     telemetry:
       - "Print spooler EID 307/347: print job submitted/completed"
@@ -177,19 +177,17 @@ steps:
         try {
           Get-Content -Path $srcFile | Out-Printer -Name $printer.Name -ErrorAction Stop
           Start-Sleep -Milliseconds 500
-          $job = Get-PrintJob -PrinterName $printer.Name -ErrorAction SilentlyContinue | Where-Object { $_.DocumentName -match 'bas_sim_dlp_print' -or $_.JobStatus -match 'Printing|Spooling|Normal' } | Select-Object -First 1
+          $job = Get-PrintJob -PrinterName $printer.Name -ErrorAction SilentlyContinue | Where-Object { $_.DocumentName -like "*bas_sim_dlp_print_$runId*" } | Select-Object -First 1
           if ($job) {
             Write-Output "EXEC T1052: sensitive record content submitted to print spooler ($($printer.Name)) unimpeded. [BAS-SIM-DLP-PRINT]"
             Write-Output "FAIL: sensitive record content (PAN/Aadhaar/SWIFT/UPI/credit-card patterns) reached the print spooler without being blocked."
             Remove-PrintJob -PrinterName $printer.Name -ID $job.ID -ErrorAction SilentlyContinue
             Write-Output "DLP_OBSERVATION: OperationSucceeded"
           } else {
-            Write-Output "EXEC T1052: print submission did not appear in the spool queue - blocked or intercepted. [BAS-SIM-DLP-PRINT]"
-            Write-Output "DLP_OBSERVATION: OperationBlocked"
+            Write-Output "SKIP: this run's print job was not found in the spool queue, so submission cannot be verified and the step is not scored. [BAS-SIM-DLP-PRINT]"
           }
         } catch {
-          Write-Output "EXEC T1052: print submission threw an error - treated as blocked. [BAS-SIM-DLP-PRINT]"
-          Write-Output "DLP_OBSERVATION: OperationBlocked"
+          Write-Output "SKIP: print submission threw an error, so the outcome cannot be verified and the step is not scored. [BAS-SIM-DLP-PRINT]"
         }
         Remove-Item -Path $srcFile -ErrorAction SilentlyContinue
       }

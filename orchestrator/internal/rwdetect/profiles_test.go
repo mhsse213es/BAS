@@ -17,7 +17,7 @@ var ransomwareScenarioFiles = []string{
 	"lockbit-kill-chain.yaml", "play-kill-chain.yaml", "ransomhub-kill-chain.yaml",
 	"ransomware-drill.yaml", "endpoint-mastery/em-07-ransomware-readiness.yaml",
 	"linux-ransomware-drill.yaml", "black-basta-kill-chain.yaml", "medusa-kill-chain.yaml",
-	"rhysida-kill-chain.yaml", "hunters-international-kill-chain.yaml",
+	"rhysida-kill-chain.yaml", "hunters-international-kill-chain.yaml", "ransomware-backup-recovery-assurance.yaml", "akira-double-extortion-assessment.yaml", "ransomware-lateral-containment-assessment.yaml", "akira-esxi-assessment.yaml",
 }
 
 // repoScenariosDir resolves ../../../scenarios relative to this package --
