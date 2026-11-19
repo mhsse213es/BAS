@@ -62,6 +62,33 @@ type DBProbeResult struct {
 	// graded as a pass.
 	CleanupStatus  string `json:"cleanupStatus,omitempty"`
 	SafetyIncident bool   `json:"safetyIncident,omitempty"`
+	// Grants mirrors agent protocol.DBProbeResult.Grants (read_grants only).
+	Grants []DBProbeGrant `json:"grants,omitempty"`
+	// GlobalGrants and Memberships mirror the agent result (read_global_privileges, read_memberships).
+	GlobalGrants []DBProbeGlobalGrant `json:"globalGrants,omitempty"`
+	Memberships  []DBProbeMembership  `json:"memberships,omitempty"`
+}
+
+// DBProbeGlobalGrant mirrors agent protocol.DBProbeGlobalGrant.
+type DBProbeGlobalGrant struct {
+	Role      string `json:"role"`
+	Scope     string `json:"scope"`
+	Privilege string `json:"privilege"`
+}
+
+// DBProbeMembership mirrors agent protocol.DBProbeMembership.
+type DBProbeMembership struct {
+	Role    string `json:"role"`
+	Member  string `json:"member"`
+	Inherit bool   `json:"inherit"`
+}
+
+// DBProbeGrant mirrors agent protocol.DBProbeGrant.
+type DBProbeGrant struct {
+	Role        string `json:"role"`
+	Object      string `json:"object"`
+	Privilege   string `json:"privilege"`
+	GrantOption bool   `json:"grantOption,omitempty"`
 }
 
 // Cleanup status values (DBProbeResult.CleanupStatus); same strings as the
@@ -124,6 +151,8 @@ type ProbeRegistryEntry struct {
 var probeRegistry = map[string]ProbeRegistryEntry{
 	"read_roles":            {ID: "read_roles", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}},
 	"read_grants":           {ID: "read_grants", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{"role": "string"}},
+	"read_global_privileges": {ID: "read_global_privileges", Class: ClassReadOnly, Engines: []string{"postgresql"}, ParamSchema: map[string]string{}},
+	"read_memberships": {ID: "read_memberships", Class: ClassReadOnly, Engines: []string{"postgresql"}, ParamSchema: map[string]string{}},
 	"auth_check":            {ID: "auth_check", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}},
 	"read_audit_config":     {ID: "read_audit_config", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}},
 	"read_restricted_table": {ID: "read_restricted_table", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{"table": "string"}},
@@ -162,6 +191,13 @@ const (
 // ProbeReadGrants is the grant-enumeration probe (DB-02); its result is only
 // meaningful against a performed policy diff (ruling R-AK).
 const ProbeReadGrants = "read_grants"
+
+// ProbeReadGlobalPrivileges (DB-02-05) and ProbeReadMemberships (DB-02-06) are read-only
+// catalog reads compared with the policy; PostgreSQL only.
+const (
+	ProbeReadGlobalPrivileges = "read_global_privileges"
+	ProbeReadMemberships      = "read_memberships"
+)
 
 // LookupProbeEntry returns the registry entry for a probe id.
 func LookupProbeEntry(id string) (ProbeRegistryEntry, bool) {

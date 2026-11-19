@@ -135,6 +135,8 @@ type Handler struct {
 	// this handler's own store, dispatch and engine (dbsim_run_handlers.go).
 	dbsimRunSvc  *dbjobs.Service
 	dbsimRunOnce sync.Once
+	// dbsimGrants is the DB-02 grant policy bound to one target (dbsim_grant_policy.go).
+	dbsimGrants *dbsimGrantSource
 	// detectVerifyConnector builds a detectverify.Connector for a config.
 	// nil in production (New leaves it unset; call sites fall back to
 	// detectverify.NewConnector) — tests override it to avoid real HTTP calls.

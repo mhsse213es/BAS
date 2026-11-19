@@ -1,0 +1,35 @@
+id: dbsim-db02-02-app-role-grants
+product_line: dbsim
+name: Database Security Simulation DB-02-02 - Application Role Grant Inspection
+description: >
+  Lists the table privileges granted to the application role bas_dbsim_app and
+  compares them with the stated grant policy. Graded only when a policy is
+  configured for the target; without one the step is ERROR, never PASS.
+  ATT&CK T1087 Account Discovery.
+author: Audspect Research
+executable: true
+tags:
+  - dbsim
+  - database
+  - privileges
+  - grants
+  - read-only
+  - mitre-attack
+mitre_phases:
+  - discovery
+
+steps:
+  - name: "DB-02-02 Application role grant inspection (T1087)"
+    technique_id: T1087
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: read_grants
+    db_params:
+      role: bas_dbsim_app
+    risk: low
+    blast_radius: "read-only privilege catalog query for one role; no state changed"
+    telemetry:
+      - "PostgreSQL pg_log: the BAS-marked privilege catalog read for role bas_dbsim_app"
+    detection:
+      - "SIEM: privilege catalog read for an application role, a discovery signal"
+    reversible: true

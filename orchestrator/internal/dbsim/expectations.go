@@ -40,6 +40,48 @@ var expectations = map[string]map[string]Expectation{
 		"read_grants": {ExpectedPrevention: "allow", ExpectDetection: true,
 			RequireObservation: true, RequirePolicyDiff: true},
 	},
+	"dbsim-db02-01-role-enumeration": {
+		"read_roles": expAllow,
+	},
+	"dbsim-db02-02-app-role-grants": {
+		"read_grants": {ExpectedPrevention: "allow", ExpectDetection: true,
+			RequireObservation: true, RequirePolicyDiff: true},
+	},
+	"dbsim-db02-03-excessive-privilege": {
+		"read_grants": {ExpectedPrevention: "allow", ExpectDetection: true,
+			RequireObservation: true, RequirePolicyDiff: true},
+	},
+	"dbsim-db02-04-dba-accounts": {
+		"read_roles": expAllow,
+	},
+	"dbsim-db02-08-public-grants": {
+		"read_grants": {ExpectedPrevention: "allow", ExpectDetection: true,
+			RequireObservation: true, RequirePolicyDiff: true},
+	},
+	"dbsim-db02-11-service-account": {
+		"read_grants": {ExpectedPrevention: "allow", ExpectDetection: true,
+			RequireObservation: true, RequirePolicyDiff: true},
+	},
+	"dbsim-db02-09-cross-schema-access": {
+		"read_grants": {ExpectedPrevention: "allow", ExpectDetection: true,
+			RequireObservation: true, RequirePolicyDiff: true},
+	},
+	"dbsim-db02-10-sensitive-table-access": {
+		"read_grants": {ExpectedPrevention: "allow", ExpectDetection: true,
+			RequireObservation: true, RequirePolicyDiff: true},
+	},
+	"dbsim-db02-07-grant-option": {
+		"read_grants": {ExpectedPrevention: "allow", ExpectDetection: true,
+			RequireObservation: true, RequirePolicyDiff: true},
+	},
+	"dbsim-db02-05-global-grants": {
+		"read_global_privileges": {ExpectedPrevention: "allow", ExpectDetection: true,
+			RequireObservation: true, RequirePolicyDiff: true},
+	},
+	"dbsim-db02-06-inheritance-chain": {
+		"read_memberships": {ExpectedPrevention: "allow", ExpectDetection: true,
+			RequireObservation: true, RequirePolicyDiff: true},
+	},
 	"dbsim-db03-unauthorized-access": {
 		"read_restricted_table": expDeny,
 	},

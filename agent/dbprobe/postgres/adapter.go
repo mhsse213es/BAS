@@ -382,7 +382,7 @@ func str(v any) string {
 func (a *Adapter) Capabilities() dbprobe.Capabilities {
 	c := dbprobe.Capabilities{
 		ProbeIDs: []string{"auth_after_revoke", "auth_check", "bounded_synthetic_read", "check_export_privileges", "check_readonly_identity", "read_audit_config", "read_classified_fixture",
-			"read_grants", "read_restricted_table", "read_roles", "suspicious_read", "try_disable_audit", "try_write_fixture"},
+			"read_global_privileges", "read_grants", "read_memberships", "read_restricted_table", "read_roles", "suspicious_read", "try_disable_audit", "try_write_fixture"},
 		MarkerInAppName:   true,
 		MarkerInQueryText: true,
 		// The marker can only reach an audit record through the statement
@@ -564,7 +564,68 @@ func (a *Adapter) RunProbe(ctx context.Context, def dbprobe.ProbeDef, spec dbpro
 		return res, nil
 	}
 	res.RowsRead = b.Used()
+	if spec.ProbeID == "read_grants" {
+		// The grant list is the policy diff's input, so a truncated or malformed list
+		// must not look complete: truncation fails the probe, a bad row is refused.
+		if len(rows) >= queryMax {
+			res.ErrorClass = "row_limit_exceeded"
+			res.Notes = append(res.Notes, "read_grants: grant list truncated; policy diff not run")
+			return res, nil
+		}
+		grants, gerr := strictGrants(rows)
+		if gerr != nil {
+			res.Notes = append(res.Notes, "read_grants: "+gerr.Error())
+			return res, nil
+		}
+		res.Grants = grants
+	}
+	if spec.ProbeID == "read_global_privileges" {
+		if len(rows) >= queryMax {
+			res.ErrorClass = "row_limit_exceeded"
+			res.Notes = append(res.Notes, "read_global_privileges: list truncated; policy diff not run")
+			return res, nil
+		}
+		g, gerr := strictGlobalGrants(rows)
+		if gerr != nil {
+			res.Notes = append(res.Notes, "read_global_privileges: "+gerr.Error())
+			return res, nil
+		}
+		res.GlobalGrants = g
+	}
+	if spec.ProbeID == "read_memberships" {
+		if len(rows) >= queryMax {
+			res.ErrorClass = "row_limit_exceeded"
+			res.Notes = append(res.Notes, "read_memberships: list truncated; policy diff not run")
+			return res, nil
+		}
+		m, merr := strictMemberships(rows)
+		if merr != nil {
+			res.Notes = append(res.Notes, "read_memberships: "+merr.Error())
+			return res, nil
+		}
+		res.Memberships = m
+	}
 	return res, nil
+}
+
+// strictGrants converts read_grants rows (grantee, object, privilege) without ever
+// dropping one: a row that is not three text values is an error, not a skipped grant.
+func strictGrants(rows [][]any) ([]dbprobe.DBProbeGrant, error) {
+	out := make([]dbprobe.DBProbeGrant, 0, len(rows))
+	for i, r := range rows {
+		if len(r) != 4 {
+			return nil, fmt.Errorf("row %d has %d columns, want 4", i, len(r))
+		}
+		role, ok1 := r[0].(string)
+		obj, ok2 := r[1].(string)
+		priv, ok3 := r[2].(string)
+		gopt, ok4 := r[3].(bool)
+		if !ok1 || !ok2 || !ok3 || !ok4 {
+			return nil, fmt.Errorf("row %d is not three text values and a boolean", i)
+		}
+		out = append(out, dbprobe.DBProbeGrant{Role: role, Object: obj, Privilege: priv, GrantOption: gopt})
+	}
+	return out, nil
 }
 
 func classify(res *dbprobe.ProbeResult, pe *pgconn.PgError) {

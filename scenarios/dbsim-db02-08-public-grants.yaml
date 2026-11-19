@@ -1,0 +1,36 @@
+id: dbsim-db02-08-public-grants
+product_line: dbsim
+name: Database Security Simulation DB-02-08 - Public Role Permission Abuse
+description: >
+  Lists the table privileges granted to PUBLIC, which every account inherits,
+  and compares them with the stated grant policy. Any grant to PUBLIC that the
+  policy does not allow is a violation. Graded only when a policy is configured;
+  without one the step is ERROR. ATT&CK T1087 Account Discovery.
+author: Audspect Research
+executable: true
+tags:
+  - dbsim
+  - database
+  - privileges
+  - grants
+  - public
+  - read-only
+  - mitre-attack
+mitre_phases:
+  - discovery
+
+steps:
+  - name: "DB-02-08 Public role grants (T1087)"
+    technique_id: T1087
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: read_grants
+    db_params:
+      role: PUBLIC
+    risk: low
+    blast_radius: "read-only privilege catalog query for the PUBLIC pseudo-role; no state changed"
+    telemetry:
+      - "PostgreSQL pg_log: the BAS-marked privilege catalog read for the PUBLIC pseudo-role"
+    detection:
+      - "SIEM: privilege catalog read for PUBLIC grants, a discovery signal"
+    reversible: true

@@ -1,0 +1,31 @@
+id: dbsim-db02-01-role-enumeration
+product_line: dbsim
+name: Database Security Simulation DB-02-01 - Role Enumeration
+description: >
+  Lists the database roles with their login and superuser flags, read-only.
+  Discovery only: this shows which accounts exist and which hold superuser,
+  it does not compare them with a policy. ATT&CK T1087 Account Discovery.
+author: Audspect Research
+executable: true
+tags:
+  - dbsim
+  - database
+  - privileges
+  - read-only
+  - mitre-attack
+mitre_phases:
+  - discovery
+
+steps:
+  - name: "DB-02-01 Role enumeration (T1087)"
+    technique_id: T1087
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: read_roles
+    risk: low
+    blast_radius: "read-only role catalog query; no state changed"
+    telemetry:
+      - "PostgreSQL pg_log: the BAS-marked catalog read of pg_roles (DB-02 role enumeration)"
+    detection:
+      - "SIEM: role catalog enumeration by the lab probe account, a discovery signal"
+    reversible: true

@@ -588,6 +588,11 @@ func (s *Service) gradeScenario(ctx context.Context, conn detectverify.Connector
 		if job.Mode == dbsim.ModeLab && p.Spec.ProbeID == dbsim.ProbeReadClassifiedFixture {
 			in.ClassificationRuleName = dbsim.LabClassificationRuleName
 		}
+		if d := s.grantDiffFor(job, rec, *matched[i], p.Spec); d != nil {
+			in.Diff = d
+			n := d.GrantsChecked
+			in.GrantsChecked = &n
+		}
 		ev, err := s.evaluateStep(ctx, stepConn, in)
 		if err != nil {
 			return RunRecord{}, nil, fmt.Sprintf("step %d could not be evaluated: %s", p.Index+1, dbsim.Redact(err.Error()))

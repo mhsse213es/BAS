@@ -20,6 +20,11 @@ var catalog = map[string]ProbeDef{
 		ParamSchema: map[string]ParamKind{}},
 	"read_grants": {ID: "read_grants", Class: ClassReadOnly, Engines: bothEngines,
 		ParamSchema: map[string]ParamKind{"role": ParamString}},
+	// DB-02-05 and DB-02-06: fixed read-only catalog reads, PostgreSQL only.
+	"read_global_privileges": {ID: "read_global_privileges", Class: ClassReadOnly, Engines: []string{"postgresql"},
+		ParamSchema: map[string]ParamKind{}},
+	"read_memberships": {ID: "read_memberships", Class: ClassReadOnly, Engines: []string{"postgresql"},
+		ParamSchema: map[string]ParamKind{}},
 	"auth_check": {ID: "auth_check", Class: ClassReadOnly, Engines: bothEngines,
 		ParamSchema: map[string]ParamKind{}},
 	// read_audit_config reports the audit-relevant settings through fixed

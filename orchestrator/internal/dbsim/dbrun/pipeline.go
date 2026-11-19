@@ -235,7 +235,7 @@ func Evaluate(ctx context.Context, conn detectverify.Connector, in StepInput) (E
 	if in.Window <= 0 {
 		return Evaluation{}, errors.New("dbrun: a positive detection window is required")
 	}
-	if in.Spec.ProbeID == dbsim.ProbeReadGrants {
+	if dbsim.IsPolicyDiffProbe(in.Spec.ProbeID) {
 		// R-AK: forced, not left to the caller.
 		in.Scenario.RequirePolicyDiff = true
 	}

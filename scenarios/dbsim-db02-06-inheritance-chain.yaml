@@ -1,0 +1,34 @@
+id: dbsim-db02-06-inheritance-chain
+product_line: dbsim
+name: Database Security Simulation DB-02-06 - Role Inheritance Abuse
+description: >
+  Lists the role memberships in the lab and compares them with the stated inheritance
+  policy. A membership the policy does not declare for its account is reported as
+  membership_excessive. The lab grants bas_dbsim_parent to dbsim_lab (seeded for DB-02-06,
+  lab/dbsim/seed-inherit-chain.sql); that privilege reaches dbsim_lab by inheritance.
+  Graded only when a policy is configured; without one the step is ERROR. PostgreSQL only.
+  ATT&CK T1087 Account Discovery.
+author: Audspect Research
+executable: true
+tags:
+  - dbsim
+  - database
+  - privileges
+  - read-only
+  - mitre-attack
+mitre_phases:
+  - discovery
+
+steps:
+  - name: "DB-02-06 Role Inheritance Abuse (T1087)"
+    technique_id: T1087
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: read_memberships
+    risk: low
+    blast_radius: "read-only role membership query; no state changed"
+    telemetry:
+      - "PostgreSQL pg_log: the BAS-marked catalog read by the probe identity"
+    detection:
+      - "SIEM: catalog read of role attributes or memberships, a discovery signal"
+    reversible: true
