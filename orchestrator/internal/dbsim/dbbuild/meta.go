@@ -25,6 +25,10 @@ var probeText = map[string]struct{ objective, action string }{
 	"check_export_privileges": {"The account does not hold backup or export privileges", "named probe check_export_privileges (read-only catalog check)"},
 }
 
+// NoScenarioVersion is recorded as the scenario version. Scenarios carry no
+// version field, so no real version can be stated; MetaFor must not invent one.
+const NoScenarioVersion = "unversioned"
+
 // MetaFor builds the report meta for one compiled probe step of a shipped
 // scenario, with the expectations from dbsim.ExpectationFor. It fails closed:
 // a nil scenario, a scenario outside the dbsim product line, an unknown
@@ -45,7 +49,7 @@ func MetaFor(sc *scenario.Scenario, spec dbsim.DBProbeSpec) (dbsim.ScenarioMeta,
 		return dbsim.ScenarioMeta{}, fmt.Errorf("dbbuild: no description for probe %q", spec.ProbeID)
 	}
 	return dbsim.ScenarioMeta{
-		ID: sc.ID, Version: "1",
+		ID: sc.ID, Version: NoScenarioVersion,
 		ControlObjective:      txt.objective,
 		Preconditions:         "Confirmed lab or approved target registered server-side; agent-local dbsim allowance in place",
 		SyntheticDataManifest: "Synthetic data only; no real data is read, written or retained",

@@ -26,6 +26,19 @@ func TestMetaForFailsClosedOnUnknown(t *testing.T) {
 	}
 }
 
+// Review finding 4: MetaFor must not invent a scenario version. Scenarios carry
+// no version field, so the meta records that instead of a fabricated "1".
+func TestMetaForDoesNotInventAVersion(t *testing.T) {
+	sc := &scenario.Scenario{ID: "dbsim-db02-excessive-grants", ProductLine: "dbsim"}
+	m, err := MetaFor(sc, dbsim.DBProbeSpec{ProbeID: "read_grants", Engine: "mysql", TargetID: "lab-db", Mode: dbsim.ModeLab})
+	if err != nil {
+		t.Fatalf("MetaFor: %v", err)
+	}
+	if m.Version != NoScenarioVersion {
+		t.Errorf("Version = %q, want %q", m.Version, NoScenarioVersion)
+	}
+}
+
 func TestMetaForFillsIdentityFromSpec(t *testing.T) {
 	sc := &scenario.Scenario{ID: "dbsim-db02-excessive-grants", ProductLine: "dbsim", Description: "x"}
 	spec := dbsim.DBProbeSpec{Engine: "mysql", ProbeID: "read_grants", TargetID: "lab-db", Mode: dbsim.ExecMode("read_only")}
@@ -33,7 +46,7 @@ func TestMetaForFillsIdentityFromSpec(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m.ID != sc.ID || m.Version != "1" || m.Engine != "mysql" || m.TargetID != "lab-db" || m.Mode != spec.Mode {
+	if m.ID != sc.ID || m.Version != NoScenarioVersion || m.Engine != "mysql" || m.TargetID != "lab-db" || m.Mode != spec.Mode {
 		t.Errorf("identity: %+v", m)
 	}
 	if m.ExpectedPrevention != "allow" || !m.ExpectDetection || !m.ExpectResponse || !m.RequireObservation || !m.RequirePolicyDiff {
