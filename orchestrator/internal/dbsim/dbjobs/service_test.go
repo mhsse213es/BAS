@@ -217,7 +217,7 @@ func newRig() *rig {
 	r.svc = &Service{
 		Targets: r.tg, Scenarios: fakeScenarios{scID: sc()}, Jobs: r.store, Dispatcher: r.disp, Canceller: r.canc,
 		Activity: fakeActivity{}, Gate: dbsim.ClientGateFunc(func() bool { return *r.gate }),
-		Now: func() time.Time { return t0 },
+		Now: func() time.Time { return t0 }, Runs: &fakeRuns{},
 	}
 	return r
 }
@@ -634,5 +634,62 @@ func TestPlannedStepsCarryTaskID(t *testing.T) {
 	}
 	if low := strings.ToLower(string(raw)); strings.Contains(low, "password") || strings.Contains(low, "secret") {
 		t.Errorf("plan JSON leaks: %s", raw)
+	}
+}
+
+// ---- run row recording (gap 1) ------------------------------------------------
+
+type fakeRuns struct {
+	rows []RunRow
+	err  error
+}
+
+func (f *fakeRuns) RecordRun(_ context.Context, row RunRow) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.rows = append(f.rows, row)
+	return nil
+}
+
+func TestStartRecordsRunRowForTheJob(t *testing.T) {
+	r := newRig()
+	runs := &fakeRuns{}
+	r.svc.Runs = runs
+	j, err := r.svc.Start(context.Background(), analyst, labReq())
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	if len(runs.rows) != 1 {
+		t.Fatalf("run rows recorded = %d, want 1", len(runs.rows))
+	}
+	row := runs.rows[0]
+	if row.ID != j.ID || row.AgentID != j.AgentID || row.InitiatedBy != analyst.ID {
+		t.Errorf("run row = %+v, want id=%s agent=%s initiated_by=%s", row, j.ID, j.AgentID, analyst.ID)
+	}
+	if row.StartedAt.IsZero() {
+		t.Error("run row has no start time")
+	}
+}
+
+func TestStartRefusesWhenRunRowCannotBeRecorded(t *testing.T) {
+	r := newRig()
+	r.svc.Runs = &fakeRuns{err: errors.New("db down")}
+	if _, err := r.svc.Start(context.Background(), analyst, labReq()); err == nil {
+		t.Fatal("start succeeded without a run row")
+	}
+	if len(r.disp.calls) != 0 {
+		t.Fatal("a command was dispatched for a run that has no row")
+	}
+}
+
+func TestStartRefusesWithoutRunRecorderFailClosed(t *testing.T) {
+	r := newRig()
+	r.svc.Runs = nil // fail closed: no recorder installed
+	if _, err := r.svc.Start(context.Background(), analyst, labReq()); !errors.Is(err, ErrNoRunRecorder) {
+		t.Fatalf("err = %v, want ErrNoRunRecorder", err)
+	}
+	if len(r.disp.calls) != 0 {
+		t.Fatal("a command was dispatched with no run recorder installed")
 	}
 }

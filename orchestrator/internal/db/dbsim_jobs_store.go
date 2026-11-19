@@ -155,6 +155,16 @@ func (s DBSimJobStore) Transition(ctx context.Context, id string, from []dbsim.J
 		if tag.RowsAffected() == 0 {
 			return errDBSimJobNoChange // rolls back, so no audit row for a no-op
 		}
+		// A terminal job ends its scenario_runs row too: until it does, the row holds
+		// the agent's per-agent running slot and would block the agent's normal runs.
+		if to.Terminal() {
+			if _, err := tx.Exec(ctx, `
+				UPDATE scenario_runs SET status = $2, completed_at = NOW()
+				WHERE id = $1 AND execution_kind = 'dbsim' AND status = 'running'`,
+				id, string(to)); err != nil {
+				return err
+			}
+		}
 		return nil
 	})
 	if errors.Is(err, errDBSimJobNoChange) {

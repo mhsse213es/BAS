@@ -41,6 +41,9 @@ var (
 	ErrTargetNotReady       = errors.New("dbsim: target is not ready to run")
 	ErrInvalidRequest       = errors.New("dbsim: invalid run request")
 	ErrConfirmationRequired = errors.New("dbsim: lab run requires the target name typed as confirmation")
+	// ErrNoRunRecorder refuses every start when no scenario_runs recorder is
+	// installed: a run the agent reports on must have a row to attach to.
+	ErrNoRunRecorder = errors.New("dbsim: no run recorder installed; the run row cannot be written")
 	ErrNotActive            = errors.New("dbsim: job is not active")
 )
 
@@ -103,8 +106,23 @@ type StartRequest struct {
 	LabConfirmation string
 }
 
+// RunRow is the scenario_runs row a dbsim run needs before the agent can post
+// host events or detections against it (the handlers look the run up by id).
+type RunRow struct {
+	ID, ScenarioID, AgentID, Name, InitiatedBy string
+	StartedAt                                   time.Time
+}
+
+// RunRecorder writes the scenario_runs row (satisfied by db.DBSimRunRecorder).
+type RunRecorder interface {
+	RecordRun(ctx context.Context, row RunRow) error
+}
+
 // Service starts and cancels jobs.
 type Service struct {
+	// Runs records the scenario_runs row for each started run. Nil refuses every
+	// start (fail closed).
+	Runs RunRecorder
 	Targets    TargetReader
 	Scenarios  ScenarioSource
 	Jobs       JobStore
@@ -440,6 +458,11 @@ func (s *Service) StartIdentityCheck(ctx context.Context, a dbadmin.Actor, targe
 // exists (the row is what refuses a concurrent start) so the mutex is never held
 // across Dispatch.
 func (s *Service) createAndDispatch(ctx context.Context, a dbadmin.Actor, job dbsim.RunJob, created dbadmin.AuditEntry, cmd scenario.ScenarioCommand, unlock func()) (dbsim.RunJob, error) {
+	if s.Runs == nil {
+		// Checked before the job is stored: a refused start leaves no pending row.
+		unlock()
+		return dbsim.RunJob{}, ErrNoRunRecorder
+	}
 	err := s.Jobs.Create(ctx, job, created)
 	unlock()
 	if err != nil {
@@ -450,6 +473,15 @@ func (s *Service) createAndDispatch(ctx context.Context, a dbadmin.Actor, job db
 		return dbsim.RunJob{}, fmt.Errorf("dbsim: store job: %w", err)
 	}
 	resource := "dbsim-run:" + job.ID
+	if err := s.Runs.RecordRun(ctx, RunRow{ID: job.ID, ScenarioID: cmd.ScenarioID, AgentID: job.AgentID, Name: cmd.Name, InitiatedBy: a.ID, StartedAt: job.CreatedAt}); err != nil {
+		reason := "the run row could not be recorded; nothing was sent to the agent"
+		fa := entry(a, "dbsim.run_failed", resource, map[string]any{"runId": job.ID, "reason": reason}, "error")
+		if _, terr := s.Jobs.Transition(ctx, job.ID, []dbsim.JobStatus{dbsim.JobPending}, dbsim.JobFailed, reason, fa); terr != nil {
+			return job, errors.Join(fmt.Errorf("dbsim: record run: %w", err), fmt.Errorf("dbsim: mark job failed: %w", terr))
+		}
+		job.Status, job.Reason = dbsim.JobFailed, reason
+		return job, fmt.Errorf("dbsim: record run: %w", err)
+	}
 	if s.Dispatcher == nil || !s.Dispatcher.Dispatch(ctx, job.AgentID, cmd) {
 		reason := "agent is offline: the command was not delivered"
 		fa := entry(a, "dbsim.run_failed", resource, map[string]any{"runId": job.ID, "reason": reason}, "error")
