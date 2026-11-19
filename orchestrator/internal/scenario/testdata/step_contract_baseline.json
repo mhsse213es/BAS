@@ -546,8 +546,8 @@
   },
   "dbsim-db03-unauthorized-access.yaml": {
     "cleanup": 0,
-    "detection": 1,
-    "telemetry": 1
+    "detection": 0,
+    "telemetry": 0
   },
   "dbsim-db04-audit-coverage.yaml": {
     "cleanup": 0,

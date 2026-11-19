@@ -20488,6 +20488,12 @@
    }
   ]
  },
+ "T1213.006": {
+   "id": "T1213.006",
+   "name": "Data from Information Repositories: Databases",
+   "description": "Adversaries may mine databases, such as on-premises or cloud-hosted relational and document stores, for useful data. Stolen content can include credentials, personal data and financial records.",
+   "url": "https://attack.mitre.org/techniques/T1213/006/"
+ },
  "T1213.003": {
   "id": "T1213.003",
   "name": "Code Repositories",
