@@ -62,6 +62,14 @@ var expectations = map[string]map[string]Expectation{
 		"read_grants": {ExpectedPrevention: "allow", ExpectDetection: true,
 			RequireObservation: true, RequirePolicyDiff: true},
 	},
+	"dbsim-db02-09-cross-schema-access": {
+		"read_grants": {ExpectedPrevention: "allow", ExpectDetection: true,
+			RequireObservation: true, RequirePolicyDiff: true},
+	},
+	"dbsim-db02-10-sensitive-table-access": {
+		"read_grants": {ExpectedPrevention: "allow", ExpectDetection: true,
+			RequireObservation: true, RequirePolicyDiff: true},
+	},
 	"dbsim-db03-unauthorized-access": {
 		"read_restricted_table": expDeny,
 	},
