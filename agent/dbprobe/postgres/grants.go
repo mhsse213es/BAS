@@ -19,7 +19,7 @@ const (
 	sqlAllGrants = "SELECT grantee::text, table_schema::text || '.' || table_name::text, privilege_type::text " +
 		"FROM information_schema.role_table_grants " +
 		"WHERE table_schema NOT IN ('pg_catalog', 'information_schema') ORDER BY 1, 2, 3"
-	sqlRoleGrants = "SELECT grantee::text, table_schema::text || '.' || table_name::text, privilege_type::text " +
+	sqlRoleGrants = "SELECT grantee::text, table_schema::text || '.' || table_name::text, privilege_type::text, (is_grantable = 'YES') AS grant_option " +
 		"FROM information_schema.role_table_grants " +
 		"WHERE table_schema NOT IN ('pg_catalog', 'information_schema') AND grantee::text = $1 ORDER BY 1, 2, 3"
 	sqlAuthCheck = "SELECT current_user::text, session_user::text"

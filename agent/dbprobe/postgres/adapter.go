@@ -587,16 +587,17 @@ func (a *Adapter) RunProbe(ctx context.Context, def dbprobe.ProbeDef, spec dbpro
 func strictGrants(rows [][]any) ([]dbprobe.DBProbeGrant, error) {
 	out := make([]dbprobe.DBProbeGrant, 0, len(rows))
 	for i, r := range rows {
-		if len(r) != 3 {
-			return nil, fmt.Errorf("row %d has %d columns, want 3", i, len(r))
+		if len(r) != 4 {
+			return nil, fmt.Errorf("row %d has %d columns, want 4", i, len(r))
 		}
 		role, ok1 := r[0].(string)
 		obj, ok2 := r[1].(string)
 		priv, ok3 := r[2].(string)
-		if !ok1 || !ok2 || !ok3 {
-			return nil, fmt.Errorf("row %d is not three text values", i)
+		gopt, ok4 := r[3].(bool)
+		if !ok1 || !ok2 || !ok3 || !ok4 {
+			return nil, fmt.Errorf("row %d is not three text values and a boolean", i)
 		}
-		out = append(out, dbprobe.DBProbeGrant{Role: role, Object: obj, Privilege: priv})
+		out = append(out, dbprobe.DBProbeGrant{Role: role, Object: obj, Privilege: priv, GrantOption: gopt})
 	}
 	return out, nil
 }

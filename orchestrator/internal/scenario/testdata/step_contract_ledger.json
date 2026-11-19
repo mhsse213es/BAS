@@ -5319,6 +5319,15 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "dbsim-db02-07-grant-option.yaml",
+    "index": 0,
+    "technique_id": "T1087",
+    "action_key": "",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "dbsim-db02-08-public-grants.yaml",
     "index": 0,
     "technique_id": "T1087",

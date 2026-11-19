@@ -12,9 +12,10 @@ import (
 // grant record (agent/dbprobe.Grant) by JSON shape; the orchestrator never
 // imports agent code.
 type Grant struct {
-	Role      string `json:"role"`
-	Object    string `json:"object"`
-	Privilege string `json:"privilege"`
+	Role        string `json:"role"`
+	Object      string `json:"object"`
+	Privilege   string `json:"privilege"`
+	GrantOption bool   `json:"grantOption,omitempty"`
 }
 
 // RolePolicy states what one role may and may not hold. Allow and Deny map an
@@ -25,6 +26,9 @@ type RolePolicy struct {
 	Inherits []string            `json:"inherits,omitempty"`
 	Allow    map[string][]string `json:"allow,omitempty"`
 	Deny     map[string][]string `json:"deny,omitempty"`
+	// GrantOption lists the object -> privileges this role may hold WITH GRANT OPTION.
+	// A grant option not covered here (own or inherited) is a grant_option_excessive deviation.
+	GrantOption map[string][]string `json:"grantOption,omitempty"`
 }
 
 // Policy is the intended grant model for a target. Source names where the
@@ -44,6 +48,9 @@ const (
 	DeviationDenied DeviationKind = "denied_grant"
 	// DeviationUnknownRole: a role holding grants that the policy does not mention.
 	DeviationUnknownRole DeviationKind = "unknown_role"
+	// DeviationGrantOption: an allowed grant held WITH GRANT OPTION that the policy does
+	// not permit to be delegated (own or inherited GrantOption rules).
+	DeviationGrantOption DeviationKind = "grant_option_excessive"
 )
 
 // Deviation is one observed grant that disagrees with the policy. It is a
@@ -91,6 +98,8 @@ func Diff(p Policy, actual []Grant) []Deviation {
 		}
 		if !allowed(p, chain, g) {
 			out = append(out, dev(p, DeviationExcessive, g, ""))
+		} else if g.GrantOption && !grantOptionAllowed(p, chain, g) {
+			out = append(out, dev(p, DeviationGrantOption, g, ""))
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool {
@@ -158,6 +167,16 @@ func allowed(p Policy, chain []string, g Grant) bool {
 	return false
 }
 
+// grantOptionAllowed reports whether any role in the chain may delegate the grant.
+func grantOptionAllowed(p Policy, chain []string, g Grant) bool {
+	for _, r := range chain {
+		if matchesAny(p.Roles[r].GrantOption, g, false) {
+			return true
+		}
+	}
+	return false
+}
+
 // matchesAny reports whether the object->privileges map covers the grant.
 // For a deny (broad=true) a grant of ALL conflicts with any denied privilege on
 // the object; for an allow it must be covered by an explicit ALL.
@@ -192,7 +211,7 @@ func objectMatches(pattern, object string) bool {
 func GrantsFromProbe(res DBProbeResult) []Grant {
 	out := make([]Grant, 0, len(res.Grants))
 	for _, g := range res.Grants {
-		out = append(out, Grant{Role: g.Role, Object: g.Object, Privilege: g.Privilege})
+		out = append(out, Grant{Role: g.Role, Object: g.Object, Privilege: g.Privilege, GrantOption: g.GrantOption})
 	}
 	return out
 }

@@ -1,0 +1,39 @@
+id: dbsim-db02-07-grant-option
+product_line: dbsim
+name: Database Security Simulation DB-02-07 - Unauthorized Grant Options
+description: >
+  Lists the table privileges held by the lab account dbsim_lab with their
+  WITH GRANT OPTION flag, and compares the delegated privileges with the stated
+  policy. A grant option the policy does not permit lets the account pass the
+  privilege on to others, and is reported as grant_option_excessive. The lab
+  currently holds no grant option, so a clean run is an expected PASS and
+  confirms the check; it detects one only when a delegation is added. PostgreSQL
+  only. Graded only when a policy is configured; without one the step is ERROR.
+  ATT&CK T1087 Account Discovery.
+author: Audspect Research
+executable: true
+tags:
+  - dbsim
+  - database
+  - privileges
+  - grant-option
+  - read-only
+  - mitre-attack
+mitre_phases:
+  - discovery
+
+steps:
+  - name: "DB-02-07 Grant option delegation (T1087)"
+    technique_id: T1087
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: read_grants
+    db_params:
+      role: dbsim_lab
+    risk: low
+    blast_radius: "read-only privilege catalog query for one role, including grant-option flags; no state changed"
+    telemetry:
+      - "PostgreSQL pg_log: the BAS-marked privilege catalog read for role dbsim_lab"
+    detection:
+      - "SIEM: privilege catalog read including grant-option columns, a discovery signal"
+    reversible: true
