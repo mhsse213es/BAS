@@ -603,3 +603,20 @@ func TestAuditCoverageUnits(t *testing.T) {
 		t.Error(got)
 	}
 }
+
+// DB-04-03: connection auditing must be visible in the config baseline, so a
+// connection-event check can tell "not logged" apart from "not configured".
+func TestReadAuditConfigReportsConnectionLogging(t *testing.T) {
+	f := auditConfigFake([][]any{{"log_connections", "on"}, {"log_disconnections", "on"}}, []any{false, false})
+	a := &Adapter{s: f, mode: dbprobe.ModeClient}
+	res, err := a.RunProbe(context.Background(), def("read_audit_config"), spec("read_audit_config", dbprobe.ModeClient, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(res.Notes, "\n")
+	for _, want := range []string{"log_connections=on", "log_disconnections=on"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("notes missing %q:\n%s", want, joined)
+		}
+	}
+}

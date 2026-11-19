@@ -235,3 +235,16 @@ restricting MySQL audit tests to SKIPPED until an audit plugin is provisioned.
 largely present (read_audit_config and the baseline scenario). The new work is the
 remaining catalogue tests on PostgreSQL, the grading expectations for each, and the MySQL
 decision above.
+
+## 13. Lab baseline change (recorded 2026-11-19, run by the product owner on staging)
+
+Container `dbsim-lab-postgres-1`, database `dbsim`:
+
+| Setting | Before | After |
+|---|---|---|
+| log_connections | off | on |
+| log_disconnections | off | on |
+
+Changed with `ALTER SYSTEM`, then the container was restarted. Revert: `ALTER SYSTEM RESET
+log_connections; ALTER SYSTEM RESET log_disconnections;` and restart. The `read_audit_config`
+probe now reports both settings, so the baseline shows them.
