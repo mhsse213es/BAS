@@ -336,3 +336,11 @@ Earlier live run: FAIL, because the step checked the file after 10 s. Defender d
 Change in this commit: the step now polls for up to 60 s, and reads Defender's detection record for the file. The reason text says when the detection record could not be matched. The verdict logic is unchanged.
 
 Suite: `go test ./internal/scenario -count=1 -timeout 420s` in a clean worktree on `origin/main` plus these changes: ok, 324.6s.
+
+## IR correction: signed YAML now matches the fixed ir-01 script
+
+Commit `5842cce5` changed `ir-01.ps1` but left the signed `scenarios/cscrf-mii-incident-response.yaml` on the old text. The YAML generator was given a wrong path, and the failure was hidden by a pipe, so the old YAML was signed and tested.
+
+This commit regenerates the YAML from the corrected script, re-signs it, and regenerates the ledger. The YAML contains the 60 s polling text and not the old 10 s check.
+
+Suite: `go test ./internal/scenario -count=1 -timeout 420s` in a clean worktree on `origin/main` plus these changes: ok, 293.7s.
