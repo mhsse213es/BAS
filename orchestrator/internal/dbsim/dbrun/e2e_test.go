@@ -436,8 +436,9 @@ func runE2E(t *testing.T, cfg e2eConfig) {
 				t.Fatalf("%s did not load", id)
 			}
 			cred, principal := cfg.credLab, "dbsim_lab"
-			if id == "dbsim-db03-unauthorized-access" {
-				cred, principal = cfg.credRO, "dbsim_test" // DB-03 expects the read to be DENIED
+			if id == "dbsim-db03-unauthorized-access" || id == "dbsim-db04-07-sensitive-table-access" {
+				// DB-03 and DB-04-07 read the restricted table as the restricted account: the denial is expected
+				cred, principal = cfg.credRO, "dbsim_test"
 			}
 			if id == "dbsim-db11-backup-export-permissions" {
 				// DB-11 grades the CONNECTED account: the restricted lab account is the

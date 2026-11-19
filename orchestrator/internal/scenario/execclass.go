@@ -495,6 +495,9 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		"c2_ingress_tool_transfer": catalogClass(ClassPotentiallyDestructive, "c2_ingress_tool_transfer", "Downloads one response body from the lab simulator into a per-run temp file, removed by undo"),
 	},
 	"T1110": {
+		"dbprobe_read_only":         dbprobeClass(ClassNonDestructive, "", "read_only database probe (named, read-only transaction, row/time bounded) -- T1110"),
+		"dbprobe_bounded_synthetic": dbprobeClass(ClassPotentiallyDestructive, "dbprobe_bounded_synthetic", "bounded_synthetic database probe (one throwaway login account created, used and dropped in the lab) -- T1110"),
+		"dbprobe_mutation":          dbprobeClass(ClassDestructive, "dbprobe_mutation", "mutation database probe (changes real database state) -- T1110"),
 		"enumerate": {
 			Class:             ClassNonDestructive,
 			DestructiveAction: "",
