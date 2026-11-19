@@ -1,0 +1,19 @@
+{
+  "source": "lab-fixture policy-lab.json (DRAFT, 2026-11-19): DB-02-05 and DB-02-06 role rules for the dbsim lab. Not approved.",
+  "roles": {
+    "postgres": {
+      "global": ["SUPERUSER", "CREATEDB", "CREATEROLE", "BYPASSRLS", "CONNECT", "CREATE", "TEMPORARY"]
+    },
+    "PUBLIC": {
+      "global": ["CONNECT", "TEMPORARY"]
+    },
+    "dbsim_lab": {
+      "global": ["CONNECT"]
+    },
+    "bas_dbsim_app": {},
+    "bas_dbsim_parent": {},
+    "dbsim_test": {
+      "global": ["CONNECT"]
+    }
+  }
+}
