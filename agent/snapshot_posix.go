@@ -171,3 +171,18 @@ func diffRegistry(_, _ *SystemSnapshot) []string { return nil }
 func captureSnapshotLite(runID string) *SystemSnapshot {
 	return captureSnapshot(runID)
 }
+
+// captureSnapshotScoped records the temp scope for the platform; POSIX snapshots
+// have no temp component, so the scope is only carried for parity.
+func captureSnapshotScoped(runID, tmpScope string) *SystemSnapshot {
+	s := captureSnapshot(runID)
+	s.TmpScope = tmpScope
+	return s
+}
+
+// captureSnapshotLiteScoped is captureSnapshotScoped for the lite capture.
+func captureSnapshotLiteScoped(runID, tmpScope string) *SystemSnapshot {
+	s := captureSnapshotLite(runID)
+	s.TmpScope = tmpScope
+	return s
+}

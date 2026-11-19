@@ -827,14 +827,16 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 	// Policy variables exposed to every step command as environment variables.
 	policyEnv := buildPolicyEnv(cmd)
 
-	snap := captureSnapshot(cmd.RunID)
-	log.Printf("[*] snapshot taken: run=%s", cmd.RunID)
-
+	// The run gets its own temp directory, and the run-level snapshot covers only that
+	// directory. Taking it before the directory exists, or scanning the machine temp
+	// directory, would count other processes' files as this run's residue.
 	payloadDir, err := os.MkdirTemp("", "bas-"+cmd.RunID+"-*")
 	if err != nil {
 		log.Printf("[!] payload dir: %v", err)
 		payloadDir = os.TempDir()
 	}
+	snap := captureSnapshotScoped(cmd.RunID, tmpScopeFor(payloadDir))
+	log.Printf("[*] snapshot taken: run=%s", cmd.RunID)
 	defer func() {
 		if err := os.RemoveAll(payloadDir); err != nil {
 			log.Printf("[!] payload dir cleanup: %v", err)
