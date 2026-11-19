@@ -382,7 +382,7 @@ func str(v any) string {
 func (a *Adapter) Capabilities() dbprobe.Capabilities {
 	c := dbprobe.Capabilities{
 		ProbeIDs: []string{"auth_after_revoke", "auth_check", "bounded_synthetic_read", "check_export_privileges", "check_readonly_identity", "read_audit_config", "read_classified_fixture",
-			"read_grants", "read_restricted_table", "read_roles", "suspicious_read", "try_disable_audit", "try_write_fixture"},
+			"read_global_privileges", "read_grants", "read_memberships", "read_restricted_table", "read_roles", "suspicious_read", "try_disable_audit", "try_write_fixture"},
 		MarkerInAppName:   true,
 		MarkerInQueryText: true,
 		// The marker can only reach an audit record through the statement
@@ -578,6 +578,32 @@ func (a *Adapter) RunProbe(ctx context.Context, def dbprobe.ProbeDef, spec dbpro
 			return res, nil
 		}
 		res.Grants = grants
+	}
+	if spec.ProbeID == "read_global_privileges" {
+		if len(rows) >= queryMax {
+			res.ErrorClass = "row_limit_exceeded"
+			res.Notes = append(res.Notes, "read_global_privileges: list truncated; policy diff not run")
+			return res, nil
+		}
+		g, gerr := strictGlobalGrants(rows)
+		if gerr != nil {
+			res.Notes = append(res.Notes, "read_global_privileges: "+gerr.Error())
+			return res, nil
+		}
+		res.GlobalGrants = g
+	}
+	if spec.ProbeID == "read_memberships" {
+		if len(rows) >= queryMax {
+			res.ErrorClass = "row_limit_exceeded"
+			res.Notes = append(res.Notes, "read_memberships: list truncated; policy diff not run")
+			return res, nil
+		}
+		m, merr := strictMemberships(rows)
+		if merr != nil {
+			res.Notes = append(res.Notes, "read_memberships: "+merr.Error())
+			return res, nil
+		}
+		res.Memberships = m
 	}
 	return res, nil
 }

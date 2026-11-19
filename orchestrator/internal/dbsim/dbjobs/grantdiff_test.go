@@ -37,3 +37,24 @@ func TestGrantDiffFor(t *testing.T) {
 		t.Error("no configured policy must not be compared")
 	}
 }
+
+// The DB-02-05 and DB-02-06 probes are compared with policy through the same hook.
+func TestGrantDiffForGlobalAndMembershipProbes(t *testing.T) {
+	s := &Service{GrantPolicy: func(dbsim.RunJob, dbsim.TargetRecord) (dbsim.Policy, bool) {
+		return dbsim.Policy{Source: "ticket-2", Roles: map[string]dbsim.RolePolicy{
+			"app": {Global: []string{"CONNECT"}},
+		}}, true
+	}}
+	ex := dbrun.AgentExec{DBProbe: &dbsim.DBProbeResult{
+		GlobalGrants: []dbsim.DBProbeGlobalGrant{{Role: "app", Scope: "cluster", Privilege: "CREATEROLE"}},
+		Memberships:  []dbsim.DBProbeMembership{{Role: "bas_dbsim_parent", Member: "app", Inherit: true}},
+	}}
+	g := s.grantDiffFor(dbsim.RunJob{}, dbsim.TargetRecord{}, ex, dbsim.DBProbeSpec{ProbeID: dbsim.ProbeReadGlobalPrivileges})
+	if g == nil || g.GrantsChecked != 1 || len(g.Deviations) != 1 || g.Deviations[0].Kind != dbsim.DeviationGlobal {
+		t.Fatalf("global probe diff: %+v", g)
+	}
+	m := s.grantDiffFor(dbsim.RunJob{}, dbsim.TargetRecord{}, ex, dbsim.DBProbeSpec{ProbeID: dbsim.ProbeReadMemberships})
+	if m == nil || m.GrantsChecked != 1 || len(m.Deviations) != 1 || m.Deviations[0].Kind != dbsim.DeviationMembership {
+		t.Fatalf("membership probe diff: %+v", m)
+	}
+}

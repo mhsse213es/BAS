@@ -29,6 +29,9 @@ type RolePolicy struct {
 	// GrantOption lists the object -> privileges this role may hold WITH GRANT OPTION.
 	// A grant option not covered here (own or inherited) is a grant_option_excessive deviation.
 	GrantOption map[string][]string `json:"grantOption,omitempty"`
+	// Global lists the cluster- and database-scope privileges this role may hold
+	// (for example CREATEROLE, CREATE). Checked by DiffGlobal (DB-02-05).
+	Global []string `json:"global,omitempty"`
 }
 
 // Policy is the intended grant model for a target. Source names where the

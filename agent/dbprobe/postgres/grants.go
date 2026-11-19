@@ -106,6 +106,10 @@ func probeSQL(probeID string, params map[string]string, maxRows int) (string, []
 			return "", nil, err
 		}
 		return sqlRoleGrants, []any{params["role"]}, nil
+	case "read_global_privileges":
+		return sqlGlobalPrivileges, nil, nil
+	case "read_memberships":
+		return sqlMemberships, nil, nil
 	case "auth_check":
 		return sqlAuthCheck, nil, nil
 	case probeAuditConfig:

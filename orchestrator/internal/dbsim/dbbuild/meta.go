@@ -14,6 +14,8 @@ var probeText = map[string]struct{ objective, action string }{
 	"auth_check":              {"Authentication policy of the database account is enforced", "named probe auth_check (read-only authentication check)"},
 	"read_roles":              {"Database roles are enumerable and reviewed", "named probe read_roles (read-only role listing)"},
 	"read_grants":             {"Granted privileges conform to the stated access policy", "named probe read_grants (read-only grant listing compared with policy)"},
+	"read_global_privileges": {"Cluster and database privileges conform to the stated access policy", "named probe read_global_privileges (read-only role attribute and database privilege listing compared with policy)"},
+	"read_memberships": {"Role memberships conform to the stated inheritance policy", "named probe read_memberships (read-only role membership listing compared with policy)"},
 	"read_restricted_table":   {"An account without access cannot read a restricted table", "named probe read_restricted_table (read of a table the account must not read)"},
 	"read_audit_config":       {"Database auditing is configured and covers security-relevant events", "named probe read_audit_config (read-only audit configuration summary)"},
 	"suspicious_read":         {"A suspicious read of a synthetic fixture is detected", "named probe suspicious_read (read of a seeded synthetic fixture)"},
