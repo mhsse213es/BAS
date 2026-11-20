@@ -1,7 +1,6 @@
-// Package mysqlaudit reads the Percona audit_log JSON file on the LAB HOST.
-//
-// It is harness code. Only the harness imports it. The agent never reads the audit
-// file, and agent-reported notes never establish plugin state or coverage.
+// Package mysqlaudit is the harness's own reader of the MySQL audit plugin. Only the
+// harness imports it. The agent never reads the audit file, and agent-reported notes
+// never establish plugin state, coverage or an event.
 package mysqlaudit
 
 import (
@@ -13,7 +12,9 @@ import (
 	"time"
 )
 
-// Event is one audit record from the Percona audit_log file.
+const sourceName = "percona_audit_log"
+
+// Event is one Query record from the Percona audit_log file.
 type Event struct {
 	Time      time.Time
 	Principal string
@@ -21,22 +22,29 @@ type Event struct {
 	Source    string
 }
 
-const sourceName = "percona_audit_log"
+// Record is one audit_log record of any kind (Connect, Query, Quit, ...).
+type Record struct {
+	Name         string
+	Time         time.Time
+	ConnectionID string
+	User         string
+	SQLText      string
+}
 
-type record struct {
+type rawRecord struct {
 	AuditRecord struct {
-		Name      string `json:"name"`
-		Timestamp string `json:"timestamp"`
-		SQLText   string `json:"sqltext"`
-		User      string `json:"user"`
+		Name         string `json:"name"`
+		Timestamp    string `json:"timestamp"`
+		ConnectionID string `json:"connection_id"`
+		SQLText      string `json:"sqltext"`
+		User         string `json:"user"`
 	} `json:"audit_record"`
 }
 
-// ReadEvents parses one audit_log JSON record per line and returns only the
-// Query records. Any malformed line is an error that names its line number:
-// a partial read must never look like a complete one.
-func ReadEvents(r io.Reader) ([]Event, error) {
-	var out []Event
+// ParseRecords parses one JSON record per line. A malformed line is an error that
+// names its line number, so a partial read never looks complete.
+func ParseRecords(r io.Reader) ([]Record, error) {
+	var out []Record
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 	for n := 1; sc.Scan(); n++ {
@@ -44,26 +52,40 @@ func ReadEvents(r io.Reader) ([]Event, error) {
 		if line == "" {
 			continue
 		}
-		var rec record
-		if err := json.Unmarshal([]byte(line), &rec); err != nil {
+		var raw rawRecord
+		if err := json.Unmarshal([]byte(line), &raw); err != nil {
 			return nil, fmt.Errorf("audit file line %d: %w", n, err)
 		}
-		if rec.AuditRecord.Name != "Query" {
-			continue
-		}
-		ts, err := time.Parse(time.RFC3339, rec.AuditRecord.Timestamp)
+		ts, err := time.Parse(time.RFC3339, raw.AuditRecord.Timestamp)
 		if err != nil {
 			return nil, fmt.Errorf("audit file line %d: bad timestamp: %w", n, err)
 		}
-		out = append(out, Event{
-			Time:      ts,
-			Principal: principalOf(rec.AuditRecord.User),
-			Statement: rec.AuditRecord.SQLText,
-			Source:    sourceName,
+		out = append(out, Record{
+			Name:         raw.AuditRecord.Name,
+			Time:         ts,
+			ConnectionID: raw.AuditRecord.ConnectionID,
+			User:         principalOf(raw.AuditRecord.User),
+			SQLText:      raw.AuditRecord.SQLText,
 		})
 	}
 	if err := sc.Err(); err != nil {
 		return nil, fmt.Errorf("reading audit file: %w", err)
+	}
+	return out, nil
+}
+
+// ReadEvents returns only the Query records, as Events.
+func ReadEvents(r io.Reader) ([]Event, error) {
+	recs, err := ParseRecords(r)
+	if err != nil {
+		return nil, err
+	}
+	var out []Event
+	for _, rec := range recs {
+		if rec.Name != "Query" {
+			continue
+		}
+		out = append(out, Event{Time: rec.Time, Principal: rec.User, Statement: rec.SQLText, Source: sourceName})
 	}
 	return out, nil
 }

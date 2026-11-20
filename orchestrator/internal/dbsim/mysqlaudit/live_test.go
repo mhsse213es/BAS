@@ -25,3 +25,24 @@ func TestLiveHarnessEvidenceCovered(t *testing.T) {
 		t.Fatalf("want covered, got %q", ev.AuditCoverage)
 	}
 }
+
+// TestLiveAuthEvent03 runs test 03 on the lab host. It needs the same DBSIM_HARNESS_*
+// variables and DBSIM_HARNESS_RUN (a run ID: letters, digits, hyphens). It must PASS.
+func TestLiveAuthEvent03(t *testing.T) {
+	if os.Getenv("DBSIM_HARNESS_LIVE") != "1" {
+		t.Skip("live lab check: set DBSIM_HARNESS_LIVE=1 on the lab host")
+	}
+	cfg := LabConfig{
+		PasswordFile: os.Getenv("DBSIM_HARNESS_PW"),
+		Addr:         os.Getenv("DBSIM_HARNESS_ADDR"),
+		AuditFile:    os.Getenv("DBSIM_HARNESS_AUDIT"),
+	}
+	res, why, err := RunAuthEvent(context.Background(), cfg, os.Getenv("DBSIM_HARNESS_RUN"))
+	if err != nil {
+		t.Fatalf("RunAuthEvent: %v", err)
+	}
+	t.Logf("result=%s reason=%s", res, why)
+	if res != "PASS" {
+		t.Fatalf("test 03 must PASS on the lab, got %s (%s)", res, why)
+	}
+}
