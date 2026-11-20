@@ -1,0 +1,44 @@
+id: dbsim-db04-03-authentication-audit
+product_line: dbsim
+name: Database Security Simulation DB-04-03 - Authentication Event Audit Coverage
+description: >
+  Opens one fresh connection as the probe role, then checks that the database
+  recorded that successful login in its connection log. A connection cannot
+  carry the per-dispatch marker, so this check matches the login by the probe
+  role and a tight time window around the probe. The result is reported on that
+  basis, never as a marker match. Two or more logins by the role in the window
+  make the result inconclusive, not a pass.
+
+  Requires connection logging on the target (log_connections and
+  log_disconnections; the read_audit_config baseline reports both).
+
+  ATT&CK mapping: T1078 Valid Accounts (the probe role's successful login is the
+  activity whose audit record is looked for).
+
+  Target details come from the server-side registry by id.
+author: Audspect Research
+executable: true
+tags:
+  - dbsim
+  - database
+  - audit
+  - authentication
+  - read-only
+  - mitre-attack
+mitre_phases:
+  - defense-evasion
+
+steps:
+  - name: "DB-04-03 Authenticated connection for role-window audit readback (T1078)"
+    technique_id: T1078
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: auth_check
+    db_audit_basis: role_window
+    risk: low
+    blast_radius: "one read-only authenticated connection as the probe role; no state changed"
+    reversible: true
+    telemetry:
+      - "Database connection log records the successful login of the probe role within the probe window"
+    detection:
+      - "SIEM: successful login of the probe role (not marker-matched)"

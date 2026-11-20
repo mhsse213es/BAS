@@ -381,7 +381,7 @@ func str(v any) string {
 // (SKIPPED), never as a pass. It answers from the cache; it issues no SQL.
 func (a *Adapter) Capabilities() dbprobe.Capabilities {
 	c := dbprobe.Capabilities{
-		ProbeIDs: []string{"auth_after_revoke", "auth_check", "bounded_synthetic_read", "check_export_privileges", "check_readonly_identity", "read_audit_config", "read_classified_fixture", "read_customer_records", "read_financial_records", "read_foreign_role_names", "read_global_privileges", "read_grants", "read_memberships", "read_restricted_table", "read_roles", "suspicious_read", "try_disable_audit", "try_write_fixture"},
+		ProbeIDs: []string{"auth_after_revoke", "auth_check", "auth_failed_login", "bounded_synthetic_read", "check_export_privileges", "check_readonly_identity", "read_audit_config", "read_classified_fixture", "read_customer_records", "read_financial_records", "read_foreign_role_names", "read_global_privileges", "read_grants", "read_memberships", "read_restricted_table", "read_roles", "suspicious_read", "try_disable_audit", "try_write_fixture"},
 		MarkerInAppName:   true,
 		MarkerInQueryText: true,
 		// The marker can only reach an audit record through the statement
@@ -460,6 +460,9 @@ func (a *Adapter) RunProbe(ctx context.Context, def dbprobe.ProbeDef, spec dbpro
 	mode := a.effectiveMode(spec)
 	if spec.ProbeID == dbprobe.ProbeAuthAfterRevoke {
 		return a.runAuthAfterRevoke(ctx, real, spec, mode)
+	}
+	if spec.ProbeID == dbprobe.ProbeAuthFailedLogin {
+		return a.runAuthFailedLogin(ctx, real, spec, mode)
 	}
 	switch spec.ProbeID {
 	case dbprobe.ProbeTryDisableAudit:

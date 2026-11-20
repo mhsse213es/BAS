@@ -39,6 +39,10 @@ type DBProbeSpec struct {
 	Marker           string            `json:"marker"`
 	FixtureID        string            `json:"fixtureId,omitempty"`
 	Mode             DBExecMode        `json:"mode"`
+	// AuditBasis selects the audit evidence class: "" (marker readback, the
+	// default) or DBAuditBasisRoleWindow (connection events matched by role and
+	// time window, for DB-04-03).
+	AuditBasis string `json:"auditBasis,omitempty"`
 	Limits           DBProbeLimits     `json:"limits"`
 	Params           map[string]string `json:"params,omitempty"`
 }
@@ -56,6 +60,12 @@ type DBProbeResult struct {
 	// marker: one of the DBAudit* values. Empty means no audit attempt was
 	// recorded (older agents). "unsupported" and "error" are never a pass.
 	AuditStatus string `json:"auditStatus,omitempty"`
+	// AuditBasis echoes which evidence class produced AuditStatus, so the
+	// orchestrator never treats a role+window match as a marker match.
+	AuditBasis string `json:"auditBasis,omitempty"`
+	// AuditPrincipal is the account the connection evidence was matched under:
+	// the throwaway account for the failed-login basis (DB-04-04).
+	AuditPrincipal string `json:"auditPrincipal,omitempty"`
 	// AuditEvents are the marker-bearing audit records (minimised: at most 50,
 	// statements redacted and cut to 512 bytes).
 	AuditEvents []DBProbeAuditEvent `json:"auditEvents,omitempty"`
@@ -125,3 +135,11 @@ type DBProbeAuditEvent struct {
 	Statement string    `json:"statement"`
 	Source    string    `json:"source,omitempty"`
 }
+
+// DBAuditBasisRoleWindow marks audit evidence matched by role and time window
+// (connection events) rather than by the run marker.
+const DBAuditBasisRoleWindow = "role_window"
+
+// DBAuditBasisFailedLogin marks the refused-password record of the throwaway
+// account (DB-04-04), matched by that account name and the refusal event.
+const DBAuditBasisFailedLogin = "failed_login_window"

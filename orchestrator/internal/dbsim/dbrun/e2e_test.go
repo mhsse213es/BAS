@@ -395,6 +395,7 @@ var e2eScenarios = []string{
 	"dbsim-db04-audit-coverage", "dbsim-db05-suspicious-read", "dbsim-db09-bounded-bulk-read",
 	"dbsim-db06-account-revocation", "dbsim-db07-sensitive-classification",
 	"dbsim-db08-audit-tamper-resistance", "dbsim-db10-write-delete-prevention", "dbsim-db11-backup-export-permissions",
+	"dbsim-db04-03-authentication-audit", "dbsim-db04-04-failed-login-audit", "dbsim-db04-07-sensitive-table-access",
 }
 
 // isFixtureScenario: these seed a per-run fixture (R-AI), so they are mutations
@@ -404,6 +405,7 @@ func isFixtureScenario(id string) bool {
 	switch id {
 	case "dbsim-db05-suspicious-read", "dbsim-db09-bounded-bulk-read",
 		"dbsim-db06-account-revocation", "dbsim-db07-sensitive-classification",
+		"dbsim-db04-04-failed-login-audit",
 		"dbsim-db08-audit-tamper-resistance", "dbsim-db10-write-delete-prevention",
 		// DB-11 seeds no fixture but is lab-only (LabOnly): it needs the same
 		// approval and the agent-local allowance.
@@ -434,8 +436,9 @@ func runE2E(t *testing.T, cfg e2eConfig) {
 				t.Fatalf("%s did not load", id)
 			}
 			cred, principal := cfg.credLab, "dbsim_lab"
-			if id == "dbsim-db03-unauthorized-access" {
-				cred, principal = cfg.credRO, "dbsim_test" // DB-03 expects the read to be DENIED
+			if id == "dbsim-db03-unauthorized-access" || id == "dbsim-db04-07-sensitive-table-access" {
+				// DB-03 and DB-04-07 read the restricted table as the restricted account: the denial is expected
+				cred, principal = cfg.credRO, "dbsim_test"
 			}
 			if id == "dbsim-db11-backup-export-permissions" {
 				// DB-11 grades the CONNECTED account: the restricted lab account is the

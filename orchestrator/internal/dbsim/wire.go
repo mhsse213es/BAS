@@ -40,6 +40,8 @@ type DBProbeSpec struct {
 	Marker           string            `json:"marker"`
 	FixtureID        string            `json:"fixtureId,omitempty"`
 	Mode             ExecMode          `json:"mode"`
+	// AuditBasis selects the audit evidence class: "" (marker) or AuditBasisRoleWindow.
+	AuditBasis string `json:"auditBasis,omitempty"`
 	Limits           Limits            `json:"limits"`
 	Params           map[string]string `json:"params,omitempty"`
 }
@@ -55,6 +57,11 @@ type DBProbeResult struct {
 	// (agent/protocol/dbprobe.go). Empty AuditStatus means no attempt was
 	// recorded; "unsupported" and "error" must never be graded as a pass.
 	AuditStatus string              `json:"auditStatus,omitempty"`
+	// AuditBasis echoes the evidence class that produced AuditStatus.
+	AuditBasis string `json:"auditBasis,omitempty"`
+	// AuditPrincipal is the account the connection evidence was matched under
+	// (the throwaway account for the failed-login basis).
+	AuditPrincipal string `json:"auditPrincipal,omitempty"`
 	AuditEvents []DBProbeAuditEvent `json:"auditEvents,omitempty"`
 	// CleanupStatus and SafetyIncident mirror the agent's fixture teardown
 	// report (agent/protocol/dbprobe.go). Empty status means an older agent or
@@ -170,6 +177,7 @@ var probeRegistry = map[string]ProbeRegistryEntry{
 	"read_financial_records":  {ID: "read_financial_records", Class: ClassReadOnly, Engines: []string{"postgresql"}, ParamSchema: map[string]string{}, RequiredFixture: "authz-restricted", FixedTable: "transactions"},
 	// DB-06: creates a throwaway login account for the run, proves it can log in, revokes its login and proves a NEW connection is refused (bounded_synthetic, ruling R-AO: only touches its own throwaway account; lab only and mutation-approved through its required fixture, R-AI).
 	"auth_after_revoke": {ID: "auth_after_revoke", Class: ClassBoundedSynthetic, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}, RequiredFixture: "empty"},
+	"auth_failed_login": {ID: "auth_failed_login", Class: ClassBoundedSynthetic, Engines: []string{"postgresql"}, ParamSchema: map[string]string{}, RequiredFixture: "empty"},
 	// DB-08: a throwaway NO-privilege account attempts ONLY a session-scoped audit change (bounded_synthetic, user decision option A: never mutation). No parameter selects a statement; no global or persistent change exists.
 	"try_disable_audit": {ID: "try_disable_audit", Class: ClassBoundedSynthetic, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}, RequiredFixture: "empty"},
 	// DB-10: a throwaway SELECT-only account attempts one INSERT, UPDATE and DELETE on the accounts fixture table; the table is fingerprinted before and after.

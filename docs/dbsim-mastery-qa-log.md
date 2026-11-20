@@ -757,3 +757,35 @@ PostgreSQL (222.5 s) and MySQL (226.0 s): every scenario PASS (DB-02 `read_grant
 * **I-2 Elastic alert source is opt-in.** `4d0440b0` had changed the Elastic connector for every user (extra `_source` fields and up to 16 KB of alert source in `MatchedAlert.RawJSON`, which verification stores persist). Now `VerifyRequest.IncludeAlertSource` (zero value false) gates both; only the dbsim correlator sets it (`dbcorrelate/correlation.go`, tested on every lookup). With the flag off the request `_source` list and the RawJSON are the origin/main ones (pinned byte-for-byte by `TestElasticSourceExposureIsOptIn`; the dbsim A1 tests now send the flag). No other connector file changed (diff vs origin/main: `connector.go`, `elastic.go`, one test file). **The lab E2E must be re-run after this change: it touches the live-verified dbsim correlation path (the flag is set by the correlator, but the live path itself has not been re-executed).**
 * **I-1 stale overwrite.** `SaveIdentityCheck` only updates when the stored `identity_check_at` is NULL or not later than the new result; otherwise `ErrIdentityCheckSuperseded` (distinguished from `ErrTargetChanged` / `ErrTargetNotFound` by a follow-up read in the same transaction; the audit row rolls back). Unit-tested at service level; the Docker store test is written, not run here.
 * HTTP: `ErrTargetChanged` and `ErrIdentityCheckSuperseded` answer 409 (pure `dbadmin.StatusFor`, unit-tested here). `RunIdentityCheck` and the target views use the service clock (`Service.Now`) for expiry. Guide section 8 B5 wording corrected; this log's header refreshed.
+
+## DB-04 audit and monitoring validation: first staging lab run (2026-11-19)
+
+Scope: DB-04-03 (authentication event audit coverage), DB-04-04 (failed login audit
+coverage), DB-04-07 (sensitive table access auditing). PostgreSQL only; MySQL audit tests
+are SKIPPED until an audit plugin is provisioned (design doc section 12).
+
+Run: user-operated on staging host, `TestE2E_PostgreSQL_SignedScenarioToCorrelatedRecord`
+filtered to `dbsim-db04-(03|04|07)`, from commit 334ce33c (agent test binary built at
+6e4c4967; the later commits changed only orchestrator code and scenarios).
+
+| Scenario | Result | Notes |
+|---|---|---|
+| DB-04-03 auth_check | PASS | Login matched by probe role and window (role_window basis), not by marker |
+| DB-04-04 auth_failed_login | PASS | Refusal matched under the throwaway account name (failed_login_window basis) |
+| DB-04-07 read_restricted_table | PASS | Denied read recorded in the audit trail; read run as dbsim_test |
+
+Post-run check: no `dbsim_*_acct` roles remained (`\du dbsim_*_acct`), so the throwaway
+account was dropped.
+
+Defects found and fixed during the run (each with a test):
+- DB-04-04 build failed: T1110 had no dbprobe classes, so the probe resolved as destructive
+  (fixed: 334ce33c).
+- DB-04-07 read was allowed: the harness read the restricted table as the privileged
+  account instead of dbsim_test (fixed: 334ce33c).
+- DB-04-07 signature failed on Linux: the signed bytes were CRLF while git stores LF
+  (fixed by re-signing the LF file: 2386a1df).
+- Agent E2E runner did not compile under the dbsim_e2e tag: gateStep was missing its
+  scenario argument (fixed: 6e4c4967).
+
+Not yet done: a full scenario package run after the T1110 classification change; DB-04-03
+and DB-04-04 MySQL equivalents; repeat runs for stability.
