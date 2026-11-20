@@ -533,6 +533,7 @@ func runE2E(t *testing.T, cfg e2eConfig) {
 type stepReporter interface {
 	Helper()
 	Errorf(format string, args ...any)
+	Logf(format string, args ...any)
 }
 
 // checkStep asserts the expected end state for one step.
@@ -546,6 +547,10 @@ func checkStep(t stepReporter, cfg e2eConfig, id string, spec dbsim.DBProbeSpec,
 	t.Helper()
 	fail := func(format string, a ...any) {
 		t.Errorf("%s/%s %s: "+format+"\n  reason: %s\n  limitations: %s", append([]any{cfg.engine, id, spec.ProbeID}, append(a, ev.Report.Reason, ev.Record.Limitations)...)...)
+		if ex.DBProbe != nil {
+			t.Logf("agent probe notes: %s", strings.Join(ex.DBProbe.Notes, " | "))
+		}
+		t.Logf("agent stderr tail: %s", tail(ex.Stderr, 1500))
 	}
 	if err := ev.Record.Validate(); err != nil {
 		fail("Record.Validate: %v", err)
