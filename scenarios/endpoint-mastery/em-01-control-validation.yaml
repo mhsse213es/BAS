@@ -33,7 +33,8 @@ description: >
     BAS_EM01_SECLOG_MB          Security event log threshold, MB. Default 192 (Audspect recommended).
     BAS_EM01_AV_DEF_HOURS       AV definitions freshness, hours. Default 24 (Audspect recommended).
     BAS_EM01_ENCRYPTION_BASELINE  none (default) | required. 'required' makes BitLocker a baseline requirement;
-                                 a missing feature or unencrypted volume then FAILs. 'none' reports NOT_ASSESSED.
+                                 a missing feature, unencrypted volume or missing TPM (step 48) then FAILs.
+                                 'none' reports NOT_ASSESSED.
     BAS_EM01_APPROVED_EXCEPTIONS  e.g. DisableIOAVProtection:CHG-1234 (comma-separated). An approved disable is
                                  reported as SKIP with its reference, not scored; unapproved disables still FAIL.
     BAS_EM01_DEF_UPDATE_HOST      update source probed (TCP 443) when definitions are stale. Default
@@ -1366,10 +1367,18 @@ steps:
       - "Config assurance: TPM binds BitLocker keys to the hardware; without it the key is software-held"
     command: |
       $ErrorActionPreference = 'Stop'
-      if (-not (Get-Command Get-Tpm -ErrorAction SilentlyContinue)) { Write-Output "SKIP: Get-Tpm is not available on this endpoint."; return }
+      # TPM is a BitLocker prerequisite, so it follows the same baseline gate (BAS_EM01_ENCRYPTION_BASELINE).
+      $req = ([string]$env:BAS_EM01_ENCRYPTION_BASELINE).Trim().ToLowerInvariant()
+      if ($req -eq '') { $req = 'none' }
+      if ($req -notin @('none', 'required')) { Write-Output "ERROR: BAS_EM01_ENCRYPTION_BASELINE must be 'none' or 'required' (got '$req')."; return }
+      function Write-Gate([string]$msg) {
+        if ($req -eq 'required') { Write-Output "FAIL: Baseline requires a TPM and it is not in force: $msg (baseline=required)." }
+        else { Write-Output "SKIP: NOT_ASSESSED - baseline does not require a TPM ($msg; baseline=none). Policy-dependent; not scored." }
+      }
+      if (-not (Get-Command Get-Tpm -ErrorAction SilentlyContinue)) { Write-Gate "Get-Tpm is not available on this endpoint"; return }
       try { $t = Get-Tpm } catch { Write-Output "ERROR: Get-Tpm failed: $($_.Exception.Message)"; return }
       if ([bool]$t.TpmPresent -and [bool]$t.TpmReady) { Write-Output "PASS: TPM is present and ready (TpmPresent=True, TpmReady=True)." }
-      else { Write-Output "FAIL: TPM is not present or not ready (TpmPresent=$($t.TpmPresent), TpmReady=$($t.TpmReady)); BitLocker cannot bind keys to hardware." }
+      else { Write-Gate "TPM is not present or not ready (TpmPresent=$($t.TpmPresent), TpmReady=$($t.TpmReady)); BitLocker cannot bind keys to hardware" }
     cleanup: ""
 
   # ───────────────────────── Windows Security Center (C1–C3) ─────────────────────────

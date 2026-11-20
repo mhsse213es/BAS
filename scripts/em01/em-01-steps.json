@@ -1,8 +1,8 @@
 {
  "scenario": "em-01-control-validation",
  "source_file": "em-01-control-validation.yaml",
- "source_sha256": "b8549e8306cc69a97f6651ac56d5e6e4ad7face9534f33d14d4c77c76d85f4a5",
- "exported_at": "2026-11-20T05:04:53+00:00",
+ "source_sha256": "8f880097c548f26cd83a5ca00f829322cfa0207fafcc135f89f4aa156918f14c",
+ "exported_at": "2026-11-20T05:23:19+00:00",
  "steps": [
   {
    "index": 0,
@@ -345,7 +345,7 @@
    "name": "TPM present and ready",
    "technique_id": "T1486",
    "timeout_sec": 30,
-   "command": "$ErrorActionPreference = 'Stop'\nif (-not (Get-Command Get-Tpm -ErrorAction SilentlyContinue)) { Write-Output \"SKIP: Get-Tpm is not available on this endpoint.\"; return }\ntry { $t = Get-Tpm } catch { Write-Output \"ERROR: Get-Tpm failed: $($_.Exception.Message)\"; return }\nif ([bool]$t.TpmPresent -and [bool]$t.TpmReady) { Write-Output \"PASS: TPM is present and ready (TpmPresent=True, TpmReady=True).\" }\nelse { Write-Output \"FAIL: TPM is not present or not ready (TpmPresent=$($t.TpmPresent), TpmReady=$($t.TpmReady)); BitLocker cannot bind keys to hardware.\" }\n"
+   "command": "$ErrorActionPreference = 'Stop'\n# TPM is a BitLocker prerequisite, so it follows the same baseline gate (BAS_EM01_ENCRYPTION_BASELINE).\n$req = ([string]$env:BAS_EM01_ENCRYPTION_BASELINE).Trim().ToLowerInvariant()\nif ($req -eq '') { $req = 'none' }\nif ($req -notin @('none', 'required')) { Write-Output \"ERROR: BAS_EM01_ENCRYPTION_BASELINE must be 'none' or 'required' (got '$req').\"; return }\nfunction Write-Gate([string]$msg) {\n  if ($req -eq 'required') { Write-Output \"FAIL: Baseline requires a TPM and it is not in force: $msg (baseline=required).\" }\n  else { Write-Output \"SKIP: NOT_ASSESSED - baseline does not require a TPM ($msg; baseline=none). Policy-dependent; not scored.\" }\n}\nif (-not (Get-Command Get-Tpm -ErrorAction SilentlyContinue)) { Write-Gate \"Get-Tpm is not available on this endpoint\"; return }\ntry { $t = Get-Tpm } catch { Write-Output \"ERROR: Get-Tpm failed: $($_.Exception.Message)\"; return }\nif ([bool]$t.TpmPresent -and [bool]$t.TpmReady) { Write-Output \"PASS: TPM is present and ready (TpmPresent=True, TpmReady=True).\" }\nelse { Write-Gate \"TPM is not present or not ready (TpmPresent=$($t.TpmPresent), TpmReady=$($t.TpmReady)); BitLocker cannot bind keys to hardware\" }\n"
   },
   {
    "index": 49,
