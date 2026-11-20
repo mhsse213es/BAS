@@ -38,6 +38,15 @@ const (
 	RunIDPrefix  = "bas-dbsim-run:"
 )
 
+// seedCredentialFor returns the privileged seed credential a step carries. Only
+// fixture steps seed, so only they carry one.
+func seedCredentialFor(st scenario.Step, target dbsim.Target) string {
+	if st.DBFixture == "" {
+		return ""
+	}
+	return target.SeedCredentialRef
+}
+
 // CredentialRefPrefix is required on every target's credential reference.
 const CredentialRefPrefix = "dbcred:"
 
@@ -141,6 +150,9 @@ func BuildSteps(ctx context.Context, sc *scenario.Scenario, opt Options) ([]scen
 		}); err != nil {
 			return nil, fmt.Errorf("dbbuild: step %d (%q): %w", i+1, st.Name, err)
 		}
+		if target.SeedCredentialRef != "" && (!strings.HasPrefix(target.SeedCredentialRef, CredentialRefPrefix) || len(target.SeedCredentialRef) == len(CredentialRefPrefix)) {
+			return nil, fmt.Errorf("dbbuild: step %d (%q): target %q has a malformed seed credential reference", i+1, st.Name, target.ID)
+		}
 		if !strings.HasPrefix(target.CredentialRef, CredentialRefPrefix) || len(target.CredentialRef) == len(CredentialRefPrefix) {
 			return nil, fmt.Errorf("dbbuild: step %d (%q): target %q has no %q credential reference", i+1, st.Name, target.ID, CredentialRefPrefix)
 		}
@@ -159,7 +171,8 @@ func BuildSteps(ctx context.Context, sc *scenario.Scenario, opt Options) ([]scen
 			Engine: target.Engine, ProbeID: entry.ID, TargetID: target.ID,
 			Host: target.Host, Port: target.Port, Database: target.Database, TLSMode: target.TLSMode,
 			ExpectedIdentity: target.ExpectedIdentity, CredentialRef: target.CredentialRef,
-			RunID: runID, Marker: MarkerPrefix + mh, FixtureID: st.DBFixture,
+			SeedCredentialRef: seedCredentialFor(st, target),
+			RunID:             runID, Marker: MarkerPrefix + mh, FixtureID: st.DBFixture,
 			Mode: target.Mode, Limits: limits, Params: copyParams(st.DBParams),
 			AuditBasis: st.DBAuditBasis,
 		}

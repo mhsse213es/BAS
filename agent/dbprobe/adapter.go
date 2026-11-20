@@ -62,3 +62,10 @@ func Engines() []string {
 type ConnectionAuditor interface {
 	CollectConnections(ctx context.Context, q AuditQuery) ([]AuditEvent, error)
 }
+
+// PrivilegedConnector is optionally implemented by an adapter that can open a
+// second, privileged lab session for fixture Seed and Cleanup while the probe
+// runs on the restricted connection. Lab mode only.
+type PrivilegedConnector interface {
+	ConnectPrivileged(ctx context.Context, cfg ConnectionConfig) error
+}

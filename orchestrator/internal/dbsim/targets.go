@@ -50,13 +50,17 @@ func (m *MemoryResolver) Resolve(ctx context.Context, id string) (Target, error)
 // Target is a pre-registered database target. ExpectedIdentity is the PG
 // system_identifier / MySQL server_uuid recorded at registration.
 type Target struct {
-	ID                       string
-	Engine                   string
-	Host                     string
-	Port                     int
-	Database                 string
-	TLSMode                  string
-	CredentialRef            string // opaque "dbcred:<name>" reference, never a secret
+	ID            string
+	Engine        string
+	Host          string
+	Port          int
+	Database      string
+	TLSMode       string
+	CredentialRef string // opaque "dbcred:<name>" reference, never a secret
+	// SeedCredentialRef optionally names a privileged lab credential used only for
+	// fixture seed and cleanup; the probe still runs as CredentialRef. Empty means
+	// fixture seed runs on the probe credential (the pre-existing behaviour).
+	SeedCredentialRef        string
 	AgentID                  string // the agent next to the database; empty (legacy target) never runs
 	Mode                     ExecMode
 	ExpectedIdentity         string

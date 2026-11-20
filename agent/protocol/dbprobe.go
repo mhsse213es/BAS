@@ -35,6 +35,10 @@ type DBProbeSpec struct {
 	TLSMode          string            `json:"tlsMode,omitempty"`
 	ExpectedIdentity string            `json:"expectedIdentity"`
 	CredentialRef    string            `json:"credentialRef"`
+	// SeedCredentialRef names a privileged (lab) credential for fixture seed and
+	// cleanup. The probe itself still runs as CredentialRef. Empty = seed on the
+	// probe connection (the pre-existing behaviour).
+	SeedCredentialRef string `json:"seedCredentialRef,omitempty"`
 	RunID            string            `json:"runId"`
 	Marker           string            `json:"marker"`
 	FixtureID        string            `json:"fixtureId,omitempty"`

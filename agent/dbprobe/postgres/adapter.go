@@ -73,6 +73,9 @@ type Adapter struct {
 	dbprobe.ActiveFixture
 
 	s       session
+	// adm is an optional privileged (lab) session. Seed and Cleanup run on it
+	// when set; the probe always runs on s, as the restricted account.
+	adm     session
 	mode    dbprobe.ExecMode
 	secrets []string // literals to scrub from any error text (password, long user/host)
 	notes   []string
@@ -207,13 +210,53 @@ func (a *Adapter) Connect(ctx context.Context, cfg dbprobe.ConnectionConfig) err
 }
 
 func (a *Adapter) closeConn() {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if a.adm != nil {
+		_ = a.adm.Close(ctx)
+		a.adm = nil
+	}
 	if a.s == nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 	_ = a.s.Close(ctx)
 	a.s = nil
+}
+
+// admin returns the session seed and cleanup run on: the privileged session
+// when one is connected, otherwise the main session.
+func (a *Adapter) admin() session {
+	if a.adm != nil {
+		return a.adm
+	}
+	return a.s
+}
+
+// ConnectPrivileged opens the privileged lab session that Seed and Cleanup use,
+// alongside the restricted probe session from Connect. Lab mode only; the same
+// host and database; the restricted session must already be connected.
+func (a *Adapter) ConnectPrivileged(ctx context.Context, cfg dbprobe.ConnectionConfig) error {
+	if err := a.require(); err != nil {
+		return err
+	}
+	if a.mode != dbprobe.ModeLab || cfg.Mode != dbprobe.ModeLab {
+		return errors.New("dbprobe/postgres: privileged session is lab mode only")
+	}
+	cc, _, err := buildConnConfig(cfg)
+	if err != nil {
+		return err
+	}
+	conn, err := pgx.ConnectConfig(ctx, cc)
+	if err != nil {
+		return wrapErr("connect privileged", err, secretsFor(cfg)...)
+	}
+	if a.adm != nil {
+		ctxc, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_ = a.adm.Close(ctxc)
+		cancel()
+	}
+	a.adm = &pgxSession{c: conn}
+	return nil
 }
 
 // Close closes the connection.
@@ -677,6 +720,7 @@ const labOpTimeout = 30 * time.Second
 // Seed creates a small synthetic fixture (schema, table, NOLOGIN role and a
 // SELECT grant). Lab mode only; no real data.
 func (a *Adapter) Seed(ctx context.Context, f dbprobe.Fixture) error {
+	adm := a.admin()
 	if err := a.require(); err != nil {
 		return err
 	}
@@ -717,22 +761,22 @@ func (a *Adapter) Seed(ctx context.Context, f dbprobe.Fixture) error {
 			return werr
 		}
 		rb, c := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		rerr := a.s.Exec(rb, "ROLLBACK") // also clears an aborted transaction state
+		rerr := adm.Exec(rb, "ROLLBACK") // also clears an aborted transaction state
 		c()
 		if rerr != nil || !claim {
 			return werr
 		}
 		return fmt.Errorf("%w: %s", dbprobe.ErrFixtureNotCreated, werr.Error())
 	}
-	if err := a.s.Exec(ctx, "BEGIN"); err != nil {
+	if err := adm.Exec(ctx, "BEGIN"); err != nil {
 		return fail(err, false)
 	}
 	for _, s := range stmts {
-		if err := a.s.Exec(ctx, s.sql, s.args...); err != nil {
+		if err := adm.Exec(ctx, s.sql, s.args...); err != nil {
 			return fail(err, true)
 		}
 	}
-	if err := a.s.Exec(ctx, "COMMIT"); err != nil {
+	if err := adm.Exec(ctx, "COMMIT"); err != nil {
 		return fail(err, false)
 	}
 	return nil
@@ -900,6 +944,7 @@ func fixtureNames(id string) (schema, role string, err error) {
 // Cleanup drops the fixture schema and role (lab mode only) and verifies
 // nothing is left behind. All statements run under a bounded context.
 func (a *Adapter) Cleanup(ctx context.Context, f dbprobe.Fixture) (dbprobe.CleanupResult, error) {
+	adm := a.admin()
 	var out dbprobe.CleanupResult
 	if err := a.require(); err != nil {
 		return out, err
@@ -925,21 +970,21 @@ func (a *Adapter) Cleanup(ctx context.Context, f dbprobe.Fixture) (dbprobe.Clean
 		"DROP ROLE IF EXISTS " + qr,
 		"DROP ROLE IF EXISTS " + qo,
 	} {
-		if err := a.s.Exec(ctx, s); err != nil {
+		if err := adm.Exec(ctx, s); err != nil {
 			errs = append(errs, wrapErr("cleanup", err, a.secrets...).Error())
 		}
 	}
-	if rows, err := a.s.Query(ctx, "SELECT 1 FROM pg_namespace WHERE nspname = $1", 1, schema); err != nil || len(rows) > 0 {
+	if rows, err := adm.Query(ctx, "SELECT 1 FROM pg_namespace WHERE nspname = $1", 1, schema); err != nil || len(rows) > 0 {
 		out.Residual = append(out.Residual, "schema:"+schema)
 	} else {
 		out.Removed = append(out.Removed, "schema:"+schema)
 	}
-	if rows, err := a.s.Query(ctx, "SELECT 1 FROM pg_roles WHERE rolname = $1", 1, role); err != nil || len(rows) > 0 {
+	if rows, err := adm.Query(ctx, "SELECT 1 FROM pg_roles WHERE rolname = $1", 1, role); err != nil || len(rows) > 0 {
 		out.Residual = append(out.Residual, "role:"+role)
 	} else {
 		out.Removed = append(out.Removed, "role:"+role)
 	}
-	if rows, err := a.s.Query(ctx, "SELECT 1 FROM pg_roles WHERE rolname = $1", 1, owner); err != nil || len(rows) > 0 {
+	if rows, err := adm.Query(ctx, "SELECT 1 FROM pg_roles WHERE rolname = $1", 1, owner); err != nil || len(rows) > 0 {
 		out.Residual = append(out.Residual, "role:"+owner)
 	} else {
 		out.Removed = append(out.Removed, "role:"+owner)
@@ -948,10 +993,10 @@ func (a *Adapter) Cleanup(ctx context.Context, f dbprobe.Fixture) (dbprobe.Clean
 		// Exactly the account this adapter created for this run, by name, and only
 		// when its CREATE was not refused: never a pattern, never another account.
 		qa := pgx.Identifier{a.acct.name}.Sanitize()
-		if err := a.s.Exec(ctx, "DROP ROLE IF EXISTS "+qa); err != nil {
+		if err := adm.Exec(ctx, "DROP ROLE IF EXISTS "+qa); err != nil {
 			errs = append(errs, wrapErr("cleanup", err, a.secrets...).Error())
 		}
-		if rows, err := a.s.Query(ctx, "SELECT 1 FROM pg_roles WHERE rolname = $1", 1, a.acct.name); err != nil || len(rows) > 0 {
+		if rows, err := adm.Query(ctx, "SELECT 1 FROM pg_roles WHERE rolname = $1", 1, a.acct.name); err != nil || len(rows) > 0 {
 			out.Residual = append(out.Residual, "role:"+a.acct.name)
 		} else {
 			out.Removed = append(out.Removed, "role:"+a.acct.name)

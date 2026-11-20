@@ -449,6 +449,11 @@ func runE2E(t *testing.T, cfg e2eConfig) {
 			tgt := dbsim.Target{ID: "lab-db", Engine: cfg.engine, Host: cfg.host, Port: cfg.port, Database: cfg.db, TLSMode: "disable",
 				CredentialRef: "dbcred:" + cred, Mode: dbsim.ModeLab, ExpectedIdentity: cfg.identity, LabConfirmed: true, AgentID: "0123456789abcdef"}
 			fixture := isFixtureScenario(id)
+			if fixture && cred != cfg.credLab {
+				// The fixture is seeded and cleaned up as the lab account; the probe still
+				// runs as the restricted one (the denial under test).
+				tgt.SeedCredentialRef = "dbcred:" + cfg.credLab
+			}
 			steps, err := dbbuild.BuildSteps(context.Background(), sc, dbbuild.Options{
 				Resolver: dbsim.NewMemoryResolver(tgt), MutationApproved: fixture, RunExpiry: time.Now().Add(20 * time.Minute)})
 			if err != nil {

@@ -312,6 +312,26 @@ func executeDBProbe(ctx context.Context, step ScenarioStep) (DBProbeOutcome, err
 			cred.Password, cred.User, spec.Host, spec.ExpectedIdentity)
 		return out, nil
 	}
+	// A fixture run may seed and clean up as a privileged account while the
+	// probe itself runs as the restricted one (spec SeedCredentialRef). Opened
+	// after the identity gate and before any seed statement.
+	if spec.FixtureID != "" && spec.SeedCredentialRef != "" {
+		pc, ok := ad.(dbprobe.PrivilegedConnector)
+		if !ok {
+			return fail(dbErrAdapterUnsupported, fmt.Sprintf("adapter for %q cannot open a privileged session for fixture %q", spec.Engine, spec.FixtureID))
+		}
+		seedCred, err := resolveDBCredential(spec.SeedCredentialRef)
+		if err != nil {
+			return runtimeErr(dbErrConnect, "privileged credential", err)
+		}
+		if err := pc.ConnectPrivileged(cctx, dbprobe.ConnectionConfig{
+			Engine: spec.Engine, Host: spec.Host, Port: spec.Port, Database: spec.Database,
+			CredentialRef: spec.SeedCredentialRef, TLSMode: spec.TLSMode, TargetID: spec.TargetID,
+			User: seedCred.User, Password: seedCred.Password, Mode: dbprobe.ModeLab,
+		}); err != nil {
+			return runtimeErr(dbErrConnect, "privileged connect", err)
+		}
+	}
 	if spec.FixtureID == "" {
 		return runBody()
 	}

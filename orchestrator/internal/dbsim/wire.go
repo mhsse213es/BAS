@@ -30,20 +30,22 @@ type DBProbeSpec struct {
 	// ExpectedIdentity is the pre-registered PG system_identifier / MySQL
 	// server_uuid the agent gate compares against the observed identity.
 	// None of these is a secret (credentials stay a CredentialRef).
-	Host             string            `json:"host"`
-	Port             int               `json:"port"`
-	Database         string            `json:"database,omitempty"`
-	TLSMode          string            `json:"tlsMode,omitempty"`
-	ExpectedIdentity string            `json:"expectedIdentity"`
-	CredentialRef    string            `json:"credentialRef"`
-	RunID            string            `json:"runId"`
-	Marker           string            `json:"marker"`
-	FixtureID        string            `json:"fixtureId,omitempty"`
-	Mode             ExecMode          `json:"mode"`
+	Host             string `json:"host"`
+	Port             int    `json:"port"`
+	Database         string `json:"database,omitempty"`
+	TLSMode          string `json:"tlsMode,omitempty"`
+	ExpectedIdentity string `json:"expectedIdentity"`
+	CredentialRef    string `json:"credentialRef"`
+	// SeedCredentialRef: privileged credential for fixture seed/cleanup (see agent protocol).
+	SeedCredentialRef string   `json:"seedCredentialRef,omitempty"`
+	RunID             string   `json:"runId"`
+	Marker            string   `json:"marker"`
+	FixtureID         string   `json:"fixtureId,omitempty"`
+	Mode              ExecMode `json:"mode"`
 	// AuditBasis selects the audit evidence class: "" (marker) or AuditBasisRoleWindow.
-	AuditBasis string `json:"auditBasis,omitempty"`
-	Limits           Limits            `json:"limits"`
-	Params           map[string]string `json:"params,omitempty"`
+	AuditBasis string            `json:"auditBasis,omitempty"`
+	Limits     Limits            `json:"limits"`
+	Params     map[string]string `json:"params,omitempty"`
 }
 
 type DBProbeResult struct {
@@ -56,13 +58,13 @@ type DBProbeResult struct {
 	// AuditStatus and AuditEvents mirror the agent's audit readback
 	// (agent/protocol/dbprobe.go). Empty AuditStatus means no attempt was
 	// recorded; "unsupported" and "error" must never be graded as a pass.
-	AuditStatus string              `json:"auditStatus,omitempty"`
+	AuditStatus string `json:"auditStatus,omitempty"`
 	// AuditBasis echoes the evidence class that produced AuditStatus.
 	AuditBasis string `json:"auditBasis,omitempty"`
 	// AuditPrincipal is the account the connection evidence was matched under
 	// (the throwaway account for the failed-login basis).
-	AuditPrincipal string `json:"auditPrincipal,omitempty"`
-	AuditEvents []DBProbeAuditEvent `json:"auditEvents,omitempty"`
+	AuditPrincipal string              `json:"auditPrincipal,omitempty"`
+	AuditEvents    []DBProbeAuditEvent `json:"auditEvents,omitempty"`
 	// CleanupStatus and SafetyIncident mirror the agent's fixture teardown
 	// report (agent/protocol/dbprobe.go). Empty status means an older agent or
 	// no fixture. A SafetyIncident, or a residual/failed status, can never be
@@ -156,13 +158,13 @@ type ProbeRegistryEntry struct {
 }
 
 var probeRegistry = map[string]ProbeRegistryEntry{
-	"read_roles":            {ID: "read_roles", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}},
-	"read_grants":           {ID: "read_grants", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{"role": "string"}},
+	"read_roles":             {ID: "read_roles", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}},
+	"read_grants":            {ID: "read_grants", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{"role": "string"}},
 	"read_global_privileges": {ID: "read_global_privileges", Class: ClassReadOnly, Engines: []string{"postgresql"}, ParamSchema: map[string]string{}},
-	"read_memberships": {ID: "read_memberships", Class: ClassReadOnly, Engines: []string{"postgresql"}, ParamSchema: map[string]string{}},
-	"auth_check":            {ID: "auth_check", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}},
-	"read_audit_config":     {ID: "read_audit_config", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}},
-	"read_restricted_table": {ID: "read_restricted_table", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{"table": "string"}},
+	"read_memberships":       {ID: "read_memberships", Class: ClassReadOnly, Engines: []string{"postgresql"}, ParamSchema: map[string]string{}},
+	"auth_check":             {ID: "auth_check", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}},
+	"read_audit_config":      {ID: "read_audit_config", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}},
+	"read_restricted_table":  {ID: "read_restricted_table", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{"table": "string"}},
 	// Rule (R-AI): a run that seeds a fixture mutates the lab database and is gated as bounded_synthetic regardless of what the probe itself reads.
 	// DB-05: one unfiltered all-column SELECT of a seeded fixture table (small hard row cap).
 	"suspicious_read": {ID: "suspicious_read", Class: ClassBoundedSynthetic, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{"table": "string"}, FixtureParam: "table"},
