@@ -44,7 +44,7 @@ import { closeRerunReview, closeRerunReviewOnBackdrop, openCampaignRerunReview, 
 import { blackoutCreate, blackoutDelete, blackoutKindChange, blackoutPreset } from './features/blackouts.js';
 import { cancelScheduledAssessment, closeSchedWizard, loadScheduledAssessments, openSchedWizard, openSchedWizardForEdit, schedAuthCheckChange, schedOnModeChange, schedOnRecurrenceChange, schedToggleAgentFromChecked, schedToggleGroupFromChecked, schedWizardNav, setSchedFilter, submitScheduledAssessment, schedSearch, schedClearFilters, schedTableQuery, setSchedPer, schedPage, schedSortBy, toggleSchedCols, schedColToggle, schedSelectRow, schedSelectAll, clearSchedSelection, exportSchedCsv, exportSchedSelected, schedOpen, schedRowKeydown, closeSchedDrawer, closeSchedDrawerOnBackdrop, schedEditFromDrawer, schedCancelFromDrawer } from './features/scheduled.js';
 import { toggleNavPin } from './features/nav-extras.js';
-import { cloudPickScenario, cloudSubmitRun, cloudSubmitDiscovery, cloudRefreshRuns, cloudSetProvider, cloudFilterInput, loadCloudScenarios } from './features/cloud-scenarios.js';
+import { cloudPickScenario, cloudSubmitRun, cloudSubmitDiscovery, cloudRefreshRuns, cloudSetProvider, cloudFilterInput, loadCloudScenarios, cloudRunProviderChanged, cloudRunScenarioChanged } from './features/cloud-scenarios.js';
 import { openPageHelp, closePageHelp, pageHelpGo } from './features/page-help.js';
 import { k8sSearch, k8sPickCluster, k8sSetCluster, k8sSetState, k8sClearFilters, k8sNewRun, k8sOpenRun, k8sRowKeydown, closeK8sDrawer, closeK8sDrawerOnBackdrop, k8sFilterClusterFromDrawer, k8sOpenCoverage } from './features/k8s-scenarios.js';
 import { setAgentsViewRich as setAgentsView } from './features/agents-risk-view.js';
@@ -579,6 +579,8 @@ export const ACTIONS = {
   cloudRefreshRuns,
   cloudSetProvider,
   cloudFilterInput,
+  cloudRunProviderChanged,
+  cloudRunScenarioChanged,
   loadCloudScenarios,
   openPageHelp,
   closePageHelp,

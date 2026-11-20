@@ -140,3 +140,29 @@ test('runRows tolerates a non-array response', function() {
   assert.deepEqual(runRows(null), []);
   assert.deepEqual(runRows({ error: 'x' }), []);
 });
+
+import { scenarioProvider, scenariosForProvider, providerMismatch } from '../../src/features/cloud-model.js';
+
+const CARDS = scenarioCards([
+  { id: 'aws-1', name: 'Bucket walk', provider: 'aws' },
+  { id: 'az-1', name: 'Vault read', provider: 'azure' },
+  { id: 'aws-2', name: 'Role chain', provider: 'aws' },
+]);
+
+test('scenarioProvider reads the provider a scenario targets, or empty when unknown', function() {
+  assert.equal(scenarioProvider(CARDS, 'az-1'), 'azure');
+  assert.equal(scenarioProvider(CARDS, 'nope'), '');
+});
+
+test('scenariosForProvider narrows the list and keeps everything when no provider is chosen', function() {
+  assert.deepEqual(scenariosForProvider(CARDS, 'aws').map(function(c) { return c.id; }), ['aws-1', 'aws-2']);
+  assert.equal(scenariosForProvider(CARDS, '').length, 3);
+  assert.equal(scenariosForProvider(undefined, 'aws').length, 0);
+});
+
+test('providerMismatch names the right provider and is empty when the pair is consistent', function() {
+  assert.equal(providerMismatch(CARDS, 'az-1', 'aws'), 'That scenario targets Azure. Choose Azure as the provider, or pick a different scenario.');
+  assert.equal(providerMismatch(CARDS, 'az-1', 'azure'), '');
+  assert.equal(providerMismatch(CARDS, 'az-1', ''), '');
+  assert.equal(providerMismatch(CARDS, 'unknown', 'aws'), '');
+});

@@ -150,3 +150,23 @@ export function runRows(runs) {
     .map(runRow)
     .sort(function(a, b) { return a.startedAt < b.startedAt ? 1 : a.startedAt > b.startedAt ? -1 : 0; });
 }
+
+// scenarioProvider returns the provider a catalogue scenario targets, or '' when it is not in the catalogue.
+export function scenarioProvider(cards, id) {
+  var c = (Array.isArray(cards) ? cards : []).filter(function(s) { return s.id === id; })[0];
+  return c ? c.provider : '';
+}
+
+// scenariosForProvider narrows the catalogue to one provider; '' keeps every scenario.
+export function scenariosForProvider(cards, provider) {
+  var list = Array.isArray(cards) ? cards : [];
+  return provider ? list.filter(function(s) { return s.provider === provider; }) : list.slice();
+}
+
+// providerMismatch names the problem before a request is sent: the server refuses a scenario that targets
+// another provider, so the page says so without a round trip. '' when the pair is consistent or incomplete.
+export function providerMismatch(cards, scenarioId, provider) {
+  var target = scenarioProvider(cards, scenarioId);
+  if (!target || !provider || target === provider) return '';
+  return 'That scenario targets ' + cloudProviderLabel(target) + '. Choose ' + cloudProviderLabel(target) + ' as the provider, or pick a different scenario.';
+}
