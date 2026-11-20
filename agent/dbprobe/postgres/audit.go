@@ -45,7 +45,8 @@ const (
 	// read_audit_config statements: parameterless, catalog-only, cannot fail
 	// on a missing view (to_regclass yields NULL instead of raising).
 	sqlAuditSettings = "SELECT name::text, setting::text FROM pg_settings WHERE name IN " +
-		"('log_connections', 'log_disconnections', 'log_destination', 'log_statement', 'logging_collector', 'pgaudit.log', 'shared_preload_libraries') ORDER BY name"
+		"('log_connections', 'log_disconnections', 'log_destination', 'log_statement', 'logging_collector', 'pgaudit.log', 'shared_preload_libraries') " +
+		"UNION ALL SELECT 'pgaudit_extension', CASE WHEN EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pgaudit') THEN 'present' ELSE 'absent' END ORDER BY 1"
 	sqlAuditViewState = "SELECT to_regclass('dbsim_audit.pg_log') IS NOT NULL, " +
 		"CASE WHEN to_regclass('dbsim_audit.pg_log') IS NULL THEN false " +
 		"ELSE has_table_privilege(to_regclass('dbsim_audit.pg_log'), 'SELECT') END"
@@ -55,7 +56,7 @@ const (
 
 // auditConfigKeys are the settings read_audit_config always reports (as
 // "absent" when pg_settings has no such row, e.g. pgaudit not loaded).
-var auditConfigKeys = []string{"log_connections", "log_disconnections", "log_destination", "log_statement", "logging_collector", "pgaudit.log", "shared_preload_libraries"}
+var auditConfigKeys = []string{"log_connections", "log_disconnections", "log_destination", "log_statement", "logging_collector", "pgaudit.log", "pgaudit_extension", "shared_preload_libraries"}
 
 // auditLimits bounds sentinel, polling and lookup transactions (the executor's
 // own deadline is tighter or equal; the smaller one wins).
