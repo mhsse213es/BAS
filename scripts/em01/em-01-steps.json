@@ -1,8 +1,8 @@
 {
  "scenario": "em-01-control-validation",
  "source_file": "em-01-control-validation.yaml",
- "source_sha256": "a5865a1db21c03a063c7ea9919290bd8b8c8a4044bce16c0fe91ec91c1a63628",
- "exported_at": "2026-11-20T11:07:14+00:00",
+ "source_sha256": "a65bf7e1baf6c7a780bdec67fd1055c435108830b3b6f786d48f3a73111110be",
+ "exported_at": "2026-11-20T11:58:36+00:00",
  "steps": [
   {
    "index": 0,
@@ -359,7 +359,7 @@
    "name": "Security Center reports an enabled antivirus provider",
    "technique_id": "T1562.001",
    "timeout_sec": 30,
-   "command": "$ErrorActionPreference = 'Stop'\ntry { $av = @(Get-CimInstance -Namespace 'root/SecurityCenter2' -ClassName AntiVirusProduct -ErrorAction Stop) } catch { Write-Output \"SKIP: SecurityCenter2 AntiVirusProduct is not available on this SKU or configuration ($($_.Exception.Message)).\"; return }\nif ($av.Count -eq 0) { Write-Output \"FAIL: Security Center registers no antivirus product.\"; return }\n$en = @($av | Where-Object { ($_.productState -band 0x1000) -ne 0 } | ForEach-Object { $_.displayName })\nif ($en.Count -gt 0) { Write-Output \"PASS: Security Center reports an enabled AV provider: $($en -join ', ').\" }\nelse { Write-Output \"FAIL: Security Center registers AV product(s) but none report enabled: $((@($av | ForEach-Object { $_.displayName })) -join ', ').\" }\n"
+   "command": "$ErrorActionPreference = 'Stop'\ntry { $av = @(Get-CimInstance -Namespace 'root/SecurityCenter2' -ClassName AntiVirusProduct -ErrorAction Stop) } catch { Write-Output \"SKIP: SecurityCenter2 AntiVirusProduct is not available on this SKU or configuration ($($_.Exception.Message)).\"; return }\nif ($av.Count -eq 0) { Write-Output \"FAIL: Security Center registers no antivirus product.\"; return }\n$en = @($av | Where-Object { ($_.productState -band 0x1000) -ne 0 } | ForEach-Object { $_.displayName })\nif ($en.Count -eq 0) { Write-Output \"FAIL: Security Center registers AV product(s) but none report enabled: $((@($av | ForEach-Object { $_.displayName })) -join ', ').\"; return }\n# Registration alone is not protection: real-time protection must be ON.\n$rtp = $null\ntry { $rtp = (Get-MpComputerStatus).RealTimeProtectionEnabled } catch {}\nif ($rtp -eq $true) { Write-Output \"PASS: Security Center reports an enabled AV provider ($($en -join ', ')) and Defender real-time protection is ON.\" }\nelseif ($rtp -eq $false) { Write-Output \"FAIL: Security Center reports an enabled AV provider ($($en -join ', ')), but Defender real-time protection is OFF - registration alone is not protection.\" }\nelse { Write-Output \"SKIP: NOT_ASSESSED - Security Center reports an enabled AV provider ($($en -join ', ')), but real-time protection cannot be read locally (Defender not present). Not scored; not a PASS.\" }\n"
   },
   {
    "index": 51,
