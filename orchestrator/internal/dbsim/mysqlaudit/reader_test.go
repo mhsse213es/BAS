@@ -1,4 +1,4 @@
-package mysqlauditfile
+package mysqlaudit
 
 import (
 	"strings"

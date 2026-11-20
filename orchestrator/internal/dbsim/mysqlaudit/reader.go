@@ -1,9 +1,8 @@
-// Package mysqlauditfile reads the Percona audit_log JSON file on the LAB HOST.
+// Package mysqlaudit reads the Percona audit_log JSON file on the LAB HOST.
 //
-// It is lab-harness code. The agent binary must never import it: the agent does
-// not access the audit file. The harness reads the file and supplies the parsed
-// events to the BAS tests as evidence.
-package mysqlauditfile
+// It is harness code. Only the harness imports it. The agent never reads the audit
+// file, and agent-reported notes never establish plugin state or coverage.
+package mysqlaudit
 
 import (
 	"bufio"
@@ -12,9 +11,15 @@ import (
 	"io"
 	"strings"
 	"time"
-
-	"audspect/agent/dbprobe"
 )
+
+// Event is one audit record from the Percona audit_log file.
+type Event struct {
+	Time      time.Time
+	Principal string
+	Statement string
+	Source    string
+}
 
 const sourceName = "percona_audit_log"
 
@@ -30,8 +35,8 @@ type record struct {
 // ReadEvents parses one audit_log JSON record per line and returns only the
 // Query records. Any malformed line is an error that names its line number:
 // a partial read must never look like a complete one.
-func ReadEvents(r io.Reader) ([]dbprobe.AuditEvent, error) {
-	var out []dbprobe.AuditEvent
+func ReadEvents(r io.Reader) ([]Event, error) {
+	var out []Event
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 	for n := 1; sc.Scan(); n++ {
@@ -50,7 +55,7 @@ func ReadEvents(r io.Reader) ([]dbprobe.AuditEvent, error) {
 		if err != nil {
 			return nil, fmt.Errorf("audit file line %d: bad timestamp: %w", n, err)
 		}
-		out = append(out, dbprobe.AuditEvent{
+		out = append(out, Event{
 			Time:      ts,
 			Principal: principalOf(rec.AuditRecord.User),
 			Statement: rec.AuditRecord.SQLText,
@@ -64,8 +69,8 @@ func ReadEvents(r io.Reader) ([]dbprobe.AuditEvent, error) {
 }
 
 // FilterByMarker keeps the events whose statement carries the probe marker.
-func FilterByMarker(events []dbprobe.AuditEvent, marker string) []dbprobe.AuditEvent {
-	var out []dbprobe.AuditEvent
+func FilterByMarker(events []Event, marker string) []Event {
+	var out []Event
 	for _, e := range events {
 		if strings.Contains(e.Statement, marker) {
 			out = append(out, e)
@@ -80,18 +85,4 @@ func principalOf(user string) string {
 		user = user[:i]
 	}
 	return strings.TrimSpace(user)
-}
-
-// CoverageVerdict is the MySQL audit-coverage rule for the harness. "covered"
-// needs an active audit plugin AND a readable audit file. An active plugin whose
-// file cannot be read is "partial". The general log and performance-schema
-// history never count here.
-func CoverageVerdict(pluginActive bool, readErr error) string {
-	switch {
-	case pluginActive && readErr == nil:
-		return "covered"
-	case pluginActive:
-		return "partial"
-	}
-	return "none"
 }
