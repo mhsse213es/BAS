@@ -32,7 +32,7 @@ steps:
   - name: "DB-03 Restricted table read attempt (T1213.006)"
     technique_id: T1213.006
     executor: dbprobe
-    db_target: lab-db
+    db_target: lab-pg-test
     db_probe: read_restricted_table
     db_params:
       table: bas_dbsim.restricted
@@ -50,7 +50,7 @@ steps:
   - name: "DB-03 Restricted customer records read attempt (T1213.006)"
     technique_id: T1213.006
     executor: dbprobe
-    db_target: lab-db
+    db_target: lab-pg-lab
     db_probe: read_customer_records
     db_fixture: authz-restricted
     db_limits:
@@ -68,7 +68,7 @@ steps:
   - name: "DB-03 Restricted financial records read attempt (T1213.006)"
     technique_id: T1213.006
     executor: dbprobe
-    db_target: lab-db
+    db_target: lab-pg-lab
     db_probe: read_financial_records
     db_fixture: authz-restricted
     db_limits:
@@ -85,7 +85,7 @@ steps:
   - name: "DB-03 Role and account name discovery (T1087)"
     technique_id: T1087
     executor: dbprobe
-    db_target: lab-db
+    db_target: lab-pg-test
     db_probe: read_foreign_role_names
     db_limits:
       max_rows: 10
