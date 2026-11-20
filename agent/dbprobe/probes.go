@@ -94,6 +94,10 @@ var catalog = map[string]ProbeDef{
 	// state is fingerprinted before and after through the lab connection.
 	ProbeTryWriteFixture: {ID: ProbeTryWriteFixture, Class: ClassBoundedSynthetic, Engines: bothEngines,
 		ParamSchema: map[string]ParamKind{}, RequiredFixture: WriteFixtureKind},
+	// audit_ddl_roundtrip (DB-04-08): lab-only CREATE and DROP of a synthetic table
+	// in the fixture schema, both tagged with the marker. PostgreSQL only.
+	ProbeAuditDDLRoundtrip: {ID: ProbeAuditDDLRoundtrip, Class: ClassBoundedSynthetic, Engines: []string{"postgresql"},
+		ParamSchema: map[string]ParamKind{}, RequiredFixture: WriteFixtureKind},
 	// check_export_privileges (DB-11): fixed read-only catalog queries about
 	// what the CONNECTED account may do regarding export/backup. No export is
 	// ever performed. Read-only by class, lab-only by LabOnly.
