@@ -52,7 +52,8 @@ export function loadCloudScenarios() {
     loadCloudRuns();
   }).catch(function(err) {
     catalogue = [];
-    if (host) host.innerHTML = '<div class="empty">Cloud scenarios are unavailable: ' + x(err.message || 'request failed') + '</div>';
+    if (host) host.innerHTML = '<div class="empty">Cloud scenarios are unavailable: ' + x(err.message || 'request failed') + ' ' +
+      '<button type="button" class="btn btn-sm"' + on('click', 'loadCloudScenarios') + '>Retry</button></div>';
   });
 }
 
@@ -105,23 +106,38 @@ export function cloudFocusScenario(id) {
   setTimeout(function() { card.classList.remove('flash'); }, 2200);
 }
 
+// populateScenarioSelect lists only the scenarios for the provider chosen in the run form, so a mismatched pair
+// cannot be picked in the first place. A scenario already chosen is kept when it still matches.
 function populateScenarioSelect() {
   var sel = el('cloud-run-scenario');
   if (!sel) return;
   var prev = sel.value;
-  sel.innerHTML = '<option value="">Choose a scenario</option>' + catalogue.map(function(c) {
+  var provider = fieldValue('cloud-run-provider');
+  var list = M.scenariosForProvider(catalogue, provider);
+  sel.innerHTML = '<option value="">Choose a scenario</option>' + list.map(function(c) {
     return '<option value="' + x(c.id) + '">' + x(c.providerLabel + ': ' + c.name) + '</option>';
   }).join('');
-  if (prev) sel.value = prev;
+  sel.value = list.some(function(c) { return c.id === prev; }) ? prev : '';
+}
+
+// cloudRunProviderChanged is the run form's provider change: the scenario list follows it.
+export function cloudRunProviderChanged() { populateScenarioSelect(); }
+
+// cloudRunScenarioChanged sets the provider from the chosen scenario, so the pair is consistent.
+export function cloudRunScenarioChanged() {
+  var target = M.scenarioProvider(catalogue, fieldValue('cloud-run-scenario'));
+  var prov = el('cloud-run-provider');
+  if (target && prov && prov.value !== target) { prov.value = target; populateScenarioSelect(); }
 }
 
 // cloudPickScenario selects a card's scenario in the run form and sets its provider.
 export function cloudPickScenario(id) {
   var sel = el('cloud-run-scenario');
   var card = catalogue.filter(function(c) { return c.id === id; })[0];
-  if (sel) sel.value = id;
   var prov = el('cloud-run-provider');
   if (prov && card && card.provider) prov.value = card.provider;
+  populateScenarioSelect();
+  if (sel) sel.value = id;
   var form = el('cloud-run-form');
   if (form && form.scrollIntoView) form.scrollIntoView({ behavior: 'smooth', block: 'start' });
   var acct = el('cloud-run-account');
@@ -140,6 +156,8 @@ export function cloudSubmitRun() {
     region: fieldValue('cloud-run-region'),
   });
   if (!built.ok) { showToast(built.error, 'error'); return; }
+  var mismatch = M.providerMismatch(catalogue, built.body.scenarioId, built.body.account.provider);
+  if (mismatch) { renderResultError(mismatch, 'cloud-run-result'); return; }
 
   var btn = el('cloud-run-submit');
   if (btn) btn.disabled = true;
@@ -147,6 +165,7 @@ export function cloudSubmitRun() {
   cloudRequest('/api/cloud-scenario-runs', { method: 'POST', body: JSON.stringify(built.body) }).then(function(r) {
     if (r.status >= 400) throw new Error(M.describeRunError(r.status, r.body && r.body.error));
     renderResult(r.body, 'cloud-run-result');
+    loadCloudRuns();
   }).catch(function(err) {
     renderResultError(err.message || 'The run was not started.', 'cloud-run-result');
   }).then(function() {
@@ -219,7 +238,8 @@ export function loadCloudRuns() {
     if (r.status !== 200) throw new Error(M.describeRunError(r.status, r.body && r.body.error));
     renderRunsTable(M.runRows(r.body));
   }).catch(function(err) {
-    host.innerHTML = '<div class="empty">Runs are unavailable: ' + x(err.message || 'request failed') + '</div>';
+    host.innerHTML = '<div class="empty">Runs are unavailable: ' + x(err.message || 'request failed') + ' ' +
+      '<button type="button" class="btn btn-sm"' + on('click', 'cloudRefreshRuns') + '>Retry</button></div>';
   });
 }
 

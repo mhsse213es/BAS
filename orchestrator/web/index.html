@@ -1377,12 +1377,12 @@
         <div class="cloud-card cloud-form" id="cloud-run-form">
           <div class="cloud-form-h"><span class="cloud-form-i"></span><div><h3>Run a scenario</h3><p class="muted">Pick a scenario above or choose one here, then name the account to assess.</p></div></div>
           <div class="cloud-fields">
-            <label class="cf-wide"><span>Scenario</span><select id="cloud-run-scenario"><option value="">Choose a scenario</option></select></label>
-            <label><span>Provider</span><select id="cloud-run-provider"><option value="aws">AWS</option><option value="azure">Azure</option><option value="gcp">GCP</option></select></label>
+            <label class="cf-wide"><span>Scenario</span><select id="cloud-run-scenario" data-on-change="cloudRunScenarioChanged"><option value="">Choose a scenario</option></select></label>
+            <label><span>Provider</span><select id="cloud-run-provider" data-on-change="cloudRunProviderChanged"><option value="aws">AWS</option><option value="azure">Azure</option><option value="gcp">GCP</option></select></label>
             <label><span>Account ID</span><input id="cloud-run-account" type="text" autocomplete="off" placeholder="e.g. 123456789012"></label>
             <label><span>Region <em>(optional)</em></span><input id="cloud-run-region" type="text" autocomplete="off" placeholder="e.g. ap-south-1"></label>
             <label><span>Principal</span><input id="cloud-run-principal" type="text" autocomplete="off" placeholder="identity to test"></label>
-            <label><span>Resource</span><input id="cloud-run-resource" type="text" autocomplete="off" placeholder="bucket, vault or account"></label>
+            <label class="cf-wide"><span>Resource</span><input id="cloud-run-resource" type="text" autocomplete="off" placeholder="bucket, vault or account"></label>
           </div>
           <button type="button" id="cloud-run-submit" class="btn btn-primary cloud-run-btn" data-on-click="cloudSubmitRun">Run scenario</button>
         </div>
@@ -1402,7 +1402,7 @@
         <div id="cloud-disc-result" class="cloud-result-host"></div>
         <div class="cloud-card cloud-recent">
           <div class="cloud-runs-h"><h3 class="rk-h">Recent runs</h3>
-            <button type="button" class="btn btn-sm" data-on-click="cloudRefreshRuns">Refresh</button></div>
+            <button type="button" class="btn btn-outline btn-sm" data-on-click="cloudRefreshRuns">&#x21bb; Refresh</button></div>
           <div id="cloud-runs-list"></div>
         </div>
       </div>
