@@ -150,6 +150,10 @@ type Outcome struct {
 	// which is treated as NotEvaluated).
 	Classification dlpreport.ClassificationOutcome
 	CollectedAt    time.Time
+	// HarnessEvidence is written by the lab harness only, never from agent Notes
+	// (agent output is untrusted and could forge it). It is shown as a separate
+	// limitation line and does not change the grade.
+	HarnessEvidence HarnessEvidence
 	// Principal is the DB role/account the probe ran as. It is stored and
 	// reported on purpose (spec section 9 requires it in results): it is a
 	// test-account name, not a secret. Credentials, passwords and DSNs are
@@ -565,6 +569,9 @@ func ToRecord(s ScenarioMeta, o Outcome) (dlpreport.Record, error) {
 	_, policyLims := policyGrade(s, o)
 	lims = append(lims, policyLims...)
 	lims = append(lims, o.Limitations...)
+	if v := o.HarnessEvidence.AuditCoverage; v == AuditConfigCovered || v == AuditConfigPartial || v == AuditConfigNone {
+		lims = append(lims, "Harness audit-plugin evidence (lab harness reading, not agent-reported): audit coverage "+v+".")
+	}
 	if u := unobservable(s, o); u != "" {
 		lims = append(lims, "Observation empty ("+u+"): an empty result is unobservable, so the run is graded ERROR, never PASS.")
 	}
@@ -791,4 +798,11 @@ func mentionsClassificationNotEvaluated(lims []string) bool {
 		}
 	}
 	return false
+}
+
+// HarnessEvidence is what the lab harness observed directly on the lab host.
+type HarnessEvidence struct {
+	// AuditCoverage is covered|partial|none from the harness reading, or empty when
+	// the harness did not collect it. Any other value is not rendered.
+	AuditCoverage string
 }
