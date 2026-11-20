@@ -187,3 +187,61 @@ The 2019 server result predates these decisions. To re-run it, the owner must ch
 ### Open item not changed by these decisions
 
 - **TPM (step 48)** still FAILs when no TPM is present, regardless of the BitLocker baseline. The TPM is a BitLocker prerequisite, but it was not one of the three decisions. Owner should decide whether TPM should follow the same baseline gate.
+
+## Windows Server 2019 test run (WIN-2IP8FNO4MAD, lab.local member server, VMware, 2026-11-19/20)
+
+Server is a lab test VM, not production. It also hosts the Trellix ePolicy Orchestrator 5.10 server role and the Trellix Agent, so it manages the lab Trellix fleet.
+
+### Latest run
+
+Run 22:34 PST (package `8f880097…918f14c`): **PASS 38, FAIL 17, SKIP 14, ERROR 0, probe errors 0.** Every verdict has an evidence line.
+
+Remaining control failures and their status:
+
+| Step | Finding | Status |
+|---|---|---|
+| 02 | Defender Tamper Protection OFF | **FAIL, not recorded as an exception.** No local toggle on this build. Needs Defender for Endpoint or Intune. |
+| 04, 28–37 | ASR rules not configured | Open. Audit-mode commands recommended, not applied. |
+| 05, 39, 40 | AppLocker not enforced | Open. Audit-mode policy via GPO recommended, not applied. |
+| 13 | Network protection not in block mode | **Open, unexplained.** Set to Enabled, but evidence showed `EnableNetworkProtection=2` (audit). Check for a policy source. |
+| 60 | LSA protection (RunAsPPL) | Open. See the LSA section below. |
+
+Changes applied by the owner and confirmed by the run: Private firewall enabled (03); RDP removed from Public (25); PUA, cloud protection (Advanced), firewall logging and log sizes, security log size, LLMNR off, process-creation auditing and command lines (11, 12, 26, 27, 57, 62–64).
+
+Other results: Defender on-access, behaviour monitoring and real-time protection PASS after the owner re-enabled real-time protection; step 19 PASS once the disable flags were cleared. Step 16 (definitions) PASS. HVCI (67) PASS after the owner enabled Memory integrity (configured and running, no driver blocks). VBS, Secure Boot and NLA PASS. Step 53 (Sense) SKIP: not onboarded. Steps 06, 22, 44–48 NOT_ASSESSED under baseline `none`.
+
+### Decisions applied
+
+- **BitLocker and TPM (06, 44–48):** baseline-gated. `none` = NOT_ASSESSED; `required` = FAIL. Not yet set to `required` for this server. The baseline owner must decide.
+- **Defender Tamper Protection (02):** the scenario has an approved-exception branch (`BAS_EM01_APPROVED_EXCEPTIONS=TamperProtection:<ref>`). No reference exists, so no exception is recorded and step 02 stays a FAIL. The branch is inactive without the variable.
+- **Defender real-time protection:** restored (owner decision). The earlier unexplained disable was not traced to a PowerShell change in the 21:20–21:40 window. Logs show Trellix services running.
+
+### LSA protection (step 60): attempted, rolled back, not applied
+
+- `RunAsPPL` was set to 1 by registry, with no UEFI lock, and the server was rebooted.
+- After the reboot the domain was unavailable: the DHCP-provided DNS server list had lost `192.168.11.200` (the DC), and domain discovery and the secure channel failed.
+- Cause: the DNS change at the reboot, not LSA protection. A rollback to `RunAsPPL=0` with a reboot still failed, which isolated LSA as not the cause.
+- Fix: static DNS on the adapter to `192.168.11.200` and the DC's IPv6 address; `ipconfig /registerdns`; Netlogon restart; `Test-ComputerSecureChannel -Repair`; `gpupdate /force`. A reboot test with LSA off then passed: DNS persisted, DC found, secure channel `Status = 0`.
+- **Current state:** `RunAsPPL = 0`. Step 60 remains a FAIL.
+- **Not yet confirmed:** Trellix compatibility with LSA protection on. The first LSA-on boot never reached a clean state, so LSA behaviour on this server is unverified. Retry only after Trellix confirms compatibility in writing, with a snapshot and a reboot window.
+- **Separate open item:** the DHCP scope still hands out the old DNS server to other machines. This server is now static, so it's unaffected. The DHCP option needs fixing at the DHCP server or router.
+
+### Trellix (open decision)
+
+- Trellix ENS is running and is registered with ePO on this host. Windows Security Center shows no registered AV product, so Defender stays active in normal mode.
+- Recommendation: Trellix as the single primary engine, with Defender passive. The owner has not yet confirmed this.
+- Scenario step 00 would need a change to accept a registered, enabled third-party product. Not made; needs owner approval.
+
+### TPM (step 48)
+
+Resolved as a decision: follows the BitLocker baseline gate. Under `none` it is NOT_ASSESSED, under `required` it is FAIL. The open item in the previous section is closed.
+
+### Open items
+
+1. Confirm the server baseline: `BAS_EM01_ENCRYPTION_BASELINE` `none` or `required`.
+2. Step 02: onboard the server to Defender for Endpoint or Intune, or accept the gap in writing with a change reference.
+3. Step 13: find out why network protection reads audit mode after being set to block.
+4. Trellix: confirm the primary engine and whether step 00 should accept a registered third-party product.
+5. Step 60: wait for Trellix's written compatibility confirmation before any further LSA change.
+6. DHCP scope: fix the DNS server option.
+7. ASR and AppLocker: audit-mode rollout, then review.
