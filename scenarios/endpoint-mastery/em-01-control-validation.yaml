@@ -276,7 +276,17 @@ steps:
       $ErrorActionPreference = 'Stop'
       if (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output "SKIP: Microsoft Defender (WinDefend) is not installed; third-party engine in use."; return }
       try { $s = Get-MpComputerStatus } catch { Write-Output "ERROR: Get-MpComputerStatus failed: $($_.Exception.Message)"; return }
+      # Passive by design: a registered, enabled third-party engine is primary; Defender's engine is off by design.
+      $passive = ([string]$s.AMRunningMode) -match 'Passive'
+      $third = @()
+      if ($passive) {
+        try {
+          $av = @(Get-CimInstance -Namespace 'root/SecurityCenter2' -ClassName AntiVirusProduct -ErrorAction Stop)
+          foreach ($p in $av) { if ($p.displayName -notmatch 'Defender' -and (($p.productState -band 0x1000) -ne 0)) { $third += $p.displayName } }
+        } catch {}
+      }
       if ([bool]$s.BehaviorMonitorEnabled) { Write-Output "PASS: Defender behavior monitoring is ENABLED (observed BehaviorMonitorEnabled=True)." }
+      elseif ($passive -and $third.Count -gt 0) { Write-Output "SKIP: Defender passive by design (observed AMRunningMode=$($s.AMRunningMode)); third-party engine enforcing: $($third -join ', '). Not scored." }
       else { Write-Output "FAIL: Defender behavior monitoring is DISABLED (observed BehaviorMonitorEnabled=False); process-behaviour detection is off." }
     cleanup: ""
 
@@ -301,7 +311,17 @@ steps:
       # Approved exceptions: BAS_EM01_APPROVED_EXCEPTIONS = 'DisableIOAVProtection:<ref>' (comma-separated). Approved = reported, not scored.
       $exc = @{}
       foreach ($pair in ([string]$env:BAS_EM01_APPROVED_EXCEPTIONS -split ',')) { $t = $pair.Trim(); if ($t -match '^([A-Za-z]+):(\S+)$') { $exc[$matches[1]] = $matches[2] } }
+      # Passive by design: a registered, enabled third-party engine is primary; Defender's engine is off by design.
+      $passive = ([string]$s.AMRunningMode) -match 'Passive'
+      $third = @()
+      if ($passive) {
+        try {
+          $av = @(Get-CimInstance -Namespace 'root/SecurityCenter2' -ClassName AntiVirusProduct -ErrorAction Stop)
+          foreach ($p in $av) { if ($p.displayName -notmatch 'Defender' -and (($p.productState -band 0x1000) -ne 0)) { $third += $p.displayName } }
+        } catch {}
+      }
       if ([bool]$s.IoavProtectionEnabled) { Write-Output "PASS: Defender on-access scanning of downloads and attachments is ENABLED (observed IoavProtectionEnabled=True)." }
+      elseif ($passive -and $third.Count -gt 0) { Write-Output "SKIP: Defender passive by design (observed AMRunningMode=$($s.AMRunningMode)); third-party engine enforcing: $($third -join ', '). Not scored." }
       elseif ($exc.ContainsKey('DisableIOAVProtection')) { Write-Output "SKIP: APPROVED EXCEPTION $($exc['DisableIOAVProtection']): on-access scanning is disabled under an approved exception (observed IoavProtectionEnabled=False); not scored." }
       else { Write-Output "FAIL: Defender on-access scanning of downloads and attachments is DISABLED (observed IoavProtectionEnabled=False) and no approved exception covers it." }
     cleanup: ""
