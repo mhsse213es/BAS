@@ -322,3 +322,10 @@ Step 50 PASSes with "Security Center reports an enabled AV provider: Windows Def
 - **Original state:** the key did not exist (step 67 FAIL). VBS was running (`VirtualizationBasedSecurityStatus=2`).
 - **Revert:** `Remove-Item -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity' -Recurse -Force`, then reboot.
 - **Verify after reboot:** `Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard | Select-Object SecurityServicesConfigured, SecurityServicesRunning` should show `2` in both. Check `Microsoft-Windows-CodeIntegrity/Operational` for events 3033 or 3077, which mean a driver blocked HVCI.
+
+## Client final state (DESKTOP-5TVEBSI, 2026-11-20)
+
+- **HVCI (step 67): kept on (owner decision).** Verified after reboot: `SecurityServicesConfigured={2}`, `SecurityServicesRunning={2}`, step 67 PASS. No 3033 events since the reboot.
+- **Chrome DLL block (informational, not changed):** older Code Integrity event 3033 (10/12/2026) shows `chrome.exe` loading `libLiteRtWebGpuAccelerator.dll` blocked by HVCI for not meeting Microsoft signing requirements. Pre-dates this change. Left as is; check if Chrome misbehaves.
+- **Real-time protection on this laptop:** left as is, per owner.
+- **RDP NLA:** on (owner-approved change, original value 0 recorded above).
