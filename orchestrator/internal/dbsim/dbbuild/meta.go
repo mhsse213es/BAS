@@ -2,6 +2,7 @@ package dbbuild
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/audspect/bas/internal/dbsim"
 	"github.com/audspect/bas/internal/scenario"
@@ -63,9 +64,17 @@ func MetaFor(sc *scenario.Scenario, spec dbsim.DBProbeSpec) (dbsim.ScenarioMeta,
 		ActionAttempted:       txt.action,
 		ExpectedPrevention:    e.ExpectedPrevention,
 		ExpectDetection:       e.ExpectDetection, ExpectResponse: e.ExpectDetection,
-		ExpectAudit: e.ExpectAudit, ExpectAuditConfig: e.ExpectAuditConfig,
+		ExpectAudit: e.ExpectAudit, AuditRequireStatements: splitAuditRequire(e.AuditRequire), ExpectAuditConfig: e.ExpectAuditConfig,
 		RequireObservation: e.RequireObservation, RequirePolicyDiff: e.RequirePolicyDiff,
 		ExpectClassification: e.ExpectClassification,
 		Engine:               spec.Engine, TargetID: spec.TargetID, Mode: spec.Mode,
 	}, nil
+}
+
+// splitAuditRequire turns the expectation's "|"-separated requirement into the list.
+func splitAuditRequire(v string) []string {
+	if v == "" {
+		return nil
+	}
+	return strings.Split(v, "|")
 }

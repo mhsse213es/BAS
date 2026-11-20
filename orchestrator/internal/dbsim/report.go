@@ -88,6 +88,9 @@ type ScenarioMeta struct {
 	// ExpectAudit: the audit readback of this probe's own marker (the agent's
 	// AuditStatus/AuditEvents) is part of the expectation.
 	ExpectAudit bool `json:"expectAudit,omitempty"`
+	// AuditRequireStatements: each text must appear in a marker-tagged audit event
+	// (case-insensitive), or the audit dimension fails. Empty = any marker event.
+	AuditRequireStatements []string `json:"auditRequireStatements,omitempty"`
 	// ExpectAuditConfig: the probe is read_audit_config and its
 	// "audit_config: covered|partial|none" summary is part of the expectation.
 	ExpectAuditConfig bool `json:"expectAuditConfig,omitempty"`
