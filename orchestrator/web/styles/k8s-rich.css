@@ -65,3 +65,45 @@
 #k8s-drawer-overlay .sc-rel svg, #k8s-drawer-overlay .sc-dh-ico svg { width: 16px; height: 16px; }
 #k8s-drawer-overlay .sc-dh-ico svg { width: 24px; height: 24px; }
 #k8s-drawer-overlay .sd-step b { font-weight: 500; font-size: 13px; overflow-wrap: anywhere; }
+
+/* Kubernetes Scenarios: the New run form, the Read-only analysis card and the search bar share the Cloud page look.
+   Only the sections below the hero are styled here. */
+
+/* Card headers */
+.k8s-card { padding: 18px 20px; border-radius: 14px; }
+.k8s-card > .card-title { font-size: 16px; font-weight: 700; margin-bottom: 12px; }
+
+/* Field labels and inputs (New run form) */
+.k8s-form label { font-size: 12px; font-weight: 600; color: var(--muted-hi, var(--text)); text-transform: none; letter-spacing: 0; margin-bottom: 6px; }
+.k8s-form input, .k8s-form select { width: 100%; height: 40px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 9px; background: var(--elevated); color: var(--text); font: inherit; }
+.k8s-form select { appearance: none; -webkit-appearance: none; padding-right: 32px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b9bb4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; background-size: 14px; cursor: pointer; }
+.k8s-form input:focus, .k8s-form select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.35), 0 0 14px rgba(59,130,246,.25); }
+.k8s-form input:disabled, .k8s-form select:disabled { opacity: .55; }
+
+/* Field icons, one per field, drawn as masks so they take the muted colour */
+#k8s-action, #k8s-cluster, #k8s-namespace, #k8s-param-name, #k8s-param-value { padding-left: 34px; background-color: var(--elevated); }
+#k8s-action, #k8s-cluster { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b9bb4' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M13 2L4 14h7l-1 8 9-12h-7z'/%3E%3C/svg%3E"), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b9bb4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat, no-repeat; background-position: 11px center, right 10px center; background-size: 16px, 14px; }
+#k8s-cluster { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b9bb4' stroke-width='1.8' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='6' rx='2'/%3E%3Crect x='3' y='14' width='18' height='6' rx='2'/%3E%3C/svg%3E"), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b9bb4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); }
+#k8s-namespace { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b9bb4' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: 11px center; background-size: 16px; }
+#k8s-param-name { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b9bb4' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M3 12V4h8l10 10-8 8z'/%3E%3Ccircle cx='7.5' cy='8.5' r='1.5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: 11px center; background-size: 16px; }
+#k8s-param-value { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b9bb4' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 20h4L19 9l-4-4L4 16z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: 11px center; background-size: 16px; }
+
+/* Action buttons: the gradient look used on the Cloud page */
+.k8s-actions .btn-primary, .k8s-analysis-bar .btn-primary { border: 0; border-radius: 10px; color: #fff; background: linear-gradient(180deg, #4f8cff 0%, #2563eb 100%); box-shadow: 0 8px 22px rgba(37,99,235,.35), inset 0 1px 0 rgba(255,255,255,.25); }
+.k8s-actions .btn-primary:hover, .k8s-analysis-bar .btn-primary:hover { background: linear-gradient(180deg, #60a0ff 0%, #2f6ff0 100%); }
+.k8s-actions .btn-primary { width: 100%; height: 42px; font-size: 14px; font-weight: 600; justify-content: center; margin-top: 14px; }
+.k8s-analysis-bar .btn-primary { height: 38px; padding: 0 16px; font-weight: 600; }
+
+/* Read-only analysis */
+.k8s-note { font-size: 12.5px; color: var(--muted); margin: 0 0 12px; }
+.k8s-analysis-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.k8s-an-toggle { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--elevated); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.k8s-an-toggle input { accent-color: var(--accent); }
+
+/* Search bar and filters below the clusters */
+#k8s-filters { gap: 10px; }
+#k8s-filters .rk-search { flex: 1 1 320px; }
+#k8s-filters .rk-search input { height: 40px; border-radius: 9px; background: var(--elevated); border: 1px solid var(--border); }
+#k8s-filters .rk-search input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.35), 0 0 14px rgba(59,130,246,.25); outline: none; }
+#k8s-filters select { height: 40px; min-width: 150px; padding: 0 32px 0 11px; border: 1px solid var(--border); border-radius: 9px; background-color: var(--elevated); color: var(--text); appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b9bb4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; background-size: 14px; cursor: pointer; }
+#k8s-filters select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.35); }
