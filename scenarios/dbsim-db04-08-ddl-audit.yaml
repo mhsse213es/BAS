@@ -1,0 +1,47 @@
+id: dbsim-db04-08-ddl-audit
+product_line: dbsim
+name: Database Security Simulation DB-04-08 - DDL Operation Auditing
+description: >
+  Creates and drops one synthetic table inside the run's own fixture schema, both
+  statements tagged with the dispatch marker, then checks that the database audit
+  trail recorded both statements. The table holds no real data and is removed by
+  the run's fixture teardown. A DDL change that leaves no audit record is an audit
+  gap, not a pass: both the CREATE and the DROP must appear.
+
+  ATT&CK mapping: T1562 Impair Defenses (the scenario checks whether schema
+  changes are audited, so an attacker's DDL would be visible; it never disables
+  any log).
+
+  Configuration (pgaudit installed, its policy) is read by dbsim-db04-audit-coverage,
+  not here. This scenario is the generation check only. Target details come from
+  the server-side registry by id; the marker is issued by the orchestrator per dispatch.
+author: Audspect Research
+executable: true
+tags:
+  - dbsim
+  - database
+  - audit
+  - logging
+  - ddl
+  - mitre-attack
+mitre_phases:
+  - defense-evasion
+
+steps:
+  - name: "DB-04-08 DDL round-trip for audit readback (T1562)"
+    technique_id: T1562
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: audit_ddl_roundtrip
+    db_fixture: accounts
+    db_limits:
+      max_rows: 10
+      timeout_sec: 30
+      max_conns: 1
+    risk: medium
+    blast_radius: "lab only: one synthetic CREATE TABLE and DROP TABLE inside the run's fixture schema; no real data; removed by fixture teardown"
+    reversible: true
+    telemetry:
+      - "Database audit trail records the marker-tagged CREATE TABLE and DROP TABLE of the synthetic table"
+    detection:
+      - "SIEM: DDL executed by the probe identity against a database schema"
