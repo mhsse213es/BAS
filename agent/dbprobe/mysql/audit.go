@@ -416,15 +416,17 @@ func auditConfigNotes(st auditState, plugins [][]any) []string {
 	notes = append(notes,
 		srcGeneralLog+"="+readable(st.glReadable),
 		srcHistoryLong+"="+readable(st.histReadable))
-	notes = append(notes, "audit_config: "+mysqlAuditCoverage(st.glUsable() || st.histUsable(), st.glOn || activePlugin || (st.psOn && st.consumersOK())))
+	notes = append(notes, "audit_config: "+mysqlAuditCoverage(activePlugin, false, st.glOn || activePlugin || (st.psOn && st.consumersOK())))
 	return notes
 }
 
-// mysqlAuditCoverage: covered when a queryable source exists, partial when
-// something logs but is not queryable by this account, none otherwise.
-func mysqlAuditCoverage(queryable, anyLogging bool) string {
+// mysqlAuditCoverage: covered only when an audit plugin is active AND its output
+// is readable. The general log and the performance-schema history are not audit
+// evidence, so they can never make coverage covered. Partial when something logs,
+// none otherwise.
+func mysqlAuditCoverage(pluginActive, pluginReadable, anyLogging bool) string {
 	switch {
-	case queryable:
+	case pluginActive && pluginReadable:
 		return "covered"
 	case anyLogging:
 		return "partial"
