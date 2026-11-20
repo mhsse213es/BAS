@@ -304,3 +304,14 @@ Step 50 PASSes with "Security Center reports an enabled AV provider: Windows Def
 2. Whether step 50 should require real-time protection to be on, in addition to the enabled bit.
 3. BIOS: Secure Boot and TPM, if the owner wants those to pass.
 4. HVCI configuration on the client, matching the server's fix.
+
+## Changes since the server and client runs (2026-11-20)
+
+- **Step 50 (Security Center enabled provider):** now requires Defender real-time protection to be ON before PASS. Registered but real-time off is FAIL. Real-time not readable locally is NOT_ASSESSED. Commit `74127234`. Effect: on the client, step 50 becomes FAIL because real-time protection is off there.
+- **Client RDP Network Level Authentication:** set `UserAuthentication` from `0` to `1` on DESKTOP-5TVEBSI, so step 68 now PASSes. Original value `0`. Revert: `Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name UserAuthentication -Value 0 -Type DWord`. RDP stays enabled.
+- **Not changed on the client:** Defender real-time protection (left alone at the owner's request), HVCI (needs a reboot, awaiting approval), BitLocker (decryption time), Secure Boot and TPM (BIOS only).
+
+## Release gate status
+
+- Merge to `main`: **not yet.** Blockers: the Trellix on-access issue on the server, and the final server re-run on the frozen package.
+- Frozen package: the scenario sha256 is `a65bf7e1baf6c7a780bdec67fd1055c435108830b3b6f786d48f3a73111110be` on commit `74127234`.
