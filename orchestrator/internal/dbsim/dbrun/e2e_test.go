@@ -405,7 +405,7 @@ func isFixtureScenario(id string) bool {
 	switch id {
 	case "dbsim-db05-suspicious-read", "dbsim-db09-bounded-bulk-read",
 		"dbsim-db06-account-revocation", "dbsim-db07-sensitive-classification",
-		"dbsim-db04-04-failed-login-audit",
+		"dbsim-db03-unauthorized-access", "dbsim-db04-04-failed-login-audit",
 		"dbsim-db08-audit-tamper-resistance", "dbsim-db10-write-delete-prevention",
 		// DB-11 seeds no fixture but is lab-only (LabOnly): it needs the same
 		// approval and the agent-local allowance.
