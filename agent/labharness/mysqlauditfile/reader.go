@@ -81,3 +81,17 @@ func principalOf(user string) string {
 	}
 	return strings.TrimSpace(user)
 }
+
+// CoverageVerdict is the MySQL audit-coverage rule for the harness. "covered"
+// needs an active audit plugin AND a readable audit file. An active plugin whose
+// file cannot be read is "partial". The general log and performance-schema
+// history never count here.
+func CoverageVerdict(pluginActive bool, readErr error) string {
+	switch {
+	case pluginActive && readErr == nil:
+		return "covered"
+	case pluginActive:
+		return "partial"
+	}
+	return "none"
+}
