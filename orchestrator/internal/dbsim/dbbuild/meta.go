@@ -25,6 +25,7 @@ var probeText = map[string]struct{ objective, action string }{
 	"read_financial_records":  {"A read of restricted financial records is denied", "named probe read_financial_records (read of a restricted transactions table under a read role with no grant on it)"},
 	"auth_failed_login":       {"A wrong-password login is refused and recorded", "named probe auth_failed_login (one login with a wrong password for a throwaway account)"},
 	"read_classified_fixture": {"A read of sensitive-looking data is recognised by data classification", "named probe read_classified_fixture (bounded read of a synthetic classified table)"},
+	"audit_ddl_roundtrip": {"Database DDL operations are recorded in the audit trail", "named probe audit_ddl_roundtrip (one marker-tagged CREATE and DROP of a synthetic table in the fixture schema)"},
 	"try_disable_audit":       {"A session cannot switch off or weaken database auditing", "named probe try_disable_audit (attempt to disable auditing in the session scope)"},
 	"bounded_synthetic_read":  {"A bounded bulk read of synthetic data is detected", "named probe bounded_synthetic_read (bounded read of a seeded synthetic fixture)"},
 	"try_write_fixture":       {"A restricted account cannot write or delete data", "named probe try_write_fixture (attempted write against a synthetic fixture)"},

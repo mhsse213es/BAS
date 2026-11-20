@@ -90,6 +90,9 @@ var expectations = map[string]map[string]Expectation{
 		// visibility of other role names is recorded, not denied.
 		"read_foreign_role_names": expAllow,
 	},
+	"dbsim-db04-08-ddl-audit": {
+		"audit_ddl_roundtrip": {ExpectedPrevention: "allow", ExpectAudit: true},
+	},
 	"dbsim-db04-audit-coverage": {
 		"read_audit_config": {ExpectedPrevention: "allow", ExpectAuditConfig: true},
 		"read_roles":        {ExpectedPrevention: "allow", ExpectDetection: true, ExpectAudit: true},

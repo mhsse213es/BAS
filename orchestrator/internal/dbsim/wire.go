@@ -184,6 +184,7 @@ var probeRegistry = map[string]ProbeRegistryEntry{
 	"try_disable_audit": {ID: "try_disable_audit", Class: ClassBoundedSynthetic, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}, RequiredFixture: "empty"},
 	// DB-10: a throwaway SELECT-only account attempts one INSERT, UPDATE and DELETE on the accounts fixture table; the table is fingerprinted before and after.
 	"try_write_fixture": {ID: "try_write_fixture", Class: ClassBoundedSynthetic, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}, RequiredFixture: "accounts"},
+	"audit_ddl_roundtrip": {ID: "audit_ddl_roundtrip", Class: ClassBoundedSynthetic, Engines: []string{"postgresql"}, ParamSchema: map[string]string{}, RequiredFixture: "accounts"},
 	// DB-11: fixed read-only catalog queries about the connected account's export/backup privileges. Read-only by class, lab-only by LabOnly. No export is performed.
 	"check_export_privileges": {ID: "check_export_privileges", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}, LabOnly: true},
 	// Task 16: fixed read-only catalog questions about the connected account (can it write, change schema, administer accounts or touch audit settings). Plain read_only and allowed in client mode: it is how a target earns the read-only identity the client-mode release gate requires.
