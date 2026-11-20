@@ -60,3 +60,23 @@
 @media (max-width: 560px) { .cloud-fields .cf-wide { grid-column: auto; } }
 @media (max-width: 640px) { .cloud-find { width: 100%; } }
 .cloud-recent .cloud-runs-table th { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+
+/* Run form and Discovery run: shared field look (icons, chevrons, focus glow) and the gradient action button. */
+.cloud-fields select { appearance: none; -webkit-appearance: none; padding-right: 32px; background-color: var(--elevated); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b9bb4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; background-size: 14px; cursor: pointer; }
+.cloud-fields #cloud-run-region, .cloud-fields #cloud-run-principal, .cloud-fields #cloud-run-resource, .cloud-fields #cloud-disc-region, .cloud-fields #cloud-disc-target { padding-left: 34px; background-repeat: no-repeat; background-position: 11px center; background-size: 16px; }
+.cloud-fields #cloud-run-region, .cloud-fields #cloud-disc-region { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b9bb4' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18'/%3E%3C/svg%3E"); }
+.cloud-fields #cloud-run-principal, .cloud-fields #cloud-disc-target { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b9bb4' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='8' cy='15' r='4'/%3E%3Cpath d='M11 12l9-9M17 6l3 3M14 9l2 2'/%3E%3C/svg%3E"); }
+.cloud-fields #cloud-run-resource { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b9bb4' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M12 3l8 4.5v9L12 21l-8-4.5v-9z'/%3E%3Cpath d='M4 7.5l8 4.5 8-4.5M12 12v9'/%3E%3C/svg%3E"); }
+.cloud-fields input:focus, .cloud-fields select:focus, .cloud-fields textarea:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.35), 0 0 14px rgba(59,130,246,.25); }
+.cloud-run-btn { position: relative; border: 0; border-radius: 10px; color: #fff; background: linear-gradient(180deg, #4f8cff 0%, #2563eb 100%); box-shadow: 0 8px 22px rgba(37,99,235,.35), inset 0 1px 0 rgba(255,255,255,.25); display: flex; align-items: center; justify-content: center; gap: 8px; }
+.cloud-run-btn:hover { background: linear-gradient(180deg, #60a0ff 0%, #2f6ff0 100%); }
+.cloud-run-btn::after { content: ""; width: 14px; height: 14px; background: #fff; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M7 5l12 7-12 7z'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M7 5l12 7-12 7z'/%3E%3C/svg%3E") center / contain no-repeat; }
+.cloud-run-btn:disabled { opacity: .6; }
+
+/* Recent runs: a card with a clear header and rows, matching the form cards. */
+.cloud-recent { padding: 16px 18px; }
+.cloud-recent .cloud-runs-h { margin-bottom: 10px; }
+.cloud-recent .cloud-runs-table { border-radius: 10px; overflow: hidden; }
+.cloud-recent .cloud-runs-table thead th { background: var(--elevated); }
+.cloud-recent .cloud-runs-table tbody tr:hover td { background: var(--accent-dim); }
+.cloud-recent .cloud-runs-table td { padding: 9px 10px; }
