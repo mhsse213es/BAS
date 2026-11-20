@@ -392,7 +392,7 @@ func TestE2E_MySQL_SignedScenarioToCorrelatedRecord(t *testing.T) {
 
 var e2eScenarios = []string{
 	"dbsim-db01-auth-policy", "dbsim-db02-excessive-grants", "dbsim-db03-unauthorized-access",
-	"dbsim-db04-audit-coverage", "dbsim-db05-suspicious-read", "dbsim-db09-bounded-bulk-read",
+	"dbsim-db04-audit-coverage", "dbsim-db04-06-role-audit", "dbsim-db04-08-ddl-audit", "dbsim-db05-suspicious-read", "dbsim-db09-bounded-bulk-read",
 	"dbsim-db06-account-revocation", "dbsim-db07-sensitive-classification",
 	"dbsim-db08-audit-tamper-resistance", "dbsim-db10-write-delete-prevention", "dbsim-db11-backup-export-permissions",
 	"dbsim-db04-03-authentication-audit", "dbsim-db04-04-failed-login-audit", "dbsim-db04-07-sensitive-table-access",
@@ -406,6 +406,7 @@ func isFixtureScenario(id string) bool {
 	case "dbsim-db05-suspicious-read", "dbsim-db09-bounded-bulk-read",
 		"dbsim-db06-account-revocation", "dbsim-db07-sensitive-classification",
 		"dbsim-db03-unauthorized-access", "dbsim-db04-04-failed-login-audit",
+		"dbsim-db04-06-role-audit", "dbsim-db04-08-ddl-audit",
 		"dbsim-db08-audit-tamper-resistance", "dbsim-db10-write-delete-prevention",
 		// DB-11 seeds no fixture but is lab-only (LabOnly): it needs the same
 		// approval and the agent-local allowance.

@@ -1,0 +1,47 @@
+id: dbsim-db04-06-role-audit
+product_line: dbsim
+name: Database Security Simulation DB-04-06 - Role and Permission Change Auditing
+description: >
+  Grants and then revokes SELECT on one synthetic table for the run's fixture role, both
+  statements tagged with the dispatch marker, then checks that the database audit
+  trail recorded both statements. The table holds no real data and the grant is removed by
+  the REVOKE. A permission change that leaves no audit record is an audit
+  gap, not a pass: both the GRANT and the REVOKE must appear.
+
+  ATT&CK mapping: T1098 Account Manipulation (the scenario checks whether permission
+  changes are audited, so an attacker's grant would be visible; it never disables
+  any log).
+
+  Configuration (pgaudit installed, its policy) is read by dbsim-db04-audit-coverage,
+  not here. This scenario is the generation check only. Target details come from
+  the server-side registry by id; the marker is issued by the orchestrator per dispatch.
+author: Audspect Research
+executable: true
+tags:
+  - dbsim
+  - database
+  - audit
+  - logging
+  - role-change
+  - mitre-attack
+mitre_phases:
+  - persistence
+
+steps:
+  - name: "DB-04-06 GRANT and REVOKE round-trip for audit readback (T1098)"
+    technique_id: T1098
+    executor: dbprobe
+    db_target: lab-db
+    db_probe: audit_role_roundtrip
+    db_fixture: accounts
+    db_limits:
+      max_rows: 10
+      timeout_sec: 30
+      max_conns: 1
+    risk: medium
+    blast_radius: "lab only: one GRANT SELECT and REVOKE SELECT on a synthetic table for the fixture role; no real data; restored by the REVOKE"
+    reversible: true
+    telemetry:
+      - "Database audit trail records the marker-tagged GRANT and REVOKE on the synthetic table"
+    detection:
+      - "SIEM: permission change executed against a database role"
