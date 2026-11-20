@@ -77,19 +77,19 @@ steps:
       $rtp = $null
       try { $rtp = (Get-MpComputerStatus).RealTimeProtectionEnabled } catch {}
       if ($rtp -eq $true) { Write-Output "PASS: Microsoft Defender real-time protection is ENABLED and enforcing. [BAS-SIM]"; return }
-      # Fall back to any registered 3rd-party AV reporting "enabled" via SecurityCenter2.
+      # Fall back to any registered 3rd-party AV reporting "enabled" via SecurityCenter2 (Windows-verified registration).
       $av = Get-CimInstance -Namespace 'root/SecurityCenter2' -ClassName AntiVirusProduct -ErrorAction SilentlyContinue
       # Defender itself is excluded here: its state was already judged above, and it must not stand in for a 3rd-party engine.
       foreach ($p in $av) { if (($p.productState -band 0x1000) -ne 0 -and $p.displayName -notmatch 'Defender') { Write-Output "PASS: 3rd-party AV '$($p.displayName)' reports real-time protection ENABLED. [BAS-SIM]"; return } }
-      # Trellix on-access driver (mfehidk) attached to volumes, with its services running. This proves the
-      # on-access filter is loaded and attached; the policy toggle itself is confirmed in ePO, not by this check.
+      # Trellix on-access driver (mfehidk) attached, with its services running. This is presence only: it does NOT
+      # prove on-access protection is enabled or working. Trellix's on-access state is not readable locally.
       $tFilter = $null
       $fl = (& fltmc filters 2>$null) -join "`n"
       if ($fl -match '(?m)^\s*mfehidk\s+([1-9]\d*)\s') { $tFilter = $matches[1] }
       $tSvc = @(Get-Service masvc,mfemms -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Running' }).Count -eq 2
       $trellixOnAccess = ($null -ne $tFilter) -and $tSvc
-      if ($trellixOnAccess) { Write-Output "PASS: Trellix on-access driver (mfehidk) is attached with $tFilter instance(s) and its services are running; Trellix is the primary engine. Policy toggle to be confirmed in ePO."; return }
-      if ($rtp -eq $false) { Write-Output "FAIL: Defender real-time protection is DISABLED - endpoint is unprotected against on-access threats."; return }
+      if ($trellixOnAccess) { Write-Output "SKIP: NOT_ASSESSED - Trellix on-access driver (mfehidk, $tFilter instance(s)) is attached and its services are running, but Trellix on-access protection cannot be verified locally (Trellix does not expose its on-access state to this check). Confirm in ePO. Not scored; not a PASS."; return }
+      if ($rtp -eq $false) { Write-Output "FAIL: Defender real-time protection is DISABLED and no verified real-time engine is present - endpoint is unprotected against on-access threats."; return }
       Write-Output "FAIL: No active real-time AV/EDR protection detected on this endpoint."
     cleanup: ""
 
@@ -284,8 +284,8 @@ steps:
       $ErrorActionPreference = 'Stop'
       if (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output "SKIP: Microsoft Defender (WinDefend) is not installed; third-party engine in use."; return }
       try { $s = Get-MpComputerStatus } catch { Write-Output "ERROR: Get-MpComputerStatus failed: $($_.Exception.Message)"; return }
-      # Trellix on-access driver (mfehidk) attached to volumes, with its services running. This proves the
-      # on-access filter is loaded and attached; the policy toggle itself is confirmed in ePO, not by this check.
+      # Trellix on-access driver (mfehidk) attached, with its services running. This is presence only: it does NOT
+      # prove on-access protection is enabled or working. Trellix's on-access state is not readable locally.
       $tFilter = $null
       $fl = (& fltmc filters 2>$null) -join "`n"
       if ($fl -match '(?m)^\s*mfehidk\s+([1-9]\d*)\s') { $tFilter = $matches[1] }
@@ -299,8 +299,8 @@ steps:
           foreach ($p in $av) { if ($p.displayName -notmatch 'Defender' -and (($p.productState -band 0x1000) -ne 0)) { $engines += $p.displayName } }
         } catch {}
       }
-      if ($trellixOnAccess -and -not [bool]$s.RealTimeProtectionEnabled) { $passive = $true; $engines += 'Trellix on-access driver (mfehidk)' }
       if ([bool]$s.BehaviorMonitorEnabled) { Write-Output "PASS: Defender behavior monitoring is ENABLED (observed BehaviorMonitorEnabled=True)." }
+      elseif ($trellixOnAccess -and -not [bool]$s.RealTimeProtectionEnabled) { Write-Output "SKIP: NOT_ASSESSED - Defender behavior monitoring is off (observed BehaviorMonitorEnabled=False) and real-time protection is off; Trellix on-access driver (mfehidk) is attached, but Trellix behaviour coverage cannot be verified locally. Confirm in ePO. Not scored." }
       elseif ($passive -and $engines.Count -gt 0) { Write-Output "SKIP: Defender passive by design (observed AMRunningMode=$($s.AMRunningMode)); third-party engine enforcing: $($engines -join ', '). Not scored." }
       else { Write-Output "FAIL: Defender behavior monitoring is DISABLED (observed BehaviorMonitorEnabled=False); process-behaviour detection is off." }
     cleanup: ""
@@ -326,8 +326,8 @@ steps:
       # Approved exceptions: BAS_EM01_APPROVED_EXCEPTIONS = 'DisableIOAVProtection:<ref>' (comma-separated). Approved = reported, not scored.
       $exc = @{}
       foreach ($pair in ([string]$env:BAS_EM01_APPROVED_EXCEPTIONS -split ',')) { $t = $pair.Trim(); if ($t -match '^([A-Za-z]+):(\S+)$') { $exc[$matches[1]] = $matches[2] } }
-      # Trellix on-access driver (mfehidk) attached to volumes, with its services running. This proves the
-      # on-access filter is loaded and attached; the policy toggle itself is confirmed in ePO, not by this check.
+      # Trellix on-access driver (mfehidk) attached, with its services running. This is presence only: it does NOT
+      # prove on-access protection is enabled or working. Trellix's on-access state is not readable locally.
       $tFilter = $null
       $fl = (& fltmc filters 2>$null) -join "`n"
       if ($fl -match '(?m)^\s*mfehidk\s+([1-9]\d*)\s') { $tFilter = $matches[1] }
@@ -341,9 +341,8 @@ steps:
           foreach ($p in $av) { if ($p.displayName -notmatch 'Defender' -and (($p.productState -band 0x1000) -ne 0)) { $engines += $p.displayName } }
         } catch {}
       }
-      if ($trellixOnAccess -and -not [bool]$s.RealTimeProtectionEnabled) { $passive = $true; $engines += 'Trellix on-access driver (mfehidk)' }
       if ([bool]$s.IoavProtectionEnabled) { Write-Output "PASS: Defender on-access scanning of downloads and attachments is ENABLED (observed IoavProtectionEnabled=True)." }
-      elseif ($trellixOnAccess) { Write-Output "PASS: Defender on-access scanning is off (observed IoavProtectionEnabled=False); Trellix on-access driver (mfehidk, $tFilter instance(s)) is attached and running as the primary engine. Policy toggle to be confirmed in ePO." }
+      elseif ($trellixOnAccess) { Write-Output "SKIP: NOT_ASSESSED - Trellix on-access driver (mfehidk, $tFilter instance(s)) is attached and its services are running, but Trellix on-access protection cannot be verified locally (Trellix does not expose its on-access state to this check). Confirm in ePO. Not scored; not a PASS." }
       elseif ($passive -and $engines.Count -gt 0) { Write-Output "SKIP: Defender passive by design (observed AMRunningMode=$($s.AMRunningMode)); third-party engine enforcing: $($engines -join ', '). Not scored." }
       elseif ($exc.ContainsKey('DisableIOAVProtection')) { Write-Output "SKIP: APPROVED EXCEPTION $($exc['DisableIOAVProtection']): on-access scanning is disabled under an approved exception (observed IoavProtectionEnabled=False); not scored." }
       else { Write-Output "FAIL: Defender on-access scanning of downloads and attachments is DISABLED (observed IoavProtectionEnabled=False) and no approved exception covers it." }
