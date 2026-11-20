@@ -812,6 +812,14 @@ func tableFixtureStmts(schema, role string, tables []dbprobe.FixtureTable) []pgS
 // ownerRoleFor names the per-run role that owns a fixture's restricted tables.
 func ownerRoleFor(schema string) string { return schema + "_own" }
 
+// revokeIfExists revokes a run role from the current user only when that role
+// exists. A bare REVOKE of a missing role is an error, and a fixture without an
+// owner role (the "empty" kind) would then fail its whole cleanup.
+func revokeIfExists(name string) string {
+	return "DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '" + name + "') THEN REVOKE " +
+		pgx.Identifier{name}.Sanitize() + " FROM CURRENT_USER; END IF; END $$"
+}
+
 func hasRestrictedTable(tables []dbprobe.FixtureTable) bool {
 	for _, t := range tables {
 		if t.Restricted {
@@ -912,8 +920,8 @@ func (a *Adapter) Cleanup(ctx context.Context, f dbprobe.Fixture) (dbprobe.Clean
 	for _, s := range []string{
 		"DROP SCHEMA IF EXISTS " + pgx.Identifier{schema}.Sanitize() + " CASCADE",
 		// Memberships granted for the run are revoked before the roles are dropped.
-		"REVOKE " + qr + " FROM CURRENT_USER",
-		"REVOKE " + qo + " FROM CURRENT_USER",
+		revokeIfExists(role),
+		revokeIfExists(owner),
 		"DROP ROLE IF EXISTS " + qr,
 		"DROP ROLE IF EXISTS " + qo,
 	} {
