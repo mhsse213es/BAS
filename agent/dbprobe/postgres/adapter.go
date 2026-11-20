@@ -381,7 +381,7 @@ func str(v any) string {
 // (SKIPPED), never as a pass. It answers from the cache; it issues no SQL.
 func (a *Adapter) Capabilities() dbprobe.Capabilities {
 	c := dbprobe.Capabilities{
-		ProbeIDs: []string{"auth_after_revoke", "auth_check", "bounded_synthetic_read", "check_export_privileges", "check_readonly_identity", "read_audit_config", "read_classified_fixture", "read_customer_records", "read_financial_records", "read_foreign_role_names", "read_global_privileges", "read_grants", "read_memberships", "read_restricted_table", "read_roles", "suspicious_read", "try_disable_audit", "try_write_fixture"},
+		ProbeIDs: []string{"auth_after_revoke", "auth_check", "auth_failed_login", "bounded_synthetic_read", "check_export_privileges", "check_readonly_identity", "read_audit_config", "read_classified_fixture", "read_customer_records", "read_financial_records", "read_foreign_role_names", "read_global_privileges", "read_grants", "read_memberships", "read_restricted_table", "read_roles", "suspicious_read", "try_disable_audit", "try_write_fixture"},
 		MarkerInAppName:   true,
 		MarkerInQueryText: true,
 		// The marker can only reach an audit record through the statement
@@ -460,6 +460,9 @@ func (a *Adapter) RunProbe(ctx context.Context, def dbprobe.ProbeDef, spec dbpro
 	mode := a.effectiveMode(spec)
 	if spec.ProbeID == dbprobe.ProbeAuthAfterRevoke {
 		return a.runAuthAfterRevoke(ctx, real, spec, mode)
+	}
+	if spec.ProbeID == dbprobe.ProbeAuthFailedLogin {
+		return a.runAuthFailedLogin(ctx, real, spec, mode)
 	}
 	switch spec.ProbeID {
 	case dbprobe.ProbeTryDisableAudit:
@@ -809,6 +812,14 @@ func tableFixtureStmts(schema, role string, tables []dbprobe.FixtureTable) []pgS
 // ownerRoleFor names the per-run role that owns a fixture's restricted tables.
 func ownerRoleFor(schema string) string { return schema + "_own" }
 
+// revokeIfExists revokes a run role from the current user only when that role
+// exists. A bare REVOKE of a missing role is an error, and a fixture without an
+// owner role (the "empty" kind) would then fail its whole cleanup.
+func revokeIfExists(name string) string {
+	return "DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '" + name + "') THEN REVOKE " +
+		pgx.Identifier{name}.Sanitize() + " FROM CURRENT_USER; END IF; END $$"
+}
+
 func hasRestrictedTable(tables []dbprobe.FixtureTable) bool {
 	for _, t := range tables {
 		if t.Restricted {
@@ -909,8 +920,8 @@ func (a *Adapter) Cleanup(ctx context.Context, f dbprobe.Fixture) (dbprobe.Clean
 	for _, s := range []string{
 		"DROP SCHEMA IF EXISTS " + pgx.Identifier{schema}.Sanitize() + " CASCADE",
 		// Memberships granted for the run are revoked before the roles are dropped.
-		"REVOKE " + qr + " FROM CURRENT_USER",
-		"REVOKE " + qo + " FROM CURRENT_USER",
+		revokeIfExists(role),
+		revokeIfExists(owner),
 		"DROP ROLE IF EXISTS " + qr,
 		"DROP ROLE IF EXISTS " + qo,
 	} {

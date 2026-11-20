@@ -22,6 +22,7 @@ import (
 // can assert what was (not) reached.
 type fakeDBAdapter struct {
 	mu          sync.Mutex
+	connFn      func(context.Context, dbprobe.AuditQuery) ([]dbprobe.AuditEvent, error)
 	calls       []string
 	gotCfg      dbprobe.ConnectionConfig
 	identity    string
@@ -75,6 +76,16 @@ func (f *fakeDBAdapter) RunProbe(ctx context.Context, def dbprobe.ProbeDef, spec
 	}
 	return dbprobe.ProbeResult{RowsRead: 3, DBTime: time.Now()}, nil
 }
+// CollectConnections is the optional role+window collector. connFn nil means
+// the adapter has no usable connection source.
+func (f *fakeDBAdapter) CollectConnections(ctx context.Context, q dbprobe.AuditQuery) ([]dbprobe.AuditEvent, error) {
+	f.rec("CollectConnections")
+	if f.connFn == nil {
+		return nil, dbprobe.ErrAuditUnsupported
+	}
+	return f.connFn(ctx, q)
+}
+
 func (f *fakeDBAdapter) CollectAudit(ctx context.Context, q dbprobe.AuditQuery) ([]dbprobe.AuditEvent, error) {
 	f.rec("CollectAudit")
 	f.mu.Lock()

@@ -96,7 +96,9 @@ func TestClientModeExecutorRunsOnlyPlainReadOnlyProbes(t *testing.T) {
 		}
 	}
 	sort.Strings(ran)
-	want := []string{"auth_check", "check_readonly_identity", "read_audit_config", "read_grants", "read_restricted_table", "read_roles"}
+	// Read-only catalog reads run in client mode: read_global_privileges and
+	// read_memberships are the DB-02 grant-policy inputs, the same kind as read_grants.
+	want := []string{"auth_check", "check_readonly_identity", "read_audit_config", "read_global_privileges", "read_grants", "read_memberships", "read_restricted_table", "read_roles"}
 	if strings.Join(ran, ",") != strings.Join(want, ",") {
 		t.Fatalf("client-mode executor ran %v, want %v", ran, want)
 	}

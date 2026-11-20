@@ -240,6 +240,9 @@ type Step struct {
 	DBProbe  string            `yaml:"db_probe,omitempty"  json:"dbProbe,omitempty"`  // named probe id; becomes the step Command
 	DBParams map[string]string `yaml:"db_params,omitempty" json:"dbParams,omitempty"` // probe parameters (schema-checked at build)
 	DBLimits *StepDBLimits     `yaml:"db_limits,omitempty" json:"dbLimits,omitempty"` // optional; defaults applied at build
+	// DBAuditBasis selects the audit evidence class: "" (marker, default) or
+	// "role_window" (connection events matched by role and time window, DB-04-03).
+	DBAuditBasis string `yaml:"db_audit_basis,omitempty" json:"dbAuditBasis,omitempty"`
 	// DBFixture names a catalog fixture (agent/dbprobe/fixtures: accounts,
 	// classified-pii, empty, edge) the agent seeds for this step and always tears
 	// down. Required by fixture-aware probes, whose db_params then name one of

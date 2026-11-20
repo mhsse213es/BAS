@@ -32,14 +32,14 @@ func TestExecclassEmbedFaithful(t *testing.T) {
 		return full[i].A < full[j].A
 	})
 
-	if len(full) != 3752 {
+	if len(full) != 3758 {
 		t.Fatalf("classification entry count changed: got %d; update the pin deliberately", len(full))
 	}
 	h := sha256.New()
 	for _, r := range full {
 		fmt.Fprintf(h, "%s\x1f%s\x1f%s\x1f%s\x1f%s\x1e", r.T, r.A, r.C, r.D, r.B)
 	}
-	const want = "babbf4848de0f0bc82660f67db204c6b8873cfdcd21c160b4c65d4fd9d6f107e"
+	const want = "acbc2896cfff7be3df3db0845902fb53a00d3e965532a975e4e638dc09556e84"
 	if got := hex.EncodeToString(h.Sum(nil)); got != want {
 		t.Fatalf("catalog changed after embed refactor:\n got  %s\n want %s", got, want)
 	}
@@ -57,8 +57,8 @@ func TestExecclassEmbedPreservesHandAuthoredSplit(t *testing.T) {
 			}
 		}
 	}
-	// 177 original hand-authored entries plus the 20 cloud VM entries, now written into the literal.
-	if hand != 302 {
-		t.Fatalf("expected 286 hand-authored entries (generated must not leak into the snapshot), got %d", hand)
+	// 177 original hand-authored entries, the 20 cloud VM entries, and 3 DB-04-04 T1110 dbprobe entries, and 3 T1213.006 dbprobe entries for DB-03.
+	if hand != 308 {
+		t.Fatalf("expected 308 hand-authored entries (generated must not leak into the snapshot), got %d", hand)
 	}
 }

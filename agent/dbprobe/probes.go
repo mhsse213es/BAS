@@ -78,6 +78,10 @@ var catalog = map[string]ProbeDef{
 	// approval path. Lab-only and mutation-approved via RequiredFixture (R-AI), not class.
 	ProbeAuthAfterRevoke: {ID: ProbeAuthAfterRevoke, Class: ClassBoundedSynthetic, Engines: bothEngines,
 		ParamSchema: map[string]ParamKind{}, RequiredFixture: RevokeFixtureKind},
+	// auth_failed_login (DB-04-04): creates a throwaway login account, attempts one
+	// login with a wrong password, and drops the account. Same lifecycle as DB-06.
+	ProbeAuthFailedLogin: {ID: ProbeAuthFailedLogin, Class: ClassBoundedSynthetic, Engines: []string{"postgresql"},
+		ParamSchema: map[string]ParamKind{}, RequiredFixture: RevokeFixtureKind},
 	// try_disable_audit (DB-08): a throwaway NO-privilege account opens a new
 	// connection and attempts ONLY a session-scoped audit change (see
 	// auditTamperSQL). bounded_synthetic (user decision, option A: never
