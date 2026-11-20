@@ -125,10 +125,21 @@ Each PASS was checked against a second source or the raw property where one exis
 - The EM-01 branch is created from `main` in a separate worktree. Only these files are committed: the YAML, its `.sig`, the 62 em-01 ledger rows, and this QA log.
 - The baseline file (`step_contract_baseline.json`) is not changed by this work: em-01 has zero gaps.
 
-## Open items for the owner
+## Open items: status (2026-11-20)
 
-1. Confirm the cause of real-time protection being disabled on this host (see the open root cause section). Decide whether to re-enable it. No host state was changed.
-2. Decide whether `OnboardingState=1` is the correct onboarding signal, or confirm it on an onboarded device.
-3. Run the scenario on a Windows Server host before any Server verdict is claimed.
-4. Confirm whether the Windows defaults in the "Expected Windows configuration" class are the out-of-box values for your image (not verified against a fresh image).
-5. Decide the meaning of the `[BAS-SIM]` suffix before it is applied to any new step.
+Built here, with instructions in `docs/endpoint-mastery-01-owner-runbook.md`:
+
+- **Read-only runner:** `scripts/em01_readonly_run.py` runs all 69 checks with the engine's verdict rules and writes CSV, JSON and a summary that records the host and the YAML sha256. Tested on this host: it reproduces the live results. The one difference from the earlier run is step 16, which FAILs because the definitions are now 28.6 h old. That is the 24 h check working as intended.
+
+Needs the owner (steps are in the runbook):
+
+1. **Real-time protection cause.** Still open. Investigated what could be checked from this host:
+   - Defender logged RTP-disabled events on 2026-10-10 11:11, 2026-10-10 16:48 and 2026-10-11 10:38.
+   - Agent operation logs for 2026-10-10 and 2026-10-11 do not exist.
+   - Retained operation logs contain test agent IDs (`test-agent`, `a1`, `abc123deadbeef01`), which suggests harness runs on this host. This is an observation, not proof.
+   - Nothing in the retained logs names the RTP-disabling scenarios. No host state was changed.
+2. **`OnboardingState=1` signal.** Needs an onboarded device. Not confirmed.
+3. **Windows Server run.** Needs a Server host. Not done.
+4. **Out-of-box defaults.** Needs a fresh image. Windows Sandbox is disabled on this host; enabling it is a state change the owner must approve.
+5. **`[BAS-SIM]` meaning.** Repo docs define the tag as marking synthetic or simulated data. EM-01 reads real state, so its PASS tags may mislabel real evidence. Options A/B/C are in the runbook. Decision pending.
+6. **Also found:** TPM (step 48) and Secure Boot (step 65) are firmware settings and need a person at the device. Defender definitions are 28.6 h old, which fails step 16 today.
