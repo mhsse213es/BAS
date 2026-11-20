@@ -45,6 +45,7 @@ export function loadCloudScenarios() {
   cloudRequest('/api/cloud-scenarios').then(function(r) {
     if (r.status !== 200) throw new Error(M.describeRunError(r.status, r.body && r.body.error));
     catalogue = M.scenarioCards(r.body);
+    syncProviderTone();
     paintHero();
     renderChips();
     renderCards();
@@ -120,14 +121,25 @@ function populateScenarioSelect() {
   sel.value = list.some(function(c) { return c.id === prev; }) ? prev : '';
 }
 
+// syncProviderTone marks each provider select with its chosen provider, so CSS can colour the field and show its logo.
+function syncProviderTone() {
+  ['cloud-run-provider', 'cloud-disc-provider'].forEach(function(id) {
+    var n = el(id);
+    if (n) n.setAttribute('data-provider', n.value || '');
+  });
+}
+
 // cloudRunProviderChanged is the run form's provider change: the scenario list follows it.
-export function cloudRunProviderChanged() { populateScenarioSelect(); }
+export function cloudRunProviderChanged() { syncProviderTone(); populateScenarioSelect(); }
+
+// cloudDiscProviderChanged is the discovery form's provider change.
+export function cloudDiscProviderChanged() { syncProviderTone(); }
 
 // cloudRunScenarioChanged sets the provider from the chosen scenario, so the pair is consistent.
 export function cloudRunScenarioChanged() {
   var target = M.scenarioProvider(catalogue, fieldValue('cloud-run-scenario'));
   var prov = el('cloud-run-provider');
-  if (target && prov && prov.value !== target) { prov.value = target; populateScenarioSelect(); }
+  if (target && prov && prov.value !== target) { prov.value = target; syncProviderTone(); populateScenarioSelect(); }
 }
 
 // cloudPickScenario selects a card's scenario in the run form and sets its provider.
@@ -136,6 +148,7 @@ export function cloudPickScenario(id) {
   var card = catalogue.filter(function(c) { return c.id === id; })[0];
   var prov = el('cloud-run-provider');
   if (prov && card && card.provider) prov.value = card.provider;
+  syncProviderTone();
   populateScenarioSelect();
   if (sel) sel.value = id;
   var form = el('cloud-run-form');
