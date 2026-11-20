@@ -1165,6 +1165,11 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			BlastRadius:       "Exfiltration over file transfer protocol — synthetic data sent to .invalid/monitored sink destinations (network-only)",
 		},
 	},
+	"T1213.006": {
+		"dbprobe_read_only":         dbprobeClass(ClassNonDestructive, "", "read_only database probe (named, read-only transaction, row/time bounded) -- T1213.006"),
+		"dbprobe_bounded_synthetic": dbprobeClass(ClassPotentiallyDestructive, "dbprobe_bounded_synthetic", "bounded_synthetic database probe (fixture-tagged synthetic rows, lab only) -- T1213.006"),
+		"dbprobe_mutation":          dbprobeClass(ClassDestructive, "dbprobe_mutation", "mutation database probe (changes real database state) -- T1213.006"),
+	},
 	"T1213": {
 		"dbprobe_read_only":         dbprobeClass(ClassNonDestructive, "", "read_only database probe (named, read-only transaction, row/time bounded) -- T1213"),
 		"dbprobe_bounded_synthetic": dbprobeClass(ClassPotentiallyDestructive, "dbprobe_bounded_synthetic", "bounded_synthetic database probe (writes only fixture-tagged synthetic rows/roles) -- T1213"),
