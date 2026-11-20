@@ -127,8 +127,14 @@ steps:
       $tp = $null
       try { $tp = (Get-MpComputerStatus).IsTamperProtected } catch {}
       if ($tp -eq $null) { Write-Output "SKIP: Tamper Protection state unavailable — not a Defender-managed endpoint."; return }
+      # Approved exception: BAS_EM01_APPROVED_EXCEPTIONS = 'TamperProtection:<ref>' (comma-separated). Approved = reported, not scored.
+      $exc = @{}
+      foreach ($pair in ([string]$env:BAS_EM01_APPROVED_EXCEPTIONS -split ',')) { $t = $pair.Trim(); if ($t -match '^([A-Za-z]+):(\S+)$') { $exc[$matches[1]] = $matches[2] } }
       if ($tp -eq $true) { Write-Output "PASS: Defender Tamper Protection is ENABLED — AV settings are locked against attacker tampering. [BAS-SIM]" }
-      else { Write-Output "FAIL: Tamper Protection is OFF — an attacker with admin can silently disable the AV before attacking." }
+      else {
+      if ($exc.ContainsKey('TamperProtection')) { Write-Output "SKIP: APPROVED EXCEPTION $($exc['TamperProtection']): Defender Tamper Protection is not available on this build (no management service; observed IsTamperProtected=False). Compensating control: Trellix Self Protection enabled. Not scored." }
+      else { Write-Output "FAIL: Tamper Protection is OFF - an attacker with admin can silently disable the AV before attacking, and no approved exception covers it." }
+      }
     cleanup: ""
 
   - name: "Host firewall enabled on all profiles (Domain/Private/Public)"

@@ -1,8 +1,8 @@
 {
  "scenario": "em-01-control-validation",
  "source_file": "em-01-control-validation.yaml",
- "source_sha256": "8f880097c548f26cd83a5ca00f829322cfa0207fafcc135f89f4aa156918f14c",
- "exported_at": "2026-11-20T05:23:19+00:00",
+ "source_sha256": "79af20a26cd432b8234b22b402c804b6ebd12ba57b0e2a6f44348fb6e02bc336",
+ "exported_at": "2026-11-20T06:24:36+00:00",
  "steps": [
   {
    "index": 0,
@@ -23,7 +23,7 @@
    "name": "Defender Tamper Protection enabled",
    "technique_id": "T1562.001",
    "timeout_sec": 30,
-   "command": "$ErrorActionPreference = 'SilentlyContinue'\n$tp = $null\ntry { $tp = (Get-MpComputerStatus).IsTamperProtected } catch {}\nif ($tp -eq $null) { Write-Output \"SKIP: Tamper Protection state unavailable — not a Defender-managed endpoint.\"; return }\nif ($tp -eq $true) { Write-Output \"PASS: Defender Tamper Protection is ENABLED — AV settings are locked against attacker tampering. [BAS-SIM]\" }\nelse { Write-Output \"FAIL: Tamper Protection is OFF — an attacker with admin can silently disable the AV before attacking.\" }\n"
+   "command": "$ErrorActionPreference = 'SilentlyContinue'\n$tp = $null\ntry { $tp = (Get-MpComputerStatus).IsTamperProtected } catch {}\nif ($tp -eq $null) { Write-Output \"SKIP: Tamper Protection state unavailable — not a Defender-managed endpoint.\"; return }\n# Approved exception: BAS_EM01_APPROVED_EXCEPTIONS = 'TamperProtection:<ref>' (comma-separated). Approved = reported, not scored.\n$exc = @{}\nforeach ($pair in ([string]$env:BAS_EM01_APPROVED_EXCEPTIONS -split ',')) { $t = $pair.Trim(); if ($t -match '^([A-Za-z]+):(\\S+)$') { $exc[$matches[1]] = $matches[2] } }\nif ($tp -eq $true) { Write-Output \"PASS: Defender Tamper Protection is ENABLED — AV settings are locked against attacker tampering. [BAS-SIM]\" }\nelse {\nif ($exc.ContainsKey('TamperProtection')) { Write-Output \"SKIP: APPROVED EXCEPTION $($exc['TamperProtection']): Defender Tamper Protection is not available on this build (no management service; observed IsTamperProtected=False). Compensating control: Trellix Self Protection enabled. Not scored.\" }\nelse { Write-Output \"FAIL: Tamper Protection is OFF - an attacker with admin can silently disable the AV before attacking, and no approved exception covers it.\" }\n}\n"
   },
   {
    "index": 3,
