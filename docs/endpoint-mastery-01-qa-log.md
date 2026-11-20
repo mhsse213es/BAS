@@ -315,3 +315,10 @@ Step 50 PASSes with "Security Center reports an enabled AV provider: Windows Def
 
 - Merge to `main`: **not yet.** Blockers: the Trellix on-access issue on the server, and the final server re-run on the frozen package.
 - Frozen package: the scenario sha256 is `a65bf7e1baf6c7a780bdec67fd1055c435108830b3b6f786d48f3a73111110be` on commit `74127234`.
+
+## Client HVCI change (DESKTOP-5TVEBSI, 2026-11-20)
+
+- **Change:** `HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity` created with `Enabled=1` (Memory integrity on). Applied before a reboot.
+- **Original state:** the key did not exist (step 67 FAIL). VBS was running (`VirtualizationBasedSecurityStatus=2`).
+- **Revert:** `Remove-Item -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity' -Recurse -Force`, then reboot.
+- **Verify after reboot:** `Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard | Select-Object SecurityServicesConfigured, SecurityServicesRunning` should show `2` in both. Check `Microsoft-Windows-CodeIntegrity/Operational` for events 3033 or 3077, which mean a driver blocked HVCI.
