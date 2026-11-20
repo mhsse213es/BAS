@@ -86,7 +86,9 @@ var expectations = map[string]map[string]Expectation{
 		"read_restricted_table":   expDeny,
 		"read_customer_records":   expDeny,
 		"read_financial_records":  expDeny,
-		"read_foreign_role_names": expDeny,
+		// PostgreSQL grants pg_roles to every login: the read is allowed and the
+		// visibility of other role names is recorded, not denied.
+		"read_foreign_role_names": expAllow,
 	},
 	"dbsim-db04-audit-coverage": {
 		"read_audit_config": {ExpectedPrevention: "allow", ExpectAuditConfig: true},
