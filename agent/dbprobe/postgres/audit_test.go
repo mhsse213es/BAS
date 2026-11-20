@@ -386,7 +386,9 @@ func TestReadAuditConfigReportsSettingsAndCoverage(t *testing.T) {
 		view     []any
 		want     string
 	}{
-		{"covered", [][]any{{"log_statement", "all"}, {"pgaudit.log", "read,write"}, {"shared_preload_libraries", "pgaudit"}}, []any{true, true}, "audit_config: covered"},
+		{"covered", [][]any{{"log_statement", "all"}, {"pgaudit.log", "read,write,ddl,role"}, {"pgaudit_extension", "present"}, {"shared_preload_libraries", "pgaudit"}}, []any{true, true}, "audit_config: covered"},
+		{"partial: policy not met (no ddl or role)", [][]any{{"log_statement", "all"}, {"pgaudit.log", "read,write"}, {"pgaudit_extension", "present"}}, []any{true, true}, "audit_config: partial"},
+		{"partial: no pgaudit extension", [][]any{{"log_statement", "all"}, {"pgaudit.log", "read,write,ddl,role"}}, []any{true, true}, "audit_config: partial"},
 		{"partial: logging but no queryable view", [][]any{{"log_statement", "all"}}, []any{false, false}, "audit_config: partial"},
 		{"partial: ddl-only logging misses reads", [][]any{{"log_statement", "ddl"}}, []any{true, true}, "audit_config: partial"},
 		{"none", [][]any{{"log_statement", "none"}}, []any{false, false}, "audit_config: none"},
@@ -590,16 +592,16 @@ func TestPGDiscoveryErrorClasses(t *testing.T) {
 }
 
 func TestAuditCoverageUnits(t *testing.T) {
-	if got := pgAuditCoverage("all", "", true); got != "covered" {
+	if got := pgAuditCoverage("all", "", true, true, true); got != "covered" {
 		t.Error(got)
 	}
-	if got := pgAuditCoverage("none", "all", true); got != "covered" {
+	if got := pgAuditCoverage("none", "all", true, true, true); got != "covered" {
 		t.Error("pgaudit all + readable view is covered:", got)
 	}
-	if got := pgAuditCoverage("none", "-read,write", true); got != "partial" {
+	if got := pgAuditCoverage("none", "-read,write", true, true, true); got != "partial" {
 		t.Error("negated read must not count:", got)
 	}
-	if got := pgAuditCoverage("", "", false); got != "none" {
+	if got := pgAuditCoverage("", "", false, true, true); got != "none" {
 		t.Error(got)
 	}
 }

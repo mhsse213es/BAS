@@ -259,17 +259,29 @@ func auditConfigNotes(settings [][]any, view []any) []string {
 		state = "present_not_selectable"
 	}
 	notes = append(notes, auditSourceName+"="+state)
-	notes = append(notes, "audit_config: "+pgAuditCoverage(got["log_statement"], got["pgaudit.log"], present && selectable))
+	extension := got["pgaudit_extension"] == "present"
+	policy := "absent"
+	if pl := got["pgaudit.log"]; pl != "" && pl != "none" {
+		policy = "not_met"
+		if pgauditPolicyMet(pl) {
+			policy = "met"
+		}
+	}
+	notes = append(notes, "pgaudit_policy="+policy)
+	notes = append(notes, "audit_config: "+pgAuditCoverage(got["log_statement"], got["pgaudit.log"], present && selectable, extension, policy == "met"))
 	return notes
 }
 
 // pgAuditCoverage summarises whether reads would be logged AND the log is
 // queryable: covered (both), partial (some logging or a readable view), none.
-func pgAuditCoverage(logStatement, pgauditLog string, viewReadable bool) string {
+// pgAuditCoverage is covered only when reads are logged, the audit view is
+// readable, the pgaudit extension is installed and the stated policy is met.
+// Otherwise partial when anything is logged, none when nothing is.
+func pgAuditCoverage(logStatement, pgauditLog string, viewReadable, extension, policyMet bool) string {
 	readLogged := logStatement == "all" || pgauditLogsReads(pgauditLog)
 	anyLogging := (logStatement != "" && logStatement != "none") || (pgauditLog != "" && pgauditLog != "none")
 	switch {
-	case readLogged && viewReadable:
+	case readLogged && viewReadable && extension && policyMet:
 		return "covered"
 	case anyLogging || viewReadable:
 		return "partial"
@@ -279,13 +291,23 @@ func pgAuditCoverage(logStatement, pgauditLog string, viewReadable bool) string 
 
 // pgauditLogsReads reports whether pgaudit.log enables the READ (or ALL) class
 // and does not negate it.
-func pgauditLogsReads(v string) bool {
+// pgauditPolicyMet reports whether pgaudit.log enables the stated policy classes
+// (write, ddl, role). "all" enables every class; a negated class is never enabled.
+func pgauditPolicyMet(v string) bool {
+	return pgauditEnables(v, "write") && pgauditEnables(v, "ddl") && pgauditEnables(v, "role")
+}
+
+func pgauditLogsReads(v string) bool { return pgauditEnables(v, "read") }
+
+// pgauditEnables reports whether pgaudit.log enables class (or all) and does not
+// negate it.
+func pgauditEnables(v, class string) bool {
 	on := false
 	for _, tok := range strings.Split(strings.ToLower(v), ",") {
 		switch strings.TrimSpace(tok) {
-		case "read", "all":
+		case class, "all":
 			on = true
-		case "-read", "-all":
+		case "-" + class, "-all":
 			return false
 		}
 	}
