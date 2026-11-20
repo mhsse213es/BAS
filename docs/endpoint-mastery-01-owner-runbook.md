@@ -142,3 +142,11 @@ Update-MpSignature
 ```
 Check whether this host should update within 24 hours at all. That depends on how its updates are
 managed.
+
+## Environment variables added (2026-11-20)
+
+- `BAS_EM01_ENCRYPTION_BASELINE` — `none` (default) | `required`. Set `required` if the selected baseline requires BitLocker. A missing feature or an unencrypted volume then FAILs. Under `none` both are NOT_ASSESSED.
+- `BAS_EM01_APPROVED_EXCEPTIONS` — e.g. `DisableIOAVProtection:CHG-1234`. Use only for a documented, approved exception. Each entry is reported as SKIP with its reference and is not scored. Unapproved disables still FAIL.
+- `BAS_EM01_DEF_UPDATE_HOST` — the update source probed for step 16 when definitions are stale. Default `definitionupdates.microsoft.com`. Set it to an approved internal source if the endpoint uses one.
+
+The runner now writes a `category` column and groups the summary into control failures, not-assessed (environmental or policy), not-applicable, and probe errors.

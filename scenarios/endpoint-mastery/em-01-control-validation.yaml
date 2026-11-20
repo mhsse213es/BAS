@@ -32,6 +32,12 @@ description: >
     BAS_EM01_FW_LOG_MB          firewall log threshold, MB. Default 16 (Audspect recommended).
     BAS_EM01_SECLOG_MB          Security event log threshold, MB. Default 192 (Audspect recommended).
     BAS_EM01_AV_DEF_HOURS       AV definitions freshness, hours. Default 24 (Audspect recommended).
+    BAS_EM01_ENCRYPTION_BASELINE  none (default) | required. 'required' makes BitLocker a baseline requirement;
+                                 a missing feature or unencrypted volume then FAILs. 'none' reports NOT_ASSESSED.
+    BAS_EM01_APPROVED_EXCEPTIONS  e.g. DisableIOAVProtection:CHG-1234 (comma-separated). An approved disable is
+                                 reported as SKIP with its reference, not scored; unapproved disables still FAIL.
+    BAS_EM01_DEF_UPDATE_HOST      update source probed (TCP 443) when definitions are stale. Default
+                                 definitionupdates.microsoft.com. Unreachable = NOT_ASSESSED; reachable = FAIL.
   Thresholds are Audspect recommended defaults, not Microsoft or CIS requirements.
   Each PASS/FAIL reports the observed value and the threshold used.
 author: Audspect Research
@@ -228,13 +234,19 @@ steps:
     detection:
       - "Config assurance: system drive must be encrypted (data-at-rest)"
     command: |
-      $ErrorActionPreference = 'SilentlyContinue'
-      $sys = $env:SystemDrive
-      $vol = $null
-      try { $vol = Get-BitLockerVolume -MountPoint $sys -ErrorAction Stop } catch {}
-      if (-not $vol) { Write-Output "SKIP: BitLocker not queryable on $sys (feature absent or 3rd-party FDE in use)."; return }
-      if ($vol.ProtectionStatus -eq 'On' -or $vol.VolumeStatus -eq 'FullyEncrypted') { Write-Output "PASS: BitLocker is ON for system drive $sys (status=$($vol.VolumeStatus)). [BAS-SIM]" }
-      else { Write-Output "FAIL: System drive $sys is NOT encrypted (protection=$($vol.ProtectionStatus)) — data-at-rest is exposed on theft/loss." }
+      $ErrorActionPreference = 'Stop'
+      # Baseline gate (Audspect decision). 'required' = the selected baseline requires BitLocker; 'none' = it does not.
+      $req = ([string]$env:BAS_EM01_ENCRYPTION_BASELINE).Trim().ToLowerInvariant()
+      if ($req -eq '') { $req = 'none' }
+      if ($req -notin @('none', 'required')) { Write-Output "ERROR: BAS_EM01_ENCRYPTION_BASELINE must be 'none' or 'required' (got '$req')."; return }
+      function Write-Gate([string]$msg) {
+        if ($req -eq 'required') { Write-Output "FAIL: Baseline requires BitLocker and it is not in force: $msg (baseline=required)." }
+        else { Write-Output "SKIP: NOT_ASSESSED - baseline does not require BitLocker ($msg; baseline=none). Policy-dependent; not scored." }
+      }
+      if (-not (Get-Command Get-BitLockerVolume -ErrorAction SilentlyContinue)) { Write-Gate "BitLocker feature is not installed on this endpoint"; return }
+      try { $vol = Get-BitLockerVolume -MountPoint $env:SystemDrive } catch { Write-Output "ERROR: Get-BitLockerVolume failed: $($_.Exception.Message)"; return }
+      if ($vol.ProtectionStatus -eq 'On' -or $vol.VolumeStatus -eq 'FullyEncrypted') { Write-Output "PASS: BitLocker is ON for system drive $env:SystemDrive (status=$($vol.VolumeStatus)). [BAS-SIM]" }
+      else { Write-Gate "system drive $env:SystemDrive is NOT encrypted (protection=$($vol.ProtectionStatus), VolumeStatus=$($vol.VolumeStatus))" }
     cleanup: ""
 
   # ───────────────────────── EDR / AV engine (E1–E8) ─────────────────────────
@@ -279,8 +291,12 @@ steps:
       $ErrorActionPreference = 'Stop'
       if (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output "SKIP: Microsoft Defender (WinDefend) is not installed; third-party engine in use."; return }
       try { $s = Get-MpComputerStatus } catch { Write-Output "ERROR: Get-MpComputerStatus failed: $($_.Exception.Message)"; return }
+      # Approved exceptions: BAS_EM01_APPROVED_EXCEPTIONS = 'DisableIOAVProtection:<ref>' (comma-separated). Approved = reported, not scored.
+      $exc = @{}
+      foreach ($pair in ([string]$env:BAS_EM01_APPROVED_EXCEPTIONS -split ',')) { $t = $pair.Trim(); if ($t -match '^([A-Za-z]+):(\S+)$') { $exc[$matches[1]] = $matches[2] } }
       if ([bool]$s.IoavProtectionEnabled) { Write-Output "PASS: Defender on-access scanning of downloads and attachments is ENABLED (observed IoavProtectionEnabled=True)." }
-      else { Write-Output "FAIL: Defender on-access scanning of downloads and attachments is DISABLED (observed IoavProtectionEnabled=False)." }
+      elseif ($exc.ContainsKey('DisableIOAVProtection')) { Write-Output "SKIP: APPROVED EXCEPTION $($exc['DisableIOAVProtection']): on-access scanning is disabled under an approved exception (observed IoavProtectionEnabled=False); not scored." }
+      else { Write-Output "FAIL: Defender on-access scanning of downloads and attachments is DISABLED (observed IoavProtectionEnabled=False) and no approved exception covers it." }
     cleanup: ""
 
   - name: "Defender running in active mode (not passive without a replacement)"
@@ -479,8 +495,19 @@ steps:
       if ($raw.Trim() -ne '') { $n = 0; if (-not [int]::TryParse($raw.Trim(), [ref]$n) -or $n -lt 1) { Write-Output "ERROR: BAS_EM01_AV_DEF_HOURS must be a positive whole number of hours (got '$raw')."; return }; $thr = $n; $src = 'organization override BAS_EM01_AV_DEF_HOURS' }
       $h = [math]::Round(((Get-Date) - [datetime]$t).TotalHours, 1)
       $tt = "threshold=$thr hours ($src)"
-      if ($h -le $thr) { Write-Output "PASS: AV definitions were last updated $h hour(s) ago (observed $t; $tt)." }
-      else { Write-Output "FAIL: AV definitions were last updated $h hour(s) ago (observed $t; $tt); the update window is missed." }
+      if ($h -le $thr) { Write-Output "PASS: AV definitions were last updated $h hour(s) ago (observed $t; $tt)."; return }
+      # Stale. Decide endpoint failure vs environment by probing the update source (TCP 443). Override host: BAS_EM01_DEF_UPDATE_HOST.
+      $updHost = ([string]$env:BAS_EM01_DEF_UPDATE_HOST).Trim()
+      if ($updHost -eq '') { $updHost = 'definitionupdates.microsoft.com' }
+      $reach = $false; $why = ''
+      try {
+        $c = New-Object System.Net.Sockets.TcpClient
+        $ar = $c.BeginConnect($updHost, 443, $null, $null)
+        if ($ar.AsyncWaitHandle.WaitOne(5000)) { $c.EndConnect($ar); $reach = [bool]$c.Connected } else { $why = 'TCP connect timed out after 5 s' }
+        $c.Close()
+      } catch { $why = $_.Exception.Message }
+      if ($reach) { Write-Output "FAIL: AV definitions were last updated $h hour(s) ago (observed $t; $tt) while the update source $($updHost):443 is reachable from this endpoint; the endpoint is not taking updates." }
+      else { Write-Output "SKIP: NOT_ASSESSED - definitions are $h hour(s) old (observed $t; $tt) but the update source $($updHost):443 is unreachable from this host ($why). Environmental: staleness cannot be attributed to the endpoint. Not scored." }
     cleanup: ""
 
   - name: "Scheduled antivirus scan configured"
@@ -549,6 +576,9 @@ steps:
       $ErrorActionPreference = 'Stop'
       if (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output "SKIP: Microsoft Defender (WinDefend) is not installed; configuration flag check not applicable."; return }
       try { $p = Get-MpPreference } catch { Write-Output "ERROR: Get-MpPreference failed: $($_.Exception.Message)"; return }
+      # Approved exceptions: BAS_EM01_APPROVED_EXCEPTIONS = '<FlagName>:<ref>' (comma-separated). Approved = reported, not scored.
+      $exc = @{}
+      foreach ($pair in ([string]$env:BAS_EM01_APPROVED_EXCEPTIONS -split ',')) { $t = $pair.Trim(); if ($t -match '^([A-Za-z]+):(\S+)$') { $exc[$matches[1]] = $matches[2] } }
       $flags = [ordered]@{
         DisableRealtimeMonitoring        = [bool]$p.DisableRealtimeMonitoring
         DisableBehaviorMonitoring        = [bool]$p.DisableBehaviorMonitoring
@@ -556,8 +586,11 @@ steps:
         DisableIntrusionPreventionSystem = [bool]$p.DisableIntrusionPreventionSystem
       }
       $on = @($flags.GetEnumerator() | Where-Object { $_.Value } | ForEach-Object { $_.Key })
-      if ($on.Count -eq 0) { Write-Output "PASS: No protection disable flag is set in the Defender configuration (all four flags False)." }
-      else { Write-Output "FAIL: The Defender configuration disables protection through: $($on -join ', ') (set to True)." }
+      $unapproved = @($on | Where-Object { -not $exc.ContainsKey($_) })
+      $approved = @($on | Where-Object { $exc.ContainsKey($_) } | ForEach-Object { "$_ (ref $($exc[$_]))" })
+      if ($unapproved.Count -gt 0) { Write-Output "FAIL: The Defender configuration disables protection through: $($unapproved -join ', ') (set to True) and no approved exception covers them.$(if ($approved.Count) { ' Approved exceptions: ' + ($approved -join ', ') + '.' })" }
+      elseif ($approved.Count -gt 0) { Write-Output "SKIP: APPROVED EXCEPTION: $($approved -join ', ') disabled under an approved exception; not scored. Exception must be reviewed." }
+      else { Write-Output "PASS: No protection disable flag is set in the Defender configuration (all four flags False)." }
     cleanup: ""
 
   - name: "No broad Defender exclusions (roots, system folders, Temp, LOLBins, extensions)"
@@ -1206,10 +1239,18 @@ steps:
       - "Config assurance: encryption is complete, not in progress or decrypted"
     command: |
       $ErrorActionPreference = 'Stop'
-      if (-not (Get-Command Get-BitLockerVolume -ErrorAction SilentlyContinue)) { Write-Output "SKIP: BitLocker cmdlets are not available on this endpoint."; return }
+      # Baseline gate (Audspect decision). 'required' = the selected baseline requires BitLocker; 'none' = it does not.
+      $req = ([string]$env:BAS_EM01_ENCRYPTION_BASELINE).Trim().ToLowerInvariant()
+      if ($req -eq '') { $req = 'none' }
+      if ($req -notin @('none', 'required')) { Write-Output "ERROR: BAS_EM01_ENCRYPTION_BASELINE must be 'none' or 'required' (got '$req')."; return }
+      function Write-Gate([string]$msg) {
+        if ($req -eq 'required') { Write-Output "FAIL: Baseline requires BitLocker and it is not in force: $msg (baseline=required)." }
+        else { Write-Output "SKIP: NOT_ASSESSED - baseline does not require BitLocker ($msg; baseline=none). Policy-dependent; not scored." }
+      }
+      if (-not (Get-Command Get-BitLockerVolume -ErrorAction SilentlyContinue)) { Write-Gate "BitLocker feature is not installed on this endpoint"; return }
       try { $vol = Get-BitLockerVolume -MountPoint $env:SystemDrive } catch { Write-Output "ERROR: Get-BitLockerVolume failed: $($_.Exception.Message)"; return }
       if ([string]$vol.VolumeStatus -eq 'FullyEncrypted') { Write-Output "PASS: System volume $env:SystemDrive is FullyEncrypted (observed VolumeStatus=FullyEncrypted)." }
-      else { Write-Output "FAIL: System volume $env:SystemDrive is not fully encrypted (observed VolumeStatus=$($vol.VolumeStatus))." }
+      else { Write-Gate "system volume $env:SystemDrive is not fully encrypted (observed VolumeStatus=$($vol.VolumeStatus))" }
     cleanup: ""
 
   - name: "BitLocker system volume uses XTS-AES"
@@ -1228,12 +1269,20 @@ steps:
       - "Config assurance: XTS-AES is the required algorithm; CBC modes lack integrity protection"
     command: |
       $ErrorActionPreference = 'Stop'
-      if (-not (Get-Command Get-BitLockerVolume -ErrorAction SilentlyContinue)) { Write-Output "SKIP: BitLocker cmdlets are not available on this endpoint."; return }
+      # Baseline gate (Audspect decision). 'required' = the selected baseline requires BitLocker; 'none' = it does not.
+      $req = ([string]$env:BAS_EM01_ENCRYPTION_BASELINE).Trim().ToLowerInvariant()
+      if ($req -eq '') { $req = 'none' }
+      if ($req -notin @('none', 'required')) { Write-Output "ERROR: BAS_EM01_ENCRYPTION_BASELINE must be 'none' or 'required' (got '$req')."; return }
+      function Write-Gate([string]$msg) {
+        if ($req -eq 'required') { Write-Output "FAIL: Baseline requires BitLocker and it is not in force: $msg (baseline=required)." }
+        else { Write-Output "SKIP: NOT_ASSESSED - baseline does not require BitLocker ($msg; baseline=none). Policy-dependent; not scored." }
+      }
+      if (-not (Get-Command Get-BitLockerVolume -ErrorAction SilentlyContinue)) { Write-Gate "BitLocker feature is not installed on this endpoint"; return }
       try { $vol = Get-BitLockerVolume -MountPoint $env:SystemDrive } catch { Write-Output "ERROR: Get-BitLockerVolume failed: $($_.Exception.Message)"; return }
       $m = [string]$vol.EncryptionMethod
       if ($m -like 'XtsAes*') { Write-Output "PASS: System volume uses $m (XTS-AES)." }
-      elseif ([string]::IsNullOrEmpty($m) -or $m -eq 'None') { Write-Output "FAIL: System volume has no encryption method applied (observed EncryptionMethod=$m)." }
-      else { Write-Output "FAIL: System volume uses legacy $m; XTS-AES is required." }
+      elseif ([string]::IsNullOrEmpty($m) -or $m -eq 'None') { Write-Gate "system volume has no encryption method applied (observed EncryptionMethod=$m)" }
+      else { Write-Gate "system volume uses legacy $m; XTS-AES is required" }
     cleanup: ""
 
   - name: "BitLocker recovery password protector present on system volume"
@@ -1252,11 +1301,19 @@ steps:
       - "Config assurance: a recovery password protector must exist so the volume can be recovered"
     command: |
       $ErrorActionPreference = 'Stop'
-      if (-not (Get-Command Get-BitLockerVolume -ErrorAction SilentlyContinue)) { Write-Output "SKIP: BitLocker cmdlets are not available on this endpoint."; return }
+      # Baseline gate (Audspect decision). 'required' = the selected baseline requires BitLocker; 'none' = it does not.
+      $req = ([string]$env:BAS_EM01_ENCRYPTION_BASELINE).Trim().ToLowerInvariant()
+      if ($req -eq '') { $req = 'none' }
+      if ($req -notin @('none', 'required')) { Write-Output "ERROR: BAS_EM01_ENCRYPTION_BASELINE must be 'none' or 'required' (got '$req')."; return }
+      function Write-Gate([string]$msg) {
+        if ($req -eq 'required') { Write-Output "FAIL: Baseline requires BitLocker and it is not in force: $msg (baseline=required)." }
+        else { Write-Output "SKIP: NOT_ASSESSED - baseline does not require BitLocker ($msg; baseline=none). Policy-dependent; not scored." }
+      }
+      if (-not (Get-Command Get-BitLockerVolume -ErrorAction SilentlyContinue)) { Write-Gate "BitLocker feature is not installed on this endpoint"; return }
       try { $vol = Get-BitLockerVolume -MountPoint $env:SystemDrive } catch { Write-Output "ERROR: Get-BitLockerVolume failed: $($_.Exception.Message)"; return }
       $rp = @($vol.KeyProtector | Where-Object { [string]$_.KeyProtectorType -eq 'RecoveryPassword' })
       if ($rp.Count -gt 0) { Write-Output "PASS: $($rp.Count) recovery password protector(s) present on $env:SystemDrive. Escrow to AD or Entra is verified in the directory, not on the endpoint." }
-      else { Write-Output "FAIL: No recovery password protector on $env:SystemDrive (protectors=$(@($vol.KeyProtector | ForEach-Object { [string]$_.KeyProtectorType }) -join ',')); the volume cannot be recovered if the TPM state changes." }
+      else { Write-Gate "no recovery password protector on $env:SystemDrive (protectors=$(@($vol.KeyProtector | ForEach-Object { [string]$_.KeyProtectorType }) -join ','))" }
     cleanup: ""
 
   - name: "All fixed data volumes fully encrypted with BitLocker"
@@ -1275,13 +1332,22 @@ steps:
       - "Config assurance: fixed data drives hold data-at-rest too"
     command: |
       $ErrorActionPreference = 'Stop'
-      if (-not (Get-Command Get-BitLockerVolume -ErrorAction SilentlyContinue)) { Write-Output "SKIP: BitLocker cmdlets are not available on this endpoint."; return }
+      # Baseline gate (Audspect decision). 'required' = the selected baseline requires BitLocker; 'none' = it does not.
+      $req = ([string]$env:BAS_EM01_ENCRYPTION_BASELINE).Trim().ToLowerInvariant()
+      if ($req -eq '') { $req = 'none' }
+      if ($req -notin @('none', 'required')) { Write-Output "ERROR: BAS_EM01_ENCRYPTION_BASELINE must be 'none' or 'required' (got '$req')."; return }
+      function Write-Gate([string]$msg) {
+        if ($req -eq 'required') { Write-Output "FAIL: Baseline requires BitLocker and it is not in force: $msg (baseline=required)." }
+        else { Write-Output "SKIP: NOT_ASSESSED - baseline does not require BitLocker ($msg; baseline=none). Policy-dependent; not scored." }
+      }
+      if (-not (Get-Command Get-BitLockerVolume -ErrorAction SilentlyContinue)) { Write-Gate "BitLocker feature is not installed on this endpoint"; return }
+      try { $vol = Get-BitLockerVolume -MountPoint $env:SystemDrive } catch { Write-Output "ERROR: Get-BitLockerVolume failed: $($_.Exception.Message)"; return }
       try { $all = @(Get-BitLockerVolume) } catch { Write-Output "ERROR: Get-BitLockerVolume failed: $($_.Exception.Message)"; return }
       $data = @($all | Where-Object { [string]$_.VolumeType -eq 'FixedData' })
       if ($data.Count -eq 0) { Write-Output "PASS: No fixed data volumes are present; only the system volume holds data-at-rest on this endpoint."; return }
       $bad = @($data | Where-Object { [string]$_.VolumeStatus -ne 'FullyEncrypted' } | ForEach-Object { "$($_.MountPoint)=$($_.VolumeStatus)" })
       if ($bad.Count -eq 0) { Write-Output "PASS: All $($data.Count) fixed data volume(s) are FullyEncrypted." }
-      else { Write-Output "FAIL: Fixed data volume(s) not fully encrypted: $($bad -join ', ')." }
+      else { Write-Gate "fixed data volume(s) not fully encrypted: $($bad -join ', ')" }
     cleanup: ""
 
   - name: "TPM present and ready"

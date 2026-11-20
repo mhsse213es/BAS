@@ -65,6 +65,23 @@ function Get-Verdict {
     return @('NO_VERDICT', '')
 }
 
+function Get-Category {
+    # Separates control failures from environmental limitations so the report can tell them apart.
+    param([string]$Verdict, [string]$Line)
+    switch ($Verdict) {
+        'PASS'       { return 'pass' }
+        'FAIL'       { return 'control_failure' }
+        'ERROR'      { return 'probe_error' }
+        'NO_VERDICT' { return 'probe_error' }
+        'TIMEOUT'    { return 'probe_error' }
+        'SKIP'       {
+            if ($Line -match 'NOT_ASSESSED|APPROVED EXCEPTION|unreachable') { return 'not_assessed_environmental_or_policy' }
+            return 'not_applicable'
+        }
+    }
+    return 'unknown'
+}
+
 function Invoke-Step {
     param([string]$Command, [int]$TimeoutSec)
     # UTF-8 with BOM so Windows PowerShell 5.1 reads non-ASCII text in the scenario correctly.
@@ -105,6 +122,7 @@ foreach ($s in $doc.steps) {
     [void]$rows.Add([pscustomobject]@{
         index        = [int]$s.index
         verdict      = $pair[0]
+        category     = (Get-Category -Verdict $pair[0] -Line $pair[1])
         name         = $s.name
         technique    = $s.technique_id
         exit_code    = $r.ExitCode
@@ -118,7 +136,7 @@ $names = 'PASS', 'FAIL', 'SKIP', 'ERROR', 'NO_VERDICT', 'TIMEOUT'
 $counts = [ordered]@{}
 foreach ($n in $names) { $counts[$n] = @($rows | Where-Object { $_.verdict -eq $n }).Count }
 
-$rows | Select-Object index, verdict, name, technique, exit_code, verdict_line |
+$rows | Select-Object index, verdict, category, name, technique, exit_code, verdict_line |
     Export-Csv -LiteralPath (Join-Path $OutDir 'results.csv') -NoTypeInformation -Encoding UTF8
 
 [ordered]@{
@@ -141,13 +159,21 @@ $lines = @(
     "Run at: $($hostCtx.runAt)"
     "Counts: " + (($counts.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ', ')
     ''
-    'Non-PASS results:'
 )
-foreach ($r in $rows) {
-    if ($r.verdict -ne 'PASS') {
-        $lines += ('  [{0:00}] {1,-10} {2}' -f $r.index, $r.verdict, $r.name)
+$groups = [ordered]@{
+    'CONTROL FAILURES (security control not in required state; scored)' = 'control_failure'
+    'NOT ASSESSED (environmental, baseline or approved exception; not scored)' = 'not_assessed_environmental_or_policy'
+    'NOT APPLICABLE (component absent by design or not in scope; not scored)' = 'not_applicable'
+    'PROBE ERRORS (check could not run; investigate; not scored)' = 'probe_error'
+}
+foreach ($g in $groups.GetEnumerator()) {
+    $members = @($rows | Where-Object { $_.category -eq $g.Value })
+    $lines += ($g.Key + ': ' + $members.Count)
+    foreach ($r in $members) {
+        $lines += ('  [{0:00}] {1}' -f $r.index, $r.name)
         if ($r.verdict_line) { $lines += ('        ' + $r.verdict_line.Substring(0, [Math]::Min(240, $r.verdict_line.Length))) }
     }
+    $lines += ''
 }
 $lines | Set-Content -LiteralPath (Join-Path $OutDir 'summary.txt') -Encoding UTF8
 

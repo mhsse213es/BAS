@@ -143,3 +143,47 @@ Needs the owner (steps are in the runbook):
 4. **Out-of-box defaults.** Needs a fresh image. Windows Sandbox is disabled on this host; enabling it is a state change the owner must approve.
 5. **`[BAS-SIM]` meaning.** Repo docs define the tag as marking synthetic or simulated data. EM-01 reads real state, so its PASS tags may mislabel real evidence. Options A/B/C are in the runbook. Decision pending.
 6. **Also found:** TPM (step 48) and Secure Boot (step 65) are firmware settings and need a person at the device. Defender definitions are 28.6 h old, which fails step 16 today.
+
+## Decisions implemented (2026-11-20)
+
+Driven by the Windows Server 2019 test run, which surfaced three SKIP/FAIL questions that needed a decision and not a guess.
+
+1. **BitLocker is baseline-driven (steps 06, 44–47).** Controlled by `BAS_EM01_ENCRYPTION_BASELINE` (`none` default | `required`).
+   - `required`: a missing BitLocker feature, or an unencrypted volume, is a FAIL.
+   - `none`: both are NOT_ASSESSED (SKIP), not PASS. A missing feature is never a successful check.
+   - Any other value is an ERROR.
+   - **Effect on the client run:** the laptop's BitLocker FAILs (steps 06, 44, 45, 46) become NOT_ASSESSED under the default `none`. They are unchanged when `required` is set. Step 47 (no fixed data volumes) still PASSes, because the BitLocker feature is present and enumerates no data volumes. This is the only case where PASS is valid without encryption.
+2. **Approved exceptions (steps 08, 19).** Controlled by `BAS_EM01_APPROVED_EXCEPTIONS` (for example `DisableIOAVProtection:CHG-1234`, comma-separated).
+   - An approved disable is reported as SKIP with its reference. It is not scored, and it names the exception so it is visible in the report.
+   - An unapproved disable still FAILs, even when another flag is approved.
+   - Nothing is restored or weakened automatically. The owner decides whether each exception is intentional. The default remains "restore the expected configuration".
+   - Verified: `DisableRealtimeMonitoring` approved → step 19 SKIP with ref; `DisableIOAVProtection` approved alone → step 19 still FAILs on the unapproved flag; step 08 approved → SKIP with ref.
+3. **Defender update-source connectivity (step 16).** Controlled by `BAS_EM01_DEF_UPDATE_HOST` (default `definitionupdates.microsoft.com`, TCP 443, 5 s timeout).
+   - Definitions fresh → PASS. Connectivity is not needed.
+   - Definitions stale and source reachable → FAIL: the endpoint is not taking updates.
+   - Definitions stale and source unreachable → NOT_ASSESSED (SKIP), with the reason. This is an environmental limitation and is not reported as an endpoint failure.
+   - Connectivity probe error → treated as unreachable and reported with the message. It is not reported as an endpoint failure.
+   - The default host is an assumption: it is the Defender definitions host commonly documented for TCP 443 access. The owner should confirm it, or set `BAS_EM01_DEF_UPDATE_HOST` to the approved internal source (for example WSUS or a local mirror).
+   - Verified on the client: default host reachable; stale threshold with reachable source → FAIL; stale threshold with an unresolvable host → NOT_ASSESSED with the reason.
+
+### Environmental limitations versus security-control failures
+
+The runner now writes a `category` field for every step, and the summary groups results by it:
+
+- **control_failure** — the control is not in the required state. Scored. Owner action needed.
+- **not_assessed_environmental_or_policy** — baseline does not require it, an approved exception covers it, or the source is unreachable from this host. Not scored, and the reason is printed.
+- **not_applicable** — the component is absent by design or out of scope (for example, Sense not onboarded, Sysmon not deployed, WDAC not deployed). Not scored.
+- **probe_error** — the check could not run. Not scored, but it must be investigated; it is never a PASS.
+
+The earlier client result of 39 FAIL / 7 SKIP is superseded by this run: 35 control_failure, 5 not_assessed, 6 not_applicable, 0 probe_error, 23 PASS (on this client, with step 16 PASS because definitions are fresh).
+
+### Server re-run needed
+
+The 2019 server result predates these decisions. To re-run it, the owner must choose the baseline for the server:
+- If the server's baseline requires BitLocker, set `BAS_EM01_ENCRYPTION_BASELINE=required`. The five not-installed BitLocker checks then become FAILs, which is the intended outcome.
+- Decide whether `DisableIOAVProtection` is an approved exception. If it is not, restore the expected Defender configuration on the server and re-run. The steps are in the runbook.
+- Run the step-16 connectivity probe from the server. Its result decides between FAIL and NOT_ASSESSED.
+
+### Open item not changed by these decisions
+
+- **TPM (step 48)** still FAILs when no TPM is present, regardless of the BitLocker baseline. The TPM is a BitLocker prerequisite, but it was not one of the three decisions. Owner should decide whether TPM should follow the same baseline gate.
