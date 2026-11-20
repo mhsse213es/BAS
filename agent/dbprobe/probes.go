@@ -98,6 +98,10 @@ var catalog = map[string]ProbeDef{
 	// in the fixture schema, both tagged with the marker. PostgreSQL only.
 	ProbeAuditDDLRoundtrip: {ID: ProbeAuditDDLRoundtrip, Class: ClassBoundedSynthetic, Engines: []string{"postgresql"},
 		ParamSchema: map[string]ParamKind{}, RequiredFixture: WriteFixtureKind},
+	// audit_role_roundtrip (DB-04-06): lab-only GRANT then REVOKE of SELECT on the
+	// fixture accounts table for the fixture role. PostgreSQL only.
+	ProbeAuditRoleRoundtrip: {ID: ProbeAuditRoleRoundtrip, Class: ClassBoundedSynthetic, Engines: []string{"postgresql"},
+		ParamSchema: map[string]ParamKind{}, RequiredFixture: WriteFixtureKind},
 	// check_export_privileges (DB-11): fixed read-only catalog queries about
 	// what the CONNECTED account may do regarding export/backup. No export is
 	// ever performed. Read-only by class, lab-only by LabOnly.

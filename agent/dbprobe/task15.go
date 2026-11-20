@@ -11,6 +11,9 @@ const (
 	// ProbeAuditDDLRoundtrip (DB-04-08): one marker-tagged CREATE TABLE and DROP
 	// TABLE of a synthetic table in the run's own fixture schema. PostgreSQL only.
 	ProbeAuditDDLRoundtrip = "audit_ddl_roundtrip"
+	// ProbeAuditRoleRoundtrip (DB-04-06): one marker-tagged GRANT SELECT and REVOKE
+	// SELECT on the fixture accounts table for the fixture role. PostgreSQL only.
+	ProbeAuditRoleRoundtrip = "audit_role_roundtrip"
 	ProbeCheckExportPrivileges = "check_export_privileges"
 
 	// AuditTamperFixtureKind is the (otherwise unused) fixture try_disable_audit
