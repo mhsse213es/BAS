@@ -789,3 +789,51 @@ Defects found and fixed during the run (each with a test):
 
 Not yet done: a full scenario package run after the T1110 classification change; DB-04-03
 and DB-04-04 MySQL equivalents; repeat runs for stability.
+
+## DB-03 / DB-04 lab validation and fixes (2026-11-20)
+
+Scope: DB-03 (unauthorized access, four steps) and DB-04 (03 authentication audit, 04
+failed-login audit, 07 sensitive-table access). PostgreSQL only. MySQL audit tests remain
+SKIPPED until an audit plugin is provisioned.
+
+Lab runs were user-operated on the staging host with
+`TestE2E_PostgreSQL_SignedScenarioToCorrelatedRecord` filtered to `dbsim-db03|dbsim-db04-(03|04|07)`.
+Each run was on a different commit, so the progression below shows what each fix changed.
+
+| Run (commit) | DB-03 | DB-04-03 | DB-04-04 | DB-04-07 | Notes |
+|---|---|---|---|---|---|
+| b09a7fd0 (DB-04 merged to main) | not run: refused at build (no fixture approval) | PASS | ERROR | PASS | cleanup reported failed for the empty fixture |
+| 96c6b668 (cleanup + approval fixes) | not run: refused at build (T1213.006 unclassified) | PASS | PASS | PASS | |
+| 7a6f0d92 (T1213.006 classes) | read_customer_records, read_financial_records, read_restricted_table ERROR/ERROR/PASS; read_foreign_role_names FAIL | PASS | PASS | PASS | seed refused: CREATE SCHEMA in a read-only transaction on the restricted session |
+| 4f25127c (seed on privileged session) | read_customer_records, read_financial_records, read_restricted_table PASS; read_foreign_role_names FAIL | PASS | PASS | PASS | |
+| 27458fb1 (role-name visibility recorded) | all four PASS | PASS | PASS | PASS | `\du dbsim_*_acct` empty after the run |
+
+Post-run check on the last run: no `dbsim_*_acct` roles remained.
+
+Defects found and fixed during these runs (each with a test written first and seen to fail):
+- Fixture cleanup marked failed for the empty fixture: REVOKE on the owner role, which does
+  not exist for that fixture. Each REVOKE now runs only when its role exists (4b2ecaf6).
+- DB-03 refused at build: the E2E harness did not mark it as a fixture scenario (0822b855).
+- DB-03 steps unclassified: T1213.006 had no dbprobe entries. Added the three classes; the
+  catalog pins moved from 3755 to 3758 entries and from 305 to 308 hand-authored, with the
+  new hash pinned (7a6f0d92). The full scenario package passed on that branch.
+- Fixture seed refused on the restricted connection: CREATE SCHEMA is not allowed in the
+  restricted session. Seed and cleanup now run on an optional privileged lab session; the
+  probe still runs as the restricted account. Specs without a seed credential are unchanged
+  (21d79167).
+- read_foreign_role_names expected a denial PostgreSQL cannot provide, because pg_roles is
+  readable by every login by default. The expectation is now allow with detection still
+  expected, and the objective records visibility rather than claiming names are hidden
+  (27458fb1). The scenario file is unchanged, so no re-sign was needed.
+
+Known open after these changes:
+- `read_foreign_role_names` is graded allow for both engines. MySQL has not been checked for
+  this read, and MySQL DB-03 has not been run.
+- Two pre-existing failures on main, not caused by these changes:
+  TestCapabilityStates_ADCSExposureCheckCitesRealScenarioContent and
+  TestCapabilityStates_DelegationTrustGPOExposureChecksCiteRealScenarioContent (they expect
+  one step per scenario; the scenarios have more).
+- cmd/loadgen TestSimulatedAgent_Run_EnrollsAndReportsActive failed once in a full parallel
+  run and passed in two standalone runs. Treated as timing-dependent, not yet investigated.
+- DB-03 and DB-04 have passed on the final code once; more runs are needed for stability.
+- MySQL DB-04 audit tests are not built.
