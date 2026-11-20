@@ -150,3 +150,13 @@ managed.
 - `BAS_EM01_DEF_UPDATE_HOST` — the update source probed for step 16 when definitions are stale. Default `definitionupdates.microsoft.com`. Set it to an approved internal source if the endpoint uses one.
 
 The runner now writes a `category` column and groups the summary into control failures, not-assessed (environmental or policy), not-applicable, and probe errors.
+
+## Current status (2026-11-20)
+
+- **Tool:** use the PowerShell runner `scripts/em01/em01_readonly_run.ps1`, with `em-01-steps.json` in the same folder. The Python runner section above is superseded and kept only for history.
+- **Baselines:** set `$env:BAS_EM01_ENCRYPTION_BASELINE = 'required'` for the server and the client runs.
+- **`[BAS-SIM]` tag:** option A is chosen. The tag is left as it is. No new steps carry it.
+- **Trellix:** driver presence is never a PASS. Steps 00, 07 and 08 report NOT_ASSESSED when Trellix is present but its on-access state can't be verified locally. Confirm the on-access setting in the ePO console.
+- **Tamper Protection (02):** onboard the server to Defender for Endpoint or Intune. No exception is recorded.
+- **Defender real-time disable (step 19):** no exception. Establish the source and confirm Trellix is primary first.
+- **Open owner items:** fix Trellix on-access, provide a virtual TPM for the server VM if the baseline stays `required`, run the server and client, and review before merge.

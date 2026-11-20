@@ -245,3 +245,31 @@ Resolved as a decision: follows the BitLocker baseline gate. Under `none` it is 
 5. Step 60: wait for Trellix's written compatibility confirmation before any further LSA change.
 6. DHCP scope: fix the DNS server option.
 7. ASR and AppLocker: audit-mode rollout, then review.
+
+## Decisions and signal semantics (2026-11-20, latest)
+
+**`[BAS-SIM]` tag: option A.** The tag stays on the existing PASS lines it was already on. No new step carries it. The docs' meaning (synthetic or simulated data) does not match EM-01, which reads real endpoint state. That mismatch is recorded here and is not resolved.
+
+**Trellix signal (steps 00, 07, 08).** Approved and implemented in `8d9991df`.
+- An attached on-access driver (`mfehidk`) with Trellix services running is **presence only**. It never produces a PASS.
+- When the driver and services are present but Trellix's on-access state cannot be verified locally, the result is `SKIP: NOT_ASSESSED`. It is not scored and it is not a PASS.
+- Services stopped, or no engine at all, with Defender real-time off: FAIL.
+- A PASS needs a verified engine: Defender real-time on (step 00), or a Windows Security Center registration with the enabled bit set (step 00, and 08 as before).
+- The on-access state is verified in the ePO console. The check cannot read it locally.
+
+**Step 07 judgment.** The on-access driver proves on-access is attached, not that behaviour monitoring is on. Step 07 therefore never reports PASS from the Trellix signal. It reports NOT_ASSESSED when Defender behaviour and real-time are both off and Trellix is present, and FAIL when nothing is present.
+
+**Baselines (approved).** Server and client: `BAS_EM01_ENCRYPTION_BASELINE=required`. This covers BitLocker (06, 44–47) and TPM (48).
+- A missing BitLocker capability, an unencrypted system volume, or a missing or unavailable TPM is FAIL against this baseline.
+- A virtual machine without a supported virtual TPM is FAIL. Passing needs the vTPM added to the VM, which is an infrastructure change.
+- Any approved hardware or platform exception must be documented separately with a reference. None is recorded.
+
+**Defender real-time disable (step 19).** Not approved. The disable source is not established, and Trellix primary is not confirmed. Step 19 stays FAIL until both are established.
+
+**Trellix primary engine.** Not confirmed. Windows Security Center does not register Trellix on this Server SKU, so there is no Windows-side evidence. Confirmation needs Windows Security Center plus the Trellix console. Until then, no step treats Trellix as the primary engine.
+
+**Tamper Protection (step 02).** Decision: onboard to Defender for Endpoint or Intune and use centralised enforcement. Until onboarding, it stays FAIL. No exception is recorded.
+
+**ASR and AppLocker.** Remain in audit mode. Enforcement waits for audit review, documented exclusions, and a successful controlled pilot. Not every ASR rule is enabled blindly.
+
+**Open items for the next run:** the Trellix on-access fix, the server and client `required` runs, and the `[BAS-SIM]` decision (now recorded as A). The client's TPM state is still unknown.
