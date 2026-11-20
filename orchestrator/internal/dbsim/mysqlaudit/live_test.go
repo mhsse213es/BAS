@@ -46,3 +46,24 @@ func TestLiveAuthEvent03(t *testing.T) {
 		t.Fatalf("test 03 must PASS on the lab, got %s (%s)", res, why)
 	}
 }
+
+// TestLiveFailedLogin04 runs test 04 on the lab host. Same variables as test 03, with
+// DBSIM_HARNESS_RUN up to 22 letters or digits. It must PASS.
+func TestLiveFailedLogin04(t *testing.T) {
+	if os.Getenv("DBSIM_HARNESS_LIVE") != "1" {
+		t.Skip("live lab check: set DBSIM_HARNESS_LIVE=1 on the lab host")
+	}
+	cfg := LabConfig{
+		PasswordFile: os.Getenv("DBSIM_HARNESS_PW"),
+		Addr:         os.Getenv("DBSIM_HARNESS_ADDR"),
+		AuditFile:    os.Getenv("DBSIM_HARNESS_AUDIT"),
+	}
+	res, why, err := RunFailedLogin(context.Background(), cfg, os.Getenv("DBSIM_HARNESS_RUN"))
+	if err != nil {
+		t.Fatalf("RunFailedLogin: %v", err)
+	}
+	t.Logf("result=%s reason=%s", res, why)
+	if res != "PASS" {
+		t.Fatalf("test 04 must PASS on the lab, got %s (%s)", res, why)
+	}
+}

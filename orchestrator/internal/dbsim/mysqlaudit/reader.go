@@ -29,6 +29,7 @@ type Record struct {
 	ConnectionID string
 	User         string
 	SQLText      string
+	Status       int // 0 for success; MySQL error number for a refused connect
 }
 
 type rawRecord struct {
@@ -37,6 +38,7 @@ type rawRecord struct {
 		Timestamp    string `json:"timestamp"`
 		ConnectionID string `json:"connection_id"`
 		SQLText      string `json:"sqltext"`
+		Status       int    `json:"status"`
 		User         string `json:"user"`
 	} `json:"audit_record"`
 }
@@ -66,6 +68,7 @@ func ParseRecords(r io.Reader) ([]Record, error) {
 			ConnectionID: raw.AuditRecord.ConnectionID,
 			User:         principalOf(raw.AuditRecord.User),
 			SQLText:      raw.AuditRecord.SQLText,
+			Status:       raw.AuditRecord.Status,
 		})
 	}
 	if err := sc.Err(); err != nil {
