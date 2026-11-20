@@ -273,3 +273,34 @@ Resolved as a decision: follows the BitLocker baseline gate. Under `none` it is 
 **ASR and AppLocker.** Remain in audit mode. Enforcement waits for audit review, documented exclusions, and a successful controlled pilot. Not every ASR rule is enabled blindly.
 
 **Open items for the next run:** the Trellix on-access fix, the server and client `required` runs, and the `[BAS-SIM]` decision (now recorded as A). The client's TPM state is still unknown.
+
+## Client run (DESKTOP-5TVEBSI, Windows 10 Pro, Dell Inspiron 7373, 2026-11-20)
+
+Package `a5865a1d…a8c81`, `BAS_EM01_ENCRYPTION_BASELINE=required`, run on the client itself (read-only). Output: `C:\Users\Administrator\Downloads\em01-client-local-final`.
+
+**Result: PASS 23, FAIL 39, SKIP 7, ERROR 0, NO_VERDICT 0.**
+
+An earlier attempt that appeared to be a client run was executed on the server (its host line showed `WIN-2IP8FNO4MAD`). It is not client evidence and is not used here.
+
+### Client findings
+
+- **Real-time protection is off (00, 07, 08, 19).** Defender real-time protection is disabled by a preference flag, and no verified real-time engine is present on this laptop. Real-time protection on this client is not running. This needs an owner decision: re-enable Defender real-time protection (a state change, needs approval), or establish and approve another engine.
+- **BitLocker and TPM (06, 44–46, 48) FAIL under `required`.** The system drive is not encrypted and the TPM is not present or ready. These are genuine gaps against this baseline.
+- **Secure Boot is off (65).** This is a firmware setting, and the BIOS change needs a person at the device.
+- **HVCI (67) FAILs while VBS runs (66 PASS).** Same pattern as the server before it was fixed: VBS is running but Memory integrity is not configured. The configuration needs checking.
+- **RDP is enabled without Network Level Authentication (68).** Genuine misconfiguration.
+- **Firewall logging and log sizes (26, 27, 57), script block logging (61), process-creation auditing and command lines (62, 63), LLMNR (64), LSA protection (60), ASR and AppLocker (04, 05, 28–40), network protection (13), controlled folder access (14), PUA (12), cloud protection (11), Tamper Protection (02).** Hardening gaps, same as the server.
+- **Sense (53) SKIP:** not onboarded, not applicable by design.
+- **WDAC kernel policy (42) PASS** (`CodeIntegrityPolicyEnforcementStatus=2`). This wasn't PASS on the previous client run, so a WDAC policy has been deployed since. Check which policy it is before relying on it.
+- **Security Center (49–51) PASS** because Defender is registered there.
+
+### Flag: step 50 may overstate protection
+
+Step 50 PASSes with "Security Center reports an enabled AV provider: Windows Defender", while Defender's real-time protection is off (step 00 FAIL). The Security Center enabled bit can stay set when real-time is off. Step 50 may therefore be reporting registration rather than active protection. This needs a decision on whether to tighten it. I haven't changed it, because changing a verdict needs approval.
+
+### Decisions needed for the client
+
+1. Re-enable Defender real-time protection on this laptop, or approve another engine. Until then the laptop has no working real-time protection.
+2. Whether step 50 should require real-time protection to be on, in addition to the enabled bit.
+3. BIOS: Secure Boot and TPM, if the owner wants those to pass.
+4. HVCI configuration on the client, matching the server's fix.
