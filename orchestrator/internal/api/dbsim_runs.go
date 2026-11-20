@@ -7,12 +7,14 @@ import (
 	"log"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/dbsim"
 	"github.com/audspect/bas/internal/dbsim/dbadmin"
+	"github.com/audspect/bas/internal/dbsim/dbbuild"
 	"github.com/audspect/bas/internal/dbsim/dbjobs"
 	"github.com/audspect/bas/internal/dbsim/dbrun"
 	"github.com/audspect/bas/internal/models"
@@ -239,6 +241,15 @@ func dbsimIngestResults(wire dbsimResultWire) ([]dbrun.AgentExec, error) {
 func (h *Handler) dbsimIngestHook(w http.ResponseWriter, r *http.Request, body []byte) bool {
 	var wire dbsimResultWire
 	if err := json.Unmarshal(body, &wire); err != nil || wire.RunID == "" {
+		return false
+	}
+	// A database run result is never graded as a scenario. With no database store
+	// there is no job to ingest it into, so it is refused here, not looked up.
+	if h.db == nil {
+		if strings.HasPrefix(wire.RunID, dbbuild.RunIDPrefix) {
+			jsonError(w, "database simulation results are not configured on this server", http.StatusServiceUnavailable)
+			return true
+		}
 		return false
 	}
 	if _, err := (db.DBSimJobStore{Pool: h.db}).Get(r.Context(), wire.RunID); err != nil {
