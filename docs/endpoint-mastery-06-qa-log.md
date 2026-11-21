@@ -45,3 +45,16 @@ Pending. Run on WIN-2IP8FNO4MAD with BAS_EM06_ALLOW_EXEC_PROBES=1. The server ha
 - The earlier EM-06 steps (regsvr32 and certutil) reported PASS on any non-zero exit, and certutil wrote a file to the working folder without cleanup. Both are replaced.
 - Test 12 encodes the download cradle. The encoded command line is what process telemetry records, so the detection depends on the telemetry capturing the encoded form.
 - Test 16 SKIPs where neither Sysmon nor process auditing is available.
+
+## Lab server run (WIN-2IP8FNO4MAD, lab.local), gate on, scenario sha256 0fd5de86e1db824282118f7fdcbbeb0c09d2ec05a44936dc29ee49a8a9aec3a4
+
+Run 3 (out3, 2026-11-21 01:52 -08:00). Clean: 16 verdicts, no NO_VERDICT.
+
+- Steps 01-15: FAIL (15 steps). Each behaviour ran (EXECUTED=yes) and process telemetry recorded it (TELEMETRY=yes). No Defender 1116/1117/1121/1122, AppLocker 8003/8004 or CodeIntegrity 3076/3077 event was logged for the step's image. As far as the Windows logs show, endpoint security did not detect or block these behaviours.
+- Step 16: PASS. This is a telemetry-coverage check (a read-only query of the WinDefend state is recorded by process telemetry). It does not show that a security control responded.
+- Earlier run (out2, 01:33) reproduced the same 15 FAIL results; the 01:33 run also gave a NO_VERDICT for step 09, which did not recur in out3.
+- Trellix (ePO) alerts are not in the Windows logs this scenario reads. An ePO check for the 01:52-01:53 window is still required before concluding that Trellix did not respond.
+
+Temp-folder cleanup: one folder, `C:\Users\Administrator\AppData\Local\Temp\2\AudspectEM06_785b9105ec` (timestamp 1:49 AM), was left after the runs. It was empty when checked. It was removed manually and a re-check printed nothing. Its creation time falls between the out2 (01:33) and out3 (01:52) runs, and no recorded run explains it. Cause not identified; it did not recur in out3's check. Not a Windows or user-environment change; no data was lost.
+
+Not run: the Trellix ePO check, and the Audspect COLLECTED check (requires the Audspect query API).
