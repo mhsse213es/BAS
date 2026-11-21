@@ -28,3 +28,35 @@
 .ph-chip:hover { border-color: var(--accent); background: var(--accent-dim); }
 .ph-foot { margin-top: 22px; font-size: 12px; color: var(--muted); }
 .ph-foot kbd { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; padding: 1px 5px; border: 1px solid var(--border); border-radius: 5px; background: var(--elevated); }
+
+/* Richer help panel: an accent-lit header with an icon badge, a highlighted purpose card, gradient step numbers,
+   accent section markers, a callout for tips and accent chips for the next pages. Theme tokens only. */
+.ph-panel { background: linear-gradient(180deg, var(--elevated) 0%, var(--surface) 38%); border-left: 1px solid var(--accent-border); }
+.ph-head { position: relative; display: flex; align-items: center; gap: 14px; padding: 22px 22px 18px; min-height: 84px; border-bottom: 1px solid var(--border); background: linear-gradient(135deg, var(--accent-dim) 0%, transparent 70%); }
+.ph-head::before { content: ""; flex: none; width: 42px; height: 42px; border-radius: 12px; background: linear-gradient(135deg, #4f8cff, #2563eb); box-shadow: 0 8px 20px rgba(37,99,235,.35); -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9.1 9a3 3 0 015.8 1c0 2-3 3-3 3M12 17h.01' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='12' cy='12' r='10' fill='none' stroke='black' stroke-width='2'/%3E%3C/svg%3E") center / 22px no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9.1 9a3 3 0 015.8 1c0 2-3 3-3 3M12 17h.01' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='12' cy='12' r='10' fill='none' stroke='black' stroke-width='2'/%3E%3C/svg%3E") center / 22px no-repeat; }
+.ph-head > div { min-width: 0; flex: 1; }
+.ph-kicker { font-size: 10.5px; letter-spacing: .14em; margin-bottom: 2px; }
+.ph-head h2 { font-size: 22px; font-weight: 800; letter-spacing: -.01em; line-height: 1.2; }
+.ph-close { width: 36px; height: 36px; border-radius: 10px; flex: none; }
+.ph-body { padding: 10px 22px 26px; }
+.ph-sec { margin-top: 22px; }
+.ph-sec h3 { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 800; letter-spacing: .1em; color: var(--muted-hi, var(--text)); }
+.ph-sec h3::before { content: ""; width: 3px; height: 14px; border-radius: 2px; background: linear-gradient(180deg, #4f8cff, #22d3a6); }
+.ph-about { padding: 14px 16px; border-radius: 12px; border: 1px solid var(--accent-border); background: var(--accent-dim); }
+.ph-about h3 { margin-bottom: 6px; }
+.ph-about p { font-size: 14.5px; line-height: 1.6; }
+.ph-steps li { border-radius: 12px; padding: 11px 14px 11px 48px; background: var(--elevated); box-shadow: 0 4px 12px rgba(0,0,0,.12); transition: border-color .15s, transform .15s; }
+.ph-steps li:hover { border-color: var(--accent-border); transform: translateX(2px); }
+.ph-steps li::before { left: 13px; top: 11px; width: 24px; height: 24px; background: linear-gradient(135deg, #4f8cff, #2563eb); color: #fff; border: 0; box-shadow: 0 4px 10px rgba(37,99,235,.35); font-size: 12px; }
+.ph-dl { gap: 8px; }
+.ph-dl dt { display: inline-flex; align-items: center; width: fit-content; padding: 3px 10px; border-radius: 999px; background: var(--accent-dim); color: var(--accent); font-size: 12px; font-weight: 700; }
+.ph-dl dd { padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--elevated); margin: 0; }
+.ph-tips { border-left: 3px solid #f59e0b; border-radius: 12px; padding: 14px 16px; background: linear-gradient(135deg, rgba(245,158,11,.10), transparent 70%), var(--elevated); }
+.ph-tips h3::before { background: #f59e0b; }
+.ph-tips li { margin-bottom: 4px; }
+.ph-chip { height: 34px; padding: 0 14px; font-weight: 600; border-radius: 999px; background: var(--elevated); box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+.ph-chip::after { content: " \2192"; color: var(--accent); }
+.ph-chip:hover { border-color: var(--accent); background: linear-gradient(180deg, #4f8cff 0%, #2563eb 100%); color: #fff; }
+.ph-chip:hover::after { color: #fff; }
+.ph-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 26px; padding-top: 14px; border-top: 1px solid var(--border); }
+.ph-foot kbd { margin: 0 2px; }
