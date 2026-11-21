@@ -214,7 +214,7 @@ function inventoryMeta() {
     ['Imported', fmtDate(i.imported_at) + ' by ' + i.imported_by], ['Source SHA-256', String(i.source_sha256 || '').slice(0, 16) + '…'], ['Operations', i.operations]];
   var scope = Array.isArray(i.suggested_scope) && i.suggested_scope.length
     ? '<p class="ai-note">Suggested allowed path prefixes (advice only, not applied to the target): <span class="ai-mono">' + i.suggested_scope.map(x).join(' ') + '</span></p>' : '';
-  var warn = Array.isArray(i.warnings) && i.warnings.length ? '<p class="ai-note">Warnings: ' + i.warnings.map(x).join('; ') + '</p>' : '';
+  var warn = Array.isArray(i.warnings) && i.warnings.length ? '<p class="ai-warn">Warnings: ' + i.warnings.map(x).join('; ') + '</p>' : '';
   return kv(rows) + scope + warn;
 }
 
@@ -224,7 +224,7 @@ function opsBody() {
   var filter = seg(M.classOptions(i.listed_operations, i.classes), S.cls, 'apiInvFilter');
   var shown = ops.slice(0, MAX_ROWS);
   var rows = shown.map(function(o) {
-    return '<tr><td>' + chip(o.method, 'info') + '</td><td class="ai-mono">' + x(o.path + (o.field ? '#' + o.field : '')) + '</td>' +
+    return '<tr><td>' + chip(o.method, M.methodTone(o.method)) + '</td><td class="ai-mono">' + x(o.path + (o.field ? '#' + o.field : '')) + '</td>' +
       '<td>' + pill(M.authLabel(o.auth), M.authTone(o.auth)) + (o.deprecated ? ' ' + chip('deprecated', 'warn') : '') + '</td>' +
       '<td>' + (o.classes || []).map(function(c) { return chip(M.classLabel(c), 'accent'); }).join(' ') + '</td></tr>';
   }).join('');

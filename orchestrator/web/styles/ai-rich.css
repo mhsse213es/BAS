@@ -1,0 +1,81 @@
+/* API Inventory: cards with an accent edge, readable tables with method and status colours, fact tiles for the
+   inventory, callouts for warnings and results, labelled fields and gradient primary actions. Scoped to the tab. */
+#tab-api-inventory { display: grid; gap: 16px; }
+#tab-api-inventory .rk-card { position: relative; overflow: hidden; border-radius: 14px; border: 1px solid var(--border); background: linear-gradient(180deg, var(--elevated) 0%, var(--surface) 100%); box-shadow: 0 10px 28px -16px rgba(0,0,0,.6); }
+#tab-api-inventory .rk-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: linear-gradient(180deg, #60a5fa, #2563eb); }
+#tab-api-inventory .rk-hd { padding: 14px 18px 0 20px; }
+#tab-api-inventory .rk-hd h2 { font-size: 15px; font-weight: 700; color: var(--text); }
+#tab-api-inventory .rk-hd-sub { font-size: 12px; color: var(--muted-hi); }
+#tab-api-inventory .rk-card > :not(.rk-hd) { margin-left: 20px; margin-right: 20px; }
+#tab-api-inventory .rk-card > :last-child { margin-bottom: 18px; }
+
+/* Text roles */
+#tab-api-inventory .ai-note { margin: 0 0 12px; font-size: 12.5px; line-height: 1.55; color: var(--muted-hi); }
+#tab-api-inventory .ai-h { margin: 16px 0 8px; padding-left: 10px; border-left: 3px solid #60a5fa; font-size: 13px; font-weight: 700; color: var(--text); }
+#tab-api-inventory .ai-mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: #bfdbfe; word-break: break-all; }
+#tab-api-inventory .ai-sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+#tab-api-inventory .ai-warn, #tab-api-inventory .ai-err, #tab-api-inventory .ai-ok { margin: 10px 0; padding: 10px 14px; border-radius: 10px; font-size: 13px; line-height: 1.5; font-weight: 600; }
+#tab-api-inventory .ai-warn { color: #fde68a; background: rgba(251,191,36,.10); border: 1px solid rgba(251,191,36,.35); }
+#tab-api-inventory .ai-err { color: #fca5a5; background: rgba(248,113,113,.10); border: 1px solid rgba(248,113,113,.35); }
+#tab-api-inventory .ai-ok { color: #6ee7b7; background: rgba(52,211,153,.10); border: 1px solid rgba(52,211,153,.35); }
+#tab-api-inventory .ai-list { margin: 6px 0 0 18px; padding: 0; font-size: 13px; line-height: 1.6; color: var(--muted-hi); }
+#tab-api-inventory .ai-list li { margin-bottom: 4px; }
+
+/* Labelled fields and rows */
+#tab-api-inventory .ai-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin: 0 0 12px; }
+#tab-api-inventory .ai-lbl { display: flex; flex-direction: column; gap: 6px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-hi); }
+#tab-api-inventory .ai-in, #tab-api-inventory select, #tab-api-inventory input[type="file"] { box-sizing: border-box; min-width: 150px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--bg, #0b1220); color: var(--text); font: inherit; font-size: 13px; font-weight: 500; text-transform: none; letter-spacing: 0; outline: none; }
+#tab-api-inventory .ai-in:focus, #tab-api-inventory select:focus, #tab-api-inventory .ai-text:focus, #tab-api-inventory input[type="number"]:focus, #tab-api-inventory input[type="text"]:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.35), 0 0 14px rgba(59,130,246,.18); }
+#tab-api-inventory .ai-text { display: block; box-sizing: border-box; width: 100%; min-height: 120px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg, #0b1220); color: #dbeafe; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.55; resize: vertical; outline: none; transition: border-color .15s, box-shadow .15s; }
+#tab-api-inventory input[type="number"], #tab-api-inventory input[type="text"] { padding: 7px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--bg, #0b1220); color: var(--text); font: inherit; font-size: 13px; outline: none; }
+#tab-api-inventory input[type="checkbox"] { accent-color: #3b82f6; width: 15px; height: 15px; }
+#tab-api-inventory input[type="file"] { min-width: 0; padding: 6px; font-size: 12px; color: var(--muted-hi); }
+
+/* Buttons: gradient primary for the main action of each card, quiet outline for the rest */
+#tab-api-inventory .btn { border-radius: 9px; font-weight: 600; }
+#tab-api-inventory .btn-primary { background: linear-gradient(180deg, #4f8cff 0%, #2563eb 100%); border-color: #2563eb; color: #fff; font-weight: 700; box-shadow: 0 6px 18px -6px rgba(59,130,246,.6); }
+#tab-api-inventory .btn-primary:hover { filter: brightness(1.08); }
+#tab-api-inventory .btn-outline:hover { border-color: #3b82f6; }
+
+/* Facts (inventory metadata and job details): a label and value table with one row per fact */
+#tab-api-inventory .rk-kv { display: grid; grid-template-columns: minmax(150px, max-content) minmax(0, 1fr); margin: 0 0 14px; border-radius: 10px; border: 1px solid var(--border); overflow: hidden; background: var(--surface); }
+#tab-api-inventory .rk-kv dt, #tab-api-inventory .rk-kv dd { margin: 0; padding: 9px 14px; border-top: 1px solid var(--border); font-size: 13px; }
+#tab-api-inventory .rk-kv dt:nth-of-type(1), #tab-api-inventory .rk-kv dd:nth-of-type(1) { border-top: 0; }
+#tab-api-inventory .rk-kv dt { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted-hi); background: rgba(148,163,184,.05); }
+#tab-api-inventory .rk-kv dd { font-weight: 600; color: var(--text); word-break: break-word; }
+
+/* Write form: two columns, textareas across the full width */
+#tab-api-inventory .ai-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; align-items: start; padding: 14px; margin: 8px 0 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); }
+#tab-api-inventory .ai-form label:has(textarea), #tab-api-inventory .ai-form > #api-inv-w-params, #tab-api-inventory .ai-form > .ai-row { grid-column: 1 / -1; }
+#tab-api-inventory .ai-form textarea.ai-text { min-height: 84px; }
+@media (max-width: 720px) { #tab-api-inventory .ai-form { grid-template-columns: 1fr; } }
+
+/* Tables */
+#tab-api-inventory .tbl-wrap { width: 100%; overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); margin: 0 0 12px; }
+#tab-api-inventory .tbl-wrap table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; color: var(--text); }
+#tab-api-inventory .tbl-wrap th { position: sticky; top: 0; padding: 9px 12px; text-align: left; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--elevated); white-space: nowrap; }
+#tab-api-inventory .tbl-wrap td { padding: 9px 12px; border-top: 1px solid var(--border); vertical-align: middle; }
+#tab-api-inventory .tbl-wrap tbody tr:nth-child(even) td { background: rgba(148,163,184,.04); }
+#tab-api-inventory .tbl-wrap tbody tr:hover td { background: var(--hover); }
+#tab-api-inventory .tbl-wrap tr.ai-sel td { background: var(--accent-dim); }
+#tab-api-inventory .tbl-wrap td b { font-weight: 700; color: var(--text); }
+#tab-api-inventory .tbl-wrap td:has(.btn) { white-space: nowrap; text-align: right; }
+#tab-api-inventory .tbl-wrap td .rk-chip { margin-right: 4px; }
+
+/* Chips and pills */
+#tab-api-inventory .rk-chip { display: inline-block; padding: 2px 9px; border-radius: 7px; font-size: 11.5px; font-weight: 700; letter-spacing: .02em; }
+#tab-api-inventory .rk-pill { font-size: 11px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
+
+/* Segmented filter: a card-coloured control with a clear selected state */
+#tab-api-inventory .rk-seg { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 4px; border-radius: 11px; background: var(--hover); border: 1px solid var(--border); margin-bottom: 10px; }
+#tab-api-inventory .rk-seg button { border: 0; background: transparent; color: var(--muted-hi); padding: 6px 10px; border-radius: 8px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+#tab-api-inventory .rk-seg button.on { color: #fff; background: linear-gradient(180deg, #4f8cff 0%, #2563eb 100%); box-shadow: 0 4px 12px -4px rgba(59,130,246,.6); }
+
+/* Result blocks from preview, save and jobs */
+#tab-api-inventory .ai-h + .tbl-wrap { margin-top: 0; }
+
+@media (max-width: 720px) {
+  #tab-api-inventory .rk-kv { grid-template-columns: 1fr; }
+  #tab-api-inventory .ai-row > * { flex: 1 1 100%; }
+  #tab-api-inventory .ai-in, #tab-api-inventory select { min-width: 0; width: 100%; }
+}

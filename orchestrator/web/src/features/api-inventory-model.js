@@ -18,6 +18,11 @@ export const MAX_SPEC_BYTES = 8 << 20;
 
 export function classLabel(c) { return CLASS_LABELS[c] || String(c); }
 
+// methodTone colours an HTTP method so reads, creates, updates and deletes are told apart at a glance.
+export function methodTone(method) {
+  return { GET: 'ok', HEAD: 'ok', OPTIONS: 'muted', POST: 'info', PUT: 'warn', PATCH: 'warn', DELETE: 'bad' }[String(method || '').toUpperCase()] || 'muted';
+}
+
 export function authTone(auth) {
   return { required: 'ok', none: 'bad', optional: 'warn', unspecified: 'muted' }[auth] || 'muted';
 }
