@@ -7452,6 +7452,132 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "endpoint-mastery/em-06-defense-evasion.yaml",
+    "index": 2,
+    "technique_id": "T1218.011",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-06-defense-evasion.yaml",
+    "index": 3,
+    "technique_id": "T1218.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-06-defense-evasion.yaml",
+    "index": 4,
+    "technique_id": "T1218.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-06-defense-evasion.yaml",
+    "index": 5,
+    "technique_id": "T1218.007",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-06-defense-evasion.yaml",
+    "index": 6,
+    "technique_id": "T1218.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-06-defense-evasion.yaml",
+    "index": 7,
+    "technique_id": "T1218.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-06-defense-evasion.yaml",
+    "index": 8,
+    "technique_id": "T1218.010",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-06-defense-evasion.yaml",
+    "index": 9,
+    "technique_id": "T1140",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-06-defense-evasion.yaml",
+    "index": 10,
+    "technique_id": "T1059.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-06-defense-evasion.yaml",
+    "index": 11,
+    "technique_id": "T1105",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-06-defense-evasion.yaml",
+    "index": 12,
+    "technique_id": "T1059",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-06-defense-evasion.yaml",
+    "index": 13,
+    "technique_id": "T1036",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-06-defense-evasion.yaml",
+    "index": 14,
+    "technique_id": "T1059",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-06-defense-evasion.yaml",
+    "index": 15,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "endpoint-mastery/em-07-ransomware-readiness.yaml",
     "index": 0,
     "technique_id": "T1083",
