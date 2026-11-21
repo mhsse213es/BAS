@@ -1,0 +1,52 @@
+id: carbanak-bfsi-share-discovery
+product_line: killchain
+name: Carbanak BFSI Network Share Discovery for Financial Data (Item 13)
+description: >
+  Lists shares on THIS host whose names match financial-data patterns. No
+  remote share is queried. [BAS-SIM-CARBANAK-S13] tagged. Grounded in MITRE
+  ATT&CK T1135 (Network Share Discovery).
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - carbanak
+  - bfsi
+  - discovery
+  - t1135
+mitre_phases:
+  - discovery
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+  - name: "Carbanak Item 13 -- Network Share Discovery for Financial Data (T1135)"
+    technique_id: T1135
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: lab-only
+    production_safe: true
+    risk: low
+    blast_radius: "Reads the local share list only. No share contents are opened."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1 for the share enumeration process"
+    detection:
+      - "EDR: enumeration of shares matching financial-data names by a non-administrative process"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- T1135"
+        url: "https://attack.mitre.org/techniques/T1135/"
+    last_reviewed: "2026-11-21"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $shares = Get-SmbShare | Where-Object { $_.Name -match 'finance|treasury|payment|ledger|swift' -and -not $_.Special } | Select-Object -ExpandProperty Name
+      Write-Output "EXEC 13: $(@($shares).Count) local financial-pattern share name(s): [$($shares -join ', ')]. Names only. [BAS-SIM-CARBANAK-S13]"
+    cleanup: ""

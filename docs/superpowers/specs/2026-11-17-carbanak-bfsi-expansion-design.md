@@ -144,14 +144,14 @@ added twice. Total 31. Item 9 stays a separate scenario and Stage 5 is untouched
 | Spec # | Scenario | ATT&CK | Status |
 |---|---|---|---|
 | 9 | Banking application and process discovery | T1057 | validated (see below) |
-| 10 | Payment gateway configuration discovery | T1083 | to validate at build |
-| 11 | Database server and service discovery | T1046 | to validate at build |
-| 12 | Domain privileged account enumeration | T1069.002 | to validate at build |
-| 13 | Network share discovery for financial data | T1135 | to validate at build |
-| 14 | Windows Credential Manager access attempt | T1555.004 | to validate at build |
-| 15 | Browser credential-store access probe | T1555.003 | to validate at build |
-| 17 | Kerberos service account enumeration | T1558.003 | to validate at build |
-| 18 | Synthetic operator credential discovery | T1552 | to validate at build (sub-technique likely) |
+| 10 | Payment gateway configuration discovery | T1083 | validated 2026-11-21 (attack.mitre.org T1083 page) |
+| 11 | Database server and service discovery | T1046 | validated 2026-11-21 (attack.mitre.org T1046 page); scoped to local listeners |
+| 12 | Domain privileged account enumeration | T1069.002 | validated 2026-11-21 (attack.mitre.org T1069/002 page) |
+| 13 | Network share discovery for financial data | T1135 | validated 2026-11-21 (attack.mitre.org T1135 page); scoped to local shares |
+| 14 | Windows Credential Manager access attempt | T1555.004 | validated 2026-11-21 (attack.mitre.org T1555/004 page); existence check only |
+| 15 | Browser credential-store access probe | T1555.003 | validated 2026-11-21 (attack.mitre.org T1555/003 page); existence check only |
+| 17 | Kerberos service account enumeration | T1558.003 | validated 2026-11-21 (attack.mitre.org T1558/003 page); LDAP query only, no ticket requested |
+| 18 | Synthetic operator credential discovery | T1552 | validated 2026-11-21 at parent level; T1552.001 (Credentials In Files) is the likely refinement, to confirm against its page |
 | 19 | SMB administrative share access | T1021.002 | to validate at build; needs `BAS_CARBANAK_TARGET_HOST` |
 | 20 | WinRM remote execution simulation | T1021.006 | to validate at build; needs target host |
 | 21 | Remote service creation | T1569.002 | to validate at build; needs target host |
