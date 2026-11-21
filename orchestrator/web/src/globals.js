@@ -26,7 +26,7 @@ import { dcAdd, dcEdit, dcTest, dcDelete, dcSave, dcCancel, dcProviderChanged } 
 import { gapSetBackend, gapCopy, gapExport, gapDeploy, gapRetest } from './features/detection-gaps.js';
 import { vfVerifyNow, vfCloseDetail, vfDeleteEvidence, vfLoadQueue, vfPickResult, vfSelect, vfSetDomain, vfSubmit, vfToggleHistory, vfUploadEvidence, vfSetStatus, vfSearch, vfClearFilters, vfTableQuery, vfClearTableQuery, vfSetPer, vfPage, vfSortBy, vfToggleCols, vfColToggle, vfSelectRow, vfSelectAll, vfClearSelection, vfRowKeydown, vfExportCsv, vfExportSelected, vfDrawerBackdrop } from './features/detection-verification.js';
 import { dbsimToggleClientMode, dbsimRegister, dbsimIdentityCheck, dbsimDeleteTarget, dbsimViewReport, dbsimStartRun, dbsimCancelRun, dbsimToggleScenario, dbsimChooseTarget, dbsimLabConfirmInput } from './features/dbsim.js';
-import { refreshEmailTab, egCancelCampaignClick, egLaunchCampaign, egRunExpectation, egToggleCampaign, egToggleRunDetail, setEmailCampaignsTab, setEmailRunsTab, openEmailScenario, openEmailCampaignDrawer, closeEmailDrawer, closeEmailDrawerOnBackdrop, setEmailTab, emailCampaignSearch, emailClearFilters, emailScenarioKeydown } from './features/email.js';
+import { refreshEmailTab, egAskLaunch, egAskCancel, egCancelCampaignClick, egLaunchCampaign, egRunExpectation, egToggleCampaign, egToggleRunDetail, setEmailCampaignsTab, setEmailRunsTab, openEmailScenario, openEmailCampaignDrawer, closeEmailDrawer, closeEmailDrawerOnBackdrop, setEmailTab, emailCampaignSearch, emailClearFilters, emailScenarioKeydown } from './features/email.js';
 import { _toggleEMExtraScenario, _toggleEMPreviewRow, _toggleVexPreviewRow, _toggleVexPreviewSection, cancelEMSweep, closeEMSweepModal, closeEMSweepModalOnBackdrop, closeEMSweepProgress, closeEMSweepProgressOnBackdrop, closeSweepPreview, closeSweepPreviewOnBackdrop, emGroupSelChange, emRunLayer, emSweepDispatch, openEMSweepProgress, openEMSweepReport, setEMExtraSearchFromInput, setEMSweepTargetMode, setVexPreviewSearchFromInput, setVexPreviewTacticFromSelect, startSweepFromPreview, stopEMSweep, stopEMSweepCurrent } from './features/endpoint-mastery.js';
 import { closeCreateUser, closeCreateUserOnBackdrop, closeDownloadOptions, closeEditUser, closeEditUserOnBackdrop, closeEvidence, closeEvidenceOnBackdrop, confirmRun, copyRaw, doResetPassword, downloadCampaignCSV, downloadCampaignReport, downloadEMSweepReport, downloadRunCSV, downloadRunReport, downloadSweepReport, exportRunJSON, openCampaignReport, openCmdk, openCreateUser, openDashRun, openEditUser, openEvidence, openFindingFromDashboard, openRunReport, pauseRun, resumeRun, stopRun, submitCreateUser, submitEditUser, toggleUserActive } from './features/evidence.js';
 import { openKevDetail, openControlDetail } from './features/dash-rich.js';
@@ -331,6 +331,8 @@ export const ACTIONS = {
   copyReportId,
   copyReportLink,
   downloadSweepReport,
+  egAskLaunch,
+  egAskCancel,
   egCancelCampaignClick,
   egLaunchCampaign,
   egRunExpectation,

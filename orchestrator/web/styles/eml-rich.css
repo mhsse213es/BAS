@@ -59,3 +59,7 @@
 #eml-drawer-foot { display: flex; align-items: center; gap: 8px; }
 
 @media (max-width: 1500px) { .eml-top { grid-template-columns: minmax(0, 1fr); } }
+
+/* Inline confirmation for launching or cancelling a campaign: a question with Confirm and Keep beside it. */
+.eml-confirm { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; padding: 10px 12px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent); background: color-mix(in srgb, var(--warning) 8%, var(--surface)); font-size: 12.5px; color: var(--text); }
+.eml-confirm > span { flex: 1 1 260px; line-height: 1.45; }

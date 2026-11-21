@@ -354,7 +354,7 @@ function templateCard(t) {
   return '<div class="eml-card eml-tpl"><div class="eml-card-hd">' + chip('Campaign template', 'info') + '</div>' +
     '<div class="eml-card-n">' + x(t.name) + '</div><div class="tiny muted mono">' + x(t.id) + '</div>' +
     '<div class="eml-tpl-ft"><span class="muted eml-small">' + icon('mail') + ' Used ' + M.templateUse(EG_LISTS.campaigns, t.id) + '×</span>' +
-    (egCanRun() ? '<button type="button" class="btn btn-primary btn-sm"' + on('click', 'egLaunchCampaign', t.id) + '>' + icon('plus') + 'Launch</button>' : '') + '</div></div>';
+    (egCanRun() ? '<button type="button" class="btn btn-primary btn-sm"' + on('click', 'egAskLaunch', t.id) + '>' + icon('plus') + 'Launch</button>' : '') + '</div></div>';
 }
 export function openEmailCampaignDrawer() {
   EMAIL_DRAWER = { kind: 'new' };
@@ -382,7 +382,7 @@ function renderCampaignDrawer(id, view) {
       }).join('');
   }
   setDrawer(M.campaignName(c, CAMPAIGN_CATALOG), c.id || id, body,
-    CLOSE_BTN + (egCanRun() && c.status === 'running' ? '<span class="grow"></span><button type="button" class="btn btn-outline btn-sm"' + on('click', 'egCancelCampaignClick', c.id) + '>Cancel campaign</button>' : ''));
+    CLOSE_BTN + (egCanRun() && c.status === 'running' ? '<span class="grow"></span><button type="button" class="btn btn-outline btn-sm"' + on('click', 'egAskCancel', c.id) + '>Cancel campaign</button>' : ''));
 }
 
 // Row click: opens the campaign drawer and fetches its stages.
@@ -465,7 +465,7 @@ function renderEmailCampaignRows() {
         '<td>' + fmtDate(c.createdAt) + '</td>' +
         '<td>' + (c.completedAt ? ago(c.completedAt) : '<span class="muted">—</span>') + '</td>' +
         '<td>' + (egCanRun() && (c.status === 'running')
-          ? '<button class="btn btn-outline btn-sm"' + on('click', 'egCancelCampaignClick', c.id) + '>Cancel</button>'
+          ? '<button class="btn btn-outline btn-sm"' + on('click', 'egAskCancel', c.id) + '>Cancel</button>'
           : '') +
         '</td></tr>';
   }).join('');
@@ -498,6 +498,38 @@ export function egCancelCampaignClick(campaignId) {
     if (EMAIL_DRAWER && EMAIL_DRAWER.kind === 'campaign') closeEmailDrawer();
     loadEmailCampaigns();
   }).catch(function(e) { showToast(e.message, 'err'); });
+}
+
+// Launching sends the campaign's email through the gateway, and cancelling stops one that is running, so
+// neither happens on the first click. The button is replaced by a short question with Confirm and Keep.
+function egAskInline(anchor, question, yesLabel, onYes) {
+  var host = anchor.closest('tr, .eml-tpl, .eml-drawer-row') || anchor.parentElement;
+  var old = host.querySelector('.eml-confirm');
+  if (old) old.remove();
+  var box = document.createElement('div');
+  box.className = 'eml-confirm';
+  box.setAttribute('role', 'alertdialog');
+  var msg = document.createElement('span');
+  msg.textContent = question;
+  var yes = document.createElement('button');
+  yes.type = 'button'; yes.className = 'btn btn-primary btn-sm'; yes.textContent = yesLabel;
+  var keep = document.createElement('button');
+  keep.type = 'button'; keep.className = 'btn btn-outline btn-sm'; keep.textContent = 'Keep';
+  yes.addEventListener('click', function() { box.remove(); onYes(); });
+  keep.addEventListener('click', function() { box.remove(); });
+  box.appendChild(msg); box.appendChild(yes); box.appendChild(keep);
+  anchor.insertAdjacentElement('afterend', box);
+  yes.focus();
+}
+
+export function egAskLaunch(templateId, el) {
+  egAskInline(el, 'Launch this campaign now? Its emails go out through the gateway.', 'Launch now', function() { egLaunchCampaign(templateId); });
+}
+
+export function egAskCancel(campaignId, el, event) {
+  // The Cancel button sits inside a clickable campaign row; without this the click also opens that row's drawer.
+  if (event && event.stopPropagation) event.stopPropagation();
+  egAskInline(el, 'Request cancellation of this campaign?', 'Cancel campaign', function() { egCancelCampaignClick(campaignId); });
 }
 
 // ── Runs ──────────────────────────────────────────────────────────────────────
