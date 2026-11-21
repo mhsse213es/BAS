@@ -262,8 +262,22 @@ export function openRunFromCampaign(runId) {
     if (r) viewRunResults(r); else showToast('Run not found', 'err');
   });
 }
+// stopCampaign asks inside the drawer first, not with the browser's confirm box. Nothing is sent until "Stop campaign" is pressed.
 export function stopCampaign(id) {
-  if (!confirm('Stop this campaign? Running child runs will be marked partial.')) return;
+  var foot = document.getElementById('cmp-drawer-foot');
+  if (!foot || document.getElementById('cmp-stop-confirm')) return;
+  foot.insertAdjacentHTML('beforebegin', '<div id="cmp-stop-confirm" class="init-confirm" role="alertdialog"><span>Stop this campaign? Running child runs will be marked partial.</span>' +
+    '<span class="init-confirm-acts"><button type="button" class="btn btn-sm init-confirm-yes"' + on('click', 'stopCampaignConfirm', id) + '>Stop campaign</button>' +
+    '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'stopCampaignKeep') + '>Keep running</button></span></div>');
+}
+
+export function stopCampaignKeep() {
+  var c = document.getElementById('cmp-stop-confirm');
+  if (c) c.remove();
+}
+
+export function stopCampaignConfirm(id) {
+  stopCampaignKeep();
   apicall('/api/campaigns/' + encodeURIComponent(id) + '/stop', { method: 'POST' })
     .then(function() { showToast('Campaign stopped', 'ok'); openCampaignDetail(id); loadCampaigns(); })
     .catch(function(e) { showToast(e.message, 'err'); });
