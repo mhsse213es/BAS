@@ -152,7 +152,7 @@ added twice. Total 31. Item 9 stays a separate scenario and Stage 5 is untouched
 | 15 | Browser credential-store access probe | T1555.003 | validated 2026-11-21 (attack.mitre.org T1555/003 page); existence check only |
 | 17 | Kerberos service account enumeration | T1558.003 | validated 2026-11-21 (attack.mitre.org T1558/003 page); LDAP query only, no ticket requested |
 | 18 | Synthetic operator credential discovery | T1552 | validated 2026-11-21 at parent level; T1552.001 (Credentials In Files) is the likely refinement, to confirm against its page |
-| 19 | SMB administrative share access | T1021.002 | to validate at build; needs `BAS_CARBANAK_TARGET_HOST` |
+| 19 | SMB administrative share access | T1021.002 | validated 2026-11-21 (attack.mitre.org T1021/002 page); existence check only; needs `BAS_CARBANAK_TARGET_HOST` |
 | 20 | WinRM remote execution simulation | T1021.006 | validated 2026-11-21 (attack.mitre.org T1021/006 page); benign echo only; needs target host |
 | 21 | Remote service creation | T1569.002 | validated 2026-11-21 with caveat: the service is created and removed but never started, so this exercises creation, not payload execution; needs target host |
 | 22 | Remote scheduled task creation | T1053.005 | validated 2026-11-21 (attack.mitre.org T1053/005 page); task dated 2099 and removed; needs target host |
