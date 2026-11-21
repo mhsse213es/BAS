@@ -70,18 +70,23 @@ steps:
       $hits = 0
       if ($sysmon) { $hits += [Math]::Max(0, (Find-Ev 'Microsoft-Windows-Sysmon/Operational' @(1) $needle $since)) }
       if ($p4688) { $hits += [Math]::Max(0, (Find-Ev 'Security' @(4688) $needle $since)) }
+      $telemetry = if ($src -eq 'none') { 'not assessable' } elseif ($hits -gt 0) { 'yes' } else { 'no' }
+      $leaf = Split-Path -Leaf $exe
+      $secReadable = [bool](Get-WinEvent -ListLog 'Microsoft-Windows-Windows Defender/Operational' -ErrorAction SilentlyContinue)
+      $sec = 0
+      foreach ($spec in @(@('Microsoft-Windows-Windows Defender/Operational', @(1116, 1117, 1121, 1122)), @('Microsoft-Windows-AppLocker/EXE and DLL', @(8003, 8004)), @('Microsoft-Windows-CodeIntegrity/Operational', @(3076, 3077)))) { $n = Find-Ev $spec[0] $spec[1] $leaf $since; if ($n -gt 0) { $sec += $n } }
       $extraFail = ''
 
       Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
       $clean = -not (Test-Path -LiteralPath $work)
-      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; DETECTED=' + $(if ($hits -gt 0) { 'yes' } elseif ($src -eq 'none') { 'not assessable' } else { 'no' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
+      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; TELEMETRY=' + $telemetry + '; SECURITY_DETECTED_OR_BLOCKED=' + $(if ($sec -gt 0) { 'yes' } elseif ($secReadable) { 'no' } else { 'not assessable' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
       if (-not $clean) { Write-Output ('ERROR: cleanup failed; remove ' + $work + ' manually. ' + $ev) }
       if ($extraFail) { Write-Output ('FAIL: ' + $extraFail + ' ' + $ev) }
       elseif ($blocked) { Write-Output ('PASS: BLOCKED by policy (' + $err + '). ' + $ev) }
       elseif (-not $executed) { Write-Output ('ERROR: the simulated process could not be started (' + $err + '). ' + $ev) }
-      elseif ($src -eq 'none') { Write-Output ('SKIP: NOT_ASSESSED - no process telemetry source (Sysmon not running; process auditing off). ' + $ev) }
-      elseif ($hits -gt 0) { Write-Output ('PASS: EXECUTED and DETECTED (' + $hits + ' process event(s) with the synthetic marker). ' + $ev) }
-      else { Write-Output ('FAIL: EXECUTED and not DETECTED: no process event with the synthetic marker was recorded. ' + $ev) }
+      elseif ($sec -gt 0) { Write-Output ('PASS: endpoint security detected or blocked the behaviour (' + $sec + ' event(s) naming ' + $leaf + '). ' + $ev) }
+      elseif (-not $secReadable) { Write-Output ('SKIP: NOT_ASSESSED - the Defender operational log is not readable; the security outcome cannot be assessed. ' + $ev) }
+      else { Write-Output ('FAIL: EXECUTED and no endpoint security detection or block was recorded. ' + $ev) }
     cleanup: ""
 
   - name: "EM-06-02 Certutil suspicious URL parameter pattern"
@@ -125,18 +130,23 @@ steps:
       $hits = 0
       if ($sysmon) { $hits += [Math]::Max(0, (Find-Ev 'Microsoft-Windows-Sysmon/Operational' @(1) $needle $since)) }
       if ($p4688) { $hits += [Math]::Max(0, (Find-Ev 'Security' @(4688) $needle $since)) }
+      $telemetry = if ($src -eq 'none') { 'not assessable' } elseif ($hits -gt 0) { 'yes' } else { 'no' }
+      $leaf = Split-Path -Leaf $exe
+      $secReadable = [bool](Get-WinEvent -ListLog 'Microsoft-Windows-Windows Defender/Operational' -ErrorAction SilentlyContinue)
+      $sec = 0
+      foreach ($spec in @(@('Microsoft-Windows-Windows Defender/Operational', @(1116, 1117, 1121, 1122)), @('Microsoft-Windows-AppLocker/EXE and DLL', @(8003, 8004)), @('Microsoft-Windows-CodeIntegrity/Operational', @(3076, 3077)))) { $n = Find-Ev $spec[0] $spec[1] $leaf $since; if ($n -gt 0) { $sec += $n } }
       $extraFail = ''
       if (@(Get-ChildItem -LiteralPath $work -Force).Count -gt 0) { $extraFail = 'certutil wrote a file into the working folder.' }
       Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
       $clean = -not (Test-Path -LiteralPath $work)
-      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; DETECTED=' + $(if ($hits -gt 0) { 'yes' } elseif ($src -eq 'none') { 'not assessable' } else { 'no' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
+      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; TELEMETRY=' + $telemetry + '; SECURITY_DETECTED_OR_BLOCKED=' + $(if ($sec -gt 0) { 'yes' } elseif ($secReadable) { 'no' } else { 'not assessable' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
       if (-not $clean) { Write-Output ('ERROR: cleanup failed; remove ' + $work + ' manually. ' + $ev) }
       if ($extraFail) { Write-Output ('FAIL: ' + $extraFail + ' ' + $ev) }
       elseif ($blocked) { Write-Output ('PASS: BLOCKED by policy (' + $err + '). ' + $ev) }
       elseif (-not $executed) { Write-Output ('ERROR: the simulated process could not be started (' + $err + '). ' + $ev) }
-      elseif ($src -eq 'none') { Write-Output ('SKIP: NOT_ASSESSED - no process telemetry source (Sysmon not running; process auditing off). ' + $ev) }
-      elseif ($hits -gt 0) { Write-Output ('PASS: EXECUTED and DETECTED (' + $hits + ' process event(s) with the synthetic marker). ' + $ev) }
-      else { Write-Output ('FAIL: EXECUTED and not DETECTED: no process event with the synthetic marker was recorded. ' + $ev) }
+      elseif ($sec -gt 0) { Write-Output ('PASS: endpoint security detected or blocked the behaviour (' + $sec + ' event(s) naming ' + $leaf + '). ' + $ev) }
+      elseif (-not $secReadable) { Write-Output ('SKIP: NOT_ASSESSED - the Defender operational log is not readable; the security outcome cannot be assessed. ' + $ev) }
+      else { Write-Output ('FAIL: EXECUTED and no endpoint security detection or block was recorded. ' + $ev) }
     cleanup: ""
 
   - name: "EM-06-03 Rundll32 suspicious DLL execution pattern"
@@ -180,18 +190,23 @@ steps:
       $hits = 0
       if ($sysmon) { $hits += [Math]::Max(0, (Find-Ev 'Microsoft-Windows-Sysmon/Operational' @(1) $needle $since)) }
       if ($p4688) { $hits += [Math]::Max(0, (Find-Ev 'Security' @(4688) $needle $since)) }
+      $telemetry = if ($src -eq 'none') { 'not assessable' } elseif ($hits -gt 0) { 'yes' } else { 'no' }
+      $leaf = Split-Path -Leaf $exe
+      $secReadable = [bool](Get-WinEvent -ListLog 'Microsoft-Windows-Windows Defender/Operational' -ErrorAction SilentlyContinue)
+      $sec = 0
+      foreach ($spec in @(@('Microsoft-Windows-Windows Defender/Operational', @(1116, 1117, 1121, 1122)), @('Microsoft-Windows-AppLocker/EXE and DLL', @(8003, 8004)), @('Microsoft-Windows-CodeIntegrity/Operational', @(3076, 3077)))) { $n = Find-Ev $spec[0] $spec[1] $leaf $since; if ($n -gt 0) { $sec += $n } }
       $extraFail = ''
 
       Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
       $clean = -not (Test-Path -LiteralPath $work)
-      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; DETECTED=' + $(if ($hits -gt 0) { 'yes' } elseif ($src -eq 'none') { 'not assessable' } else { 'no' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
+      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; TELEMETRY=' + $telemetry + '; SECURITY_DETECTED_OR_BLOCKED=' + $(if ($sec -gt 0) { 'yes' } elseif ($secReadable) { 'no' } else { 'not assessable' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
       if (-not $clean) { Write-Output ('ERROR: cleanup failed; remove ' + $work + ' manually. ' + $ev) }
       if ($extraFail) { Write-Output ('FAIL: ' + $extraFail + ' ' + $ev) }
       elseif ($blocked) { Write-Output ('PASS: BLOCKED by policy (' + $err + '). ' + $ev) }
       elseif (-not $executed) { Write-Output ('ERROR: the simulated process could not be started (' + $err + '). ' + $ev) }
-      elseif ($src -eq 'none') { Write-Output ('SKIP: NOT_ASSESSED - no process telemetry source (Sysmon not running; process auditing off). ' + $ev) }
-      elseif ($hits -gt 0) { Write-Output ('PASS: EXECUTED and DETECTED (' + $hits + ' process event(s) with the synthetic marker). ' + $ev) }
-      else { Write-Output ('FAIL: EXECUTED and not DETECTED: no process event with the synthetic marker was recorded. ' + $ev) }
+      elseif ($sec -gt 0) { Write-Output ('PASS: endpoint security detected or blocked the behaviour (' + $sec + ' event(s) naming ' + $leaf + '). ' + $ev) }
+      elseif (-not $secReadable) { Write-Output ('SKIP: NOT_ASSESSED - the Defender operational log is not readable; the security outcome cannot be assessed. ' + $ev) }
+      else { Write-Output ('FAIL: EXECUTED and no endpoint security detection or block was recorded. ' + $ev) }
     cleanup: ""
 
   - name: "EM-06-04 Mshta script execution pattern"
@@ -235,18 +250,23 @@ steps:
       $hits = 0
       if ($sysmon) { $hits += [Math]::Max(0, (Find-Ev 'Microsoft-Windows-Sysmon/Operational' @(1) $needle $since)) }
       if ($p4688) { $hits += [Math]::Max(0, (Find-Ev 'Security' @(4688) $needle $since)) }
+      $telemetry = if ($src -eq 'none') { 'not assessable' } elseif ($hits -gt 0) { 'yes' } else { 'no' }
+      $leaf = Split-Path -Leaf $exe
+      $secReadable = [bool](Get-WinEvent -ListLog 'Microsoft-Windows-Windows Defender/Operational' -ErrorAction SilentlyContinue)
+      $sec = 0
+      foreach ($spec in @(@('Microsoft-Windows-Windows Defender/Operational', @(1116, 1117, 1121, 1122)), @('Microsoft-Windows-AppLocker/EXE and DLL', @(8003, 8004)), @('Microsoft-Windows-CodeIntegrity/Operational', @(3076, 3077)))) { $n = Find-Ev $spec[0] $spec[1] $leaf $since; if ($n -gt 0) { $sec += $n } }
       $extraFail = ''
 
       Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
       $clean = -not (Test-Path -LiteralPath $work)
-      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; DETECTED=' + $(if ($hits -gt 0) { 'yes' } elseif ($src -eq 'none') { 'not assessable' } else { 'no' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
+      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; TELEMETRY=' + $telemetry + '; SECURITY_DETECTED_OR_BLOCKED=' + $(if ($sec -gt 0) { 'yes' } elseif ($secReadable) { 'no' } else { 'not assessable' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
       if (-not $clean) { Write-Output ('ERROR: cleanup failed; remove ' + $work + ' manually. ' + $ev) }
       if ($extraFail) { Write-Output ('FAIL: ' + $extraFail + ' ' + $ev) }
       elseif ($blocked) { Write-Output ('PASS: BLOCKED by policy (' + $err + '). ' + $ev) }
       elseif (-not $executed) { Write-Output ('ERROR: the simulated process could not be started (' + $err + '). ' + $ev) }
-      elseif ($src -eq 'none') { Write-Output ('SKIP: NOT_ASSESSED - no process telemetry source (Sysmon not running; process auditing off). ' + $ev) }
-      elseif ($hits -gt 0) { Write-Output ('PASS: EXECUTED and DETECTED (' + $hits + ' process event(s) with the synthetic marker). ' + $ev) }
-      else { Write-Output ('FAIL: EXECUTED and not DETECTED: no process event with the synthetic marker was recorded. ' + $ev) }
+      elseif ($sec -gt 0) { Write-Output ('PASS: endpoint security detected or blocked the behaviour (' + $sec + ' event(s) naming ' + $leaf + '). ' + $ev) }
+      elseif (-not $secReadable) { Write-Output ('SKIP: NOT_ASSESSED - the Defender operational log is not readable; the security outcome cannot be assessed. ' + $ev) }
+      else { Write-Output ('FAIL: EXECUTED and no endpoint security detection or block was recorded. ' + $ev) }
     cleanup: ""
 
   - name: "EM-06-05 InstallUtil proxy execution pattern"
@@ -294,18 +314,23 @@ steps:
       $hits = 0
       if ($sysmon) { $hits += [Math]::Max(0, (Find-Ev 'Microsoft-Windows-Sysmon/Operational' @(1) $needle $since)) }
       if ($p4688) { $hits += [Math]::Max(0, (Find-Ev 'Security' @(4688) $needle $since)) }
+      $telemetry = if ($src -eq 'none') { 'not assessable' } elseif ($hits -gt 0) { 'yes' } else { 'no' }
+      $leaf = Split-Path -Leaf $exe
+      $secReadable = [bool](Get-WinEvent -ListLog 'Microsoft-Windows-Windows Defender/Operational' -ErrorAction SilentlyContinue)
+      $sec = 0
+      foreach ($spec in @(@('Microsoft-Windows-Windows Defender/Operational', @(1116, 1117, 1121, 1122)), @('Microsoft-Windows-AppLocker/EXE and DLL', @(8003, 8004)), @('Microsoft-Windows-CodeIntegrity/Operational', @(3076, 3077)))) { $n = Find-Ev $spec[0] $spec[1] $leaf $since; if ($n -gt 0) { $sec += $n } }
       $extraFail = ''
 
       Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
       $clean = -not (Test-Path -LiteralPath $work)
-      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; DETECTED=' + $(if ($hits -gt 0) { 'yes' } elseif ($src -eq 'none') { 'not assessable' } else { 'no' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
+      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; TELEMETRY=' + $telemetry + '; SECURITY_DETECTED_OR_BLOCKED=' + $(if ($sec -gt 0) { 'yes' } elseif ($secReadable) { 'no' } else { 'not assessable' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
       if (-not $clean) { Write-Output ('ERROR: cleanup failed; remove ' + $work + ' manually. ' + $ev) }
       if ($extraFail) { Write-Output ('FAIL: ' + $extraFail + ' ' + $ev) }
       elseif ($blocked) { Write-Output ('PASS: BLOCKED by policy (' + $err + '). ' + $ev) }
       elseif (-not $executed) { Write-Output ('ERROR: the simulated process could not be started (' + $err + '). ' + $ev) }
-      elseif ($src -eq 'none') { Write-Output ('SKIP: NOT_ASSESSED - no process telemetry source (Sysmon not running; process auditing off). ' + $ev) }
-      elseif ($hits -gt 0) { Write-Output ('PASS: EXECUTED and DETECTED (' + $hits + ' process event(s) with the synthetic marker). ' + $ev) }
-      else { Write-Output ('FAIL: EXECUTED and not DETECTED: no process event with the synthetic marker was recorded. ' + $ev) }
+      elseif ($sec -gt 0) { Write-Output ('PASS: endpoint security detected or blocked the behaviour (' + $sec + ' event(s) naming ' + $leaf + '). ' + $ev) }
+      elseif (-not $secReadable) { Write-Output ('SKIP: NOT_ASSESSED - the Defender operational log is not readable; the security outcome cannot be assessed. ' + $ev) }
+      else { Write-Output ('FAIL: EXECUTED and no endpoint security detection or block was recorded. ' + $ev) }
     cleanup: ""
 
   - name: "EM-06-06 Msiexec remote package execution pattern"
@@ -349,18 +374,23 @@ steps:
       $hits = 0
       if ($sysmon) { $hits += [Math]::Max(0, (Find-Ev 'Microsoft-Windows-Sysmon/Operational' @(1) $needle $since)) }
       if ($p4688) { $hits += [Math]::Max(0, (Find-Ev 'Security' @(4688) $needle $since)) }
+      $telemetry = if ($src -eq 'none') { 'not assessable' } elseif ($hits -gt 0) { 'yes' } else { 'no' }
+      $leaf = Split-Path -Leaf $exe
+      $secReadable = [bool](Get-WinEvent -ListLog 'Microsoft-Windows-Windows Defender/Operational' -ErrorAction SilentlyContinue)
+      $sec = 0
+      foreach ($spec in @(@('Microsoft-Windows-Windows Defender/Operational', @(1116, 1117, 1121, 1122)), @('Microsoft-Windows-AppLocker/EXE and DLL', @(8003, 8004)), @('Microsoft-Windows-CodeIntegrity/Operational', @(3076, 3077)))) { $n = Find-Ev $spec[0] $spec[1] $leaf $since; if ($n -gt 0) { $sec += $n } }
       $extraFail = ''
 
       Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
       $clean = -not (Test-Path -LiteralPath $work)
-      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; DETECTED=' + $(if ($hits -gt 0) { 'yes' } elseif ($src -eq 'none') { 'not assessable' } else { 'no' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
+      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; TELEMETRY=' + $telemetry + '; SECURITY_DETECTED_OR_BLOCKED=' + $(if ($sec -gt 0) { 'yes' } elseif ($secReadable) { 'no' } else { 'not assessable' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
       if (-not $clean) { Write-Output ('ERROR: cleanup failed; remove ' + $work + ' manually. ' + $ev) }
       if ($extraFail) { Write-Output ('FAIL: ' + $extraFail + ' ' + $ev) }
       elseif ($blocked) { Write-Output ('PASS: BLOCKED by policy (' + $err + '). ' + $ev) }
       elseif (-not $executed) { Write-Output ('ERROR: the simulated process could not be started (' + $err + '). ' + $ev) }
-      elseif ($src -eq 'none') { Write-Output ('SKIP: NOT_ASSESSED - no process telemetry source (Sysmon not running; process auditing off). ' + $ev) }
-      elseif ($hits -gt 0) { Write-Output ('PASS: EXECUTED and DETECTED (' + $hits + ' process event(s) with the synthetic marker). ' + $ev) }
-      else { Write-Output ('FAIL: EXECUTED and not DETECTED: no process event with the synthetic marker was recorded. ' + $ev) }
+      elseif ($sec -gt 0) { Write-Output ('PASS: endpoint security detected or blocked the behaviour (' + $sec + ' event(s) naming ' + $leaf + '). ' + $ev) }
+      elseif (-not $secReadable) { Write-Output ('SKIP: NOT_ASSESSED - the Defender operational log is not readable; the security outcome cannot be assessed. ' + $ev) }
+      else { Write-Output ('FAIL: EXECUTED and no endpoint security detection or block was recorded. ' + $ev) }
     cleanup: ""
 
   - name: "EM-06-07 Control Panel applet execution pattern"
@@ -404,18 +434,23 @@ steps:
       $hits = 0
       if ($sysmon) { $hits += [Math]::Max(0, (Find-Ev 'Microsoft-Windows-Sysmon/Operational' @(1) $needle $since)) }
       if ($p4688) { $hits += [Math]::Max(0, (Find-Ev 'Security' @(4688) $needle $since)) }
+      $telemetry = if ($src -eq 'none') { 'not assessable' } elseif ($hits -gt 0) { 'yes' } else { 'no' }
+      $leaf = Split-Path -Leaf $exe
+      $secReadable = [bool](Get-WinEvent -ListLog 'Microsoft-Windows-Windows Defender/Operational' -ErrorAction SilentlyContinue)
+      $sec = 0
+      foreach ($spec in @(@('Microsoft-Windows-Windows Defender/Operational', @(1116, 1117, 1121, 1122)), @('Microsoft-Windows-AppLocker/EXE and DLL', @(8003, 8004)), @('Microsoft-Windows-CodeIntegrity/Operational', @(3076, 3077)))) { $n = Find-Ev $spec[0] $spec[1] $leaf $since; if ($n -gt 0) { $sec += $n } }
       $extraFail = ''
 
       Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
       $clean = -not (Test-Path -LiteralPath $work)
-      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; DETECTED=' + $(if ($hits -gt 0) { 'yes' } elseif ($src -eq 'none') { 'not assessable' } else { 'no' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
+      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; TELEMETRY=' + $telemetry + '; SECURITY_DETECTED_OR_BLOCKED=' + $(if ($sec -gt 0) { 'yes' } elseif ($secReadable) { 'no' } else { 'not assessable' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
       if (-not $clean) { Write-Output ('ERROR: cleanup failed; remove ' + $work + ' manually. ' + $ev) }
       if ($extraFail) { Write-Output ('FAIL: ' + $extraFail + ' ' + $ev) }
       elseif ($blocked) { Write-Output ('PASS: BLOCKED by policy (' + $err + '). ' + $ev) }
       elseif (-not $executed) { Write-Output ('ERROR: the simulated process could not be started (' + $err + '). ' + $ev) }
-      elseif ($src -eq 'none') { Write-Output ('SKIP: NOT_ASSESSED - no process telemetry source (Sysmon not running; process auditing off). ' + $ev) }
-      elseif ($hits -gt 0) { Write-Output ('PASS: EXECUTED and DETECTED (' + $hits + ' process event(s) with the synthetic marker). ' + $ev) }
-      else { Write-Output ('FAIL: EXECUTED and not DETECTED: no process event with the synthetic marker was recorded. ' + $ev) }
+      elseif ($sec -gt 0) { Write-Output ('PASS: endpoint security detected or blocked the behaviour (' + $sec + ' event(s) naming ' + $leaf + '). ' + $ev) }
+      elseif (-not $secReadable) { Write-Output ('SKIP: NOT_ASSESSED - the Defender operational log is not readable; the security outcome cannot be assessed. ' + $ev) }
+      else { Write-Output ('FAIL: EXECUTED and no endpoint security detection or block was recorded. ' + $ev) }
     cleanup: ""
 
   - name: "EM-06-08 CMSTP proxy execution pattern"
@@ -462,18 +497,23 @@ steps:
       $hits = 0
       if ($sysmon) { $hits += [Math]::Max(0, (Find-Ev 'Microsoft-Windows-Sysmon/Operational' @(1) $needle $since)) }
       if ($p4688) { $hits += [Math]::Max(0, (Find-Ev 'Security' @(4688) $needle $since)) }
+      $telemetry = if ($src -eq 'none') { 'not assessable' } elseif ($hits -gt 0) { 'yes' } else { 'no' }
+      $leaf = Split-Path -Leaf $exe
+      $secReadable = [bool](Get-WinEvent -ListLog 'Microsoft-Windows-Windows Defender/Operational' -ErrorAction SilentlyContinue)
+      $sec = 0
+      foreach ($spec in @(@('Microsoft-Windows-Windows Defender/Operational', @(1116, 1117, 1121, 1122)), @('Microsoft-Windows-AppLocker/EXE and DLL', @(8003, 8004)), @('Microsoft-Windows-CodeIntegrity/Operational', @(3076, 3077)))) { $n = Find-Ev $spec[0] $spec[1] $leaf $since; if ($n -gt 0) { $sec += $n } }
       $extraFail = ''
 
       Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
       $clean = -not (Test-Path -LiteralPath $work)
-      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; DETECTED=' + $(if ($hits -gt 0) { 'yes' } elseif ($src -eq 'none') { 'not assessable' } else { 'no' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
+      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; TELEMETRY=' + $telemetry + '; SECURITY_DETECTED_OR_BLOCKED=' + $(if ($sec -gt 0) { 'yes' } elseif ($secReadable) { 'no' } else { 'not assessable' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
       if (-not $clean) { Write-Output ('ERROR: cleanup failed; remove ' + $work + ' manually. ' + $ev) }
       if ($extraFail) { Write-Output ('FAIL: ' + $extraFail + ' ' + $ev) }
       elseif ($blocked) { Write-Output ('PASS: BLOCKED by policy (' + $err + '). ' + $ev) }
       elseif (-not $executed) { Write-Output ('ERROR: the simulated process could not be started (' + $err + '). ' + $ev) }
-      elseif ($src -eq 'none') { Write-Output ('SKIP: NOT_ASSESSED - no process telemetry source (Sysmon not running; process auditing off). ' + $ev) }
-      elseif ($hits -gt 0) { Write-Output ('PASS: EXECUTED and DETECTED (' + $hits + ' process event(s) with the synthetic marker). ' + $ev) }
-      else { Write-Output ('FAIL: EXECUTED and not DETECTED: no process event with the synthetic marker was recorded. ' + $ev) }
+      elseif ($sec -gt 0) { Write-Output ('PASS: endpoint security detected or blocked the behaviour (' + $sec + ' event(s) naming ' + $leaf + '). ' + $ev) }
+      elseif (-not $secReadable) { Write-Output ('SKIP: NOT_ASSESSED - the Defender operational log is not readable; the security outcome cannot be assessed. ' + $ev) }
+      else { Write-Output ('FAIL: EXECUTED and no endpoint security detection or block was recorded. ' + $ev) }
     cleanup: ""
 
   - name: "EM-06-09 Regsvr32 unusual DLL registration behaviour"
@@ -517,18 +557,23 @@ steps:
       $hits = 0
       if ($sysmon) { $hits += [Math]::Max(0, (Find-Ev 'Microsoft-Windows-Sysmon/Operational' @(1) $needle $since)) }
       if ($p4688) { $hits += [Math]::Max(0, (Find-Ev 'Security' @(4688) $needle $since)) }
+      $telemetry = if ($src -eq 'none') { 'not assessable' } elseif ($hits -gt 0) { 'yes' } else { 'no' }
+      $leaf = Split-Path -Leaf $exe
+      $secReadable = [bool](Get-WinEvent -ListLog 'Microsoft-Windows-Windows Defender/Operational' -ErrorAction SilentlyContinue)
+      $sec = 0
+      foreach ($spec in @(@('Microsoft-Windows-Windows Defender/Operational', @(1116, 1117, 1121, 1122)), @('Microsoft-Windows-AppLocker/EXE and DLL', @(8003, 8004)), @('Microsoft-Windows-CodeIntegrity/Operational', @(3076, 3077)))) { $n = Find-Ev $spec[0] $spec[1] $leaf $since; if ($n -gt 0) { $sec += $n } }
       $extraFail = ''
 
       Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
       $clean = -not (Test-Path -LiteralPath $work)
-      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; DETECTED=' + $(if ($hits -gt 0) { 'yes' } elseif ($src -eq 'none') { 'not assessable' } else { 'no' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
+      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; TELEMETRY=' + $telemetry + '; SECURITY_DETECTED_OR_BLOCKED=' + $(if ($sec -gt 0) { 'yes' } elseif ($secReadable) { 'no' } else { 'not assessable' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
       if (-not $clean) { Write-Output ('ERROR: cleanup failed; remove ' + $work + ' manually. ' + $ev) }
       if ($extraFail) { Write-Output ('FAIL: ' + $extraFail + ' ' + $ev) }
       elseif ($blocked) { Write-Output ('PASS: BLOCKED by policy (' + $err + '). ' + $ev) }
       elseif (-not $executed) { Write-Output ('ERROR: the simulated process could not be started (' + $err + '). ' + $ev) }
-      elseif ($src -eq 'none') { Write-Output ('SKIP: NOT_ASSESSED - no process telemetry source (Sysmon not running; process auditing off). ' + $ev) }
-      elseif ($hits -gt 0) { Write-Output ('PASS: EXECUTED and DETECTED (' + $hits + ' process event(s) with the synthetic marker). ' + $ev) }
-      else { Write-Output ('FAIL: EXECUTED and not DETECTED: no process event with the synthetic marker was recorded. ' + $ev) }
+      elseif ($sec -gt 0) { Write-Output ('PASS: endpoint security detected or blocked the behaviour (' + $sec + ' event(s) naming ' + $leaf + '). ' + $ev) }
+      elseif (-not $secReadable) { Write-Output ('SKIP: NOT_ASSESSED - the Defender operational log is not readable; the security outcome cannot be assessed. ' + $ev) }
+      else { Write-Output ('FAIL: EXECUTED and no endpoint security detection or block was recorded. ' + $ev) }
     cleanup: ""
 
   - name: "EM-06-10 Certutil decode pattern"
@@ -575,18 +620,23 @@ steps:
       $hits = 0
       if ($sysmon) { $hits += [Math]::Max(0, (Find-Ev 'Microsoft-Windows-Sysmon/Operational' @(1) $needle $since)) }
       if ($p4688) { $hits += [Math]::Max(0, (Find-Ev 'Security' @(4688) $needle $since)) }
+      $telemetry = if ($src -eq 'none') { 'not assessable' } elseif ($hits -gt 0) { 'yes' } else { 'no' }
+      $leaf = Split-Path -Leaf $exe
+      $secReadable = [bool](Get-WinEvent -ListLog 'Microsoft-Windows-Windows Defender/Operational' -ErrorAction SilentlyContinue)
+      $sec = 0
+      foreach ($spec in @(@('Microsoft-Windows-Windows Defender/Operational', @(1116, 1117, 1121, 1122)), @('Microsoft-Windows-AppLocker/EXE and DLL', @(8003, 8004)), @('Microsoft-Windows-CodeIntegrity/Operational', @(3076, 3077)))) { $n = Find-Ev $spec[0] $spec[1] $leaf $since; if ($n -gt 0) { $sec += $n } }
       $extraFail = ''
 
       Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
       $clean = -not (Test-Path -LiteralPath $work)
-      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; DETECTED=' + $(if ($hits -gt 0) { 'yes' } elseif ($src -eq 'none') { 'not assessable' } else { 'no' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
+      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; TELEMETRY=' + $telemetry + '; SECURITY_DETECTED_OR_BLOCKED=' + $(if ($sec -gt 0) { 'yes' } elseif ($secReadable) { 'no' } else { 'not assessable' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
       if (-not $clean) { Write-Output ('ERROR: cleanup failed; remove ' + $work + ' manually. ' + $ev) }
       if ($extraFail) { Write-Output ('FAIL: ' + $extraFail + ' ' + $ev) }
       elseif ($blocked) { Write-Output ('PASS: BLOCKED by policy (' + $err + '). ' + $ev) }
       elseif (-not $executed) { Write-Output ('ERROR: the simulated process could not be started (' + $err + '). ' + $ev) }
-      elseif ($src -eq 'none') { Write-Output ('SKIP: NOT_ASSESSED - no process telemetry source (Sysmon not running; process auditing off). ' + $ev) }
-      elseif ($hits -gt 0) { Write-Output ('PASS: EXECUTED and DETECTED (' + $hits + ' process event(s) with the synthetic marker). ' + $ev) }
-      else { Write-Output ('FAIL: EXECUTED and not DETECTED: no process event with the synthetic marker was recorded. ' + $ev) }
+      elseif ($sec -gt 0) { Write-Output ('PASS: endpoint security detected or blocked the behaviour (' + $sec + ' event(s) naming ' + $leaf + '). ' + $ev) }
+      elseif (-not $secReadable) { Write-Output ('SKIP: NOT_ASSESSED - the Defender operational log is not readable; the security outcome cannot be assessed. ' + $ev) }
+      else { Write-Output ('FAIL: EXECUTED and no endpoint security detection or block was recorded. ' + $ev) }
     cleanup: ""
 
   - name: "EM-06-11 PowerShell encoded command execution pattern"
@@ -631,18 +681,23 @@ steps:
       $hits = 0
       if ($sysmon) { $hits += [Math]::Max(0, (Find-Ev 'Microsoft-Windows-Sysmon/Operational' @(1) $needle $since)) }
       if ($p4688) { $hits += [Math]::Max(0, (Find-Ev 'Security' @(4688) $needle $since)) }
+      $telemetry = if ($src -eq 'none') { 'not assessable' } elseif ($hits -gt 0) { 'yes' } else { 'no' }
+      $leaf = Split-Path -Leaf $exe
+      $secReadable = [bool](Get-WinEvent -ListLog 'Microsoft-Windows-Windows Defender/Operational' -ErrorAction SilentlyContinue)
+      $sec = 0
+      foreach ($spec in @(@('Microsoft-Windows-Windows Defender/Operational', @(1116, 1117, 1121, 1122)), @('Microsoft-Windows-AppLocker/EXE and DLL', @(8003, 8004)), @('Microsoft-Windows-CodeIntegrity/Operational', @(3076, 3077)))) { $n = Find-Ev $spec[0] $spec[1] $leaf $since; if ($n -gt 0) { $sec += $n } }
       $extraFail = ''
 
       Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
       $clean = -not (Test-Path -LiteralPath $work)
-      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; DETECTED=' + $(if ($hits -gt 0) { 'yes' } elseif ($src -eq 'none') { 'not assessable' } else { 'no' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
+      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; TELEMETRY=' + $telemetry + '; SECURITY_DETECTED_OR_BLOCKED=' + $(if ($sec -gt 0) { 'yes' } elseif ($secReadable) { 'no' } else { 'not assessable' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
       if (-not $clean) { Write-Output ('ERROR: cleanup failed; remove ' + $work + ' manually. ' + $ev) }
       if ($extraFail) { Write-Output ('FAIL: ' + $extraFail + ' ' + $ev) }
       elseif ($blocked) { Write-Output ('PASS: BLOCKED by policy (' + $err + '). ' + $ev) }
       elseif (-not $executed) { Write-Output ('ERROR: the simulated process could not be started (' + $err + '). ' + $ev) }
-      elseif ($src -eq 'none') { Write-Output ('SKIP: NOT_ASSESSED - no process telemetry source (Sysmon not running; process auditing off). ' + $ev) }
-      elseif ($hits -gt 0) { Write-Output ('PASS: EXECUTED and DETECTED (' + $hits + ' process event(s) with the synthetic marker). ' + $ev) }
-      else { Write-Output ('FAIL: EXECUTED and not DETECTED: no process event with the synthetic marker was recorded. ' + $ev) }
+      elseif ($sec -gt 0) { Write-Output ('PASS: endpoint security detected or blocked the behaviour (' + $sec + ' event(s) naming ' + $leaf + '). ' + $ev) }
+      elseif (-not $secReadable) { Write-Output ('SKIP: NOT_ASSESSED - the Defender operational log is not readable; the security outcome cannot be assessed. ' + $ev) }
+      else { Write-Output ('FAIL: EXECUTED and no endpoint security detection or block was recorded. ' + $ev) }
     cleanup: ""
 
   - name: "EM-06-12 PowerShell download cradle detection"
@@ -688,18 +743,23 @@ steps:
       $hits = 0
       if ($sysmon) { $hits += [Math]::Max(0, (Find-Ev 'Microsoft-Windows-Sysmon/Operational' @(1) $needle $since)) }
       if ($p4688) { $hits += [Math]::Max(0, (Find-Ev 'Security' @(4688) $needle $since)) }
+      $telemetry = if ($src -eq 'none') { 'not assessable' } elseif ($hits -gt 0) { 'yes' } else { 'no' }
+      $leaf = Split-Path -Leaf $exe
+      $secReadable = [bool](Get-WinEvent -ListLog 'Microsoft-Windows-Windows Defender/Operational' -ErrorAction SilentlyContinue)
+      $sec = 0
+      foreach ($spec in @(@('Microsoft-Windows-Windows Defender/Operational', @(1116, 1117, 1121, 1122)), @('Microsoft-Windows-AppLocker/EXE and DLL', @(8003, 8004)), @('Microsoft-Windows-CodeIntegrity/Operational', @(3076, 3077)))) { $n = Find-Ev $spec[0] $spec[1] $leaf $since; if ($n -gt 0) { $sec += $n } }
       $extraFail = ''
 
       Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
       $clean = -not (Test-Path -LiteralPath $work)
-      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; DETECTED=' + $(if ($hits -gt 0) { 'yes' } elseif ($src -eq 'none') { 'not assessable' } else { 'no' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
+      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; TELEMETRY=' + $telemetry + '; SECURITY_DETECTED_OR_BLOCKED=' + $(if ($sec -gt 0) { 'yes' } elseif ($secReadable) { 'no' } else { 'not assessable' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
       if (-not $clean) { Write-Output ('ERROR: cleanup failed; remove ' + $work + ' manually. ' + $ev) }
       if ($extraFail) { Write-Output ('FAIL: ' + $extraFail + ' ' + $ev) }
       elseif ($blocked) { Write-Output ('PASS: BLOCKED by policy (' + $err + '). ' + $ev) }
       elseif (-not $executed) { Write-Output ('ERROR: the simulated process could not be started (' + $err + '). ' + $ev) }
-      elseif ($src -eq 'none') { Write-Output ('SKIP: NOT_ASSESSED - no process telemetry source (Sysmon not running; process auditing off). ' + $ev) }
-      elseif ($hits -gt 0) { Write-Output ('PASS: EXECUTED and DETECTED (' + $hits + ' process event(s) with the synthetic marker). ' + $ev) }
-      else { Write-Output ('FAIL: EXECUTED and not DETECTED: no process event with the synthetic marker was recorded. ' + $ev) }
+      elseif ($sec -gt 0) { Write-Output ('PASS: endpoint security detected or blocked the behaviour (' + $sec + ' event(s) naming ' + $leaf + '). ' + $ev) }
+      elseif (-not $secReadable) { Write-Output ('SKIP: NOT_ASSESSED - the Defender operational log is not readable; the security outcome cannot be assessed. ' + $ev) }
+      else { Write-Output ('FAIL: EXECUTED and no endpoint security detection or block was recorded. ' + $ev) }
     cleanup: ""
 
   - name: "EM-06-13 Suspicious script interpreter chaining"
@@ -746,18 +806,23 @@ steps:
       $hits = 0
       if ($sysmon) { $hits += [Math]::Max(0, (Find-Ev 'Microsoft-Windows-Sysmon/Operational' @(1) $needle $since)) }
       if ($p4688) { $hits += [Math]::Max(0, (Find-Ev 'Security' @(4688) $needle $since)) }
+      $telemetry = if ($src -eq 'none') { 'not assessable' } elseif ($hits -gt 0) { 'yes' } else { 'no' }
+      $leaf = Split-Path -Leaf $exe
+      $secReadable = [bool](Get-WinEvent -ListLog 'Microsoft-Windows-Windows Defender/Operational' -ErrorAction SilentlyContinue)
+      $sec = 0
+      foreach ($spec in @(@('Microsoft-Windows-Windows Defender/Operational', @(1116, 1117, 1121, 1122)), @('Microsoft-Windows-AppLocker/EXE and DLL', @(8003, 8004)), @('Microsoft-Windows-CodeIntegrity/Operational', @(3076, 3077)))) { $n = Find-Ev $spec[0] $spec[1] $leaf $since; if ($n -gt 0) { $sec += $n } }
       $extraFail = ''
 
       Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
       $clean = -not (Test-Path -LiteralPath $work)
-      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; DETECTED=' + $(if ($hits -gt 0) { 'yes' } elseif ($src -eq 'none') { 'not assessable' } else { 'no' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
+      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; TELEMETRY=' + $telemetry + '; SECURITY_DETECTED_OR_BLOCKED=' + $(if ($sec -gt 0) { 'yes' } elseif ($secReadable) { 'no' } else { 'not assessable' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
       if (-not $clean) { Write-Output ('ERROR: cleanup failed; remove ' + $work + ' manually. ' + $ev) }
       if ($extraFail) { Write-Output ('FAIL: ' + $extraFail + ' ' + $ev) }
       elseif ($blocked) { Write-Output ('PASS: BLOCKED by policy (' + $err + '). ' + $ev) }
       elseif (-not $executed) { Write-Output ('ERROR: the simulated process could not be started (' + $err + '). ' + $ev) }
-      elseif ($src -eq 'none') { Write-Output ('SKIP: NOT_ASSESSED - no process telemetry source (Sysmon not running; process auditing off). ' + $ev) }
-      elseif ($hits -gt 0) { Write-Output ('PASS: EXECUTED and DETECTED (' + $hits + ' process event(s) with the synthetic marker). ' + $ev) }
-      else { Write-Output ('FAIL: EXECUTED and not DETECTED: no process event with the synthetic marker was recorded. ' + $ev) }
+      elseif ($sec -gt 0) { Write-Output ('PASS: endpoint security detected or blocked the behaviour (' + $sec + ' event(s) naming ' + $leaf + '). ' + $ev) }
+      elseif (-not $secReadable) { Write-Output ('SKIP: NOT_ASSESSED - the Defender operational log is not readable; the security outcome cannot be assessed. ' + $ev) }
+      else { Write-Output ('FAIL: EXECUTED and no endpoint security detection or block was recorded. ' + $ev) }
     cleanup: ""
 
   - name: "EM-06-14 LOLBin execution from an unusual directory"
@@ -804,18 +869,23 @@ steps:
       $hits = 0
       if ($sysmon) { $hits += [Math]::Max(0, (Find-Ev 'Microsoft-Windows-Sysmon/Operational' @(1) $needle $since)) }
       if ($p4688) { $hits += [Math]::Max(0, (Find-Ev 'Security' @(4688) $needle $since)) }
+      $telemetry = if ($src -eq 'none') { 'not assessable' } elseif ($hits -gt 0) { 'yes' } else { 'no' }
+      $leaf = Split-Path -Leaf $exe
+      $secReadable = [bool](Get-WinEvent -ListLog 'Microsoft-Windows-Windows Defender/Operational' -ErrorAction SilentlyContinue)
+      $sec = 0
+      foreach ($spec in @(@('Microsoft-Windows-Windows Defender/Operational', @(1116, 1117, 1121, 1122)), @('Microsoft-Windows-AppLocker/EXE and DLL', @(8003, 8004)), @('Microsoft-Windows-CodeIntegrity/Operational', @(3076, 3077)))) { $n = Find-Ev $spec[0] $spec[1] $leaf $since; if ($n -gt 0) { $sec += $n } }
       $extraFail = ''
 
       Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
       $clean = -not (Test-Path -LiteralPath $work)
-      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; DETECTED=' + $(if ($hits -gt 0) { 'yes' } elseif ($src -eq 'none') { 'not assessable' } else { 'no' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
+      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; TELEMETRY=' + $telemetry + '; SECURITY_DETECTED_OR_BLOCKED=' + $(if ($sec -gt 0) { 'yes' } elseif ($secReadable) { 'no' } else { 'not assessable' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
       if (-not $clean) { Write-Output ('ERROR: cleanup failed; remove ' + $work + ' manually. ' + $ev) }
       if ($extraFail) { Write-Output ('FAIL: ' + $extraFail + ' ' + $ev) }
       elseif ($blocked) { Write-Output ('PASS: BLOCKED by policy (' + $err + '). ' + $ev) }
       elseif (-not $executed) { Write-Output ('ERROR: the simulated process could not be started (' + $err + '). ' + $ev) }
-      elseif ($src -eq 'none') { Write-Output ('SKIP: NOT_ASSESSED - no process telemetry source (Sysmon not running; process auditing off). ' + $ev) }
-      elseif ($hits -gt 0) { Write-Output ('PASS: EXECUTED and DETECTED (' + $hits + ' process event(s) with the synthetic marker). ' + $ev) }
-      else { Write-Output ('FAIL: EXECUTED and not DETECTED: no process event with the synthetic marker was recorded. ' + $ev) }
+      elseif ($sec -gt 0) { Write-Output ('PASS: endpoint security detected or blocked the behaviour (' + $sec + ' event(s) naming ' + $leaf + '). ' + $ev) }
+      elseif (-not $secReadable) { Write-Output ('SKIP: NOT_ASSESSED - the Defender operational log is not readable; the security outcome cannot be assessed. ' + $ev) }
+      else { Write-Output ('FAIL: EXECUTED and no endpoint security detection or block was recorded. ' + $ev) }
     cleanup: ""
 
   - name: "EM-06-15 Parent-child process relationship anomaly"
@@ -859,18 +929,23 @@ steps:
       $hits = 0
       if ($sysmon) { $hits += [Math]::Max(0, (Find-Ev 'Microsoft-Windows-Sysmon/Operational' @(1) $needle $since)) }
       if ($p4688) { $hits += [Math]::Max(0, (Find-Ev 'Security' @(4688) $needle $since)) }
+      $telemetry = if ($src -eq 'none') { 'not assessable' } elseif ($hits -gt 0) { 'yes' } else { 'no' }
+      $leaf = Split-Path -Leaf $exe
+      $secReadable = [bool](Get-WinEvent -ListLog 'Microsoft-Windows-Windows Defender/Operational' -ErrorAction SilentlyContinue)
+      $sec = 0
+      foreach ($spec in @(@('Microsoft-Windows-Windows Defender/Operational', @(1116, 1117, 1121, 1122)), @('Microsoft-Windows-AppLocker/EXE and DLL', @(8003, 8004)), @('Microsoft-Windows-CodeIntegrity/Operational', @(3076, 3077)))) { $n = Find-Ev $spec[0] $spec[1] $leaf $since; if ($n -gt 0) { $sec += $n } }
       $extraFail = ''
 
       Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
       $clean = -not (Test-Path -LiteralPath $work)
-      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; DETECTED=' + $(if ($hits -gt 0) { 'yes' } elseif ($src -eq 'none') { 'not assessable' } else { 'no' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
+      $ev = 'EXECUTED=' + $(if ($executed) { 'yes' } else { 'no' }) + '; TELEMETRY=' + $telemetry + '; SECURITY_DETECTED_OR_BLOCKED=' + $(if ($sec -gt 0) { 'yes' } elseif ($secReadable) { 'no' } else { 'not assessable' }) + '; BLOCKED=' + $(if ($blocked) { 'yes' } else { 'no' }) + '; COLLECTED=NOT_ASSESSED (requires Audspect query).'
       if (-not $clean) { Write-Output ('ERROR: cleanup failed; remove ' + $work + ' manually. ' + $ev) }
       if ($extraFail) { Write-Output ('FAIL: ' + $extraFail + ' ' + $ev) }
       elseif ($blocked) { Write-Output ('PASS: BLOCKED by policy (' + $err + '). ' + $ev) }
       elseif (-not $executed) { Write-Output ('ERROR: the simulated process could not be started (' + $err + '). ' + $ev) }
-      elseif ($src -eq 'none') { Write-Output ('SKIP: NOT_ASSESSED - no process telemetry source (Sysmon not running; process auditing off). ' + $ev) }
-      elseif ($hits -gt 0) { Write-Output ('PASS: EXECUTED and DETECTED (' + $hits + ' process event(s) with the synthetic marker). ' + $ev) }
-      else { Write-Output ('FAIL: EXECUTED and not DETECTED: no process event with the synthetic marker was recorded. ' + $ev) }
+      elseif ($sec -gt 0) { Write-Output ('PASS: endpoint security detected or blocked the behaviour (' + $sec + ' event(s) naming ' + $leaf + '). ' + $ev) }
+      elseif (-not $secReadable) { Write-Output ('SKIP: NOT_ASSESSED - the Defender operational log is not readable; the security outcome cannot be assessed. ' + $ev) }
+      else { Write-Output ('FAIL: EXECUTED and no endpoint security detection or block was recorded. ' + $ev) }
     cleanup: ""
 
   - name: "EM-06-16 Monitoring coverage for tamper-type queries"
