@@ -298,6 +298,19 @@ const metaMarker = dbprobe.MetaMarker
 // cancellation marks the adapter broken and skips ROLLBACK.
 func (a *Adapter) inTxn(ctx context.Context, mode dbprobe.ExecMode, class dbprobe.ProbeClass,
 	lim dbprobe.Limits, marker string, fn func(ctx context.Context, comment string) error) error {
+	return a.txn(ctx, mode, class, lim, marker, false, fn)
+}
+
+// inCommitTxn runs fn in one transaction and COMMITs only when fn returns nil. The DB-04
+// round-trips (06 and 08) use it, so the statements persist until their own cleanup runs.
+// A failure anywhere rolls the whole transaction back, leaving nothing published.
+func (a *Adapter) inCommitTxn(ctx context.Context, mode dbprobe.ExecMode, class dbprobe.ProbeClass,
+	lim dbprobe.Limits, marker string, fn func(ctx context.Context, comment string) error) error {
+	return a.txn(ctx, mode, class, lim, marker, true, fn)
+}
+
+func (a *Adapter) txn(ctx context.Context, mode dbprobe.ExecMode, class dbprobe.ProbeClass,
+	lim dbprobe.Limits, marker string, commit bool, fn func(ctx context.Context, comment string) error) error {
 	if err := a.require(); err != nil {
 		return err
 	}
@@ -315,8 +328,9 @@ func (a *Adapter) inTxn(ctx context.Context, mode dbprobe.ExecMode, class dbprob
 	if err := step("begin", a.s.Exec(ctx, beginStmt(mode, class))); err != nil {
 		return err
 	}
+	committed := false
 	defer func() {
-		if a.broken || a.s == nil {
+		if committed || a.broken || a.s == nil {
 			return
 		}
 		rb, c := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
@@ -330,7 +344,14 @@ func (a *Adapter) inTxn(ctx context.Context, mode dbprobe.ExecMode, class dbprob
 	if err != nil && (isCtxErr(err) || ctx.Err() != nil) {
 		a.markBroken()
 	}
-	return err
+	if err != nil || !commit {
+		return err
+	}
+	if err := step("commit", a.s.Exec(ctx, "COMMIT")); err != nil {
+		return err
+	}
+	committed = true
+	return nil
 }
 
 func (a *Adapter) metaQuery(ctx context.Context, op, sql string, maxRows int) ([][]any, error) {
