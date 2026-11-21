@@ -19,7 +19,7 @@ import { auditPage, backupNow, exportAuditLogs, loadAuditLogs, loadBackups, load
 import { stopCampaignConfirm, stopCampaignKeep, campaignClearFilters, campaignOpenFindings, campaignSearch, closeCampaignDetail, closeCampaignDrawerOnBackdrop, closeCampaignLaunch, cmpAllConfirmChange, cmpOnExistingScenarioChange, cmpOnGroupChange, cmpOnTargetTypeChange, cmpSelChange, cmpSelectAllFiltered, cmpToggleExclusionFromChecked, generateTIScenario, loadCampaigns, loadKEVPack, openCampaignDetail, openCampaignLaunch, openRunFromCampaign, openThreatPriorityActor, pauseCampaign, renderCampaignTargets, resumeCampaign, selectTIPack, setCampaignSource, setCampaignTab, stopCampaign, submitCampaign } from './features/campaigns.js';
 import { closeChangePassword, closeChangePasswordOnBackdrop, closeConfirmDiffModal, loadCalderaStatus, openChangePassword, openComplianceDetail, runConfirmDiffModal, submitChangePassword } from './features/compliance.js';
 import { closeCovDrawer, closeCovDrawerOnBackdrop, loadCoverageAnalytics, openTechnique, recalcCoverage, renderUTL, setCovView, setUTLFilter } from './features/coverage.js';
-import { loadADCoverage, setADFilter, exportADReportPDF, exportADReportJSON } from './features/ad-coverage.js';
+import { loadADCoverage, refreshADCoverage, setADFilter, exportADReportPDF, exportADReportJSON } from './features/ad-coverage.js';
 import { setReportType, pickReportFormat } from './features/reports.js';
 import { rptFilter, rptClear, toggleRepRuns, copyReportId, copyReportLink } from './features/rpt-view.js';
 import { dcAdd, dcEdit, dcTest, dcDelete, dcSave, dcCancel, dcProviderChanged } from './features/detection-connectors.js';
@@ -400,6 +400,7 @@ export const ACTIONS = {
   loadCoverageAnalytics,
   loadCoverageMatrix,
   loadADCoverage,
+  refreshADCoverage,
   setADFilter,
   exportADReportPDF,
   exportADReportJSON,

@@ -327,7 +327,7 @@ var HEROES = {
     icon: ICON.box,
     title: 'AD Coverage',
     sub: 'Active Directory attack-surface capabilities: what is modeled, composed into scenarios, executed and detection-validated.',
-    actions: '<button type="button" class="btn btn-outline" data-on-click="loadADCoverage">' + svg('<path d="M20 11a8 8 0 00-14-4M4 13a8 8 0 0014 4M5 3v4h4M19 21v-4h-4"/>') + 'Refresh</button>',
+    actions: '<button type="button" class="btn btn-outline" data-on-click="refreshADCoverage">' + svg('<path d="M20 11a8 8 0 00-14-4M4 13a8 8 0 0014 4M5 3v4h4M19 21v-4h-4"/>') + 'Refresh</button>',
     stats: [
       { id: 'adc-hs-total', icon: ICON.posture, value: '—', label: 'Capabilities' },
       { id: 'adc-hs-composed', icon: ICON.layers, value: '—', label: 'Scenario-composed' },

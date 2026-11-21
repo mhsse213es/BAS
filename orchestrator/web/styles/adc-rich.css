@@ -42,3 +42,10 @@
 .adc-detail { padding: 4px 12px 14px; font-size: 12.5px; }
 .adc-detail ul { margin: 4px 0 0 18px; padding: 0; }
 .adc-detail > div + div { margin-top: 8px; }
+
+/* Capability rows: the summary must be the same grid as the header, or the pills drift away from their column titles.
+   app.css sets summary to flex, so this selector has to be more specific than that rule. */
+details.adc-cap > summary { display: grid; grid-template-columns: minmax(240px, 2.6fr) repeat(5, minmax(120px, 1fr)); gap: 10px; align-items: center; min-width: 880px; }
+details.adc-cap > summary > span:not(.adc-cell-cap) { justify-self: start; }
+/* A generic details rule adds 16px of padding and a border to each row, which pushed the summary off the header grid. */
+details.adc-cap { padding: 0; border-left: 0; border-right: 0; }

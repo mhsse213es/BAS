@@ -1,4 +1,5 @@
 import { apicall } from '../core/api.js';
+import { showToast } from '../core/util.js';
 import { x } from '../core/escape.js';
 import { kpi, card, chip, hbars, empty, icon } from '../core/kit.js';
 import { setHeroStat } from './shell-ui.js';
@@ -31,7 +32,7 @@ export function loadADCoverage() {
   // Two independent reads. Coverage is always available; content-inventory is
   // permission-gated, so a failure there must NOT blank the page -- it only
   // means the live-store completeness note can't be shown.
-  apicall('/api/ad/coverage').then(function(d) {
+  return apicall('/api/ad/coverage').then(function(d) {
     _adData = d || null;
     return apicall('/api/ad/content-inventory').then(function(inv) {
       _adInv = inv || null; _adInvError = false;
@@ -44,6 +45,18 @@ export function loadADCoverage() {
     var list = document.getElementById('adc-list');
     if (list) list.innerHTML = '<div class="empty u-danger">Failed to load AD coverage: ' + x(e && e.message ? e.message : 'request failed') + '</div>';
   });
+}
+
+// The hero's Refresh. A reload that looks identical to the last one gave no sign it ran, so say so.
+export function refreshADCoverage() {
+  var btn = document.querySelector('#hero-adc [data-on-click="refreshADCoverage"]');
+  if (btn) btn.disabled = true;
+  loadADCoverage().then(function() {
+    if (_adData) showToast('AD coverage refreshed · ' + ((_adData.capabilityStates || []).length) + ' capabilities', 'ok');
+    else showToast('AD coverage could not be refreshed', 'err');
+  }).catch(function() {
+    showToast('AD coverage could not be refreshed', 'err');
+  }).then(function() { if (btn) btn.disabled = false; });
 }
 
 export function setADFilter(dim, val) {
@@ -96,8 +109,8 @@ function renderDisclaimer(sum) {
     x(String(executed)) + ' capabilities executed and ' + x(String(detected)) +
     ' detection-validated. Content availability and scenario composition do not imply a technique has run against, or been detected in, a real domain.</div></div>' +
     '<div class="adc-warn-actions">' +
-    '<button class="btn btn-outline btn-sm" data-on-click="exportADReportPDF" title="Download the enterprise assessment report (PDF)">Export PDF</button>' +
-    '<button class="btn btn-outline btn-sm" data-on-click="exportADReportJSON" title="Download the assessment data (JSON)">JSON</button>' +
+    '<button class="btn btn-outline btn-sm" data-on-click="exportADReportPDF" title="Open the enterprise assessment report (PDF) in a new tab">Export PDF</button>' +
+    '<button class="btn btn-outline btn-sm" data-on-click="exportADReportJSON" title="Open the assessment data (JSON) in a new tab">JSON</button>' +
     '</div>';
 }
 
