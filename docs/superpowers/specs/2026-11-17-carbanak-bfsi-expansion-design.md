@@ -153,9 +153,9 @@ added twice. Total 31. Item 9 stays a separate scenario and Stage 5 is untouched
 | 17 | Kerberos service account enumeration | T1558.003 | validated 2026-11-21 (attack.mitre.org T1558/003 page); LDAP query only, no ticket requested |
 | 18 | Synthetic operator credential discovery | T1552 | validated 2026-11-21 at parent level; T1552.001 (Credentials In Files) is the likely refinement, to confirm against its page |
 | 19 | SMB administrative share access | T1021.002 | to validate at build; needs `BAS_CARBANAK_TARGET_HOST` |
-| 20 | WinRM remote execution simulation | T1021.006 | to validate at build; needs target host |
-| 21 | Remote service creation | T1569.002 | to validate at build; needs target host |
-| 22 | Remote scheduled task creation | T1053.005 | to validate at build; needs target host |
+| 20 | WinRM remote execution simulation | T1021.006 | validated 2026-11-21 (attack.mitre.org T1021/006 page); benign echo only; needs target host |
+| 21 | Remote service creation | T1569.002 | validated 2026-11-21 with caveat: the service is created and removed but never started, so this exercises creation, not payload execution; needs target host |
+| 22 | Remote scheduled task creation | T1053.005 | validated 2026-11-21 (attack.mitre.org T1053/005 page); task dated 2099 and removed; needs target host |
 | 23 | Unauthorized payment beneficiary creation | none: `no_clean_attack_technique` | excluded from ATT&CK coverage %; included in execution and fraud-control reporting |
 | 24 | Transaction amount manipulation | T1565.002 (proposed) | validated with caveat |
 | 25 | Unauthorized transaction approval | T1078 (proposed) | validated with caveat |

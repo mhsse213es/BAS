@@ -1,0 +1,65 @@
+id: carbanak-bfsi-remote-task
+product_line: killchain
+name: Carbanak BFSI Remote Scheduled Task Creation (Item 22)
+description: >
+  Creates a uniquely named one-time task on the lab target dated in 2099, so
+  it never runs, then deletes it in a finally block and verifies the deletion.
+  Skips without a configured second host. [BAS-SIM-CARBANAK-S22] tagged.
+  Grounded in MITRE ATT&CK T1053.005 (Scheduled Task/Job: Scheduled Task).
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - carbanak
+  - bfsi
+  - lateral-movement
+  - t1053
+mitre_phases:
+  - lateral-movement
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+  - name: "Carbanak Item 22 -- Remote Scheduled Task Creation (T1053.005)"
+    technique_id: T1053.005
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: lab-only
+    production_safe: false
+    risk: medium
+    blast_radius: "Creates and then removes one one-time task on a single lab host. The task is dated 2099 and never runs."
+    reversible: true
+    telemetry:
+      - "Security EID 4698 on the target for the created task"
+    detection:
+      - "SIEM: scheduled task created on a lab host by a remote, non-administrative account"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- T1053.005"
+        url: "https://attack.mitre.org/techniques/T1053/005/"
+    last_reviewed: "2026-11-21"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $target = $env:BAS_CARBANAK_TARGET_HOST
+      if (-not $target) { Write-Output "SKIP: Carbanak Item 22 not run -- BAS_CARBANAK_TARGET_HOST unset. This step needs a second lab host."; exit 0 }
+      if ($target -notmatch '\.(lab|test)$') { Write-Output "REFUSED: target must be a .lab or .test host label."; exit 1 }
+      $task = 'basprobe' + ([guid]::NewGuid().ToString('N').Substring(0, 8))
+      $created = $false
+      try {
+        schtasks /create /s $target /tn $task /tr "cmd.exe /c exit 0" /sc once /sd 01/01/2099 /st 00:00 /f | Out-Null
+        $created = ($LASTEXITCODE -eq 0)
+      } finally {
+        schtasks /delete /s $target /tn $task /f | Out-Null
+      }
+      schtasks /query /s $target /tn $task 2>$null | Out-Null
+      $gone = ($LASTEXITCODE -ne 0)
+      Write-Output "EXEC 22: task created=$created; removed and verified absent=$gone. [BAS-SIM-CARBANAK-S22]"
+    cleanup: ""
