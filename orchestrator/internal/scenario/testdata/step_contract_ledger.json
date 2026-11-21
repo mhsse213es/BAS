@@ -6984,6 +6984,456 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 2,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 3,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 4,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 5,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 6,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 7,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 8,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 9,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 10,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 11,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 12,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 13,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 14,
+    "technique_id": "T1543.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 15,
+    "technique_id": "T1543.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 16,
+    "technique_id": "T1574.009",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 17,
+    "technique_id": "T1543.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 18,
+    "technique_id": "T1543.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 19,
+    "technique_id": "T1543.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 20,
+    "technique_id": "T1053.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 21,
+    "technique_id": "T1053.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 22,
+    "technique_id": "T1053.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 23,
+    "technique_id": "T1053.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 24,
+    "technique_id": "T1053.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 25,
+    "technique_id": "T1053.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 26,
+    "technique_id": "T1053.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 27,
+    "technique_id": "T1546.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 28,
+    "technique_id": "T1546.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 29,
+    "technique_id": "T1546.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 30,
+    "technique_id": "T1546.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 31,
+    "technique_id": "T1546.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 32,
+    "technique_id": "T1546.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 33,
+    "technique_id": "T1547.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 34,
+    "technique_id": "T1547.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 35,
+    "technique_id": "T1547.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 36,
+    "technique_id": "T1547.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 37,
+    "technique_id": "T1546.010",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 38,
+    "technique_id": "T1546.012",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 39,
+    "technique_id": "T1546.012",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 40,
+    "technique_id": "T1542.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 41,
+    "technique_id": "T1546.009",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 42,
+    "technique_id": "T1091",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 43,
+    "technique_id": "T1037.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 44,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 45,
+    "technique_id": "T1547.014",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 46,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 47,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 48,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 49,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 50,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 51,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "endpoint-mastery/em-06-defense-evasion.yaml",
     "index": 0,
     "technique_id": "T1218.010",
