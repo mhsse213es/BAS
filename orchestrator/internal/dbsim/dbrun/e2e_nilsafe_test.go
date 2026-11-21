@@ -41,3 +41,4 @@ type recorder struct{ errs []string }
 
 func (r *recorder) Helper()                   {}
 func (r *recorder) Errorf(f string, a ...any) { r.errs = append(r.errs, fmt.Sprintf(f, a...)) }
+func (r *recorder) Logf(string, ...any)                {}

@@ -14,6 +14,10 @@ type Expectation struct {
 	ExpectedPrevention   string // "allow" | "deny"
 	ExpectDetection      bool
 	ExpectAudit          bool
+	// AuditRequire lists statement texts that must each appear in a marker-tagged
+	// audit event, separated by "|". Empty = any marker event. Kept a string so
+	// Expectation stays comparable.
+	AuditRequire string
 	ExpectAuditConfig    bool
 	RequireObservation   bool
 	RequirePolicyDiff    bool
@@ -89,6 +93,12 @@ var expectations = map[string]map[string]Expectation{
 		// PostgreSQL grants pg_roles to every login: the read is allowed and the
 		// visibility of other role names is recorded, not denied.
 		"read_foreign_role_names": expAllow,
+	},
+	"dbsim-db04-06-role-audit": {
+		"audit_role_roundtrip": {ExpectedPrevention: "allow", ExpectAudit: true, AuditRequire: "GRANT|REVOKE"},
+	},
+	"dbsim-db04-08-ddl-audit": {
+		"audit_ddl_roundtrip": {ExpectedPrevention: "allow", ExpectAudit: true, AuditRequire: "CREATE TABLE|DROP TABLE"},
 	},
 	"dbsim-db04-audit-coverage": {
 		"read_audit_config": {ExpectedPrevention: "allow", ExpectAuditConfig: true},

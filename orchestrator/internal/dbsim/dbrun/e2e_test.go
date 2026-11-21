@@ -392,7 +392,7 @@ func TestE2E_MySQL_SignedScenarioToCorrelatedRecord(t *testing.T) {
 
 var e2eScenarios = []string{
 	"dbsim-db01-auth-policy", "dbsim-db02-excessive-grants", "dbsim-db03-unauthorized-access",
-	"dbsim-db04-audit-coverage", "dbsim-db05-suspicious-read", "dbsim-db09-bounded-bulk-read",
+	"dbsim-db04-audit-coverage", "dbsim-db04-06-role-audit", "dbsim-db04-08-ddl-audit", "dbsim-db05-suspicious-read", "dbsim-db09-bounded-bulk-read",
 	"dbsim-db06-account-revocation", "dbsim-db07-sensitive-classification",
 	"dbsim-db08-audit-tamper-resistance", "dbsim-db10-write-delete-prevention", "dbsim-db11-backup-export-permissions",
 	"dbsim-db04-03-authentication-audit", "dbsim-db04-04-failed-login-audit", "dbsim-db04-07-sensitive-table-access",
@@ -406,6 +406,7 @@ func isFixtureScenario(id string) bool {
 	case "dbsim-db05-suspicious-read", "dbsim-db09-bounded-bulk-read",
 		"dbsim-db06-account-revocation", "dbsim-db07-sensitive-classification",
 		"dbsim-db03-unauthorized-access", "dbsim-db04-04-failed-login-audit",
+		"dbsim-db04-06-role-audit", "dbsim-db04-08-ddl-audit",
 		"dbsim-db08-audit-tamper-resistance", "dbsim-db10-write-delete-prevention",
 		// DB-11 seeds no fixture but is lab-only (LabOnly): it needs the same
 		// approval and the agent-local allowance.
@@ -532,6 +533,7 @@ func runE2E(t *testing.T, cfg e2eConfig) {
 type stepReporter interface {
 	Helper()
 	Errorf(format string, args ...any)
+	Logf(format string, args ...any)
 }
 
 // checkStep asserts the expected end state for one step.
@@ -545,6 +547,10 @@ func checkStep(t stepReporter, cfg e2eConfig, id string, spec dbsim.DBProbeSpec,
 	t.Helper()
 	fail := func(format string, a ...any) {
 		t.Errorf("%s/%s %s: "+format+"\n  reason: %s\n  limitations: %s", append([]any{cfg.engine, id, spec.ProbeID}, append(a, ev.Report.Reason, ev.Record.Limitations)...)...)
+		if ex.DBProbe != nil {
+			t.Logf("agent probe notes: %s", strings.Join(ex.DBProbe.Notes, " | "))
+		}
+		t.Logf("agent stderr tail: %s", tail(ex.Stderr, 1500))
 	}
 	if err := ev.Record.Validate(); err != nil {
 		fail("Record.Validate: %v", err)

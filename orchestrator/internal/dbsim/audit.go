@@ -113,6 +113,25 @@ func roleWindowLogins(o Outcome) (matching int) {
 	return matching
 }
 
+// missingAuditStatements returns the required texts that no marker-tagged audit
+// event contains (case-insensitive).
+func missingAuditStatements(required []string, o Outcome) []string {
+	var missing []string
+	for _, want := range required {
+		found := false
+		for _, e := range o.Probe.AuditEvents {
+			if qualifyingAuditStatement(e.Statement, o.Marker) && strings.Contains(strings.ToUpper(e.Statement), strings.ToUpper(want)) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			missing = append(missing, want)
+		}
+	}
+	return missing
+}
+
 func auditHasMarkerEvidence(o Outcome) bool {
 	for _, e := range o.Probe.AuditEvents {
 		if qualifyingAuditStatement(e.Statement, o.Marker) {
@@ -216,7 +235,12 @@ func auditGrade(s ScenarioMeta, o Outcome) (DimensionGrade, []string) {
 					lims = append(lims, "No login by the probe role was reported in the window: connection evidence is unverifiable.")
 				}
 			} else if auditHasMarkerEvidence(o) {
-				grades = append(grades, DimPass)
+				if missing := missingAuditStatements(s.AuditRequireStatements, o); len(missing) > 0 {
+					grades = append(grades, DimFail)
+					lims = append(lims, "The audit trail lacks a marker-tagged statement the probe ran: "+strings.Join(missing, ", ")+".")
+				} else {
+					grades = append(grades, DimPass)
+				}
 			} else {
 				grades = append(grades, DimUnverifiable)
 				lims = append(lims, "The agent reported audit status found but returned no audit event carrying this run's marker: audit evidence is unverifiable.")

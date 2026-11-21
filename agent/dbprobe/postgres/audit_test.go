@@ -245,7 +245,7 @@ func TestPGCapabilitiesReflectDiscoveredSourceAndCacheIt(t *testing.T) {
 			t.Errorf("notes missing %q: %s", want, notes)
 		}
 	}
-	if len(a.Capabilities().ProbeIDs) != 19 {
+	if len(a.Capabilities().ProbeIDs) != 21 {
 		t.Fatalf("probe ids %v", a.Capabilities().ProbeIDs)
 	}
 }
