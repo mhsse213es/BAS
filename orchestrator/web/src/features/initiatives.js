@@ -260,7 +260,18 @@ function initiativeShowDrawerError(msg) {
   if (el) el.innerHTML = msg ? '<div class="tiny u-danger">' + x(msg) + '</div>' : '';
 }
 
+// Close asks inside the drawer first, like Detach. Closing marks the initiative finished; it can be archived afterwards.
 export function initiativeCloseAction() {
+  if (!INIT_CURRENT) return;
+  var el = document.getElementById('init-drawer-error');
+  if (el) el.innerHTML = '<div class="init-confirm" role="alert"><span>Close <b>' + x(INIT_CURRENT.Name) + '</b>? It will be marked finished. You can archive it afterwards.</span>' +
+    '<span class="init-confirm-acts"><button type="button" class="btn btn-sm init-confirm-go"' + on('click', 'initiativeCloseConfirm') + '>Close initiative</button>' +
+    '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'initiativeCloseCancel') + '>Keep open</button></span></div>';
+}
+
+export function initiativeCloseCancel() { initiativeShowDrawerError(''); }
+
+export function initiativeCloseConfirm() {
   if (!INIT_CURRENT) return;
   initiativeShowDrawerError('');
   apicall('/api/initiatives/' + encodeURIComponent(INIT_CURRENT.ID) + '/close', { method: 'POST' }).then(function(res) {
