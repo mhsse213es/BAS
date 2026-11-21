@@ -145,3 +145,5 @@
 .init-confirm-yes:hover { background: var(--danger); color: #fff; }
 #init-create-error:not(:empty), .init-dr-err:not(:empty) { padding: 10px 12px; border: 1px solid var(--danger-border); border-radius: 10px; background: var(--danger-dim); color: var(--danger-text); font-size: 13px; }
 #init-create-error:not(:empty) > div, .init-dr-err:not(:empty) > div { color: inherit; }
+.init-confirm-go { height: 34px; border: 1px solid var(--accent-border); border-radius: 9px; background: linear-gradient(180deg, #4f8cff 0%, #2563eb 100%); color: #fff; font-weight: 700; box-shadow: 0 6px 16px rgba(37,99,235,.35); }
+.init-confirm-go:hover { background: linear-gradient(180deg, #60a0ff 0%, #2f6ff0 100%); }
