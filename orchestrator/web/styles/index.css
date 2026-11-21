@@ -37,4 +37,5 @@
 @import "./set-rich.css" layer(app);
 @import "./rich-g4.css" layer(app);
 @import "./aleef-rich.css" layer(app);
+@import "./seg-rich.css" layer(app);
 @import "./inline-equivalent.css";

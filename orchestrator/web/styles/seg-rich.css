@@ -1,0 +1,70 @@
+/* Segmentation lab page: pack cards with a run count, a run history with pills, and a run detail with a verdict
+   summary, a verdict bar, fact tiles and a probe table that reads at a glance. */
+#tab-segmentation { display: grid; gap: 16px; }
+
+/* Packs */
+#tab-segmentation .seg-packs { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+#tab-segmentation .seg-pack { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; border-radius: 14px; border: 1px solid var(--border); background: linear-gradient(180deg, var(--elevated) 0%, var(--surface) 100%); overflow: hidden; }
+#tab-segmentation .seg-pack::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: linear-gradient(180deg, #60a5fa, #2563eb); }
+#tab-segmentation .seg-pack-top { display: flex; align-items: center; gap: 12px; }
+#tab-segmentation .seg-pack-ico { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px; color: #93c5fd; background: rgba(96,165,250,.14); border: 1px solid rgba(96,165,250,.35); }
+#tab-segmentation .seg-pack-ico svg { width: 18px; height: 18px; }
+#tab-segmentation .seg-pack b { display: block; font-size: 15px; font-weight: 700; color: var(--text); }
+#tab-segmentation .seg-pack-meta { display: block; margin-top: 2px; font-size: 12px; color: var(--muted-hi); }
+#tab-segmentation .seg-pack p { margin: 0; font-size: 13px; line-height: 1.55; color: var(--muted-hi); }
+#tab-segmentation .seg-pack-run { margin-top: auto; }
+#tab-segmentation .seg-run-btn { display: inline-flex; align-items: center; gap: 6px; border-radius: 9px; font-weight: 700; background: linear-gradient(180deg, #4f8cff 0%, #2563eb 100%); border-color: #2563eb; color: #fff; box-shadow: 0 6px 18px -6px rgba(59,130,246,.6); }
+#tab-segmentation .seg-run-btn:hover { filter: brightness(1.08); }
+#tab-segmentation .seg-note { margin: 0 0 10px; font-size: 12.5px; color: var(--muted-hi); }
+
+/* Run history */
+#tab-segmentation .seg-table-wrap { width: 100%; overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); }
+#tab-segmentation .seg-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; color: var(--text); }
+#tab-segmentation .seg-table th { position: sticky; top: 0; padding: 9px 12px; text-align: left; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--elevated); white-space: nowrap; }
+#tab-segmentation .seg-table td { padding: 10px 12px; border-top: 1px solid var(--border); vertical-align: middle; }
+#tab-segmentation .seg-table tbody tr:nth-child(even) td { background: rgba(148,163,184,.04); }
+#tab-segmentation .seg-row { cursor: pointer; }
+#tab-segmentation .seg-row:hover td { background: var(--hover); }
+#tab-segmentation .seg-row.is-sel td { background: var(--accent-dim); box-shadow: inset 0 1px 0 var(--accent-border), inset 0 -1px 0 var(--accent-border); }
+#tab-segmentation .seg-cell-date { white-space: nowrap; color: var(--muted-hi); font-variant-numeric: tabular-nums; }
+#tab-segmentation .seg-num { text-align: right; font-variant-numeric: tabular-nums; }
+#tab-segmentation .seg-chip { display: inline-block; padding: 2px 9px; border-radius: 7px; font-size: 12px; color: var(--text); background: var(--hover); border: 1px solid var(--border); }
+
+/* Run detail */
+#tab-segmentation .seg-summary { display: grid; gap: 12px; margin-bottom: 14px; }
+#tab-segmentation .seg-stats { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; }
+#tab-segmentation .seg-stat { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--elevated); border-left-width: 3px; }
+#tab-segmentation .seg-stat span { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-hi); }
+#tab-segmentation .seg-stat b { font-size: 24px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
+#tab-segmentation .seg-stat.tone-ok { border-left-color: #34d399; }
+#tab-segmentation .seg-stat.tone-bad { border-left-color: #f87171; }
+#tab-segmentation .seg-stat.tone-warn { border-left-color: #fbbf24; }
+#tab-segmentation .seg-stat.tone-muted { border-left-color: #94a3b8; }
+#tab-segmentation .seg-bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: var(--hover); }
+#tab-segmentation .seg-bar-seg { display: block; height: 100%; }
+#tab-segmentation .seg-bar-ok { background: #34d399; }
+#tab-segmentation .seg-bar-bad { background: #f87171; }
+#tab-segmentation .seg-bar-warn { background: #fbbf24; }
+#tab-segmentation .seg-bar-muted { background: #94a3b8; }
+#tab-segmentation .seg-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 14px; }
+#tab-segmentation .seg-facts > div { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); }
+#tab-segmentation .seg-facts span { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted-hi); }
+#tab-segmentation .seg-facts b { font-size: 13.5px; font-weight: 600; color: var(--text); word-break: break-word; }
+
+/* Probe table */
+#tab-segmentation .seg-route { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: #93c5fd; background: rgba(96,165,250,.10); padding: 2px 7px; border-radius: 6px; white-space: nowrap; }
+#tab-segmentation .seg-expect { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+#tab-segmentation .seg-expect-allow { color: #6ee7b7; background: rgba(52,211,153,.12); border: 1px solid rgba(52,211,153,.35); }
+#tab-segmentation .seg-expect-deny { color: #fca5a5; background: rgba(248,113,113,.10); border: 1px solid rgba(248,113,113,.35); }
+#tab-segmentation .seg-rule { display: inline-block; margin: 0 4px 4px 0; padding: 2px 8px; border-radius: 6px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; color: var(--text); background: var(--hover); border: 1px solid var(--border); }
+#tab-segmentation .seg-none { font-size: 12px; color: var(--muted); }
+#tab-segmentation .seg-reason { color: var(--muted-hi); font-size: 12.5px; min-width: 200px; }
+
+@media (max-width: 720px) {
+  #tab-segmentation .seg-stats { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  #tab-segmentation .seg-packs { grid-template-columns: 1fr; }
+}
+
+#tab-segmentation .seg-caption { margin: 0; font-size: 12.5px; color: var(--muted-hi); }
+#tab-segmentation .seg-facts .rk-pill { white-space: normal; text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 600; line-height: 1.35; max-width: 100%; }
+#tab-segmentation .seg-facts > div b { display: block; }
