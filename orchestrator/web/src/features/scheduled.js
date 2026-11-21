@@ -805,7 +805,7 @@ function renderSchedReview() {
     : 'Weekly · ' + SCHED_DOW[payload.dayOfWeek] + ' · ' + payload.timeOfDay;
   var initiative = SCHED.initiativesActive.find(function(it) { return it.ID === payload.initiativeId; });
 
-  var html = '<div class="g1-s-1662da4e">' +
+  var html = '<div class="g1-s-1662da4e sched-review">' +
     '<div><strong>Scenario:</strong> ' + x(sc ? sc.name : payload.scenarioId) + '</div>' +
     '<div><strong>Mode:</strong> ' + x(payload.mode === 'telemetry' ? 'Telemetry' : 'Posture') + '</div>' +
     '<div><strong>Targets:</strong> ' + x(targetsLine) + '</div>' +

@@ -96,3 +96,29 @@
   #tab-scheduled-assessments .rk-seg { display: flex; flex-wrap: nowrap; width: 100%; overflow-x: auto; }
   #tab-scheduled-assessments .rk-seg button { flex: 0 0 auto; padding: 0 12px; font-size: 12.5px; }
 }
+
+/* New scheduled assessment wizard: a richer dialog with a gradient current step and the console's field and button look. */
+#sched-overlay .modal { border-radius: 16px; background: linear-gradient(180deg, var(--elevated) 0%, var(--surface) 60%); border: 1px solid var(--accent-border); box-shadow: 0 30px 70px -20px rgba(0,0,0,.6); }
+#sched-overlay .wz-pip-n { background: var(--hover); border: 1px solid var(--border); color: var(--muted-hi); font-weight: 700; }
+#sched-overlay .wz-pip.active .wz-pip-n { background: linear-gradient(135deg, #4f8cff, #2563eb); border-color: transparent; color: #fff; box-shadow: 0 6px 16px rgba(37,99,235,.4); }
+#sched-overlay .wz-pip.active { color: var(--text); font-weight: 700; }
+#sched-overlay .wz-pip:not(:last-child)::after { height: 2px; border-radius: 2px; background: linear-gradient(90deg, var(--border), var(--border)); }
+#sched-overlay select, #sched-overlay input[type="text"], #sched-overlay input[type="number"], #sched-overlay input[type="date"], #sched-overlay input[type="datetime-local"], #sched-overlay textarea { min-height: 40px; border: 1px solid var(--border); border-radius: 9px; background-color: var(--elevated); color: var(--text); font: inherit; padding: 9px 12px; }
+#sched-overlay select { appearance: none; -webkit-appearance: none; padding-right: 34px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b9bb4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 11px center; background-size: 14px; cursor: pointer; }
+#sched-overlay select:focus, #sched-overlay input:focus, #sched-overlay textarea:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.35), 0 0 14px rgba(59,130,246,.25); }
+#sched-overlay .wz-actions .btn-primary, #sched-overlay .wz-actions .btn-primary:not([disabled]) { border: 0; border-radius: 10px; height: 38px; padding: 0 18px; color: #fff; font-weight: 600; background: linear-gradient(180deg, #4f8cff 0%, #2563eb 100%); box-shadow: 0 8px 22px rgba(37,99,235,.35), inset 0 1px 0 rgba(255,255,255,.25); }
+#sched-overlay .wz-actions .btn-primary:hover { background: linear-gradient(180deg, #60a0ff 0%, #2f6ff0 100%); }
+#sched-overlay .wz-actions .btn-outline { border-radius: 10px; height: 38px; font-weight: 600; }
+
+/* Drawer: the detail list sits in a panel, and the primary action keeps the gradient. Cancel schedule stays red. */
+#sched-drawer-overlay .sc-kv { padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--elevated); row-gap: 10px; }
+#sched-drawer-overlay .sc-kv dt { font-size: 11.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+#sched-drawer-overlay .sc-drawer-ft .btn-primary { border: 0; border-radius: 10px; height: 38px; padding: 0 18px; color: #fff; font-weight: 600; background: linear-gradient(180deg, #4f8cff 0%, #2563eb 100%); box-shadow: 0 8px 22px rgba(37,99,235,.35), inset 0 1px 0 rgba(255,255,255,.25); }
+#sched-drawer-overlay .sc-drawer-ft .btn-primary:hover { background: linear-gradient(180deg, #60a0ff 0%, #2f6ff0 100%); }
+#sched-drawer-overlay .sc-drawer-ft .sched-cancel { height: 38px; border-radius: 10px; font-weight: 600; }
+
+/* Review step: the summary reads as a panel of label and value tiles. */
+#sched-overlay .sched-review { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 6px 0 4px; }
+#sched-overlay .sched-review > div { padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--elevated); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+#sched-overlay .sched-review strong { display: block; margin-bottom: 2px; font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+@media (max-width: 560px) { #sched-overlay .sched-review { grid-template-columns: 1fr; } }
