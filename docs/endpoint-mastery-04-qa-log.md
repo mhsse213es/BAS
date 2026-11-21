@@ -82,3 +82,13 @@ FAIL (scored): 02 RunAsPPL not configured (0); 03 Credential Guard not running; 
 - Step 00: the probe enables SeDebugPrivilege before requesting the handle; SKIP if it cannot. Commit 879fe015. Server run out3 used the pre-change file (header hash cde79b9a…), so it does not count as the step 00 result. Re-run needed with the new file.
 - Step 17: `rassfm` is accepted only when `System32\rassfm.dll` has a valid signature from Microsoft Corporation (the server check showed exactly that). scecli remains the only other expected package. Any other unexpected package still FAILs. Commit 21913b19. Not exercised on the client, which has no rassfm.dll.
 - Expected header for the next server run: Source sha256 b02ad3f3c83704497e04991374b841f5206867e41594390992bd3990a614c7ce.
+
+## Final server run (out6) — WIN-2IP8FNO4MAD, 2026-11-20 22:00 -08:00
+
+- Source sha256 b02ad3f3c83704497e04991374b841f5206867e41594390992bd3990a614c7ce (matches HEAD at the time of the run).
+- Counts: **PASS 26, FAIL 10, SKIP 8, NO_VERDICT 0, ERROR 0.**
+- Step 00: PASS, handle DENIED with SeDebugPrivilege enabled (Win32 error 5). Access-control result only. The cause is still not attributed; visible candidates are the Trellix stack (mfehidk minifilter and services masvc, mfemms, mfevtp, mfewc, TrellixDLPAgentService). Attribution needs Trellix configuration.
+- Step 17: PASS. Observed rassfm, scecli; rassfm accepted as a Microsoft-signed OS component (Microsoft Corporation, valid signature). This is an owner-approved exception.
+- FAIL (scored): 02 RunAsPPL not configured; 03 Credential Guard not running; 04 LsaCfgFlags absent; 06 LSASS ASR rule in Audit; 07 Sysmon no EID 10 in 7 days; 09 CG not in SecurityServicesConfigured; 28 one stored Credential Manager credential; 31 cached domain logons 10 (threshold 2); 38 LmCompatibilityLevel unset; 39 RestrictAnonymous 0.
+- SKIP: 05 (CG neither configured nor running), 25, 27, 29, 30, 33, 34, 35 (domain-only, no data, or not configured).
+- Runner errors seen across server runs: "An error occurred while creating the pipeline" (exit 1) for step 05 (out) and step 17 (out5). Both cleared on the next full run, and the standalone run of step 17 passed. Treated as transient runner errors; not reproduced locally.
