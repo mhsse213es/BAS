@@ -103,3 +103,18 @@
 
 /* Heatmap: the matrix is wider than the card on most screens, so its scrollbar stays visible. */
 .cov-heat .rg2-matrix { scrollbar-width: thin; scrollbar-color: var(--border-hi, #334155) transparent; padding-bottom: 8px; }
+
+/* Technique drawer: a result callout first, then the reference facts as a table, then the description. */
+#cov-drawer-body .cov-dr-guide { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 14px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border); border-left-width: 3px; background: var(--surface); font-size: 13px; line-height: 1.5; color: var(--text); }
+#cov-drawer-body .cov-dr-guide .cov-dot { margin-top: 5px; flex: none; }
+#cov-drawer-body .cov-dr-guide.tone-ok { border-left-color: var(--success); }
+#cov-drawer-body .cov-dr-guide.tone-warn { border-left-color: var(--warning); }
+#cov-drawer-body .cov-dr-guide.tone-bad { border-left-color: var(--danger); }
+#cov-drawer-body .cov-dr-guide.tone-muted { border-left-color: var(--muted); }
+#cov-drawer-body .cov-dr-kv .rk-kv { display: grid; grid-template-columns: minmax(150px, max-content) minmax(0, 1fr); margin: 0; border-radius: 10px; border: 1px solid var(--border); overflow: hidden; background: var(--surface); }
+#cov-drawer-body .cov-dr-kv .rk-kv dt, #cov-drawer-body .cov-dr-kv .rk-kv dd { margin: 0; padding: 10px 14px; border-top: 1px solid var(--border); font-size: 13px; }
+#cov-drawer-body .cov-dr-kv .rk-kv dt:nth-of-type(1), #cov-drawer-body .cov-dr-kv .rk-kv dd:nth-of-type(1) { border-top: 0; }
+#cov-drawer-body .cov-dr-kv .rk-kv dt { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted-hi); background: rgba(148,163,184,.05); }
+#cov-drawer-body .cov-dr-kv .rk-kv dd { font-weight: 600; color: var(--text); word-break: break-word; }
+#cov-drawer-body .cov-dr-desc { padding: 12px 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); color: var(--muted-hi); }
+#cov-drawer-body .cov-dr-link .btn { width: auto; display: inline-flex; align-items: center; height: 34px; padding: 0 14px; font-size: 13px; text-decoration: none; }

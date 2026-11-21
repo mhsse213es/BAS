@@ -351,6 +351,11 @@ function renderCovToolbar() {
 export function setCovView(v) { COV_VIEW = v; renderCovToolbar(); renderCovMatrix(); }
 
 // The technique drawer: ATT&CK reference for one technique plus what this console knows about it.
+// prettyTactic: "initial-access" -> "Initial Access" for the drawer; anything else passes through.
+function prettyTactic(t) {
+  return String(t || '').split(/[-_\s]+/).filter(Boolean).map(function(w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(' ');
+}
+
 export function openTechnique(id) {
   var st = (state._covSt || {})[id] || 'none';
   var vi = M.verdictInfo(st);
@@ -361,18 +366,26 @@ export function openTechnique(id) {
     var set = function(eid, t) { var el = document.getElementById(eid); if (el) el.textContent = t; };
     set('cov-drawer-title', e.name || 'Technique');
     set('cov-drawer-sub', id);
-    var list = function(a) { return (a || []).join(', '); };
+    var list = function(a) { return (a || []).map(prettyTactic).join(', '); };
     var facts = [['Tactics', list(e.tactics)], ['Platforms', list(e.platforms)], ['Known actors (ATT&CK reference)', list(e.groups)], ['Data sources', list(e.dataSources)]]
       .filter(function(r) { return r[1]; });
     var link = e.url && /^https?:\/\//i.test(e.url)
-      ? '<p class="cov-dr-link"><a href="' + x(e.url) + '" target="_blank" rel="noopener">View on attack.mitre.org →</a></p>' : '';
+      ? '<p class="cov-dr-link"><a class="btn btn-outline" href="' + x(e.url) + '" target="_blank" rel="noopener">View on attack.mitre.org →</a></p>' : '';
+    // What the result means and what to do next, so the drawer is useful on its own.
+    var guide = {
+      cov: ['Blocked and detected in the validated runs. Keep the control in place and re-validate after changes.', 'ok'],
+      part: ['Detected by EDR/SIEM but not blocked. Add a prevention control for this behaviour, then re-run.', 'warn'],
+      gap: ['Neither blocked nor detected in the validated runs. Add a detection rule and a prevention control, then re-run.', 'bad'],
+      none: ['Not validated yet. Run a scenario that covers this technique to get a result.', 'muted'],
+    }[st] || ['Not validated yet.', 'muted'];
     var body = document.getElementById('cov-drawer-body');
     if (body) {
-      body.innerHTML = grid(3, [
-        kpi({ label: 'Result', value: vi.label, sub: 'Last validated', icon: 'shield', tone: vi.tone }),
-        kpi({ label: 'Runs', value: an ? an.runCount : '—', sub: an ? 'in the analysed window' : 'not in the analysed window', icon: 'play', tone: 'accent' }),
-        kpi({ label: 'Variants', value: lib ? lib.totalVariants : '—', sub: lib ? M.sourceCount(lib) + ' source(s)' : 'not in the library', icon: 'layers', tone: 'muted' }),
-      ]) + (facts.length ? '<div class="cov-dr-kv">' + kv(facts) + '</div>' : '') +
+      body.innerHTML = '<p class="cov-dr-guide tone-' + guide[1] + '"><span class="cov-dot tone-' + guide[1] + '"></span>' + x(guide[0]) + '</p>' +
+        grid(3, [
+          kpi({ label: 'Result', value: vi.label, sub: 'Last validated', icon: 'shield', tone: vi.tone }),
+          kpi({ label: 'Runs', value: an ? an.runCount : '—', sub: an ? 'in the analysed window' : 'not in the analysed window', icon: 'play', tone: 'accent' }),
+          kpi({ label: 'Variants', value: lib ? lib.totalVariants : '—', sub: lib ? M.sourceCount(lib) + ' source(s)' : 'not in the library', icon: 'layers', tone: 'muted' }),
+        ]) + (facts.length ? '<div class="cov-dr-kv">' + kv(facts) + '</div>' : '') +
         (e.description ? '<p class="cov-dr-desc">' + x(e.description) + '</p>' : '') + link;
     }
     var o = document.getElementById('cov-drawer-overlay');
