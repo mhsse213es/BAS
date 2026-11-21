@@ -97,6 +97,9 @@ var expectations = map[string]map[string]Expectation{
 	"dbsim-db04-06-role-audit": {
 		"audit_role_roundtrip": {ExpectedPrevention: "allow", ExpectAudit: true, AuditRequire: "GRANT|REVOKE"},
 	},
+	"dbsim-db04-05-privileged-audit": {
+		"audit_reload_conf": {ExpectedPrevention: "allow", ExpectAudit: true, AuditRequire: "pg_reload_conf"},
+	},
 	"dbsim-db04-08-ddl-audit": {
 		"audit_ddl_roundtrip": {ExpectedPrevention: "allow", ExpectAudit: true, AuditRequire: "CREATE TABLE|DROP TABLE"},
 	},
