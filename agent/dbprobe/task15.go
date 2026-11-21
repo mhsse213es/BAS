@@ -14,6 +14,9 @@ const (
 	// ProbeAuditRoleRoundtrip (DB-04-06): one marker-tagged GRANT SELECT and REVOKE
 	// SELECT on the fixture accounts table for the fixture role. PostgreSQL only.
 	ProbeAuditRoleRoundtrip = "audit_role_roundtrip"
+	// ProbeAuditReloadConf (DB-04-05): one marker-tagged privileged call, SELECT
+	// pg_reload_conf(), in the lab. PostgreSQL only.
+	ProbeAuditReloadConf = "audit_reload_conf"
 	ProbeCheckExportPrivileges = "check_export_privileges"
 
 	// AuditTamperFixtureKind is the (otherwise unused) fixture try_disable_audit
