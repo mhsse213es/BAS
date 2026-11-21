@@ -268,8 +268,8 @@ export function renderRunCard(host, run, perms, confirming) {
   }
   if (s.coverage.length) {
     var det = el('details', { class: 'aleef-details' }, [el('summary', { text: 'Coverage by operation' })]);
-    det.appendChild(tableOf(['Operation', 'Class', 'Generated', 'Executed', 'Not executed', 'Findings', 'Verified', 'Skipped'],
-      s.coverage.map(function(c) { return [c.operation, c.cls, c.generated, c.executed, c.notExecuted, c.findings, c.verified, c.skipped]; })));
+    det.appendChild(el('div', { class: 'aleef-table-wrap' }, [tableOf(['Operation', 'Class', 'Generated', 'Executed', 'Not executed', 'Findings', 'Verified', 'Skipped'],
+      s.coverage.map(function(c) { return [c.operation, c.cls, c.generated, c.executed, c.notExecuted, c.findings, c.verified, c.skipped]; }))]));
     host.appendChild(det);
   }
   if (!s.finished && perms.run) {
@@ -342,10 +342,19 @@ export function consistencyFlag(f, list) {
 
 function findingRow(f, verified, perms, listName) {
   var flag = consistencyFlag(f, listName);
-  var cells = [f.title || '', f.property_id || '', f.test_id || '', flag || f.state || '', f.novelty_label || '', f.evidence_hash || '', f.created_at || ''];
-  if (verified) cells.push(f.regression_id || '');
   var tr = el('tr', { 'data-finding-id': f.id || '', class: flag ? 'aleef-inconsistent' : '' });
-  cells.forEach(function(c) { tr.appendChild(el('td', { text: String(c) })); });
+  var hash = f.evidence_hash || '';
+  var cells = [
+    el('td', { class: 'aleef-cell-title' }, [el('strong', { text: f.title || '' })]),
+    el('td', null, [el('code', { text: f.property_id || '' })]),
+    el('td', { text: f.test_id || '' }),
+    el('td', null, [el('span', { class: 'aleef-pill aleef-pill-' + (flag ? 'warn' : (f.state || 'unknown')), text: flag || f.state || '' })]),
+    el('td', null, [el('span', { class: 'aleef-chip', text: String(f.novelty_label || '').replace(/_/g, ' ') })]),
+    el('td', null, [el('span', { class: 'aleef-hash', title: hash, text: hash })]),
+    el('td', { class: 'aleef-cell-date', text: f.created_at || '' })
+  ];
+  if (verified) cells.push(el('td', { text: f.regression_id || '' }));
+  cells.forEach(function(c) { tr.appendChild(c); });
   if (verified) {
     var actions = el('td');
     if (f.regression_id) actions.appendChild(el('button', { class: 'btn btn-outline btn-sm', type: 'button', 'data-aleef-action': 'download-regression', 'data-finding': f.id || '', text: 'Download regression' }));
@@ -362,10 +371,10 @@ function findingRow(f, verified, perms, listName) {
 function findingsTable(list, verified, perms, listName) {
   var heads = ['Title', 'Property', 'Test', 'State', 'Novelty', 'Evidence hash', 'Created'];
   if (verified) heads = heads.concat(['Regression', 'Actions']);
-  return el('table', { class: 'tbl' }, [
+  return el('div', { class: 'aleef-table-wrap' }, [el('table', { class: 'tbl aleef-findings-table' }, [
     el('thead', null, [el('tr', null, heads.map(function(h) { return el('th', { text: h }); }))]),
     el('tbody', null, list.map(function(f) { return findingRow(f, verified, perms, listName); }))
-  ]);
+  ])]);
 }
 
 function section(id, title, note, list, verified, perms, listName) {
