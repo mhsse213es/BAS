@@ -55,6 +55,9 @@ type AgentExec struct {
 
 // StepInput is everything needed to evaluate one executed dbsim step.
 type StepInput struct {
+	// HarnessEvidence is supplied by the lab harness (its own reading of the lab
+	// host). It is never taken from Exec, because agent output is untrusted.
+	HarnessEvidence dbsim.HarnessEvidence
 	// Scenario carries the expectations (prevention, detection, response,
 	// audit, observation) for this step. The wiring never invents them.
 	Scenario dbsim.ScenarioMeta
@@ -266,6 +269,7 @@ func Evaluate(ctx context.Context, conn detectverify.Connector, in StepInput) (E
 		ProbeID: in.Spec.ProbeID,
 		Marker:  in.Spec.Marker, RunID: in.Spec.RunID, Principal: in.Principal,
 		CollectedAt: now().UTC(), Observed: in.GrantsChecked, Diff: in.Diff,
+		HarnessEvidence: in.HarnessEvidence,
 	}
 	classifyExec(in.Exec, &o)
 	if in.Exec.DBProbe != nil {

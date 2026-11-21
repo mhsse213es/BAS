@@ -611,9 +611,9 @@ func TestReadAuditConfigReportsSettingsAndCoverage(t *testing.T) {
 		want      string
 		wantNotes []string
 	}{
-		{"covered via general_log", []any{int64(1), []byte("TABLE"), int64(0)}, no, nil, nil, denied, "audit_config: covered",
+		{"partial: general_log is not audit evidence", []any{int64(1), []byte("TABLE"), int64(0)}, no, nil, nil, denied, "audit_config: partial",
 			[]string{"general_log=ON", "log_output=TABLE", "performance_schema=OFF", "audit_plugins=none", "mysql.general_log=readable"}},
-		{"covered via performance_schema", []any{int64(0), []byte("FILE"), int64(1)}, yes, nil, denied, nil, "audit_config: covered",
+		{"partial: performance_schema history is not audit evidence", []any{int64(0), []byte("FILE"), int64(1)}, yes, nil, denied, nil, "audit_config: partial",
 			[]string{"general_log=OFF", "performance_schema=ON", "ps_consumer.events_statements_history_long=YES", "performance_schema.events_statements_history_long=readable"}},
 		{"partial: audit plugin only", []any{int64(0), []byte("FILE"), int64(0)}, no, [][]any{{"audit_log", "ACTIVE"}}, denied, denied, "audit_config: partial",
 			[]string{"audit_plugins=audit_log:ACTIVE", "mysql.general_log=unreadable"}},
