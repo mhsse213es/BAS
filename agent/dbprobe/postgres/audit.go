@@ -243,6 +243,9 @@ func auditConfigNotes(settings [][]any, view []any) []string {
 		v, ok := got[k]
 		if !ok {
 			v = "absent"
+			if k == "shared_preload_libraries" {
+				v = "unreadable"
+			}
 		}
 		notes = append(notes, k+"="+v)
 	}
@@ -259,7 +262,17 @@ func auditConfigNotes(settings [][]any, view []any) []string {
 		state = "present_not_selectable"
 	}
 	notes = append(notes, auditSourceName+"="+state)
-	extension := got["pgaudit_extension"] == "present"
+	// An unreadable preload (the probe role lacks pg_read_all_settings) is unknown, not
+	// absent: coverage cannot be confirmed without it.
+	preload, readable := got["shared_preload_libraries"]
+	loaded := readable && preloadHasPgaudit(preload)
+	loadState := map[bool]string{true: "yes", false: "no"}[loaded]
+	if !readable {
+		loadState = "unknown"
+	}
+	notes = append(notes, "pgaudit_loaded="+loadState)
+	// pgaudit records only when preloaded, so an installed but unloaded extension is inert.
+	extension := got["pgaudit_extension"] == "present" && loaded
 	policy := "absent"
 	if pl := got["pgaudit.log"]; pl != "" && pl != "none" {
 		policy = "not_met"
@@ -312,4 +325,15 @@ func pgauditEnables(v, class string) bool {
 		}
 	}
 	return on
+}
+
+// preloadHasPgaudit reports whether a shared_preload_libraries value lists pgaudit
+// exactly (comma-separated, whitespace tolerated).
+func preloadHasPgaudit(v string) bool {
+	for _, name := range strings.Split(v, ",") {
+		if strings.TrimSpace(name) == "pgaudit" {
+			return true
+		}
+	}
+	return false
 }
