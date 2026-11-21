@@ -162,7 +162,7 @@ function renderInitiativesList() {
       emp.hidden = false;
       emp.innerHTML = all.length
         ? empty('search', 'No initiatives match', 'Clear the filters to see everything.') + '<div class="init-empty-act"><button class="btn btn-outline btn-sm"' + on('click', 'initiativeClearFilters') + '>Clear filters</button></div>'
-        : empty('flag', EMPTY_TITLE, EMPTY_BODY);
+        : empty('flag', EMPTY_TITLE, EMPTY_BODY) + '<div class="init-empty-act"><button type="button" class="btn btn-primary"' + on('click', 'openInitiativeCreateDrawer') + '>+ New Initiative</button></div>';
     }
     return;
   }
