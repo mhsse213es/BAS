@@ -7416,6 +7416,15 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "endpoint-mastery/em-05-persistence-validation.yaml",
+    "index": 51,
+    "technique_id": "T1547.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "endpoint-mastery/em-06-defense-evasion.yaml",
     "index": 0,
     "technique_id": "T1218.010",

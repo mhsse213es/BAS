@@ -1475,3 +1475,28 @@ steps:
       if ($mb -ge 192) { Write-Output "PASS: Security log maximum size is $mb MB (at least 192 MB recommended)." }
       else { Write-Output "FAIL: Security log maximum size is $mb MB; below the 192 MB recommendation for persistence events." }
     cleanup: ""
+
+  - name: "User Startup folder is at its standard location (no shell-folder redirection)"
+    technique_id: T1547.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Compares the Startup shell-folder registry value with the standard location. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $k = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders'
+      $raw = (Get-ItemProperty -Path $k -Name Startup -ErrorAction SilentlyContinue).Startup
+      $std = [Environment]::ExpandEnvironmentVariables('%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup')
+      $cur = [Environment]::GetFolderPath('Startup')
+      if ($cur -eq $std) { Write-Output "PASS: the user Startup folder is at its standard location ($std)." }
+      else { Write-Output "FAIL: the user Startup folder is redirected to '$cur' (registry value '$raw'); a Startup redirect is a persistence path outside the standard folder." }
+    cleanup: ""
