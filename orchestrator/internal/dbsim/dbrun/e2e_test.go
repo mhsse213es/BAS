@@ -515,6 +515,7 @@ func runE2E(t *testing.T, cfg e2eConfig) {
 				checkStep(t, cfg, id, spec, ev, results[i])
 				js, _ := json.Marshal(ev.Record)
 				t.Logf("step %d %s: result=%s record=%s", i+1, spec.ProbeID, ev.Result, js)
+				t.Logf("step %d %s agent notes: %s", i+1, spec.ProbeID, strings.Join(results[i].DBProbe.Notes, " | "))
 				summary[cfg.engine+"/"+id+"/"+spec.ProbeID] = string(ev.Result)
 			}
 		})
