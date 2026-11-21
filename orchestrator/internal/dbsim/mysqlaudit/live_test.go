@@ -107,3 +107,40 @@ func TestLiveFixtureTests05to08(t *testing.T) {
 		}
 	}
 }
+
+// TestLiveSkippedWhenPluginOff expects every MySQL test (03-08) to report SKIPPED. Run it
+// only while the audit_log plugin is UNINSTALLED on the lab. Each runner checks the plugin
+// before any operation, so a SKIPPED result means no operation ran.
+func TestLiveSkippedWhenPluginOff(t *testing.T) {
+	if os.Getenv("DBSIM_HARNESS_LIVE") != "1" || os.Getenv("DBSIM_HARNESS_PLUGIN_OFF") != "1" {
+		t.Skip("set DBSIM_HARNESS_LIVE=1 and DBSIM_HARNESS_PLUGIN_OFF=1 (only while audit_log is uninstalled)")
+	}
+	base := os.Getenv("DBSIM_HARNESS_RUN")
+	cfg := LabConfig{
+		PasswordFile:        os.Getenv("DBSIM_HARNESS_PW"),
+		FixturePasswordFile: os.Getenv("DBSIM_FIXTURE_PW"),
+		Addr:                os.Getenv("DBSIM_HARNESS_ADDR"),
+		AuditFile:           os.Getenv("DBSIM_HARNESS_AUDIT"),
+	}
+	ctx := context.Background()
+	type run func(context.Context, LabConfig, string) (dbsim.RunResult, string, error)
+	cases := map[string]run{
+		"03": RunAuthEvent,
+		"04": RunFailedLogin,
+		"05": RunPrivilegedFlush,
+		"06": RunGrantRevoke,
+		"07": RunSensitiveRead,
+		"08": RunDDL,
+	}
+	for _, name := range []string{"03", "04", "05", "06", "07", "08"} {
+		res, why, err := cases[name](ctx, cfg, base+name)
+		if err != nil {
+			t.Errorf("test %s: %v", name, err)
+			continue
+		}
+		t.Logf("test %s: result=%s reason=%s", name, res, why)
+		if res != dbsim.ResultSkipped {
+			t.Errorf("test %s must be SKIPPED while the plugin is off, got %s (%s)", name, res, why)
+		}
+	}
+}
