@@ -987,7 +987,7 @@ steps:
       try {
         $flt = Set-WmiInstance -Namespace $ns -Class __EventFilter -Arguments @{Name=$fn; EventNamespace='root\cimv2'; QueryLanguage='WQL'; Query="SELECT * FROM __InstanceCreationEvent WITHIN 10 WHERE TargetInstance ISA 'Audspect_EM05_NeverExists'"} -ErrorAction Stop
         $stage = 'consumer'
-        $con = Set-WmiInstance -Namespace $ns -Class NTEventLogEventConsumer -Arguments @{Name=$cn; SourceName='Application'; EventID=1; EventType=4} -ErrorAction Stop
+        $con = Set-WmiInstance -Namespace $ns -Class NTEventLogEventConsumer -Arguments @{Name=$cn; SourceName='Application'; EventID=1; EventType=4; Category=0; NumberOfInsertionStrings=1; InsertionStringTemplates=@('Synthetic BAS marker; never fires')} -ErrorAction Stop
         $stage = 'binding'
         $null = Set-WmiInstance -Namespace $ns -Class __FilterToConsumerBinding -Arguments @{Filter=('__EventFilter.Name="' + $fn + '"'); Consumer=('NTEventLogEventConsumer.Name="' + $cn + '"')} -ErrorAction Stop
         $made = $true
