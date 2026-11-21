@@ -75,3 +75,29 @@
 .cmp-mbd .modal-lbl { margin-top: 2px; }
 .cmp-mbd select { width: 100%; }
 @media (max-width: 700px) { .cmp-filters .rk-search { flex-basis: 100%; } .cmp-facts { gap: 6px; } }
+
+/* Campaigns view switch: a raised segmented control with a gradient on the chosen view. On phone it scrolls
+   sideways on one row instead of wrapping. */
+#campaign-toolbar .rk-seg { display: inline-flex; gap: 4px; padding: 4px; background: var(--elevated); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.18); max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+#campaign-toolbar .rk-seg button { height: 34px; padding: 0 14px; border: 0; border-radius: 9px; background: transparent; color: var(--muted-hi); font-weight: 600; font-size: 13px; white-space: nowrap; cursor: pointer; transition: background .15s, color .15s; }
+#campaign-toolbar .rk-seg button:hover { background: var(--hover); color: var(--text); }
+#campaign-toolbar .rk-seg button.on { color: #fff; background: linear-gradient(180deg, #4f8cff 0%, #2563eb 100%); box-shadow: 0 6px 16px rgba(37,99,235,.35), inset 0 1px 0 rgba(255,255,255,.25); }
+#campaign-toolbar .rk-seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#campaign-toolbar .rk-seg-n { display: inline-block; min-width: 20px; padding: 1px 6px; margin-left: 4px; border-radius: 999px; background: var(--hover); font-size: 11px; font-weight: 700; }
+#campaign-toolbar .rk-seg button.on .rk-seg-n { background: rgba(255,255,255,.22); }
+#campaign-filters .rk-search input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.35), 0 0 14px rgba(59,130,246,.25); outline: none; }
+@media (max-width: 700px) {
+  #campaign-toolbar { width: 100%; }
+  #campaign-toolbar .rk-seg { display: flex; width: 100%; }
+  #campaign-toolbar .rk-seg button { flex: 0 0 auto; }
+  .cmp-filters .cmp-sched { width: 100%; justify-content: center; }
+}
+
+/* Campaign cards: lifted hover and gradient surface, matching the Initiatives cards. */
+.cmp-card { position: relative; border-radius: 14px; padding: 18px 18px 16px; background: linear-gradient(180deg, var(--elevated) 0%, var(--panel, var(--elevated)) 100%); box-shadow: 0 6px 18px rgba(0,0,0,.18); transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+.cmp-card:hover { transform: translateY(-2px); box-shadow: 0 14px 30px rgba(0,0,0,.28), 0 0 0 1px var(--accent-dim); }
+
+/* Per-agent breakdown: a clear accent button instead of a bare outline. */
+.cmp-card .btn-outline.btn-sm { border-color: var(--accent-border); color: var(--accent); background: var(--accent-dim); font-weight: 600; border-radius: 9px; }
+.cmp-card .btn-outline.btn-sm:hover { background: var(--accent); color: #fff; }
+@media (max-width: 700px) { #campaign-toolbar .rk-seg { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; } }
