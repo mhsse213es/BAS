@@ -2,12 +2,19 @@
 product_line: av
 name: "Endpoint Mastery 05 — Persistence Mechanism Validation"
 description: >
-  ENDPOINT MASTERY — Layer 5. Validates system resistance and monitoring depth
-  across common auto-start extensibility points (ASEPs). Evaluates registry run key mutations,
-  User Startup folder access, and Scheduled Task modifications[cite: 4, 5].
-
-  VERDICTS: PASS = intervention caught/blocked execution or registry write. FAIL = persistence
-  mechanism registered unblocked. SAFETY: Modifies only mock entries tagged with [BAS-SIM] and cleans up immediately.
+  ENDPOINT MASTERY — Layer 5. Assesses whether unauthorized persistence can be established on a
+  Windows endpoint and whether controls prevent or detect it. Covers registry Run and RunOnce keys,
+  Startup folders, Windows services, scheduled tasks, WMI permanent event subscriptions, Winlogon,
+  AppInit_DLLs, Image File Execution Options, boot execution, autorun policy and detection telemetry.
+  VERDICTS: PASS = the write was blocked, or it succeeded and was detected. FAIL = the write succeeded
+  and was not detected, or a configuration is unsafe. SKIP = not applicable or not assessable here,
+  with a reason; SKIP is not scored. ERROR = the check could not complete, or cleanup failed.
+  WRITE PROBES: disabled unless BAS_EM05_ALLOW_WRITE_PROBES=1 is set on an isolated lab host.
+  Each probe creates one uniquely named synthetic item, checks for telemetry, removes it, and verifies
+  removal. Synthetic values never launch: they run cmd.exe /c exit 0, point at a missing binary, or sit
+  on a task scheduled in the future. Files are .txt and not executable.
+  READ-ONLY: inventory, ACL and configuration checks. Nothing is launched and no value is read beyond
+  its presence or configured state.
 author: Audspect Research
 executable: true
 supported_os: [windows]
@@ -15,10 +22,11 @@ tags:
   - endpoint-mastery
   - em-layer-5
   - persistence
+  - autorun
 mitre_phases:
   - persistence
 live_policy:
-  block_on_domain_controller: false
+  block_on_domain_controller: true
   require_dc_reachable: false
 
 steps:
@@ -27,35 +35,194 @@ steps:
     framework: custom
     executor: powershell
     requires_priv: user
+    timeout_sec: 60
+    fidelity: synthetic-gated
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Writes one synthetic value to HKCU Run and removes it; verifies removal."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      if ($env:BAS_EM05_ALLOW_WRITE_PROBES -ne '1') { Write-Output 'SKIP: write probe disabled; set BAS_EM05_ALLOW_WRITE_PROBES=1 on an isolated lab host to run.'; return }
+      function Find-Ev([string]$log, [int[]]$ids, [string]$needle, [datetime]$since) {
+        try { return @(Get-WinEvent -FilterHashtable @{LogName=$log; Id=$ids; StartTime=$since} -ErrorAction Stop | Where-Object { $_.Message -like "*$needle*" }).Count }
+        catch { if ($_.Exception.Message -match 'No events') { return 0 } else { return -1 } }
+      }
+      $sfx = [guid]::NewGuid().ToString('N').Substring(0, 10); $n = 'AudspectEM05_' + $sfx
+      $p = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+      $since = Get-Date
+      $wrote = $false; $werr = ''
+      try { New-ItemProperty -Path $p -Name $n -Value 'cmd.exe /c exit 0' -PropertyType String -ErrorAction Stop | Out-Null; $wrote = $true } catch { $werr = $_.Exception.Message }
+      Start-Sleep -Seconds 4
+      $d = Find-Ev 'Microsoft-Windows-Sysmon/Operational' @(13) $n $since
+      $cleanOk = $true
+      if ($wrote) {
+        try { Remove-ItemProperty -Path $p -Name $n -ErrorAction Stop } catch { $cleanOk = $false }
+        if (Get-ItemProperty -Path $p -Name $n -ErrorAction SilentlyContinue) { $cleanOk = $false }
+      }
+      $tail = if ($cleanOk) { 'Cleanup verified.' } else { "CLEANUP FAILED: remove $p\$n manually; the value is an executable autorun." }
+      if (-not $wrote) { Write-Output "PASS: write to $p was blocked ($werr). $tail" }
+      elseif ($d -gt 0) { Write-Output "PASS: write to $p succeeded but was detected ($d Sysmon EID 13 event(s) for the synthetic value). $tail" }
+      elseif ($d -lt 0) { Write-Output "FAIL: write to $p succeeded and no detection telemetry source was readable (Sysmon not present).  $tail" }
+      else { Write-Output "FAIL: write to $p succeeded and no detection event was recorded. $tail" }
+    cleanup: ""
+
+  - name: "HKLM Run key write probe"
+    technique_id: T1547.001
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 60
+    fidelity: synthetic-gated
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Writes one synthetic value to HKLM Run (elevated) and removes it; verifies removal."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      if ($env:BAS_EM05_ALLOW_WRITE_PROBES -ne '1') { Write-Output 'SKIP: write probe disabled; set BAS_EM05_ALLOW_WRITE_PROBES=1 on an isolated lab host to run.'; return }
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      function Find-Ev([string]$log, [int[]]$ids, [string]$needle, [datetime]$since) {
+        try { return @(Get-WinEvent -FilterHashtable @{LogName=$log; Id=$ids; StartTime=$since} -ErrorAction Stop | Where-Object { $_.Message -like "*$needle*" }).Count }
+        catch { if ($_.Exception.Message -match 'No events') { return 0 } else { return -1 } }
+      }
+      $sfx = [guid]::NewGuid().ToString('N').Substring(0, 10); $n = 'AudspectEM05_' + $sfx
+      $p = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run'
+      $since = Get-Date
+      $wrote = $false; $werr = ''
+      try { New-ItemProperty -Path $p -Name $n -Value 'cmd.exe /c exit 0' -PropertyType String -ErrorAction Stop | Out-Null; $wrote = $true } catch { $werr = $_.Exception.Message }
+      Start-Sleep -Seconds 4
+      $d = Find-Ev 'Microsoft-Windows-Sysmon/Operational' @(13) $n $since
+      $cleanOk = $true
+      if ($wrote) {
+        try { Remove-ItemProperty -Path $p -Name $n -ErrorAction Stop } catch { $cleanOk = $false }
+        if (Get-ItemProperty -Path $p -Name $n -ErrorAction SilentlyContinue) { $cleanOk = $false }
+      }
+      $tail = if ($cleanOk) { 'Cleanup verified.' } else { "CLEANUP FAILED: remove $p\$n manually; the value is an executable autorun." }
+      if (-not $wrote) { Write-Output "PASS: write to $p was blocked ($werr). $tail" }
+      elseif ($d -gt 0) { Write-Output "PASS: write to $p succeeded but was detected ($d Sysmon EID 13 event(s) for the synthetic value). $tail" }
+      elseif ($d -lt 0) { Write-Output "FAIL: write to $p succeeded and no detection telemetry source was readable (Sysmon not present).  $tail" }
+      else { Write-Output "FAIL: write to $p succeeded and no detection event was recorded. $tail" }
+    cleanup: ""
+
+  - name: "HKCU RunOnce write probe"
+    technique_id: T1547.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: synthetic-gated
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Writes one synthetic RunOnce value and removes it before any logon can run it; verifies removal."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      if ($env:BAS_EM05_ALLOW_WRITE_PROBES -ne '1') { Write-Output 'SKIP: write probe disabled; set BAS_EM05_ALLOW_WRITE_PROBES=1 on an isolated lab host to run.'; return }
+      function Find-Ev([string]$log, [int[]]$ids, [string]$needle, [datetime]$since) {
+        try { return @(Get-WinEvent -FilterHashtable @{LogName=$log; Id=$ids; StartTime=$since} -ErrorAction Stop | Where-Object { $_.Message -like "*$needle*" }).Count }
+        catch { if ($_.Exception.Message -match 'No events') { return 0 } else { return -1 } }
+      }
+      $sfx = [guid]::NewGuid().ToString('N').Substring(0, 10); $n = 'AudspectEM05_' + $sfx
+      $p = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce'
+      $since = Get-Date
+      $wrote = $false; $werr = ''
+      try { New-ItemProperty -Path $p -Name $n -Value 'cmd.exe /c exit 0' -PropertyType String -ErrorAction Stop | Out-Null; $wrote = $true } catch { $werr = $_.Exception.Message }
+      Start-Sleep -Seconds 4
+      $d = Find-Ev 'Microsoft-Windows-Sysmon/Operational' @(13) $n $since
+      $cleanOk = $true
+      if ($wrote) {
+        try { Remove-ItemProperty -Path $p -Name $n -ErrorAction Stop } catch { $cleanOk = $false }
+        if (Get-ItemProperty -Path $p -Name $n -ErrorAction SilentlyContinue) { $cleanOk = $false }
+      }
+      $tail = if ($cleanOk) { 'Cleanup verified.' } else { "CLEANUP FAILED: remove $p\$n manually; the value is an executable autorun." }
+      if (-not $wrote) { Write-Output "PASS: write to $p was blocked ($werr). $tail" }
+      elseif ($d -gt 0) { Write-Output "PASS: write to $p succeeded but was detected ($d Sysmon EID 13 event(s) for the synthetic value). $tail" }
+      elseif ($d -lt 0) { Write-Output "FAIL: write to $p succeeded and no detection telemetry source was readable (Sysmon not present).  $tail" }
+      else { Write-Output "FAIL: write to $p succeeded and no detection event was recorded. $tail" }
+    cleanup: ""
+
+  - name: "HKLM RunOnce write probe"
+    technique_id: T1547.001
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 60
+    fidelity: synthetic-gated
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Writes one synthetic RunOnce value to HKLM (elevated) and removes it; verifies removal."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      if ($env:BAS_EM05_ALLOW_WRITE_PROBES -ne '1') { Write-Output 'SKIP: write probe disabled; set BAS_EM05_ALLOW_WRITE_PROBES=1 on an isolated lab host to run.'; return }
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      function Find-Ev([string]$log, [int[]]$ids, [string]$needle, [datetime]$since) {
+        try { return @(Get-WinEvent -FilterHashtable @{LogName=$log; Id=$ids; StartTime=$since} -ErrorAction Stop | Where-Object { $_.Message -like "*$needle*" }).Count }
+        catch { if ($_.Exception.Message -match 'No events') { return 0 } else { return -1 } }
+      }
+      $sfx = [guid]::NewGuid().ToString('N').Substring(0, 10); $n = 'AudspectEM05_' + $sfx
+      $p = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\RunOnce'
+      $since = Get-Date
+      $wrote = $false; $werr = ''
+      try { New-ItemProperty -Path $p -Name $n -Value 'cmd.exe /c exit 0' -PropertyType String -ErrorAction Stop | Out-Null; $wrote = $true } catch { $werr = $_.Exception.Message }
+      Start-Sleep -Seconds 4
+      $d = Find-Ev 'Microsoft-Windows-Sysmon/Operational' @(13) $n $since
+      $cleanOk = $true
+      if ($wrote) {
+        try { Remove-ItemProperty -Path $p -Name $n -ErrorAction Stop } catch { $cleanOk = $false }
+        if (Get-ItemProperty -Path $p -Name $n -ErrorAction SilentlyContinue) { $cleanOk = $false }
+      }
+      $tail = if ($cleanOk) { 'Cleanup verified.' } else { "CLEANUP FAILED: remove $p\$n manually; the value is an executable autorun." }
+      if (-not $wrote) { Write-Output "PASS: write to $p was blocked ($werr). $tail" }
+      elseif ($d -gt 0) { Write-Output "PASS: write to $p succeeded but was detected ($d Sysmon EID 13 event(s) for the synthetic value). $tail" }
+      elseif ($d -lt 0) { Write-Output "FAIL: write to $p succeeded and no detection telemetry source was readable (Sysmon not present).  $tail" }
+      else { Write-Output "FAIL: write to $p succeeded and no detection event was recorded. $tail" }
+    cleanup: ""
+
+  - name: "HKLM Run key ACL denies write to standard users"
+    technique_id: T1547.001
+    framework: custom
+    executor: powershell
+    requires_priv: admin
     timeout_sec: 30
     fidelity: telemetry-safe
     production_safe: true
     risk: low
     reversible: true
-    blast_radius: "Writes a temporary mock string to HKCU Run key and rolls back instantly[cite: 5]."
+    blast_radius: "Reads the ACL of HKLM Run. Read-only."
     telemetry:
-      - "Sysmon EID 13: Registry value set for HKCU Run"
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
     detection:
-      - "EDR: Core persistence warning on registry run alterations"
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
-      $path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-      $name = "AudspectMockRun"
-      $val = "C:\Windows\System32\cmd.exe /c echo [BAS-SIM]"
-      $blocked = $false
-      try {
-        New-ItemProperty -Path $path -Name $name -Value $val -PropertyType String -Force -ErrorAction Stop | Out-Null
-      } catch { $blocked = $true }
-      if ($blocked) {
-        Write-Output "PASS: EDR or Registry Protection prevented direct injection into user Run keys. [BAS-SIM][cite: 5]"
-      } else {
-        Remove-ItemProperty -Path $path -Name $name -ErrorAction SilentlyContinue
-        Write-Output "FAIL: Successfully wrote to HKCU Registry Run Key — persistence vector is unmonitored or unblocked[cite: 5]."
-      }
-    cleanup: |
-      Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "AudspectMockRun" -ErrorAction SilentlyContinue
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      try { $acl = Get-Acl -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' -ErrorAction Stop } catch { Write-Output "SKIP: the HKLM Run ACL cannot be read ($($_.Exception.Message))."; return }
+      $bad = @($acl.Access | Where-Object { "$($_.IdentityReference)" -match 'Users|Everyone|Authenticated Users' -and $_.AccessControlType -eq 'Allow' -and "$($_.RegistryRights)" -match 'SetValue|FullControl|WriteKey|CreateSubKey' } | ForEach-Object { "$($_.IdentityReference)" } | Select-Object -Unique)
+      if ($bad.Count -eq 0) { Write-Output 'PASS: standard users cannot write to HKLM Run.' } else { Write-Output "FAIL: standard principals can write to HKLM Run: $($bad -join ', ')." }
+    cleanup: ""
 
-  - name: "User Startup Folder File Drop"
+  - name: "HKCU Run key ACL is limited to the current user"
     technique_id: T1547.001
     framework: custom
     executor: powershell
@@ -65,23 +232,1243 @@ steps:
     production_safe: true
     risk: low
     reversible: true
-    blast_radius: "Writes a benign .txt file inside the User Startup folder and deletes it instantly[cite: 5]."
+    blast_radius: "Reads the ACL of HKCU Run. Read-only."
     telemetry:
-      - "Sysmon EID 11: FileCreate in Startup directory"
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
-      $startupPath = [Environment]::GetFolderPath('Startup')
-      $targetFile = Join-Path $startupPath "Audspect_Benign_Task.txt"
-      $blocked = $false
-      try {
-        [System.IO.File]::WriteAllText($targetFile, "Benign BAS simulation marker [BAS-SIM]")
-      } catch { $blocked = $true }
-      if ($blocked -or -not (Test-Path $targetFile)) {
-        Write-Output "PASS: Write access to Windows Startup folder was blocked or quarantined by local controls. [BAS-SIM]"
-      } else {
-        Remove-Item -Path $targetFile -Force -ErrorAction SilentlyContinue
-        Write-Output "FAIL: Dropped file unhindered into User Startup directory. Security controls missed the deployment signature."
+      try { $acl = Get-Acl -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -ErrorAction Stop } catch { Write-Output "SKIP: the HKCU Run ACL cannot be read ($($_.Exception.Message))."; return }
+      $bad = @($acl.Access | Where-Object { "$($_.IdentityReference)" -match 'Everyone|Authenticated Users' -and $_.AccessControlType -eq 'Allow' -and "$($_.RegistryRights)" -match 'SetValue|FullControl|WriteKey' } | ForEach-Object { "$($_.IdentityReference)" } | Select-Object -Unique)
+      if ($bad.Count -eq 0) { Write-Output 'PASS: the HKCU Run ACL grants no write to Everyone or Authenticated Users.' } else { Write-Output "FAIL: the HKCU Run ACL grants write to: $($bad -join ', ')." }
+    cleanup: ""
+
+  - name: "Run and RunOnce entries do not point at user-writable locations"
+    technique_id: T1547.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads Run and RunOnce values and checks target folders. Read-only; values are compared, not executed."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $keys = @('HKCU:\Software\Microsoft\Windows\CurrentVersion\Run','HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce','HKLM:\Software\Microsoft\Windows\CurrentVersion\Run','HKLM:\Software\Microsoft\Windows\CurrentVersion\RunOnce')
+      $hits = @()
+      foreach ($k in $keys) {
+        $item = Get-Item -Path $k -ErrorAction SilentlyContinue
+        if (-not $item) { continue }
+        foreach ($n in $item.Property) {
+          $v = "$((Get-ItemProperty -Path $k -Name $n).$n)"
+          if ($v -match '(?i)\\Users\\|\\Temp\\|\\AppData\\') { $hits += "$k\$n" }
+        }
       }
-    cleanup: |
-      $startupPath = [Environment]::GetFolderPath('Startup')
-      Remove-Item -Path (Join-Path $startupPath "Audspect_Benign_Task.txt") -Force -ErrorAction SilentlyContinue
+      if ($hits.Count -eq 0) { Write-Output 'PASS: no Run or RunOnce entry targets a user-writable folder (Users, Temp, AppData).' }
+      else { Write-Output "FAIL: $($hits.Count) Run or RunOnce entr$(if ($hits.Count -eq 1) {'y'} else {'ies'}) target user-writable folders: $($hits -join '; ')." }
+    cleanup: ""
+
+  - name: "Run key modification is audited (registry SACL present)"
+    technique_id: T1547.001
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads the audit rules (SACL) of HKLM Run. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      try { $acl = Get-Acl -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' -Audit -ErrorAction Stop } catch { Write-Output "SKIP: the HKLM Run audit rules cannot be read ($($_.Exception.Message))."; return }
+      $n = @($acl.Audit | Where-Object { $_.AuditFlags -match 'Success' }).Count
+      if ($n -gt 0) { Write-Output "PASS: HKLM Run has $n success audit rule(s)." } else { Write-Output 'FAIL: HKLM Run has no success audit rule; modifications are not audited at the registry level.' }
+    cleanup: ""
+
+  - name: "User Startup Folder File Drop"
+    technique_id: T1547.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: synthetic-gated
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Creates one synthetic .txt file in the user Startup folder and removes it; verifies removal. Not executable."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      if ($env:BAS_EM05_ALLOW_WRITE_PROBES -ne '1') { Write-Output 'SKIP: write probe disabled; set BAS_EM05_ALLOW_WRITE_PROBES=1 on an isolated lab host to run.'; return }
+      function Find-Ev([string]$log, [int[]]$ids, [string]$needle, [datetime]$since) {
+        try { return @(Get-WinEvent -FilterHashtable @{LogName=$log; Id=$ids; StartTime=$since} -ErrorAction Stop | Where-Object { $_.Message -like "*$needle*" }).Count }
+        catch { if ($_.Exception.Message -match 'No events') { return 0 } else { return -1 } }
+      }
+      $sfx = [guid]::NewGuid().ToString('N').Substring(0, 10); $n = 'AudspectEM05_' + $sfx
+      $dir = [Environment]::GetFolderPath('Startup')
+      $f = Join-Path $dir ($n + '.txt')
+      $since = Get-Date
+      $wrote = $false; $werr = ''
+      try { [IO.File]::WriteAllText($f, 'Synthetic BAS marker; not executable.'); $wrote = $true } catch { $werr = $_.Exception.Message }
+      Start-Sleep -Seconds 4
+      $d = Find-Ev 'Microsoft-Windows-Sysmon/Operational' @(11) $n $since
+      $cleanOk = $true
+      if ($wrote) {
+        try { Remove-Item -LiteralPath $f -Force -ErrorAction Stop } catch { $cleanOk = $false }
+        if (Test-Path -LiteralPath $f) { $cleanOk = $false }
+      }
+      $tail = if ($cleanOk) { 'Cleanup verified.' } else { "CLEANUP FAILED: remove $f manually." }
+      if (-not $wrote) { Write-Output "PASS: file creation in the user Startup folder was blocked ($werr). $tail" }
+      elseif ($d -gt 0) { Write-Output "PASS: file created in the user Startup folder was detected ($d Sysmon EID 11 event(s)). $tail" }
+      elseif ($d -lt 0) { Write-Output "FAIL: file created in the user Startup folder and no detection telemetry source was readable (Sysmon not present). $tail" }
+      else { Write-Output "FAIL: file created in the user Startup folder and no detection event was recorded. $tail" }
+    cleanup: ""
+
+  - name: "All-users Startup folder file drop"
+    technique_id: T1547.001
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 60
+    fidelity: synthetic-gated
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Creates one synthetic .txt file in the all-users Startup folder (elevated) and removes it; verifies removal."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      if ($env:BAS_EM05_ALLOW_WRITE_PROBES -ne '1') { Write-Output 'SKIP: write probe disabled; set BAS_EM05_ALLOW_WRITE_PROBES=1 on an isolated lab host to run.'; return }
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      function Find-Ev([string]$log, [int[]]$ids, [string]$needle, [datetime]$since) {
+        try { return @(Get-WinEvent -FilterHashtable @{LogName=$log; Id=$ids; StartTime=$since} -ErrorAction Stop | Where-Object { $_.Message -like "*$needle*" }).Count }
+        catch { if ($_.Exception.Message -match 'No events') { return 0 } else { return -1 } }
+      }
+      $sfx = [guid]::NewGuid().ToString('N').Substring(0, 10); $n = 'AudspectEM05_' + $sfx
+      $dir = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\StartUp'
+      $f = Join-Path $dir ($n + '.txt')
+      $since = Get-Date
+      $wrote = $false; $werr = ''
+      try { [IO.File]::WriteAllText($f, 'Synthetic BAS marker; not executable.'); $wrote = $true } catch { $werr = $_.Exception.Message }
+      Start-Sleep -Seconds 4
+      $d = Find-Ev 'Microsoft-Windows-Sysmon/Operational' @(11) $n $since
+      $cleanOk = $true
+      if ($wrote) {
+        try { Remove-Item -LiteralPath $f -Force -ErrorAction Stop } catch { $cleanOk = $false }
+        if (Test-Path -LiteralPath $f) { $cleanOk = $false }
+      }
+      $tail = if ($cleanOk) { 'Cleanup verified.' } else { "CLEANUP FAILED: remove $f manually." }
+      if (-not $wrote) { Write-Output "PASS: file creation in the all-users Startup folder was blocked ($werr). $tail" }
+      elseif ($d -gt 0) { Write-Output "PASS: file created in the all-users Startup folder was detected ($d Sysmon EID 11 event(s)). $tail" }
+      elseif ($d -lt 0) { Write-Output "FAIL: file created in the all-users Startup folder and no detection telemetry source was readable (Sysmon not present). $tail" }
+      else { Write-Output "FAIL: file created in the all-users Startup folder and no detection event was recorded. $tail" }
+    cleanup: ""
+
+  - name: "User Startup folder ACL denies write to other users"
+    technique_id: T1547.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads the ACL of the user Startup folder. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $p = [Environment]::GetFolderPath('Startup')
+      if (-not (Test-Path -LiteralPath $p)) { Write-Output 'SKIP: the user Startup folder does not exist on this host.'; return }
+      try { $acl = Get-Acl -Path $p -ErrorAction Stop } catch { Write-Output "SKIP: the user Startup folder ACL cannot be read from this context ($($_.Exception.Message))."; return }
+      $bad = @($acl.Access | Where-Object { "$($_.IdentityReference)" -match '^(BUILTIN\\Users|Everyone|NT AUTHORITY\\Authenticated Users)$' -and $_.AccessControlType -eq 'Allow' -and "$($_.FileSystemRights)$($_.RegistryRights)" -match 'Write|FullControl|Modify|SetValue|CreateSubKey|CreateFiles|AppendData|Delete' } | ForEach-Object { "$($_.IdentityReference)" } | Select-Object -Unique)
+      if ($bad.Count -eq 0) { Write-Output "PASS: the user Startup folder grants no write access to standard users or Everyone." }
+      else { Write-Output "FAIL: the user Startup folder grants write access to: $($bad -join ', ')." }
+    cleanup: ""
+
+  - name: "All-users Startup folder ACL denies write to standard users"
+    technique_id: T1547.001
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads the ACL of the all-users Startup folder. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      $ErrorActionPreference = 'SilentlyContinue'
+      $p = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\StartUp'
+      if (-not (Test-Path -LiteralPath $p)) { Write-Output 'SKIP: the all-users Startup folder does not exist on this host.'; return }
+      try { $acl = Get-Acl -Path $p -ErrorAction Stop } catch { Write-Output "SKIP: the all-users Startup folder ACL cannot be read from this context ($($_.Exception.Message))."; return }
+      $bad = @($acl.Access | Where-Object { "$($_.IdentityReference)" -match '^(BUILTIN\\Users|Everyone|NT AUTHORITY\\Authenticated Users)$' -and $_.AccessControlType -eq 'Allow' -and "$($_.FileSystemRights)$($_.RegistryRights)" -match 'Write|FullControl|Modify|SetValue|CreateSubKey|CreateFiles|AppendData|Delete' } | ForEach-Object { "$($_.IdentityReference)" } | Select-Object -Unique)
+      if ($bad.Count -eq 0) { Write-Output "PASS: the all-users Startup folder grants no write access to standard users or Everyone." }
+      else { Write-Output "FAIL: the all-users Startup folder grants write access to: $($bad -join ', ')." }
+    cleanup: ""
+
+  - name: "Startup folder contents inventory (executables flagged)"
+    technique_id: T1547.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Lists Startup folder item names and types. Read-only; no item is opened or executed."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $dirs = @([Environment]::GetFolderPath('Startup'), (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\StartUp'))
+      $items = @(); foreach ($d in $dirs) { $items += @(Get-ChildItem -LiteralPath $d -Force -ErrorAction SilentlyContinue) }
+      $exe = @($items | Where-Object { $_.Extension -match '^\.(exe|bat|cmd|ps1|vbs|js|scr|com|pif|wsf|hta)$' })
+      if ($exe.Count -eq 0) { Write-Output "PASS: $($items.Count) Startup item(s) found, none is a directly executable type." }
+      else { Write-Output "FAIL: $($exe.Count) directly executable item(s) in Startup: $(($exe | ForEach-Object { $_.Name }) -join ', ')." }
+    cleanup: ""
+
+  - name: "Sysmon is present to record Startup folder file creation"
+    technique_id: T1547.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads the Sysmon service state. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $s = Get-Service -Name Sysmon64,Sysmon -ErrorAction SilentlyContinue | Select-Object -First 1
+      if (-not $s) { Write-Output 'SKIP: Sysmon is not deployed; Startup file-create events (EID 11) are not collected.' }
+      elseif ($s.Status -eq 'Running') { Write-Output "PASS: Sysmon ($($s.Name)) is running; Startup file-create events (EID 11) can be recorded." }
+      else { Write-Output "FAIL: Sysmon ($($s.Name)) is installed but not running; Startup file-create events are not recorded." }
+    cleanup: ""
+
+  - name: "Service creation probe (demand start, missing binary, deleted)"
+    technique_id: T1543.003
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 60
+    fidelity: synthetic-gated
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Creates one service with a nonexistent binary and start=demand (it cannot run), then deletes it; verifies removal."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      if ($env:BAS_EM05_ALLOW_WRITE_PROBES -ne '1') { Write-Output 'SKIP: write probe disabled; set BAS_EM05_ALLOW_WRITE_PROBES=1 on an isolated lab host to run.'; return }
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      function Find-Ev([string]$log, [int[]]$ids, [string]$needle, [datetime]$since) {
+        try { return @(Get-WinEvent -FilterHashtable @{LogName=$log; Id=$ids; StartTime=$since} -ErrorAction Stop | Where-Object { $_.Message -like "*$needle*" }).Count }
+        catch { if ($_.Exception.Message -match 'No events') { return 0 } else { return -1 } }
+      }
+      $sfx = [guid]::NewGuid().ToString('N').Substring(0, 10); $n = 'AudspectEM05_' + $sfx
+      $svc = 'AudspectEM05_' + $sfx
+      $since = Get-Date
+      $created = $false; $cerr = ''
+      & sc.exe create $svc 'binPath=' 'C:\AudspectEM05_missing\probe.exe' 'start=' 'demand' 'DisplayName=' 'AudspectEM05 probe' | Out-Null
+      if ($LASTEXITCODE -eq 0) { $created = $true } else { $cerr = "sc.exe exit $LASTEXITCODE" }
+      Start-Sleep -Seconds 4
+      $d = Find-Ev 'System' @(7045) $svc $since
+      $cleanOk = $true
+      if ($created) {
+        & sc.exe delete $svc | Out-Null
+        if (Get-Service -Name $svc -ErrorAction SilentlyContinue) { $cleanOk = $false }
+      }
+      $tail = if ($cleanOk) { 'Cleanup verified.' } else { "CLEANUP FAILED: run sc.exe delete $svc manually." }
+      if (-not $created) { Write-Output "PASS: service creation was blocked ($cerr). $tail" }
+      elseif ($d -gt 0) { Write-Output "PASS: service creation succeeded but was recorded ($d System EID 7045 event(s)). $tail" }
+      elseif ($d -lt 0) { Write-Output "FAIL: service created and System log was not readable for EID 7045. $tail" }
+      else { Write-Output "FAIL: service created and no EID 7045 event was recorded. $tail" }
+    cleanup: ""
+
+  - name: "Auto-start service binaries are not writable by standard users"
+    technique_id: T1543.003
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads auto-start service image paths and their ACLs. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      $svcs = @(Get-CimInstance Win32_Service -Filter "StartMode='Auto'" -ErrorAction SilentlyContinue)
+      $bad = @()
+      foreach ($s in $svcs) {
+        $img = "$($s.PathName)" -replace '^"?([^"]+?\.exe).*$', '$1'
+        if (-not (Test-Path -LiteralPath $img)) { continue }
+        $acl = Get-Acl -LiteralPath $img -ErrorAction SilentlyContinue
+        if ($acl -and @($acl.Access | Where-Object { "$($_.IdentityReference)" -match '^BUILTIN\\Users$|Everyone' -and $_.AccessControlType -eq 'Allow' -and "$($_.FileSystemRights)" -match 'Write|Modify|FullControl' }).Count -gt 0) { $bad += $s.Name }
+      }
+      if ($bad.Count -eq 0) { Write-Output "PASS: no auto-start service binary ($($svcs.Count) checked) is writable by standard users." }
+      else { Write-Output "FAIL: $($bad.Count) auto-start service binar$(if ($bad.Count -eq 1) {'y is'} else {'ies are'}) writable by standard users: $($bad -join ', ')." }
+    cleanup: ""
+
+  - name: "Unquoted service paths with spaces are absent"
+    technique_id: T1574.009
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Lists auto-start service image paths with spaces that are not quoted. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $hits = @(Get-CimInstance Win32_Service -Filter "StartMode='Auto'" | Where-Object { $_.PathName -and $_.PathName -notmatch '^"' -and $_.PathName -match ' ' -and $_.PathName -match '\.exe' -and $_.PathName -notmatch '^[A-Za-z]:\\Windows\\' } | ForEach-Object { $_.Name })
+      if ($hits.Count -eq 0) { Write-Output 'PASS: no auto-start service has an unquoted path containing spaces outside Windows.' }
+      else { Write-Output "FAIL: $($hits.Count) auto-start service(s) have unquoted paths with spaces: $($hits -join ', ')." }
+    cleanup: ""
+
+  - name: "Service configuration cannot be changed by standard users"
+    technique_id: T1543.003
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads the SDDL of the Service Control Manager. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      $sddl = (& sc.exe sdshow scmanager) -join ''
+      if (-not $sddl -or $sddl -notmatch 'D:') { Write-Output 'SKIP: the Service Control Manager SDDL cannot be read from this context.'; return }
+      $usersCreate = $sddl -match '\(A;;[A-Z]*C[A-Z]*;;;BU\)'
+      if (-not $usersCreate) { Write-Output 'PASS: standard users (BU) have no create-service right on the Service Control Manager.' }
+      else { Write-Output 'FAIL: standard users (BU) have a create-service right on the Service Control Manager.' }
+    cleanup: ""
+
+  - name: "Non-Microsoft LocalSystem services with user-writable binaries are absent"
+    technique_id: T1543.003
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads service account and image path. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      $svcs = @(Get-CimInstance Win32_Service | Where-Object { $_.StartName -match '^LocalSystem$|SYSTEM' -and $_.PathName -notmatch '(?i)\\Windows\\' })
+      $bad = @()
+      foreach ($s in $svcs) {
+        $img = "$($s.PathName)" -replace '^"?([^"]+?\.exe).*$', '$1'
+        if ($img -match '(?i)\\Users\\|\\Temp\\' ) { $bad += $s.Name }
+      }
+      if ($bad.Count -eq 0) { Write-Output "PASS: no non-Windows LocalSystem service runs a binary from a user-writable folder ($($svcs.Count) checked)." }
+      else { Write-Output "FAIL: LocalSystem service(s) run from user-writable folders: $($bad -join ', ')." }
+    cleanup: ""
+
+  - name: "Service installation events (7045) are readable"
+    technique_id: T1543.003
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads the last day of System log EID 7045 (count only). Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      try { $n = @(Get-WinEvent -FilterHashtable @{LogName='System'; Id=7045; StartTime=(Get-Date).AddDays(-1)} -ErrorAction Stop).Count; Write-Output "PASS: System log is readable; $n service-install event(s) (EID 7045) in the last day." }
+      catch { if ($_.Exception.Message -match 'No events') { Write-Output 'PASS: System log is readable; no service-install event (EID 7045) in the last day.' } else { Write-Output "FAIL: the System log cannot be read for EID 7045 ($($_.Exception.Message))." } }
+    cleanup: ""
+
+  - name: "Scheduled task creation probe (never-running one-time task)"
+    technique_id: T1053.005
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 60
+    fidelity: synthetic-gated
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Creates one task scheduled far in the future with a no-op action, then deletes it; verifies removal."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      if ($env:BAS_EM05_ALLOW_WRITE_PROBES -ne '1') { Write-Output 'SKIP: write probe disabled; set BAS_EM05_ALLOW_WRITE_PROBES=1 on an isolated lab host to run.'; return }
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      function Find-Ev([string]$log, [int[]]$ids, [string]$needle, [datetime]$since) {
+        try { return @(Get-WinEvent -FilterHashtable @{LogName=$log; Id=$ids; StartTime=$since} -ErrorAction Stop | Where-Object { $_.Message -like "*$needle*" }).Count }
+        catch { if ($_.Exception.Message -match 'No events') { return 0 } else { return -1 } }
+      }
+      $sfx = [guid]::NewGuid().ToString('N').Substring(0, 10); $n = 'AudspectEM05_' + $sfx
+      $tn = "\AudspectEM05\probe_$($sfx)"
+      $since = Get-Date
+      $created = $false; $cerr = ''
+      & schtasks.exe /Create /TN $tn /TR 'cmd.exe /c exit 0' /SC ONCE /ST 00:00 /SD 01/01/2099 /F | Out-Null
+      if ($LASTEXITCODE -eq 0) { $created = $true } else { $cerr = "schtasks.exe exit $LASTEXITCODE" }
+      Start-Sleep -Seconds 4
+      $d = Find-Ev 'Security' @(4698) $tn $since
+      $cleanOk = $true
+      if ($created) {
+        & schtasks.exe /Delete /TN $tn /F | Out-Null
+        & schtasks.exe /Query /TN $tn 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) { $cleanOk = $false }
+      }
+      $tail = if ($cleanOk) { 'Cleanup verified.' } else { "CLEANUP FAILED: run schtasks /Delete /TN $tn /F manually." }
+      if (-not $created) { Write-Output "PASS: task creation was blocked ($cerr). $tail" }
+      elseif ($d -gt 0) { Write-Output "PASS: task created and recorded ($d Security EID 4698 event(s)). $tail" }
+      elseif ($d -lt 0) { Write-Output "FAIL: task created and the Security log was not readable for EID 4698. $tail" }
+      else { Write-Output "FAIL: task created and no EID 4698 event was recorded (task-creation auditing may be off). $tail" }
+    cleanup: ""
+
+  - name: "Task folder ACL denies write to standard users"
+    technique_id: T1053.005
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads the ACL of the scheduled task store. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      $ErrorActionPreference = 'SilentlyContinue'
+      $p = Join-Path $env:WINDIR 'System32\Tasks'
+      if (-not (Test-Path -LiteralPath $p)) { Write-Output 'SKIP: the scheduled task store does not exist on this host.'; return }
+      try { $acl = Get-Acl -Path $p -ErrorAction Stop } catch { Write-Output "SKIP: the scheduled task store ACL cannot be read from this context ($($_.Exception.Message))."; return }
+      $bad = @($acl.Access | Where-Object { "$($_.IdentityReference)" -match '^(BUILTIN\\Users|Everyone|NT AUTHORITY\\Authenticated Users)$' -and $_.AccessControlType -eq 'Allow' -and "$($_.FileSystemRights)$($_.RegistryRights)" -match 'Write|FullControl|Modify|SetValue|CreateSubKey|CreateFiles|AppendData|Delete' } | ForEach-Object { "$($_.IdentityReference)" } | Select-Object -Unique)
+      if ($bad.Count -eq 0) { Write-Output "PASS: the scheduled task store grants no write access to standard users or Everyone." }
+      else { Write-Output "FAIL: the scheduled task store grants write access to: $($bad -join ', ')." }
+    cleanup: ""
+
+  - name: "SYSTEM tasks do not run binaries from user-writable folders"
+    technique_id: T1053.005
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads task actions and principals (names and paths). Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      $t = @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.Principal.UserId -match '^SYSTEM$|S-1-5-18' -and $_.State -ne 'Disabled' })
+      $bad = @($t | Where-Object { @($_.Actions | Where-Object { "$($_.Execute)" -match '(?i)\\Users\\|\\Temp\\' }).Count -gt 0 } | ForEach-Object { $_.TaskName })
+      if ($bad.Count -eq 0) { Write-Output "PASS: no enabled SYSTEM task ($($t.Count) checked) runs an action from a user-writable folder." }
+      else { Write-Output "FAIL: enabled SYSTEM task(s) run from user-writable folders: $($bad -join ', ')." }
+    cleanup: ""
+
+  - name: "Logon-triggered tasks run only from protected folders"
+    technique_id: T1053.005
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads logon-triggered task actions (names and paths). Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $t = @(Get-ScheduledTask | Where-Object { $_.State -ne 'Disabled' -and @($_.Triggers | Where-Object { $_.CimClass.CimClassName -eq 'MSFT_TaskLogonTrigger' }).Count -gt 0 })
+      $bad = @($t | Where-Object { @($_.Actions | Where-Object { "$($_.Execute)" -match '(?i)\\Users\\|\\Temp\\|\\AppData\\' }).Count -gt 0 } | ForEach-Object { $_.TaskName })
+      if ($bad.Count -eq 0) { Write-Output "PASS: no enabled logon-triggered task ($($t.Count) checked) runs from a user-writable folder." }
+      else { Write-Output "FAIL: logon-triggered task(s) run from user-writable folders: $($bad -join ', ')." }
+    cleanup: ""
+
+  - name: "Task action executables are not writable by standard users"
+    technique_id: T1053.005
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads ACLs of enabled task action executables. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      $bad = @()
+      foreach ($t in @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.State -ne 'Disabled' })) {
+        foreach ($a in @($t.Actions)) {
+          $exe = "$($a.Execute)".Trim('"')
+          if (-not $exe -or -not (Test-Path -LiteralPath $exe)) { continue }
+          $acl = Get-Acl -LiteralPath $exe -ErrorAction SilentlyContinue
+          if ($acl -and @($acl.Access | Where-Object { "$($_.IdentityReference)" -match '^BUILTIN\\Users$|Everyone' -and $_.AccessControlType -eq 'Allow' -and "$($_.FileSystemRights)" -match 'Write|Modify|FullControl' }).Count -gt 0) { $bad += $t.TaskName }
+        }
+      }
+      $bad = @($bad | Select-Object -Unique)
+      if ($bad.Count -eq 0) { Write-Output 'PASS: no enabled task action executable is writable by standard users.' }
+      else { Write-Output "FAIL: task action executable(s) writable by standard users: $($bad -join ', ')." }
+    cleanup: ""
+
+  - name: "Task creation is audited (Other Object Access = success)"
+    technique_id: T1053.005
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads the audit policy subcategory used for task creation (EID 4698). Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      $out = (& auditpol.exe /get /subcategory:'{0CCE9227-69AE-11D9-BED3-505054503030}' /r 2>$null) | Out-String
+      if ($out -match 'Success') { Write-Output 'PASS: task creation is audited for success (EID 4698).' } else { Write-Output 'FAIL: task creation is not audited for success; EID 4698 will not be recorded.' }
+    cleanup: ""
+
+  - name: "Task creation events (4698) are readable"
+    technique_id: T1053.005
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads the Security log for EID 4698 (count only). Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      try { $n = @(Get-WinEvent -FilterHashtable @{LogName='Security'; Id=4698; StartTime=(Get-Date).AddDays(-1)} -ErrorAction Stop).Count; Write-Output "PASS: Security log is readable; $n task-creation event(s) (EID 4698) in the last day." }
+      catch { if ($_.Exception.Message -match 'No events') { Write-Output 'PASS: Security log is readable; no task-creation event (EID 4698) in the last day.' } else { Write-Output "FAIL: the Security log cannot be read for EID 4698 ($($_.Exception.Message))." } }
+    cleanup: ""
+
+  - name: "Permanent WMI subscription inventory (filters, consumers, bindings)"
+    technique_id: T1546.003
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Counts permanent subscription objects in root\\subscription and lists names. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      $ns = 'root\subscription'
+      $f = @(Get-WmiObject -Namespace $ns -Class __EventFilter -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'SCM Event Log Filter' })
+      $c = @(Get-WmiObject -Namespace $ns -Class __EventConsumer -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'SCM Event Log Consumer' })
+      $b = @(Get-WmiObject -Namespace $ns -Class __FilterToConsumerBinding -ErrorAction SilentlyContinue | Where-Object { "$($_.Filter)" -notmatch 'SCM Event Log Filter' })
+      if ($f.Count -eq 0 -and $c.Count -eq 0 -and $b.Count -eq 0) { Write-Output 'PASS: no permanent WMI subscription beyond the built-in SCM Event Log pair exists in root\subscription.' }
+      else { Write-Output "FAIL: $($f.Count) filter(s), $($c.Count) consumer(s), $($b.Count) binding(s) beyond the built-in SCM pair: filters $(($f | ForEach-Object { $_.Name }) -join ', ')." }
+    cleanup: ""
+
+  - name: "root\\subscription denies write to standard users"
+    technique_id: T1546.003
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads the DACL of the root namespace security descriptor. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      try { $sd = Invoke-CimMethod -Namespace 'root' -ClassName __SystemSecurity -MethodName GetSecurityDescriptor -ErrorAction Stop } catch { Write-Output "SKIP: the WMI security descriptor cannot be read ($($_.Exception.Message))."; return }
+      if ($sd.ReturnValue -ne 0 -or -not $sd.Descriptor) { Write-Output "SKIP: the WMI security descriptor returned code $($sd.ReturnValue)."; return }
+      $bad = @($sd.Descriptor.DACL | Where-Object { $_.AceType -eq 0 -and "$($_.Trustee.Name)" -match '^(Users|Everyone|Authenticated Users)$' -and ([int]$_.AccessMask -band (0x4 -bor 0x40000)) -ne 0 } | ForEach-Object { "$($_.Trustee.Name)" } | Select-Object -Unique)
+      if ($bad.Count -eq 0) { Write-Output 'PASS: the root WMI namespace grants no write or write-DAC right to Users, Everyone or Authenticated Users.' }
+      else { Write-Output "FAIL: the root WMI namespace grants write rights to: $($bad -join ', ')." }
+    cleanup: ""
+
+  - name: "No CommandLine or ActiveScript consumers are registered"
+    technique_id: T1546.003
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Counts CommandLine and ActiveScript consumers (execution-capable). Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      $exec = @(Get-CimInstance -Namespace 'root\subscription' -ClassName __EventConsumer -ErrorAction SilentlyContinue | Where-Object { $_.CimClass.CimClassName -match 'CommandLineEventConsumer|ActiveScriptEventConsumer' })
+      if ($exec.Count -eq 0) { Write-Output 'PASS: no execution-capable WMI consumer (CommandLine or ActiveScript) is registered.' }
+      else { Write-Output "FAIL: $($exec.Count) execution-capable WMI consumer(s) registered: $(($exec | ForEach-Object { $_.Name }) -join ', ')." }
+    cleanup: ""
+
+  - name: "No orphaned WMI bindings exist"
+    technique_id: T1546.003
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Checks that every binding's filter and consumer still exist. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      $ns = 'root\subscription'
+      $b = @(Get-WmiObject -Namespace $ns -Class __FilterToConsumerBinding -ErrorAction SilentlyContinue)
+      $filters = @(Get-WmiObject -Namespace $ns -Class __EventFilter -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
+      $consumers = @(Get-WmiObject -Namespace $ns -Class __EventConsumer -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
+      $orphan = 0
+      foreach ($x in $b) {
+        $fn = ([regex]::Match("$($x.Filter)", 'Name="([^"]+)"')).Groups[1].Value
+        $cn = ([regex]::Match("$($x.Consumer)", 'Name="([^"]+)"')).Groups[1].Value
+        if (($filters -notcontains $fn) -or ($consumers -notcontains $cn)) { $orphan++ }
+      }
+      if ($orphan -eq 0) { Write-Output "PASS: all $($b.Count) WMI binding(s) resolve to an existing filter and consumer." }
+      else { Write-Output "FAIL: $orphan WMI binding(s) reference a missing filter or consumer." }
+    cleanup: ""
+
+  - name: "Permanent subscription write probe (never-firing filter, event-log consumer)"
+    technique_id: T1546.003
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 60
+    fidelity: synthetic-gated
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Creates a filter that never fires, an event-log consumer and a binding, then removes all three; verifies removal."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      if ($env:BAS_EM05_ALLOW_WRITE_PROBES -ne '1') { Write-Output 'SKIP: write probe disabled; set BAS_EM05_ALLOW_WRITE_PROBES=1 on an isolated lab host to run.'; return }
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      function Find-Ev([string]$log, [int[]]$ids, [string]$needle, [datetime]$since) {
+        try { return @(Get-WinEvent -FilterHashtable @{LogName=$log; Id=$ids; StartTime=$since} -ErrorAction Stop | Where-Object { $_.Message -like "*$needle*" }).Count }
+        catch { if ($_.Exception.Message -match 'No events') { return 0 } else { return -1 } }
+      }
+      $sfx = [guid]::NewGuid().ToString('N').Substring(0, 10); $n = 'AudspectEM05_' + $sfx
+      $ns = 'root\subscription'
+      $fn = 'AudspectEM05F_' + $sfx; $cn = 'AudspectEM05C_' + $sfx
+      $since = Get-Date
+      $made = $false; $werr = ''
+      try {
+        $flt = Set-WmiInstance -Namespace $ns -Class __EventFilter -Arguments @{Name=$fn; EventNamespace='root\cimv2'; QueryLanguage='WQL'; Query="SELECT * FROM __InstanceCreationEvent WITHIN 10 WHERE TargetInstance ISA 'Audspect_EM05_NeverExists'"} -ErrorAction Stop
+        $con = Set-WmiInstance -Namespace $ns -Class NTEventLogEventConsumer -Arguments @{Name=$cn; SourceName='Application'; EventID=1; EventType=4} -ErrorAction Stop
+        $null = Set-WmiInstance -Namespace $ns -Class __FilterToConsumerBinding -Arguments @{Filter=$flt.__PATH; Consumer=$con.__PATH} -ErrorAction Stop
+        $made = $true
+      } catch { $werr = $_.Exception.Message }
+      Start-Sleep -Seconds 4
+      $d = Find-Ev 'Microsoft-Windows-WMI-Activity/Operational' @(5861) $fn $since
+      $cleanOk = $true
+      Get-WmiObject -Namespace $ns -Class __FilterToConsumerBinding -ErrorAction SilentlyContinue | Where-Object { "$($_.Filter)" -match [regex]::Escape($fn) } | ForEach-Object { $_.Delete() }
+      Get-WmiObject -Namespace $ns -Class NTEventLogEventConsumer -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq $cn } | ForEach-Object { $_.Delete() }
+      Get-WmiObject -Namespace $ns -Class __EventFilter -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq $fn } | ForEach-Object { $_.Delete() }
+      if (Get-WmiObject -Namespace $ns -Class __EventFilter -Filter "Name='$fn'" -ErrorAction SilentlyContinue) { $cleanOk = $false }
+      if (Get-WmiObject -Namespace $ns -Class NTEventLogEventConsumer -Filter "Name='$cn'" -ErrorAction SilentlyContinue) { $cleanOk = $false }
+      $tail = if ($cleanOk) { 'Cleanup verified.' } else { "CLEANUP FAILED: remove WMI objects $fn and $cn from root\subscription manually." }
+      if (-not $made) { Write-Output "PASS: permanent subscription creation was blocked ($werr). $tail" }
+      elseif ($d -gt 0) { Write-Output "PASS: permanent subscription created and recorded ($d WMI-Activity EID 5861 event(s)). $tail" }
+      elseif ($d -lt 0) { Write-Output "FAIL: subscription created and the WMI-Activity log was not readable. $tail" }
+      else { Write-Output "FAIL: subscription created and no WMI-Activity EID 5861 event was recorded. $tail" }
+    cleanup: ""
+
+  - name: "WMI-Activity operational log is enabled and readable"
+    technique_id: T1546.003
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads the state of the WMI-Activity operational log. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      $l = Get-WinEvent -ListLog 'Microsoft-Windows-WMI-Activity/Operational' -ErrorAction SilentlyContinue
+      if (-not $l) { Write-Output 'FAIL: the WMI-Activity operational log is not present on this host.' }
+      elseif ($l.IsEnabled) { Write-Output "PASS: the WMI-Activity operational log is enabled (max size $([math]::Round($l.MaximumSizeInBytes/1MB)) MB)." }
+      else { Write-Output 'FAIL: the WMI-Activity operational log is disabled; subscription registrations (EID 5861) are not recorded.' }
+    cleanup: ""
+
+  - name: "Winlogon Shell value is the default"
+    technique_id: T1547.004
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads the Winlogon Shell value. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $v = (Get-ItemProperty -Path 'HKLM:\Software\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name Shell -ErrorAction SilentlyContinue).Shell
+      if ($v -match '^explorer\.exe$') { Write-Output 'PASS: Winlogon Shell is the default (explorer.exe).' }
+      else { Write-Output "FAIL: Winlogon Shell is not the default: '$v'." }
+    cleanup: ""
+
+  - name: "Winlogon Userinit value is the default"
+    technique_id: T1547.004
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads the Winlogon Userinit value. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $v = (Get-ItemProperty -Path 'HKLM:\Software\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name Userinit -ErrorAction SilentlyContinue).Userinit
+      if ($v -match '(?i)^C:\\Windows\\system32\\userinit\.exe,?$') { Write-Output 'PASS: Winlogon Userinit is the default (userinit.exe).' }
+      else { Write-Output "FAIL: Winlogon Userinit is not the default: '$v'." }
+    cleanup: ""
+
+  - name: "No Notify, GinaDLL or Taskman replacement is registered"
+    technique_id: T1547.004
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads Winlogon Notify subkeys and the GinaDLL and Taskman values. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $extra = @()
+      if ((Get-ItemProperty -Path 'HKLM:\Software\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name GinaDLL).GinaDLL) { $extra += 'GinaDLL' }
+      if ((Get-ItemProperty -Path 'HKLM:\Software\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name Taskman).Taskman) { $extra += 'Taskman' }
+      $notify = Get-ChildItem -Path 'HKLM:\Software\Microsoft\Windows NT\CurrentVersion\Winlogon\Notify' -ErrorAction SilentlyContinue
+      if ($notify) { $extra += @($notify | ForEach-Object { "Notify\$($_.PSChildName)" }) }
+      if ($extra.Count -eq 0) { Write-Output 'PASS: no GinaDLL, Taskman or Winlogon Notify package is registered.' }
+      else { Write-Output "FAIL: Winlogon replacement or notification entries present: $($extra -join ', ')." }
+    cleanup: ""
+
+  - name: "Winlogon key denies write to standard users"
+    technique_id: T1547.004
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads the ACL of the Winlogon key. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      $ErrorActionPreference = 'SilentlyContinue'
+      $p = 'HKLM:\Software\Microsoft\Windows NT\CurrentVersion\Winlogon'
+      if (-not (Test-Path -LiteralPath $p)) { Write-Output 'SKIP: the Winlogon key does not exist on this host.'; return }
+      try { $acl = Get-Acl -Path $p -ErrorAction Stop } catch { Write-Output "SKIP: the Winlogon key ACL cannot be read from this context ($($_.Exception.Message))."; return }
+      $bad = @($acl.Access | Where-Object { "$($_.IdentityReference)" -match '^(BUILTIN\\Users|Everyone|NT AUTHORITY\\Authenticated Users)$' -and $_.AccessControlType -eq 'Allow' -and "$($_.FileSystemRights)$($_.RegistryRights)" -match 'Write|FullControl|Modify|SetValue|CreateSubKey|CreateFiles|AppendData|Delete' } | ForEach-Object { "$($_.IdentityReference)" } | Select-Object -Unique)
+      if ($bad.Count -eq 0) { Write-Output "PASS: the Winlogon key grants no write access to standard users or Everyone." }
+      else { Write-Output "FAIL: the Winlogon key grants write access to: $($bad -join ', ')." }
+    cleanup: ""
+
+  - name: "AppInit_DLLs is empty or loading is disabled"
+    technique_id: T1546.010
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads AppInit_DLLs and LoadAppInit_DLLs. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $k = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Windows'
+      $dlls = "$((Get-ItemProperty -Path $k -Name AppInit_DLLs).AppInit_DLLs)".Trim()
+      $load = (Get-ItemProperty -Path $k -Name LoadAppInit_DLLs).LoadAppInit_DLLs
+      if (-not $dlls) { Write-Output 'PASS: AppInit_DLLs is empty.' }
+      elseif ($load -eq 0) { Write-Output "PASS: AppInit_DLLs is set but loading is disabled (LoadAppInit_DLLs=0): '$dlls' is not loaded." }
+      else { Write-Output "FAIL: AppInit_DLLs loads into every user-mode process: '$dlls' (LoadAppInit_DLLs=$load)." }
+    cleanup: ""
+
+  - name: "Image File Execution Options: no non-Microsoft debugger entries"
+    technique_id: T1546.012
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads IFEO Debugger values. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      $ifeo = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options'
+      $dbg = @(Get-ChildItem -Path $ifeo -ErrorAction SilentlyContinue | Where-Object { (Get-ItemProperty -Path $_.PSPath -Name Debugger -ErrorAction SilentlyContinue).Debugger } | ForEach-Object { "$($_.PSChildName) -> $((Get-ItemProperty -Path $_.PSPath -Name Debugger).Debugger)" })
+      if ($dbg.Count -eq 0) { Write-Output 'PASS: no IFEO Debugger value is registered.' }
+      else { Write-Output "FAIL: $($dbg.Count) IFEO Debugger value(s) registered: $($dbg -join '; ')." }
+    cleanup: ""
+
+  - name: "IFEO write probe (synthetic image name never launched)"
+    technique_id: T1546.012
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 60
+    fidelity: synthetic-gated
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Creates an IFEO Debugger value for a synthetic image name that never runs, then removes the key; verifies removal."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      if ($env:BAS_EM05_ALLOW_WRITE_PROBES -ne '1') { Write-Output 'SKIP: write probe disabled; set BAS_EM05_ALLOW_WRITE_PROBES=1 on an isolated lab host to run.'; return }
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      function Find-Ev([string]$log, [int[]]$ids, [string]$needle, [datetime]$since) {
+        try { return @(Get-WinEvent -FilterHashtable @{LogName=$log; Id=$ids; StartTime=$since} -ErrorAction Stop | Where-Object { $_.Message -like "*$needle*" }).Count }
+        catch { if ($_.Exception.Message -match 'No events') { return 0 } else { return -1 } }
+      }
+      $sfx = [guid]::NewGuid().ToString('N').Substring(0, 10); $n = 'AudspectEM05_' + $sfx
+      $k = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\$n.exe"
+      $since = Get-Date
+      $wrote = $false; $werr = ''
+      try { New-Item -Path $k -Force -ErrorAction Stop | Out-Null; New-ItemProperty -Path $k -Name Debugger -Value 'cmd.exe /c exit 0' -PropertyType String -ErrorAction Stop | Out-Null; $wrote = $true } catch { $werr = $_.Exception.Message }
+      Start-Sleep -Seconds 4
+      $d = Find-Ev 'Microsoft-Windows-Sysmon/Operational' @(13) $n $since
+      $cleanOk = $true
+      if ($wrote) { try { Remove-Item -Path $k -Recurse -Force -ErrorAction Stop } catch { $cleanOk = $false }; if (Test-Path $k) { $cleanOk = $false } }
+      $tail = if ($cleanOk) { 'Cleanup verified.' } else { "CLEANUP FAILED: remove $k manually." }
+      if (-not $wrote) { Write-Output "PASS: IFEO Debugger write was blocked ($werr). $tail" }
+      elseif ($d -gt 0) { Write-Output "PASS: IFEO Debugger write succeeded but was detected ($d Sysmon EID 13 event(s)). $tail" }
+      elseif ($d -lt 0) { Write-Output "FAIL: IFEO Debugger write succeeded and no detection telemetry source was readable (Sysmon not present). $tail" }
+      else { Write-Output "FAIL: IFEO Debugger write succeeded and no detection event was recorded. $tail" }
+    cleanup: ""
+
+  - name: "BootExecute is the default"
+    technique_id: T1542.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads the BootExecute value. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $v = @((Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -Name BootExecute -ErrorAction SilentlyContinue).BootExecute | Where-Object { $_ })
+      if (($v -join ' ') -eq 'autocheck autochk *') { Write-Output 'PASS: BootExecute is the default (autocheck autochk *).' }
+      else { Write-Output "FAIL: BootExecute differs from the default: '$($v -join ' ')'." }
+    cleanup: ""
+
+  - name: "AppCertDlls is absent"
+    technique_id: T1546.009
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads the AppCertDlls value. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $v = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\AppCertDlls' -ErrorAction SilentlyContinue)
+      $items = @($v.PSObject.Properties | Where-Object { $_.Name -notmatch '^PS' })
+      if ($items.Count -eq 0) { Write-Output 'PASS: no AppCertDlls entry is registered.' }
+      else { Write-Output "FAIL: $($items.Count) AppCertDlls entr$(if ($items.Count -eq 1) {'y'} else {'ies'}) registered: $(($items | ForEach-Object { $_.Name }) -join ', ')." }
+    cleanup: ""
+
+  - name: "Autorun is disabled for all drive types"
+    technique_id: T1091
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads NoDriveTypeAutoRun. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $v = (Get-ItemProperty -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer' -Name NoDriveTypeAutoRun -ErrorAction SilentlyContinue).NoDriveTypeAutoRun
+      if ($v -eq 255) { Write-Output 'PASS: autorun is disabled for all drive types (NoDriveTypeAutoRun=0xFF).' }
+      else { Write-Output "FAIL: autorun is not disabled for all drive types (NoDriveTypeAutoRun=$(if ($null -eq $v) {'absent'} else {$v}))." }
+    cleanup: ""
+
+  - name: "Logon script inventory"
+    technique_id: T1037.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Lists logon script entries for the user and the machine (paths only). Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $u = (Get-ItemProperty -Path 'HKCU:\Environment' -Name UserInitMprLogonScript).UserInitMprLogonScript
+      $m = @(Get-ChildItem -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Group Policy\Scripts\Logon' -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -eq 'Script' } | ForEach-Object { (Get-ItemProperty -LiteralPath $_.PSPath -Name Script).Script })
+      $found = @(); if ($u) { $found += "user:$u" }; $found += @($m | ForEach-Object { "machine:$_" })
+      if ($found.Count -eq 0) { Write-Output 'PASS: no user or machine logon script is configured.' }
+      else { Write-Output "FAIL: $($found.Count) logon script(s) configured; review: $($found -join '; ')." }
+    cleanup: ""
+
+  - name: "AutoAdminLogon does not keep a stored password"
+    technique_id: T1547.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Checks whether AutoAdminLogon=1 is combined with a stored DefaultPassword (existence only; value is never read)."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $k = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
+      $auto = (Get-ItemProperty -Path $k -Name AutoAdminLogon -ErrorAction SilentlyContinue).AutoAdminLogon
+      $hasPw = $null -ne (Get-ItemProperty -Path $k -Name DefaultPassword -ErrorAction SilentlyContinue).DefaultPassword
+      if ("$auto" -ne '1') { Write-Output 'PASS: AutoAdminLogon is not enabled.' }
+      elseif ($hasPw) { Write-Output 'FAIL: AutoAdminLogon is enabled and a DefaultPassword value is stored in plain text. The value was not read.' }
+      else { Write-Output 'PASS: AutoAdminLogon is enabled but no DefaultPassword value is stored.' }
+    cleanup: ""
+
+  - name: "Active Setup StubPath entries do not point at user-writable folders"
+    technique_id: T1547.014
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads Active Setup StubPath values and checks their folder. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $hits = @()
+      foreach ($root in @('HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components', 'HKCU:\Software\Microsoft\Active Setup\Installed Components')) {
+        foreach ($c in @(Get-ChildItem -Path $root)) {
+          $s = "$((Get-ItemProperty -LiteralPath $c.PSPath -Name StubPath).StubPath)"
+          if ($s -match '(?i)\\Users\\|\\Temp\\|\\AppData\\') { $hits += $c.PSChildName }
+        }
+      }
+      if ($hits.Count -eq 0) { Write-Output 'PASS: no Active Setup StubPath points at a user-writable folder.' }
+      else { Write-Output "FAIL: $($hits.Count) Active Setup StubPath(s) point at user-writable folders: $($hits -join ', ')." }
+    cleanup: ""
+
+  - name: "Sysmon service is running"
+    technique_id: T1547.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads the Sysmon service state. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $s = Get-Service -Name Sysmon64,Sysmon -ErrorAction SilentlyContinue | Select-Object -First 1
+      if (-not $s) { Write-Output 'SKIP: Sysmon is not deployed on this host; persistence telemetry is limited.' }
+      elseif ($s.Status -eq 'Running') { Write-Output "PASS: Sysmon ($($s.Name)) is running." }
+      else { Write-Output "FAIL: Sysmon ($($s.Name)) is installed but not running." }
+    cleanup: ""
+
+  - name: "Sysmon configuration records registry value sets on Run keys"
+    technique_id: T1547.001
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads the installed Sysmon configuration for registry rules. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      $svc = Get-CimInstance Win32_Service -Filter "Name='Sysmon64' OR Name='Sysmon'" | Select-Object -First 1
+      if (-not $svc) { Write-Output 'SKIP: Sysmon is not installed.'; return }
+      $exe = "$($svc.PathName)" -replace '^"?([^"]+?\.exe).*$', '$1'
+      $cfg = (& $exe -c 2>$null) | Out-String
+      if (-not $cfg) { Write-Output 'SKIP: the Sysmon configuration cannot be dumped from this context.'; return }
+      if ($cfg -match '(?i)CurrentVersion\\Run') { Write-Output 'PASS: the Sysmon configuration covers the CurrentVersion\Run registry keys.' }
+      else { Write-Output 'FAIL: the Sysmon configuration does not cover CurrentVersion\Run; Run-key writes may not be recorded.' }
+    cleanup: ""
+
+  - name: "Registry auditing is enabled for success"
+    technique_id: T1547.001
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads the Registry audit subcategory. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      $out = (& auditpol.exe /get /subcategory:'{0CCE921E-69AE-11D9-BED3-505054503030}' /r 2>$null) | Out-String
+      if ($out -match 'Success') { Write-Output 'PASS: registry auditing records success events (Event 4657 and related).' }
+      else { Write-Output 'FAIL: registry auditing is off for success events; registry-level persistence changes are not audited.' }
+    cleanup: ""
+
+  - name: "Process creation records command lines"
+    technique_id: T1547.001
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads process-creation auditing and the command-line policy. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      $out = (& auditpol.exe /get /subcategory:'{0CCE922B-69AE-11D9-BED3-505054503030}' /r 2>$null) | Out-String
+      $cl = (Get-ItemProperty -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System\Audit' -Name ProcessCreationIncludeCmdLine_Enabled -ErrorAction SilentlyContinue).ProcessCreationIncludeCmdLine_Enabled
+      if ($out -match 'Success' -and $cl -eq 1) { Write-Output 'PASS: process creation is audited (4688) with command lines.' }
+      else { Write-Output "FAIL: process creation audit success=$($out -match 'Success'), command-line capture=$(if ($cl -eq 1) {'on'} else {'off'}); persistence launches lack command-line evidence." }
+    cleanup: ""
+
+  - name: "Security log size supports persistence telemetry retention"
+    technique_id: T1547.001
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads the Security log maximum size. Read-only."
+    telemetry:
+      - "Synthetic write (gated) or read-only evaluation; EDR and Sysmon see the operation"
+    detection:
+      - "Sysmon, Security, System or WMI-Activity events for the synthetic item, where the source is enabled"
+    command: |
+      $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+      if (-not (New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Write-Output 'SKIP: requires an elevated context.'; return }
+      $l = Get-WinEvent -ListLog Security -ErrorAction SilentlyContinue
+      if (-not $l) { Write-Output 'FAIL: the Security log cannot be read.'; return }
+      $mb = [math]::Round($l.MaximumSizeInBytes / 1MB)
+      if ($mb -ge 192) { Write-Output "PASS: Security log maximum size is $mb MB (at least 192 MB recommended)." }
+      else { Write-Output "FAIL: Security log maximum size is $mb MB; below the 192 MB recommendation for persistence events." }
+    cleanup: ""
