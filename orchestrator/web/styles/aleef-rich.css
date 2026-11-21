@@ -1,0 +1,79 @@
+/* Aleef API discovery page: a clear hierarchy of cards, labelled fields, gradient primary actions,
+   and styled post-click surfaces (status line, validation messages, Stop confirmation, findings). */
+
+#tab-aleef .sec-hdr h2 { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 800; letter-spacing: -.01em; }
+#tab-aleef .aleef-addon-badge { margin-left: 0; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--accent); background: var(--accent-dim); border: 1px solid var(--accent-border); }
+
+/* Banner: a clear amber callout with a shield mark. */
+#tab-aleef .aleef-banner { position: relative; margin: 6px 0 14px; padding: 14px 16px 14px 48px; border-radius: 12px; border: 1px solid rgba(251,191,36,.35); background: linear-gradient(135deg, rgba(251,191,36,.14), rgba(251,191,36,.04)); color: #fde68a; font-size: 13.5px; line-height: 1.5; font-weight: 600; }
+#tab-aleef .aleef-banner::before { content: ""; position: absolute; left: 16px; top: 16px; width: 18px; height: 18px; background: #fbbf24; -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z'/><path d='M9 12l2 2 4-4'/></svg>") center/contain no-repeat; mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z'/><path d='M9 12l2 2 4-4'/></svg>") center/contain no-repeat; }
+
+/* Live status line: colour by outcome, hidden while empty. */
+#tab-aleef .aleef-status { display: inline-flex; align-items: center; gap: 8px; min-height: 0; margin: 0 0 12px; padding: 0; font-size: 13px; }
+#tab-aleef .aleef-status:empty { display: none; }
+#tab-aleef .aleef-status:not(:empty) { padding: 9px 12px; border-radius: 9px; border: 1px solid var(--border); background: var(--elevated); width: 100%; box-sizing: border-box; }
+#tab-aleef .aleef-status.aleef-ok { color: #6ee7b7; border-color: rgba(52,211,153,.35); background: rgba(52,211,153,.10); }
+#tab-aleef .aleef-status.aleef-error { color: #fca5a5; border-color: rgba(248,113,113,.35); background: rgba(248,113,113,.10); }
+#tab-aleef .aleef-status.aleef-warn { color: #fde68a; border-color: rgba(251,191,36,.35); background: rgba(251,191,36,.10); }
+
+/* Cards: a raised panel with an accent edge and a title row. */
+#tab-aleef .aleef-card { position: relative; margin-bottom: 16px; padding: 18px 20px 20px 22px; border-radius: 14px; border: 1px solid var(--border); background: linear-gradient(180deg, var(--elevated) 0%, var(--surface) 100%); box-shadow: 0 10px 28px -16px rgba(0,0,0,.6); overflow: hidden; }
+#tab-aleef .aleef-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: linear-gradient(180deg, #60a5fa, #2563eb); }
+#tab-aleef .aleef-card > h3 { margin: 0 0 4px; font-size: 16px; font-weight: 800; }
+#tab-aleef .aleef-card > p.muted { margin: 0 0 14px; font-size: 12.5px; line-height: 1.55; color: var(--muted-hi); }
+
+/* Fields: uppercase labels, consistent inputs, focus ring. */
+#tab-aleef .aleef-grid { gap: 12px 14px; margin-bottom: 12px; }
+#tab-aleef .aleef-grid label, #tab-aleef .aleef-card label.muted { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-hi); }
+#tab-aleef .aleef-card label.muted { text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 600; }
+#tab-aleef input:not([type="checkbox"]):not([type="radio"]), #tab-aleef select, #tab-aleef textarea { box-sizing: border-box; width: 100%; padding: 8px 11px; border: 1px solid var(--border); border-radius: 9px; background: var(--input, var(--bg)); color: var(--text); font: inherit; font-size: 13px; text-transform: none; letter-spacing: 0; font-weight: 500; outline: none; transition: border-color .15s, box-shadow .15s; }
+#tab-aleef input:not([type="checkbox"]):focus, #tab-aleef select:focus, #tab-aleef textarea:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.35), 0 0 14px rgba(59,130,246,.18); }
+#tab-aleef select { appearance: none; padding-right: 32px; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>"); background-repeat: no-repeat; background-position: right 11px center; cursor: pointer; }
+#tab-aleef .aleef-textarea { min-height: 96px; resize: vertical; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.5; }
+#tab-aleef .aleef-warn { margin: 0 0 10px; padding: 9px 12px; border-radius: 9px; border: 1px solid rgba(251,191,36,.35); background: rgba(251,191,36,.10); color: #fde68a; font-size: 12.5px; font-weight: 600; }
+#tab-aleef .aleef-error:not(:empty) { margin: 0 0 8px; padding: 9px 12px; border-radius: 9px; border: 1px solid rgba(248,113,113,.30); background: rgba(248,113,113,.10); color: #fca5a5; font-size: 12.5px; font-weight: 600; }
+
+/* Buttons: gradient primary, quiet outline secondary. */
+#tab-aleef .btn-primary { background: linear-gradient(180deg, #4f8cff 0%, #2563eb 100%); border-color: #2563eb; color: #fff; font-weight: 700; border-radius: 9px; padding: 10px 18px; box-shadow: 0 6px 18px -6px rgba(59,130,246,.65); }
+#tab-aleef .btn-primary:hover { filter: brightness(1.08); }
+#tab-aleef .btn-outline { border-radius: 9px; font-weight: 600; }
+#tab-aleef .aleef-card > .btn-primary { display: block; width: 100%; margin-top: 4px; }
+
+/* Account rows: a compact grid of inputs with a remove action. */
+#tab-aleef .aleef-account-row { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)) auto; gap: 8px; align-items: center; margin-bottom: 8px; padding: 10px; border-radius: 10px; border: 1px dashed var(--border-hi, var(--border)); background: var(--hover, transparent); }
+#tab-aleef .aleef-account-row input { padding: 7px 10px; }
+#tab-aleef .aleef-account-row .btn { white-space: nowrap; }
+@media (max-width: 720px) { #tab-aleef .aleef-account-row { grid-template-columns: 1fr 1fr; } }
+
+/* Stop confirmation: a danger callout with two clear actions. */
+#tab-aleef .aleef-confirm { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 10px 0 0; padding: 12px 14px; border-radius: 11px; border: 1px solid rgba(248,113,113,.40); background: linear-gradient(135deg, rgba(248,113,113,.14), rgba(248,113,113,.04)); color: #fecaca; font-size: 13px; font-weight: 600; }
+#tab-aleef .aleef-confirm > span:first-child { flex: 1 1 260px; }
+#tab-aleef .aleef-confirm .btn-danger, #tab-aleef .aleef-confirm button:first-of-type { background: linear-gradient(180deg, #f87171, #dc2626); border-color: #dc2626; color: #fff; font-weight: 700; border-radius: 9px; }
+
+/* Run status and the operations table. */
+#tab-aleef .aleef-run-status { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 999px; background: var(--accent-dim); border: 1px solid var(--accent-border); color: var(--accent); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+#tab-aleef .aleef-card table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 12px; font-size: 12.5px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+#tab-aleef .aleef-card th { padding: 8px 10px; text-align: left; font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted-hi); background: var(--hover, transparent); }
+#tab-aleef .aleef-card td { padding: 8px 10px; border-top: 1px solid var(--border); }
+#tab-aleef .aleef-card td code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+
+/* Findings: each bucket is a collapsible panel with a count pill. */
+#tab-aleef .sec-hdr h3 { font-size: 16px; font-weight: 800; }
+#tab-aleef .aleef-findings-section { margin-bottom: 14px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); }
+#tab-aleef .aleef-findings-section h3 { margin: 0 0 4px; font-size: 14px; font-weight: 800; }
+#tab-aleef details { margin-top: 10px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); overflow: hidden; }
+#tab-aleef details > summary { cursor: pointer; padding: 11px 14px; font-weight: 700; font-size: 13px; list-style: none; display: flex; align-items: center; gap: 8px; }
+#tab-aleef details > summary::-webkit-details-marker { display: none; }
+#tab-aleef details > summary::before { content: ""; width: 14px; height: 14px; flex: 0 0 14px; background: var(--muted-hi); -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M9 6l6 6-6 6'/></svg>") center/contain no-repeat; mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M9 6l6 6-6 6'/></svg>") center/contain no-repeat; transition: transform .15s; }
+#tab-aleef details[open] > summary::before { transform: rotate(90deg); }
+#tab-aleef details > summary:hover { background: var(--hover, transparent); }
+#tab-aleef details > *:not(summary) { padding: 0 14px 12px; font-size: 12.5px; color: var(--muted-hi); }
+#tab-aleef details > summary + .muted, #tab-aleef details > p { margin: 0; }
+#tab-aleef .aleef-inconsistent td { background: rgba(248,113,113,.12); }
+
+/* Phones: fields stack, the add-on badge wraps under the title. */
+@media (max-width: 720px) {
+  #tab-aleef .sec-hdr h2 { font-size: 17px; flex-wrap: wrap; }
+  #tab-aleef .aleef-card { padding: 16px 14px 18px 18px; }
+  #tab-aleef .aleef-grid { grid-template-columns: 1fr; }
+}
