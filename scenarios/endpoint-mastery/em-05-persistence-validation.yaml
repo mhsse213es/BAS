@@ -997,11 +997,13 @@ steps:
       Start-Sleep -Seconds 4
       $d = Find-Ev 'Microsoft-Windows-WMI-Activity/Operational' @(5861) $fn $since
       $cleanOk = $true
-      Get-WmiObject -Namespace $ns -Class __FilterToConsumerBinding -ErrorAction SilentlyContinue | Where-Object { "$($_.Filter)" -match [regex]::Escape($fn) } | ForEach-Object { $_.Delete() }
-      Get-WmiObject -Namespace $ns -Class NTEventLogEventConsumer -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq $cn } | ForEach-Object { $_.Delete() }
+      Get-WmiObject -Namespace $ns -Class __FilterToConsumerBinding -ErrorAction SilentlyContinue | Where-Object { "$($_.Filter)$($_.Consumer)" -match [regex]::Escape($sfx) } | ForEach-Object { $_.Delete() }
+      foreach ($cls in 'LogFileEventConsumer','NTEventLogEventConsumer') { Get-WmiObject -Namespace $ns -Class $cls -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq $cn } | ForEach-Object { $_.Delete() } }
       Get-WmiObject -Namespace $ns -Class __EventFilter -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq $fn } | ForEach-Object { $_.Delete() }
-      if (Get-WmiObject -Namespace $ns -Class __EventFilter -Filter "Name='$fn'" -ErrorAction SilentlyContinue) { $cleanOk = $false }
-      if (Get-WmiObject -Namespace $ns -Class NTEventLogEventConsumer -Filter "Name='$cn'" -ErrorAction SilentlyContinue) { $cleanOk = $false }
+      $left = @(Get-WmiObject -Namespace $ns -Class __EventFilter -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq $fn })
+      foreach ($cls in 'LogFileEventConsumer','NTEventLogEventConsumer') { $left += @(Get-WmiObject -Namespace $ns -Class $cls -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq $cn }) }
+      $left += @(Get-WmiObject -Namespace $ns -Class __FilterToConsumerBinding -ErrorAction SilentlyContinue | Where-Object { "$($_.Filter)$($_.Consumer)" -match [regex]::Escape($sfx) })
+      if ($left.Count -gt 0) { $cleanOk = $false }
       $tail = if ($cleanOk) { 'Cleanup verified.' } else { "CLEANUP FAILED: remove WMI objects $fn and $cn from root\subscription manually." }
       if (-not $made) { if ($werr -match 'denied|access|unauthori|privilege|0x80070005|0x80041003') { Write-Output "PASS: permanent subscription creation was blocked ($werr). $tail" } else { Write-Output "ERROR: permanent subscription could not be created ($werr). $tail" } }
       elseif ($d -gt 0) { Write-Output "PASS: permanent subscription created and recorded ($d WMI-Activity EID 5861 event(s)). $tail" }
