@@ -5454,6 +5454,15 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "dbsim-db04-05-privileged-audit.yaml",
+    "index": 0,
+    "technique_id": "T1562",
+    "action_key": "",
+    "framework": "native",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "dbsim-db04-06-role-audit.yaml",
     "index": 0,
     "technique_id": "T1098",

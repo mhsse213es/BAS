@@ -445,7 +445,7 @@ func str(v any) string {
 // (SKIPPED), never as a pass. It answers from the cache; it issues no SQL.
 func (a *Adapter) Capabilities() dbprobe.Capabilities {
 	c := dbprobe.Capabilities{
-		ProbeIDs: []string{"audit_ddl_roundtrip", "audit_role_roundtrip", "auth_after_revoke", "auth_check", "auth_failed_login", "bounded_synthetic_read", "check_export_privileges", "check_readonly_identity", "read_audit_config", "read_classified_fixture", "read_customer_records", "read_financial_records", "read_foreign_role_names", "read_global_privileges", "read_grants", "read_memberships", "read_restricted_table", "read_roles", "suspicious_read", "try_disable_audit", "try_write_fixture"},
+		ProbeIDs: []string{"audit_ddl_roundtrip", "audit_reload_conf", "audit_role_roundtrip", "auth_after_revoke", "auth_check", "auth_failed_login", "bounded_synthetic_read", "check_export_privileges", "check_readonly_identity", "read_audit_config", "read_classified_fixture", "read_customer_records", "read_financial_records", "read_foreign_role_names", "read_global_privileges", "read_grants", "read_memberships", "read_restricted_table", "read_roles", "suspicious_read", "try_disable_audit", "try_write_fixture"},
 		MarkerInAppName:   true,
 		MarkerInQueryText: true,
 		// The marker can only reach an audit record through the statement
@@ -537,6 +537,8 @@ func (a *Adapter) RunProbe(ctx context.Context, def dbprobe.ProbeDef, spec dbpro
 		return a.runAuditDDLRoundtrip(ctx, def, spec, mode)
 	case dbprobe.ProbeAuditRoleRoundtrip:
 		return a.runAuditRoleRoundtrip(ctx, def, spec, mode)
+	case dbprobe.ProbeAuditReloadConf:
+		return a.runAuditReloadConf(ctx, def, spec, mode)
 	case dbprobe.ProbeCheckExportPrivileges:
 		return a.runCheckExportPrivileges(ctx, spec, mode)
 	case dbprobe.ProbeCheckReadOnlyIdentity:

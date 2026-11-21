@@ -102,6 +102,10 @@ var catalog = map[string]ProbeDef{
 	// fixture accounts table for the fixture role. PostgreSQL only.
 	ProbeAuditRoleRoundtrip: {ID: ProbeAuditRoleRoundtrip, Class: ClassBoundedSynthetic, Engines: []string{"postgresql"},
 		ParamSchema: map[string]ParamKind{}, RequiredFixture: WriteFixtureKind},
+	// audit_reload_conf (DB-04-05): lab-only SELECT pg_reload_conf(), tagged with the
+	// marker. PostgreSQL only.
+	ProbeAuditReloadConf: {ID: ProbeAuditReloadConf, Class: ClassBoundedSynthetic, Engines: []string{"postgresql"},
+		ParamSchema: map[string]ParamKind{}, RequiredFixture: WriteFixtureKind},
 	// check_export_privileges (DB-11): fixed read-only catalog queries about
 	// what the CONNECTED account may do regarding export/backup. No export is
 	// ever performed. Read-only by class, lab-only by LabOnly.
