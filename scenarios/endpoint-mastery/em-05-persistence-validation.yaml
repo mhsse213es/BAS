@@ -65,7 +65,7 @@ steps:
         if (Get-ItemProperty -Path $p -Name $n -ErrorAction SilentlyContinue) { $cleanOk = $false }
       }
       $tail = if ($cleanOk) { 'Cleanup verified.' } else { "CLEANUP FAILED: remove $p\$n manually; the value is an executable autorun." }
-      if (-not $wrote) { Write-Output "PASS: write to $p was blocked ($werr). $tail" }
+      if (-not $wrote) { if ($werr -match 'denied|access|unauthori|privilege|0x80070005|0x80041003') { Write-Output "PASS: write to $p was blocked ($werr). $tail" } else { Write-Output "ERROR: write to $p could not be tested ($werr). $tail" } }
       elseif ($d -gt 0) { Write-Output "PASS: write to $p succeeded but was detected ($d Sysmon EID 13 event(s) for the synthetic value). $tail" }
       elseif ($d -lt 0) { Write-Output "FAIL: write to $p succeeded and no detection telemetry source was readable (Sysmon not present).  $tail" }
       else { Write-Output "FAIL: write to $p succeeded and no detection event was recorded. $tail" }
@@ -108,7 +108,7 @@ steps:
         if (Get-ItemProperty -Path $p -Name $n -ErrorAction SilentlyContinue) { $cleanOk = $false }
       }
       $tail = if ($cleanOk) { 'Cleanup verified.' } else { "CLEANUP FAILED: remove $p\$n manually; the value is an executable autorun." }
-      if (-not $wrote) { Write-Output "PASS: write to $p was blocked ($werr). $tail" }
+      if (-not $wrote) { if ($werr -match 'denied|access|unauthori|privilege|0x80070005|0x80041003') { Write-Output "PASS: write to $p was blocked ($werr). $tail" } else { Write-Output "ERROR: write to $p could not be tested ($werr). $tail" } }
       elseif ($d -gt 0) { Write-Output "PASS: write to $p succeeded but was detected ($d Sysmon EID 13 event(s) for the synthetic value). $tail" }
       elseif ($d -lt 0) { Write-Output "FAIL: write to $p succeeded and no detection telemetry source was readable (Sysmon not present).  $tail" }
       else { Write-Output "FAIL: write to $p succeeded and no detection event was recorded. $tail" }
@@ -149,7 +149,7 @@ steps:
         if (Get-ItemProperty -Path $p -Name $n -ErrorAction SilentlyContinue) { $cleanOk = $false }
       }
       $tail = if ($cleanOk) { 'Cleanup verified.' } else { "CLEANUP FAILED: remove $p\$n manually; the value is an executable autorun." }
-      if (-not $wrote) { Write-Output "PASS: write to $p was blocked ($werr). $tail" }
+      if (-not $wrote) { if ($werr -match 'denied|access|unauthori|privilege|0x80070005|0x80041003') { Write-Output "PASS: write to $p was blocked ($werr). $tail" } else { Write-Output "ERROR: write to $p could not be tested ($werr). $tail" } }
       elseif ($d -gt 0) { Write-Output "PASS: write to $p succeeded but was detected ($d Sysmon EID 13 event(s) for the synthetic value). $tail" }
       elseif ($d -lt 0) { Write-Output "FAIL: write to $p succeeded and no detection telemetry source was readable (Sysmon not present).  $tail" }
       else { Write-Output "FAIL: write to $p succeeded and no detection event was recorded. $tail" }
@@ -192,7 +192,7 @@ steps:
         if (Get-ItemProperty -Path $p -Name $n -ErrorAction SilentlyContinue) { $cleanOk = $false }
       }
       $tail = if ($cleanOk) { 'Cleanup verified.' } else { "CLEANUP FAILED: remove $p\$n manually; the value is an executable autorun." }
-      if (-not $wrote) { Write-Output "PASS: write to $p was blocked ($werr). $tail" }
+      if (-not $wrote) { if ($werr -match 'denied|access|unauthori|privilege|0x80070005|0x80041003') { Write-Output "PASS: write to $p was blocked ($werr). $tail" } else { Write-Output "ERROR: write to $p could not be tested ($werr). $tail" } }
       elseif ($d -gt 0) { Write-Output "PASS: write to $p succeeded but was detected ($d Sysmon EID 13 event(s) for the synthetic value). $tail" }
       elseif ($d -lt 0) { Write-Output "FAIL: write to $p succeeded and no detection telemetry source was readable (Sysmon not present).  $tail" }
       else { Write-Output "FAIL: write to $p succeeded and no detection event was recorded. $tail" }
@@ -334,7 +334,7 @@ steps:
         if (Test-Path -LiteralPath $f) { $cleanOk = $false }
       }
       $tail = if ($cleanOk) { 'Cleanup verified.' } else { "CLEANUP FAILED: remove $f manually." }
-      if (-not $wrote) { Write-Output "PASS: file creation in the user Startup folder was blocked ($werr). $tail" }
+      if (-not $wrote) { if ($werr -match 'denied|access|unauthori|privilege|0x80070005|0x80041003') { Write-Output "PASS: file creation in the user Startup folder was blocked ($werr). $tail" } else { Write-Output "ERROR: file creation in the user Startup folder could not be tested ($werr). $tail" } }
       elseif ($d -gt 0) { Write-Output "PASS: file created in the user Startup folder was detected ($d Sysmon EID 11 event(s)). $tail" }
       elseif ($d -lt 0) { Write-Output "FAIL: file created in the user Startup folder and no detection telemetry source was readable (Sysmon not present). $tail" }
       else { Write-Output "FAIL: file created in the user Startup folder and no detection event was recorded. $tail" }
@@ -378,7 +378,7 @@ steps:
         if (Test-Path -LiteralPath $f) { $cleanOk = $false }
       }
       $tail = if ($cleanOk) { 'Cleanup verified.' } else { "CLEANUP FAILED: remove $f manually." }
-      if (-not $wrote) { Write-Output "PASS: file creation in the all-users Startup folder was blocked ($werr). $tail" }
+      if (-not $wrote) { if ($werr -match 'denied|access|unauthori|privilege|0x80070005|0x80041003') { Write-Output "PASS: file creation in the all-users Startup folder was blocked ($werr). $tail" } else { Write-Output "ERROR: file creation in the all-users Startup folder could not be tested ($werr). $tail" } }
       elseif ($d -gt 0) { Write-Output "PASS: file created in the all-users Startup folder was detected ($d Sysmon EID 11 event(s)). $tail" }
       elseif ($d -lt 0) { Write-Output "FAIL: file created in the all-users Startup folder and no detection telemetry source was readable (Sysmon not present). $tail" }
       else { Write-Output "FAIL: file created in the all-users Startup folder and no detection event was recorded. $tail" }
@@ -510,8 +510,8 @@ steps:
       $svc = 'AudspectEM05_' + $sfx
       $since = Get-Date
       $created = $false; $cerr = ''
-      & sc.exe create $svc 'binPath=' 'C:\AudspectEM05_missing\probe.exe' 'start=' 'demand' 'DisplayName=' 'AudspectEM05 probe' | Out-Null
-      if ($LASTEXITCODE -eq 0) { $created = $true } else { $cerr = "sc.exe exit $LASTEXITCODE" }
+      $scOut = (& sc.exe create $svc 'binPath=' 'C:\AudspectEM05_missing\probe.exe' 'start=' 'demand' 'DisplayName=' 'AudspectEM05 probe' 2>&1) | Out-String
+      if ($LASTEXITCODE -eq 0) { $created = $true } else { $cerr = "sc.exe exit $($LASTEXITCODE): " + ($scOut -replace "\s+", " ").Trim() }
       Start-Sleep -Seconds 4
       $d = Find-Ev 'System' @(7045) $svc $since
       $cleanOk = $true
@@ -520,7 +520,7 @@ steps:
         if (Get-Service -Name $svc -ErrorAction SilentlyContinue) { $cleanOk = $false }
       }
       $tail = if ($cleanOk) { 'Cleanup verified.' } else { "CLEANUP FAILED: run sc.exe delete $svc manually." }
-      if (-not $created) { Write-Output "PASS: service creation was blocked ($cerr). $tail" }
+      if (-not $created) { if ($cerr -match 'ACCESS_DENIED|Access is denied') { Write-Output "PASS: service creation was blocked ($cerr). $tail" } else { Write-Output "ERROR: service creation could not be tested ($cerr). $tail" } }
       elseif ($d -gt 0) { Write-Output "PASS: service creation succeeded but was recorded ($d System EID 7045 event(s)). $tail" }
       elseif ($d -lt 0) { Write-Output "FAIL: service created and System log was not readable for EID 7045. $tail" }
       else { Write-Output "FAIL: service created and no EID 7045 event was recorded. $tail" }
@@ -681,8 +681,8 @@ steps:
       $tn = "\AudspectEM05\probe_$($sfx)"
       $since = Get-Date
       $created = $false; $cerr = ''
-      & schtasks.exe /Create /TN $tn /TR 'cmd.exe /c exit 0' /SC ONCE /ST 00:00 /SD 01/01/2099 /F | Out-Null
-      if ($LASTEXITCODE -eq 0) { $created = $true } else { $cerr = "schtasks.exe exit $LASTEXITCODE" }
+      $tOut = (& schtasks.exe /Create /TN $tn /TR 'cmd.exe /c exit 0' /SC ONCE /ST 00:00 /SD 01/01/2099 /F 2>&1) | Out-String
+      if ($LASTEXITCODE -eq 0) { $created = $true } else { $cerr = "schtasks.exe exit $($LASTEXITCODE): " + ($tOut -replace "\s+", " ").Trim() }
       Start-Sleep -Seconds 4
       $d = Find-Ev 'Security' @(4698) $tn $since
       $cleanOk = $true
@@ -692,7 +692,7 @@ steps:
         if ($LASTEXITCODE -eq 0) { $cleanOk = $false }
       }
       $tail = if ($cleanOk) { 'Cleanup verified.' } else { "CLEANUP FAILED: run schtasks /Delete /TN $tn /F manually." }
-      if (-not $created) { Write-Output "PASS: task creation was blocked ($cerr). $tail" }
+      if (-not $created) { if ($cerr -match 'Access is denied') { Write-Output "PASS: task creation was blocked ($cerr). $tail" } else { Write-Output "ERROR: task creation could not be tested ($cerr). $tail" } }
       elseif ($d -gt 0) { Write-Output "PASS: task created and recorded ($d Security EID 4698 event(s)). $tail" }
       elseif ($d -lt 0) { Write-Output "FAIL: task created and the Security log was not readable for EID 4698. $tail" }
       else { Write-Output "FAIL: task created and no EID 4698 event was recorded (task-creation auditing may be off). $tail" }
@@ -986,7 +986,7 @@ steps:
       try {
         $flt = Set-WmiInstance -Namespace $ns -Class __EventFilter -Arguments @{Name=$fn; EventNamespace='root\cimv2'; QueryLanguage='WQL'; Query="SELECT * FROM __InstanceCreationEvent WITHIN 10 WHERE TargetInstance ISA 'Audspect_EM05_NeverExists'"} -ErrorAction Stop
         $con = Set-WmiInstance -Namespace $ns -Class NTEventLogEventConsumer -Arguments @{Name=$cn; SourceName='Application'; EventID=1; EventType=4} -ErrorAction Stop
-        $null = Set-WmiInstance -Namespace $ns -Class __FilterToConsumerBinding -Arguments @{Filter=$flt.__PATH; Consumer=$con.__PATH} -ErrorAction Stop
+        $null = Set-WmiInstance -Namespace $ns -Class __FilterToConsumerBinding -Arguments @{Filter=('__EventFilter.Name="' + $fn + '"'); Consumer=('NTEventLogEventConsumer.Name="' + $cn + '"')} -ErrorAction Stop
         $made = $true
       } catch { $werr = $_.Exception.Message }
       Start-Sleep -Seconds 4
@@ -998,7 +998,7 @@ steps:
       if (Get-WmiObject -Namespace $ns -Class __EventFilter -Filter "Name='$fn'" -ErrorAction SilentlyContinue) { $cleanOk = $false }
       if (Get-WmiObject -Namespace $ns -Class NTEventLogEventConsumer -Filter "Name='$cn'" -ErrorAction SilentlyContinue) { $cleanOk = $false }
       $tail = if ($cleanOk) { 'Cleanup verified.' } else { "CLEANUP FAILED: remove WMI objects $fn and $cn from root\subscription manually." }
-      if (-not $made) { Write-Output "PASS: permanent subscription creation was blocked ($werr). $tail" }
+      if (-not $made) { if ($werr -match 'denied|access|unauthori|privilege|0x80070005|0x80041003') { Write-Output "PASS: permanent subscription creation was blocked ($werr). $tail" } else { Write-Output "ERROR: permanent subscription could not be created ($werr). $tail" } }
       elseif ($d -gt 0) { Write-Output "PASS: permanent subscription created and recorded ($d WMI-Activity EID 5861 event(s)). $tail" }
       elseif ($d -lt 0) { Write-Output "FAIL: subscription created and the WMI-Activity log was not readable. $tail" }
       else { Write-Output "FAIL: subscription created and no WMI-Activity EID 5861 event was recorded. $tail" }
@@ -1206,7 +1206,7 @@ steps:
       $cleanOk = $true
       if ($wrote) { try { Remove-Item -Path $k -Recurse -Force -ErrorAction Stop } catch { $cleanOk = $false }; if (Test-Path $k) { $cleanOk = $false } }
       $tail = if ($cleanOk) { 'Cleanup verified.' } else { "CLEANUP FAILED: remove $k manually." }
-      if (-not $wrote) { Write-Output "PASS: IFEO Debugger write was blocked ($werr). $tail" }
+      if (-not $wrote) { if ($werr -match 'denied|access|unauthori|privilege|0x80070005|0x80041003') { Write-Output "PASS: IFEO Debugger write was blocked ($werr). $tail" } else { Write-Output "ERROR: IFEO Debugger write could not be tested ($werr). $tail" } }
       elseif ($d -gt 0) { Write-Output "PASS: IFEO Debugger write succeeded but was detected ($d Sysmon EID 13 event(s)). $tail" }
       elseif ($d -lt 0) { Write-Output "FAIL: IFEO Debugger write succeeded and no detection telemetry source was readable (Sysmon not present). $tail" }
       else { Write-Output "FAIL: IFEO Debugger write succeeded and no detection event was recorded. $tail" }
