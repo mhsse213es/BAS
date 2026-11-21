@@ -9,10 +9,17 @@ import { helpFor } from './page-help-content.js';
 
 var PANEL_ID = 'page-help';
 
-// currentTab: the id of the page showing now (the visible tab-* block), or ''.
+// currentTab: the id of the page showing now, or ''. Pages are shown and hidden with inline display styles, so
+// several page blocks can lack the is-hidden class at once. The active navigation item is the reliable answer;
+// the displayed block is the fallback.
 export function currentTab() {
-  var el = document.querySelector('main > [id^="tab-"]:not(.is-hidden)');
-  return el ? el.id.replace(/^tab-/, '') : '';
+  var nav = document.querySelector('.nav-item.active[data-tab]');
+  if (nav && nav.getAttribute('data-tab')) return nav.getAttribute('data-tab');
+  var blocks = document.querySelectorAll('main > [id^="tab-"]');
+  for (var i = 0; i < blocks.length; i++) {
+    if (getComputedStyle(blocks[i]).display !== 'none') return blocks[i].id.replace(/^tab-/, '');
+  }
+  return '';
 }
 
 function titleOf(tab) {
