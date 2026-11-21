@@ -204,7 +204,52 @@
     "detection": 0,
     "telemetry": 0
   },
+  "carbanak-bfsi-archive-records.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "carbanak-bfsi-beneficiary-creation.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "carbanak-bfsi-browser-probe.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "carbanak-bfsi-credman-probe.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "carbanak-bfsi-db-discovery.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "carbanak-bfsi-db-staging.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "carbanak-bfsi-document-collection.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "carbanak-bfsi-gateway-discovery.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "carbanak-bfsi-https-exfil-sim.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "carbanak-bfsi-kerberos-enum.yaml": {
     "cleanup": 0,
     "detection": 0,
     "telemetry": 0
@@ -219,12 +264,47 @@
     "detection": 0,
     "telemetry": 0
   },
+  "carbanak-bfsi-priv-enum.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "carbanak-bfsi-remote-service.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "carbanak-bfsi-remote-task.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "carbanak-bfsi-session-misuse.yaml": {
     "cleanup": 0,
     "detection": 0,
     "telemetry": 0
   },
+  "carbanak-bfsi-share-discovery.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "carbanak-bfsi-smb-admin-share.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "carbanak-bfsi-synthetic-cred-discovery.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "carbanak-bfsi-unauthorized-approval.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "carbanak-bfsi-winrm-exec.yaml": {
     "cleanup": 0,
     "detection": 0,
     "telemetry": 0
@@ -539,12 +619,97 @@
     "detection": 2,
     "telemetry": 2
   },
+  "dbsim-db02-01-role-enumeration.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dbsim-db02-02-app-role-grants.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dbsim-db02-03-excessive-privilege.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dbsim-db02-04-dba-accounts.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dbsim-db02-05-global-grants.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dbsim-db02-06-inheritance-chain.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dbsim-db02-07-grant-option.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dbsim-db02-08-public-grants.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dbsim-db02-09-cross-schema-access.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dbsim-db02-10-sensitive-table-access.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dbsim-db02-11-service-account.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "dbsim-db02-excessive-grants.yaml": {
     "cleanup": 0,
     "detection": 2,
     "telemetry": 2
   },
   "dbsim-db03-unauthorized-access.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dbsim-db04-03-authentication-audit.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dbsim-db04-04-failed-login-audit.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dbsim-db04-05-privileged-audit.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dbsim-db04-06-role-audit.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dbsim-db04-07-sensitive-table-access.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "dbsim-db04-08-ddl-audit.yaml": {
     "cleanup": 0,
     "detection": 0,
     "telemetry": 0
@@ -696,12 +861,12 @@
   },
   "endpoint-mastery/em-04-credential-theft.yaml": {
     "cleanup": 0,
-    "detection": 1,
+    "detection": 0,
     "telemetry": 0
   },
   "endpoint-mastery/em-05-persistence-validation.yaml": {
     "cleanup": 0,
-    "detection": 1,
+    "detection": 0,
     "telemetry": 0
   },
   "endpoint-mastery/em-06-defense-evasion.yaml": {

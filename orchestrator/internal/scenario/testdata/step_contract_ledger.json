@@ -2601,9 +2601,90 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "carbanak-bfsi-archive-records.yaml",
+    "index": 0,
+    "technique_id": "T1560.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "carbanak-bfsi-beneficiary-creation.yaml",
     "index": 0,
     "technique_id": "",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-bfsi-browser-probe.yaml",
+    "index": 0,
+    "technique_id": "T1555.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-bfsi-credman-probe.yaml",
+    "index": 0,
+    "technique_id": "T1555.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-bfsi-db-discovery.yaml",
+    "index": 0,
+    "technique_id": "T1046",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-bfsi-db-staging.yaml",
+    "index": 0,
+    "technique_id": "T1074.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-bfsi-document-collection.yaml",
+    "index": 0,
+    "technique_id": "T1005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "carbanak-bfsi-gateway-discovery.yaml",
+    "index": 0,
+    "technique_id": "T1083",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-bfsi-https-exfil-sim.yaml",
+    "index": 0,
+    "technique_id": "T1567",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-bfsi-kerberos-enum.yaml",
+    "index": 0,
+    "technique_id": "T1558.003",
     "action_key": "",
     "framework": "custom",
     "class": "non_destructive",
@@ -2628,6 +2709,33 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "carbanak-bfsi-priv-enum.yaml",
+    "index": 0,
+    "technique_id": "T1069.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-bfsi-remote-service.yaml",
+    "index": 0,
+    "technique_id": "T1569.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "carbanak-bfsi-remote-task.yaml",
+    "index": 0,
+    "technique_id": "T1053.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "carbanak-bfsi-session-misuse.yaml",
     "index": 0,
     "technique_id": "T1078",
@@ -2637,9 +2745,45 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "carbanak-bfsi-share-discovery.yaml",
+    "index": 0,
+    "technique_id": "T1135",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-bfsi-smb-admin-share.yaml",
+    "index": 0,
+    "technique_id": "T1021.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-bfsi-synthetic-cred-discovery.yaml",
+    "index": 0,
+    "technique_id": "T1552",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
     "scenario": "carbanak-bfsi-unauthorized-approval.yaml",
     "index": 0,
     "technique_id": "T1078",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "carbanak-bfsi-winrm-exec.yaml",
+    "index": 0,
+    "technique_id": "T1021.006",
     "action_key": "",
     "framework": "custom",
     "class": "non_destructive",
