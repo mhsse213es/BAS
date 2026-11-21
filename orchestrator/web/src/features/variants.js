@@ -116,8 +116,31 @@ export function vexStatCard(label, val, col, sub, help) {
 // showVexStatHelp explains what a Variant Executor stat card's number means —
 // each card has a small "?" button since the always-visible caption under the
 // number isn't always enough context on its own for a first-time viewer.
-export function showVexStatHelp(label, help) {
-  showToast(label + ': ' + help, 'ok');
+// The explanation opens as a small card anchored under the button that was clicked (the action passes the
+// element last). A second click on the same button, or a click anywhere else, closes it. A toast was too
+// short-lived and too small for a sentence of explanation.
+export function showVexStatHelp(label, help, el) {
+  var existing = document.querySelector('.vex-help-pop');
+  var sameAnchor = existing && existing._anchor === el;
+  if (existing) existing.remove();
+  if (sameAnchor || !el) return;
+  var pop = document.createElement('div');
+  pop.className = 'vex-help-pop';
+  pop.setAttribute('role', 'dialog');
+  pop.innerHTML = '<div class="vex-help-t">' + x(label) + '</div><div class="vex-help-b">' + x(help) + '</div>';
+  pop._anchor = el;
+  document.body.appendChild(pop);
+  var r = el.getBoundingClientRect();
+  var left = Math.min(Math.max(8, r.left), window.innerWidth - pop.offsetWidth - 8);
+  pop.style.top = (r.bottom + 8 + window.scrollY) + 'px';
+  pop.style.left = (left + window.scrollX) + 'px';
+  setTimeout(function() {
+    document.addEventListener('click', function close(ev) {
+      if (!pop.isConnected) { document.removeEventListener('click', close); return; }
+      if (ev.target === el || pop.contains(ev.target)) return;
+      pop.remove(); document.removeEventListener('click', close);
+    });
+  }, 0);
 }
 
 export function populateVexAgents() {
@@ -277,20 +300,23 @@ function renderVexSweepList(sweeps) {
     var rawPct = sw.totalVariants > 0 ? (sw.completedVariants / sw.totalVariants) * 100 : 0;
     var pct = rawPct > 0 && rawPct < 1 ? 1 : Math.round(rawPct);
     var disconnected = sw.status === 'agent_disconnected';
-    return '<div class="card" style="margin-top:0.5rem;padding:0.75rem 1rem" id="vex-sweep-card-' + x(sw.id) + '">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.78rem;margin-bottom:0.3rem">' +
-        '<span class="u-fw600">' + x(sw.agentId) +
-          (disconnected ? ' <span class="sbadge s-agent_disconnected">Agent Disconnected</span>' : '') + '</span>' +
-        '<span style="display:flex;align-items:center;gap:0.6rem">' +
-          (disconnected ? '' : '<span style="font-weight:700;color:var(--accent)">' + pct + '%</span>') +
-          '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);padding:2px 8px;font-size:0.7rem"' + on('click', 'stopVexSweep', sw.id) + '>&#9632; Stop</button>' +
-        '</span>' +
+    // Classes live in var-rich.css (.vex-sw-*); the only inline value is the bar width, which is data.
+    return '<div class="vex-sw' + (disconnected ? ' is-disconnected' : '') + '" id="vex-sweep-card-' + x(sw.id) + '">' +
+      '<div class="vex-sw-head">' +
+        '<div class="vex-sw-agent"><span class="vex-sw-label">Full sweep · agent</span>' +
+          '<span class="vex-sw-id">' + x(sw.agentId) + '</span>' +
+          (disconnected ? '<span class="sbadge s-agent_disconnected">Agent Disconnected</span>' : '') + '</div>' +
+        '<div class="vex-sw-actions">' +
+          (disconnected ? '' : '<span class="vex-sw-pct">' + pct + '%</span>') +
+          '<button class="btn btn-outline btn-sm vex-sw-stop"' + on('click', 'stopVexSweep', sw.id) + '>&#9632; Stop</button>' +
+        '</div>' +
       '</div>' +
-      '<div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">' +
-        '<div style="height:5px;background:var(--accent);border-radius:3px;width:' + pct + '%;transition:width 0.5s ease"></div>' +
+      '<div class="vex-sw-bar"><div class="vex-sw-fill" style="width:' + pct + '%"></div></div>' +
+      '<div class="vex-sw-meta">' +
+        '<span class="vex-sw-chip">Atomic test ' + (sw.currentIndex + 1) + ' of ' + sw.totalTechniques + '</span>' +
+        '<span class="vex-sw-tech">' + x(sw.currentTechnique) + '</span>' +
       '</div>' +
-      '<div class="tiny muted" style="margin-top:0.35rem">Atomic test ' + (sw.currentIndex + 1) + '/' + sw.totalTechniques + ': ' + x(sw.currentTechnique) + '</div>' +
-      '<div class="tiny muted" id="vex-sweep-variant-' + x(sw.id) + '">Loading current variant…</div>' +
+      '<div class="vex-sw-variant" id="vex-sweep-variant-' + x(sw.id) + '">Loading current variant…</div>' +
     '</div>';
   }).join('');
 
@@ -590,6 +616,8 @@ export function loadVariantCoverage() {
         '</tr>';
     });
     html += '</tbody></table></div><div class="var-prev">' +
+      '<div class="var-prev-h"><span>Prevention rate per technique</span>' +
+      '<span class="var-prev-k"><i class="tone-ok"></i>75% or more <i class="tone-warn"></i>40–74% <i class="tone-bad"></i>under 40%</span></div>' +
       hbars(cr.map(function(r) { return [r.technique, r.pct, M.preventionTone(r.pct), r.pct + '%']; })) + '</div>';
     el.innerHTML = html;
   }).catch(function(e) {
