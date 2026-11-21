@@ -6572,7 +6572,7 @@
   {
     "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
     "index": 1,
-    "technique_id": "T1003.002",
+    "technique_id": "T1003.001",
     "action_key": "",
     "framework": "custom",
     "class": "non_destructive",
@@ -6581,6 +6581,375 @@
   {
     "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
     "index": 2,
+    "technique_id": "T1003.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 3,
+    "technique_id": "T1003.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 4,
+    "technique_id": "T1003.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 5,
+    "technique_id": "T1003.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 6,
+    "technique_id": "T1003.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 7,
+    "technique_id": "T1003.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 8,
+    "technique_id": "T1003.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 9,
+    "technique_id": "T1003.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 10,
+    "technique_id": "T1003.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 11,
+    "technique_id": "T1003.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 12,
+    "technique_id": "T1003.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 13,
+    "technique_id": "T1003.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 14,
+    "technique_id": "T1003.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 15,
+    "technique_id": "T1003.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 16,
+    "technique_id": "T1003.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 17,
+    "technique_id": "T1003.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 18,
+    "technique_id": "T1003.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 19,
+    "technique_id": "T1003.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 20,
+    "technique_id": "T1003.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 21,
+    "technique_id": "T1003.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 22,
+    "technique_id": "T1003.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 23,
+    "technique_id": "T1555",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 24,
+    "technique_id": "T1555",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 25,
+    "technique_id": "T1555",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 26,
+    "technique_id": "T1555",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 27,
+    "technique_id": "T1555",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 28,
+    "technique_id": "T1555.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 29,
+    "technique_id": "T1555.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 30,
+    "technique_id": "T1555.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 31,
+    "technique_id": "T1003.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 32,
+    "technique_id": "T1003.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 33,
+    "technique_id": "T1558",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 34,
+    "technique_id": "T1558",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 35,
+    "technique_id": "T1558.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 36,
+    "technique_id": "T1550",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 37,
+    "technique_id": "T1550",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 38,
+    "technique_id": "T1557",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 39,
+    "technique_id": "T1087",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 40,
+    "technique_id": "T1003.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 41,
+    "technique_id": "T1003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 42,
+    "technique_id": "T1003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-04-credential-theft.yaml",
+    "index": 43,
     "technique_id": "T1003",
     "action_key": "",
     "framework": "custom",
