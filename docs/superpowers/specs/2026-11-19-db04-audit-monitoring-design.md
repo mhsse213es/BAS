@@ -184,6 +184,11 @@ before it is used in a report.
    filesystem permissions.
 5. **Tests 13 and 14 kept, lab-only.** Controlled, reversible configuration changes on
    isolated lab instances; verify detection and restoration. Never run against production.
+6. **MySQL audit source: Percona Audit Log Plugin accepted (2026-11-21).** This is the "explicitly
+   supported equivalent" named in decision 2. The lab runs Percona Server 8.0.46 with the `audit_log`
+   plugin (JSON, policy ALL, SYNCHRONOUS), which is the authoritative MySQL evidence for tests 03–08,
+   10, 13, 14, 16 and 17. The general log stays supplementary and never counts as audit evidence.
+   The conflict recorded in section 12 is resolved by this decision.
 
 Build constraints: keep the per-run fixture lifecycle, synthetic data, verified cleanup and
 explicit PASS / FAIL / ERROR / SKIPPED outcomes. Do not merge until the full validation
@@ -222,7 +227,7 @@ The design above was written without checking the repository. These already exis
 agent gets no file access. This matches decision 4: it is a documented, database-provided
 interface, and the limitation (file-backed, provisioned by the operator) is recorded here.
 
-**MySQL audit source: conflict with decision 2.** The current MySQL implementation reads
+**MySQL audit source: conflict with decision 2 (RESOLVED by decision 6, 2026-11-21).** The current MySQL implementation reads
 `mysql.general_log` and `performance_schema` statement history as the audit source. Decision
 2 says the general log is supplementary only and the authoritative source is the Enterprise
 Audit plugin or an explicitly supported equivalent. The lab's MySQL is Community, which has
