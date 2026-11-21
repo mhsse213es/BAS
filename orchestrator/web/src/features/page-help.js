@@ -9,17 +9,18 @@ import { helpFor } from './page-help-content.js';
 
 var PANEL_ID = 'page-help';
 
-// currentTab: the id of the page showing now, or ''. Pages are shown and hidden with inline display styles, so
-// several page blocks can lack the is-hidden class at once. The active navigation item is the reliable answer;
-// the displayed block is the fallback.
+// currentTab: the id of the page showing now, or ''. A page counts as showing when it has no is-hidden class and is
+// not displayed as none (pages are also shown and hidden with inline styles, so the class alone is not enough). If
+// several pages pass that test, the one the navigation marks active wins.
 export function currentTab() {
+  var shown = [];
+  document.querySelectorAll('main > [id^="tab-"]').forEach(function(el) {
+    if (!el.classList.contains("is-hidden") && el.ownerDocument.defaultView.getComputedStyle(el).display !== "none") shown.push(el.id.replace(/^tab-/, ''));
+  });
+  if (!shown.length) return '';
   var nav = document.querySelector('.nav-item.active[data-tab]');
-  if (nav && nav.getAttribute('data-tab')) return nav.getAttribute('data-tab');
-  var blocks = document.querySelectorAll('main > [id^="tab-"]');
-  for (var i = 0; i < blocks.length; i++) {
-    if (getComputedStyle(blocks[i]).display !== 'none') return blocks[i].id.replace(/^tab-/, '');
-  }
-  return '';
+  var active = nav ? nav.getAttribute('data-tab') : '';
+  return shown.indexOf(active) >= 0 ? active : shown[0];
 }
 
 function titleOf(tab) {
