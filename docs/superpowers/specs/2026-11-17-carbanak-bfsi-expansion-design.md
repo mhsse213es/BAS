@@ -1,7 +1,8 @@
 # Carbanak BFSI Pack Expansion — Design
 
-Status: APPROVED direction (user decisions recorded below). ATT&CK mapping validation and
-acceptance criteria documented. Implementation NOT started. Nothing built.
+Status: APPROVED (direction and implementation plan, 2026-11-21). Built so far: the ledger service
+(`cmd/carbanak-ledger-sim`), the attack-gap schema, Stage 3/4/8 corrections, and scenarios 9 and 23-28.
+Remaining: scenarios 10-15, 17-22, 29-32 and validation. See `docs/superpowers/plans/2026-11-17-carbanak-bfsi-expansion.md`.
 
 ## Intent
 
@@ -54,8 +55,8 @@ file and deletes it, so it measures nothing about the bank.
 - Windows-only endpoint stages (`supported_os: [windows]`).
 - Signing gate: every edit to a scenario file requires re-signing its `.sig`.
 - Step-contract ledger and baseline regenerated (`STEP_CONTRACT_WRITE=1`) with no new gaps.
-- `TestBuiltinScenarios_AllHaveValidProductLine` hardcodes the scenario count (currently 147);
-  bump it by one for each file added.
+- `TestBuiltinScenarios_AllHaveValidProductLine` checks a floor of 180, not an exact count;
+  no bump is needed for each file added.
 - Credential-access tier (from the approved APT29 work): LSASS uses query-only
   `PROCESS_QUERY_LIMITED_INFORMATION` (0x1000), never `PROCESS_VM_READ`. Credential Manager and
   browser stores are enumerated or probed for existence only, never read.
@@ -240,5 +241,9 @@ Registration and verification:
 ## Open decisions for you
 
 Decided: items 23 and 28 use `no_clean_attack_technique` (option b). No open decisions remain in
-this doc. Next: implementation plan, which is not to be executed until the plan and acceptance
+this doc.
+
+Ruling (plan Task 0): scenarios 24-27 are "validated with caveat", so their mappings count as validated
+and carry no `mapping: proposed` marker. Cost if wrong: caveated mappings appear in coverage reporting;
+reversible in one edit. Next: implementation plan, which is not to be executed until the plan and acceptance
 criteria are approved.

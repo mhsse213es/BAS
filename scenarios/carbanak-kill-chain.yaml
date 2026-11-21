@@ -48,10 +48,10 @@ description: >
   SAFETY: Stages 1, 3, 4, 5, 6 and 7 are production-safe and self-cleaning.
   Stage 2 (service install) is lab-only. Stage 6 captures an operator screen
   into an in-memory bitmap, reads its dimensions, and disposes it -- NO
-  screenshot is written to disk or transmitted. Stage 8 is lab-only: it writes
-  a single decoy "fraudulent transfer" record to an isolated temp dir to
-  represent the objective, then deletes it -- no real transaction, no network,
-  no credentials used. Windows only. [BAS-SIM-CARBANAK] tagged throughout.
+  screenshot is written to disk or transmitted. Stage 8 is lab-only: it calls the
+  simulated banking ledger on loopback with a synthetic operator (no real
+  credentials, no external network) and writes only a run-state file in %TEMP%.
+  It moves no money and touches no real banking system. Windows only. [BAS-SIM-CARBANAK] tagged throughout.
 author: Audspect Research
 executable: true
 local_check: false
