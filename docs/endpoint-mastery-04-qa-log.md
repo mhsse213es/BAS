@@ -92,3 +92,11 @@ FAIL (scored): 02 RunAsPPL not configured (0); 03 Credential Guard not running; 
 - FAIL (scored): 02 RunAsPPL not configured; 03 Credential Guard not running; 04 LsaCfgFlags absent; 06 LSASS ASR rule in Audit; 07 Sysmon no EID 10 in 7 days; 09 CG not in SecurityServicesConfigured; 28 one stored Credential Manager credential; 31 cached domain logons 10 (threshold 2); 38 LmCompatibilityLevel unset; 39 RestrictAnonymous 0.
 - SKIP: 05 (CG neither configured nor running), 25, 27, 29, 30, 33, 34, 35 (domain-only, no data, or not configured).
 - Runner errors seen across server runs: "An error occurred while creating the pipeline" (exit 1) for step 05 (out) and step 17 (out5). Both cleared on the next full run, and the standalone run of step 17 passed. Treated as transient runner errors; not reproduced locally.
+
+## Final client run (client-final) — DESKTOP-5TVEBSI, 2026-11-21 11:40 +05:30
+
+- Source sha256 cde… is the pre-change file; the final file's hash is b02ad3f3c83704497e04991374b841f5206867e41594390992bd3990a614c7ce.
+- Counts: **PASS 20, FAIL 13, SKIP 11, NO_VERDICT 0, ERROR 0.**
+- Step 00: FAIL. The handle was GRANTED with SeDebugPrivilege enabled. On this client RunAsPPL is absent and Credential Guard is not running, so the grant is consistent with no LSASS protection.
+- Step 17: PASS (only scecli observed; no rassfm on this client, so the accept branch was not exercised).
+- Client and server results differ as expected: server denies the handle (step 00 PASS), client grants it (step 00 FAIL). Neither is attributed yet.
