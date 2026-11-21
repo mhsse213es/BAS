@@ -987,7 +987,7 @@ steps:
       try {
         $flt = New-CimInstance -Namespace $ns -ClassName __EventFilter -Property @{Name=$fn; EventNamespace='root/cimv2'; QueryLanguage='WQL'; Query="SELECT * FROM __InstanceCreationEvent WITHIN 10 WHERE TargetInstance ISA 'Audspect_EM05_NeverExists'"} -Key Name -ErrorAction Stop
         $stage = 'consumer'
-        $con = New-CimInstance -Namespace $ns -ClassName NTEventLogEventConsumer -Property @{Name=$cn; SourceName='Application'; EventID=[uint32]1; EventType=[uint32]4} -Key Name -ErrorAction Stop
+        $con = New-CimInstance -Namespace $ns -ClassName LogFileEventConsumer -Property @{Name=$cn; Filename=(Join-Path $env:TEMP ('AudspectEM05_' + $sfx + '.log')); Text='Synthetic BAS marker; never fires'} -Key Name -ErrorAction Stop
         $stage = 'binding'
         $null = New-CimInstance -Namespace $ns -ClassName __FilterToConsumerBinding -Property @{Filter=[Microsoft.Management.Infrastructure.CimInstance]$flt; Consumer=[Microsoft.Management.Infrastructure.CimInstance]$con} -ErrorAction Stop
         $made = $true
