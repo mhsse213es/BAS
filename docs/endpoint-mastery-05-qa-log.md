@@ -56,3 +56,39 @@ Pending. Run on the lab server (WIN-2IP8FNO4MAD) with `BAS_EM05_ALLOW_WRITE_PROB
 - `scenarios/endpoint-mastery/em-05-persistence-validation.yaml` and `.sig` (51 steps; signed).
 - `orchestrator/internal/scenario/testdata/step_contract_ledger.json` (EM-05 rows only). `TestStepContract` passes; full scenario package passes.
 - `docs/endpoint-mastery-05-qa-log.md` (this log).
+
+## Lab server run (out9) — WIN-2IP8FNO4MAD, 2026-11-21 00:17 -08:00, write gate on
+
+- Source sha256 63179fb2416295b70c517ed558922ac9fd806fb1d8f7147562fea319b4f2e1ca (matches HEAD ded1ce8e).
+- Counts: **PASS 35, FAIL 17, SKIP 0, ERROR 0, NO_VERDICT 0.** First clean run of the full set.
+- All 10 write probes ran; cleanup verified for each.
+
+Established and not detected (FAIL):
+- Run / RunOnce (HKCU and HKLM): writes succeeded, no Sysmon EID 13 recorded. The Sysmon configuration does not cover CurrentVersion\Run (step 47).
+- User and all-users Startup file drops: succeeded, no EID 11 recorded.
+- IFEO Debugger for a synthetic image name: succeeded, no EID 13 recorded.
+- Task creation: succeeded, no EID 4698 recorded (task-creation audit off, step 25).
+- Service creation: PASS. The install was recorded (EID 7045) under the display name. Detection matched on the display name after the fix.
+- WMI subscription: PASS. Created, EID 5861 recorded, removed.
+
+Configuration findings (FAIL):
+- User Startup folder is redirected to C:\Users\Administrator\AppData\Local\Temp\atomictest\ (step 51). That folder contains calc.exe (step 12), an executable that runs at logon. Probably left by an Atomic Red Team test. Not removed; restoration needs owner approval.
+- Task store (System32\Tasks) grants explicit Write to NT AUTHORITY\Authenticated Users (step 21). Confirmed on server and client.
+- BootExecute is 'autocheck autochk /q /v *' rather than the default (step 40). Owner to decide.
+- Autorun not disabled for all drives (step 42); registry auditing off (step 48); Run key SACL absent (step 7).
+
+## Defects found and fixed during lab runs
+
+- Blocked-write PASS accepted any failure; now only an access-denied reason passes, other failures are ERROR.
+- Service detection searched the internal name; the event reports the display name. Display name now carries the suffix.
+- WMI subscription: NTEventLogEventConsumer rejected by the server (null value at the consumer stage); LogFileEventConsumer used instead. Binding reference type mismatch fixed by using WMI object paths.
+- **WMI cleanup removed only NTEventLogEventConsumer objects and verified the same wrong class.** A failed run (out7) left a filter and a log-file consumer on the server while reporting cleanup verified. Those objects were removed by hand (only AudspectEM05* names), and the cleanup now covers both consumer classes and verifies the same objects.
+
+## Runner notes
+
+- NO_VERDICT ("An error occurred while creating the pipeline") appeared on single steps across several runs (05, 07, 11, 17, 28, 36, 44, 47). Each cleared on re-run. Not reproduced locally.
+
+## Open
+
+- Startup redirect and calc.exe: awaiting owner approval to restore the standard Startup location and remove the file.
+- PR #23 open; not merged. Merge after owner review of the findings above.
