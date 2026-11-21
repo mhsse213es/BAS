@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"testing"
+
+	"github.com/audspect/bas/internal/dbsim"
 )
 
 // TestLiveHarnessEvidenceCovered runs only on the lab host. It is skipped unless
@@ -65,5 +67,43 @@ func TestLiveFailedLogin04(t *testing.T) {
 	t.Logf("result=%s reason=%s", res, why)
 	if res != "PASS" {
 		t.Fatalf("test 04 must PASS on the lab, got %s (%s)", res, why)
+	}
+}
+
+// TestLiveFixtureTests05to08 runs tests 05-08 on the lab host. It needs the harness
+// variables plus DBSIM_FIXTURE_PW (the dbsim_fixture password file). Each test gets its
+// own run ID: DBSIM_HARNESS_RUN with a two-digit suffix, so it must stay under 21
+// characters. Every test must PASS.
+func TestLiveFixtureTests05to08(t *testing.T) {
+	if os.Getenv("DBSIM_HARNESS_LIVE") != "1" {
+		t.Skip("live lab check: set DBSIM_HARNESS_LIVE=1 on the lab host")
+	}
+	base := os.Getenv("DBSIM_HARNESS_RUN")
+	cfg := LabConfig{
+		PasswordFile:        os.Getenv("DBSIM_HARNESS_PW"),
+		FixturePasswordFile: os.Getenv("DBSIM_FIXTURE_PW"),
+		Addr:                os.Getenv("DBSIM_HARNESS_ADDR"),
+		AuditFile:           os.Getenv("DBSIM_HARNESS_AUDIT"),
+	}
+	ctx := context.Background()
+	cases := []struct {
+		name string
+		run  func(context.Context, LabConfig, string) (dbsim.RunResult, string, error)
+	}{
+		{"05", RunPrivilegedFlush},
+		{"06", RunGrantRevoke},
+		{"07", RunSensitiveRead},
+		{"08", RunDDL},
+	}
+	for _, c := range cases {
+		res, why, err := c.run(ctx, cfg, base+c.name)
+		if err != nil {
+			t.Errorf("test %s: %v", c.name, err)
+			continue
+		}
+		t.Logf("test %s: result=%s reason=%s", c.name, res, why)
+		if res != dbsim.ResultPass {
+			t.Errorf("test %s must PASS on the lab, got %s (%s)", c.name, res, why)
+		}
 	}
 }

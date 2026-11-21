@@ -17,6 +17,11 @@ const HarnessUser = "dbsim_harness"
 // must not be readable by group or others. The DSN is built with the driver's own
 // config, so the password is never hand-concatenated.
 func DSNFromFile(path, addr string) (string, error) {
+	return dsnFromFileFor(path, addr, HarnessUser)
+}
+
+// dsnFromFileFor is DSNFromFile for a named lab account.
+func dsnFromFileFor(path, addr, user string) (string, error) {
 	fi, err := os.Stat(path)
 	if err != nil {
 		return "", fmt.Errorf("harness password file: %w", err)
@@ -29,7 +34,7 @@ func DSNFromFile(path, addr string) (string, error) {
 		return "", fmt.Errorf("harness password file: %w", err)
 	}
 	cfg := mysql.NewConfig()
-	cfg.User = HarnessUser
+	cfg.User = user
 	cfg.Passwd = strings.TrimSpace(string(raw))
 	cfg.Net = "tcp"
 	cfg.Addr = addr

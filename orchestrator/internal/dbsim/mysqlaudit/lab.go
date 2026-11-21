@@ -15,6 +15,8 @@ type LabConfig struct {
 	PasswordFile string // harness-owned, mode 600
 	Addr         string // host:port of the lab MySQL, e.g. 127.0.0.1:53306
 	AuditFile    string // the Percona audit_log file on the lab host
+	// FixturePasswordFile is the dbsim_fixture password file (tests 05-08 only).
+	FixturePasswordFile string
 }
 
 // Evidence is the harness's reading of the lab MySQL audit plugin. It opens the
