@@ -5721,7 +5721,8 @@ func (h *Handler) RunCalderaAdversary(w http.ResponseWriter, r *http.Request) {
 // connector.ConnectorStatus to avoid two sources of truth for one boolean.
 type connectorStatusResponse struct {
 	connector.ConnectorStatus
-	OTXEnabled bool `json:"otxEnabled"`
+	OTXEnabled bool                      `json:"otxEnabled"`
+	Retained   map[string]retainedSource `json:"retained,omitempty"`
 }
 
 // GET /api/connector/status
@@ -5733,12 +5734,18 @@ func (h *Handler) GetConnectorStatus(w http.ResponseWriter, r *http.Request) {
 				LastError:      "No threat-intel sources configured. Set MISP_URL/MISP_API_KEY or OPENCTI_URL/OPENCTI_API_KEY.",
 			},
 			OTXEnabled: h.getIOCProvider() != nil,
+			Retained:   h.retainedSources(r.Context(), map[string]bool{"otx": h.getIOCProvider() != nil}),
 		})
 		return
 	}
+	st := h.scheduler.Status()
+	otx := h.getIOCProvider() != nil
 	respond(w, connectorStatusResponse{
-		ConnectorStatus: h.scheduler.Status(),
-		OTXEnabled:      h.getIOCProvider() != nil,
+		ConnectorStatus: st,
+		OTXEnabled:      otx,
+		Retained: h.retainedSources(r.Context(), map[string]bool{
+			"misp": st.MISPEnabled, "opencti": st.OpenCTIEnabled, "otx": otx,
+		}),
 	})
 }
 

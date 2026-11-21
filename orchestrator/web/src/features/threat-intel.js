@@ -281,9 +281,10 @@ export function loadConnectorStatus() {
   apicall('/api/connector/status').then(function(s) {
     var bySource = s.bySource || {};
     renderIntelInsights(s);
-    _renderConnectorCard('misp', s.mispEnabled, bySource.misp, 'cs-misp-events');
-    _renderConnectorCard('opencti', s.openctiEnabled, bySource.opencti, 'cs-opencti-nodes');
-    document.getElementById('cs-otx').textContent     = s.otxEnabled     ? '✓ Enabled' : '✗ Not configured';
+    var retained = s.retained || {};
+    _renderConnectorCard('misp', s.mispEnabled, bySource.misp, 'cs-misp-events', retained.misp);
+    _renderConnectorCard('opencti', s.openctiEnabled, bySource.opencti, 'cs-opencti-nodes', retained.opencti);
+    document.getElementById('cs-otx').textContent     = s.otxEnabled ? '✓ Enabled' : (retained.otx ? '◌ Config removed · data kept (' + retained.otx.actors.toLocaleString() + ' actors)' : '✗ Not configured');
     document.getElementById('cs-bundle').textContent = s.bundleEnabled ? ('✓ Enabled (v' + (s.bundleVersion || '?') + ')') : '✗ Not configured';
     document.getElementById('cs-last-sync').textContent = s.lastSyncAt ? new Date(s.lastSyncAt).toLocaleString() : 'Never';
     document.getElementById('cs-created').textContent = (s.scenariosCreated || 0) + ' created, ' + (s.scenariosUpdated || 0) + ' updated';

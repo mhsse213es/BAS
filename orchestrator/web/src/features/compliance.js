@@ -138,9 +138,13 @@ export function loadCalderaStatus() {
 // "Threat Actor Nodes" for OpenCTI) — they're genuinely different kinds of
 // raw data, not the same concept under two names. See
 // docs/superpowers/specs/2026-07-22-connector-rich-status-cards-design.md.
-export function _renderConnectorCard(prefix, enabled, stat, rawCountElId) {
+export function _renderConnectorCard(prefix, enabled, stat, rawCountElId, retained) {
   var statusEl = document.getElementById('cs-' + prefix + '-status');
-  if (!enabled) {
+  if (!enabled && retained) {
+    // Config removed but the source's actors are still in the console: say so, and show what it still holds.
+    statusEl.textContent = '◌ Config removed · data kept';
+    statusEl.style.color = '#d29922';
+  } else if (!enabled) {
     statusEl.textContent = '✗ Not configured';
     statusEl.style.color = 'var(--muted)';
   } else if (stat && stat.error) {
@@ -150,9 +154,16 @@ export function _renderConnectorCard(prefix, enabled, stat, rawCountElId) {
     statusEl.textContent = '✓ Connected';
     statusEl.style.color = '#5cead8';
   }
-  document.getElementById(rawCountElId).textContent = stat ? stat.rawCount.toLocaleString() : '—';
-  document.getElementById('cs-' + prefix + '-actors').textContent = stat ? stat.actorCount.toLocaleString() : '—';
-  document.getElementById('cs-' + prefix + '-lastfetch').textContent = (stat && stat.fetchedAt) ? new Date(stat.fetchedAt).toLocaleString() : '—';
+  if (!enabled && retained) {
+    // Raw counts are not kept after removal; actors and the last successful sync are.
+    document.getElementById(rawCountElId).textContent = '—';
+    document.getElementById('cs-' + prefix + '-actors').textContent = retained.actors.toLocaleString();
+    document.getElementById('cs-' + prefix + '-lastfetch').textContent = retained.lastSuccessAt ? new Date(retained.lastSuccessAt).toLocaleString() : 'Never synced';
+  } else {
+    document.getElementById(rawCountElId).textContent = stat ? stat.rawCount.toLocaleString() : '—';
+    document.getElementById('cs-' + prefix + '-actors').textContent = stat ? stat.actorCount.toLocaleString() : '—';
+    document.getElementById('cs-' + prefix + '-lastfetch').textContent = (stat && stat.fetchedAt) ? new Date(stat.fetchedAt).toLocaleString() : '—';
+  }
   var errEl = document.getElementById('cs-' + prefix + '-error');
   if (stat && stat.error) { errEl.textContent = stat.error; setDisplay(errEl, ''); }
   else { setDisplay(errEl, 'none'); }
