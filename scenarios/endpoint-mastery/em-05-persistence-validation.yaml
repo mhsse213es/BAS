@@ -989,7 +989,9 @@ steps:
         $stage = 'consumer'
         $con = New-CimInstance -Namespace $ns -ClassName LogFileEventConsumer -Property @{Name=$cn; Filename=(Join-Path $env:TEMP ('AudspectEM05_' + $sfx + '.log')); Text='Synthetic BAS marker; never fires'} -Key Name -ErrorAction Stop
         $stage = 'binding'
-        $null = New-CimInstance -Namespace $ns -ClassName __FilterToConsumerBinding -Property @{Filter=[Microsoft.Management.Infrastructure.CimInstance]$flt; Consumer=[Microsoft.Management.Infrastructure.CimInstance]$con} -ErrorAction Stop
+        $fo = Get-WmiObject -Namespace $ns -Class __EventFilter -Filter ("Name='" + $fn + "'") -ErrorAction Stop
+        $co = Get-WmiObject -Namespace $ns -Class LogFileEventConsumer -Filter ("Name='" + $cn + "'") -ErrorAction Stop
+        $null = Set-WmiInstance -Namespace $ns -Class __FilterToConsumerBinding -Arguments @{Filter=$fo.__PATH; Consumer=$co.__PATH} -ErrorAction Stop
         $made = $true
       } catch { $werr = "$stage stage: " + $_.Exception.Message }
       Start-Sleep -Seconds 4
