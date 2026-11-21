@@ -458,8 +458,22 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape' && DR.id) closeSchedDrawer();
 });
 
+// Cancel asks above the table first, not with the browser's confirm box. Nothing is sent until "Cancel schedule" is pressed.
+function clearCancelConfirm() { var old = document.getElementById('sched-cancel-confirm'); if (old) old.remove(); }
+
 export function cancelScheduledAssessment(id) {
-  if (!confirm('Cancel this scheduled assessment? It will stop firing future runs; the schedule stays visible in this list as Cancelled.')) return;
+  var host = document.getElementById('sched-table-wrap');
+  clearCancelConfirm();
+  if (!host) return;
+  host.insertAdjacentHTML('beforebegin', '<div id="sched-cancel-confirm" class="init-confirm" role="alert"><span>Cancel this scheduled assessment? It will stop firing future runs; the schedule stays in this list as Cancelled.</span>' +
+    '<span class="init-confirm-acts"><button type="button" class="btn btn-sm init-confirm-yes"' + on('click', 'cancelScheduledConfirm', id) + '>Cancel schedule</button>' +
+    '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'cancelScheduledKeep') + '>Keep</button></span></div>');
+}
+
+export function cancelScheduledKeep() { clearCancelConfirm(); }
+
+export function cancelScheduledConfirm(id) {
+  clearCancelConfirm();
   apicall('/api/scheduled-assessments/' + encodeURIComponent(id) + '/cancel', { method: 'POST' }).then(function(res) {
     if (res && res.error) { showToast(res.error, 'err'); return; }
     showToast('Schedule cancelled', 'ok');
