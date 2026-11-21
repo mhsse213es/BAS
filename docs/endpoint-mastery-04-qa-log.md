@@ -55,3 +55,17 @@ Two earlier runs were used to fix checks, not as evidence:
 - `scenarios/endpoint-mastery/em-04-credential-theft.yaml.sig` — re-signed.
 - `orchestrator/internal/scenario/testdata/step_contract_ledger.json` — em-04 rows only (old SAM technique row replaced). `TestStepContract` passes; full package passes.
 - `docs/endpoint-mastery-04-qa-log.md` — this log.
+
+## Server run — WIN-2IP8FNO4MAD (Windows Server 2019 Standard Evaluation, lab.local, domain-joined)
+
+- Run at 2026-11-20 21:08 -08:00, elevated, PowerShell 5.1.17763. Source sha256 `cde79b9a…b848` (matches commit).
+- Output: `out\results.csv`, `out\results.json`, `out\summary.txt`.
+- Counts: **PASS 25, FAIL 11, SKIP 7, NO_VERDICT 1, ERROR 0, TIMEOUT 0.**
+
+FAIL (scored): 02 RunAsPPL not configured (0); 03 Credential Guard not running; 04 LsaCfgFlags absent; 06 LSASS ASR rule in Audit (action 2), not Block; 07 Sysmon running but no EID 10 in 7 days; 09 Credential Guard not in SecurityServicesConfigured; 17 unexpected notification package `rassfm`; 28 one stored Credential Manager credential; 31 cached domain logons 10 (threshold 2, recommended default); 38 LmCompatibilityLevel not set; 39 RestrictAnonymous 0.
+
+**Open items on this run:**
+- **Step 05 — NO_VERDICT** ("An error occurred while creating the pipeline", exit 1). Not a check result. The same command ran cleanly on the client (SKIP, neither configured nor running). Not reproduced locally. Treat as a transient runner error and re-run the full set; a repeat would need investigation.
+- **Step 00 — PASS on denial is not attributable.** The `PROCESS_VM_READ` request was denied (Win32 error 5) with RunAsPPL=0 and Credential Guard not running. The denial is therefore not evidence of LSASS protection. On the client the same probe was GRANTED. The cause on the server is unknown (candidates: token privilege state, a third-party process-protection driver). Per the design, this step reports the denial without crediting a control; the PASS should not be read as "protected".
+- **Step 17 — `rassfm` in notification packages.** Flagged as unexpected. It is a Remote Access notification package that can be present by default on Server installs. Owner should confirm whether RAS is installed before treating this as a finding.
+- Steps 05 and 17 need owner or re-run confirmation before the server counts are final.
