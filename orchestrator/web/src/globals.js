@@ -1,5 +1,5 @@
 import { x } from './core/escape.js';
-import { closeFactoryDrawerOnBackdrop, closeFactorySource, recheckFactoryHealth, openFactorySource, fhTableQuery, clearFhTableQuery, setFhPer, fhPage, fhSortBy, toggleFhCols, fhColToggle, fhSelectRow, fhSelectAll, clearFhSelection, fhRowKeydown, exportFhCsv, exportFhSelected } from './features/factory-health.js';
+import { closeFactoryDrawerOnBackdrop, closeFactorySource, recheckFactoryHealth, setVelocityWindow, openFactorySource, fhTableQuery, clearFhTableQuery, setFhPer, fhPage, fhSortBy, toggleFhCols, fhColToggle, fhSelectRow, fhSelectAll, clearFhSelection, fhRowKeydown, exportFhCsv, exportFhSelected } from './features/factory-health.js';
 import { stopEvent } from './core/actions.js';
 import { loadSegmentation, segRefresh, segRun, segSelect } from './features/segmentation.js';
 import { apiInvSelect, apiInvImport, apiInvLoadFile, apiInvFilter, apiInvVersion, apiInvDrift, apiInvExample, apiInvPlanBinding, apiInvRefresh, apiInvSaveBinding, apiInvDeleteBinding, apiInvExampleWrite, apiInvRunBound, apiInvJob, apiInvJobsRefresh, apiInvWriteOp, apiInvWriteSync, apiInvWriteApply, apiInvWriteClear, apiInvWriteEdit, apiInvWriteRemove, apiInvSaveSchedule, apiInvSchedMode, apiInvAllJobsRefresh, apiInvAllJobsFilter, apiInvAllJobsMore, apiInvAllJob, apiInvRemoveSchedule, apiInvExampleChecks, apiInvJobsFilter, apiInvJobsMore } from './features/api-inventory.js';
@@ -114,6 +114,7 @@ export const ACTIONS = {
   closeCovDrawerOnBackdrop,
   recalcCoverage,
   recheckFactoryHealth,
+  setVelocityWindow,
   apiInvSelect,
   segRefresh,
   segRun,
