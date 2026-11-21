@@ -65,3 +65,34 @@
 
 /* Wizard footer buttons keep their natural width (no clipping in either theme). */
 .wz-actions .btn { width: auto; flex: none; white-space: nowrap; }
+
+/* Change-freeze windows: a proper form with the console's field and button look. */
+#blk-card { padding: 18px 20px; border-radius: 14px; }
+#blk-card .rk-card-head h3 { font-size: 16px; font-weight: 700; }
+#blk-form { display: flex; flex-direction: column; gap: 6px; max-width: 620px; margin-top: 12px; }
+#blk-form > label, #blk-once-fields > label, #blk-daily-fields > label { margin-top: 10px; font-size: 12px; font-weight: 600; color: var(--muted-hi, var(--text)); }
+#blk-form input[type="text"], #blk-form input[type="date"], #blk-form input[type="datetime-local"], #blk-form select { width: 100%; height: 40px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--elevated); color: var(--text); font: inherit; }
+#blk-form select { appearance: none; -webkit-appearance: none; padding-right: 34px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b9bb4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 11px center; background-size: 14px; cursor: pointer; }
+#blk-form input:focus, #blk-form select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.35), 0 0 14px rgba(59,130,246,.25); }
+#blk-weekdays { display: flex; flex-wrap: wrap; gap: 8px; }
+#blk-weekdays label { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--elevated); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+#blk-weekdays label:has(input:checked) { border-color: var(--accent-border); background: var(--accent-dim); color: var(--accent); }
+#blk-weekdays input { accent-color: var(--accent); }
+#blk-form > .btn-primary { justify-self: start; margin-top: 14px; height: 40px; padding: 0 18px; border: 0; border-radius: 10px; color: #fff; font-weight: 600; background: linear-gradient(180deg, #4f8cff 0%, #2563eb 100%); box-shadow: 0 8px 22px rgba(37,99,235,.35), inset 0 1px 0 rgba(255,255,255,.25); }
+#blk-form > .btn-primary:hover { background: linear-gradient(180deg, #60a0ff 0%, #2f6ff0 100%); }
+#blk-err:empty { display: none; }
+
+/* Scheduled table: Edit and Cancel are compact; the table keeps its own horizontal scroll. */
+#sched-table-wrap .sched-actions .btn { height: 30px; padding: 0 10px; border-radius: 8px; font-size: 12.5px; }
+
+/* View switch and toolbar buttons: the console's raised control and accent buttons. */
+#tab-scheduled-assessments .rk-seg { display: inline-flex; gap: 4px; padding: 4px; background: var(--elevated); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.18); max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+#tab-scheduled-assessments .rk-seg button { height: 34px; padding: 0 14px; border: 0; border-radius: 9px; background: transparent; color: var(--muted-hi); font-weight: 600; font-size: 13px; white-space: nowrap; cursor: pointer; }
+#tab-scheduled-assessments .rk-seg button.on { color: #fff; background: linear-gradient(180deg, #4f8cff 0%, #2563eb 100%); box-shadow: 0 6px 16px rgba(37,99,235,.35), inset 0 1px 0 rgba(255,255,255,.25); }
+#tab-scheduled-assessments .rk-seg button:hover:not(.on) { background: var(--hover); color: var(--text); }
+#tab-scheduled-assessments .rk-seg-n { display: inline-block; min-width: 20px; padding: 1px 6px; margin-left: 4px; border-radius: 999px; background: var(--hover); font-size: 11px; font-weight: 700; }
+#tab-scheduled-assessments .rk-seg button.on .rk-seg-n { background: rgba(255,255,255,.22); }
+@media (max-width: 700px) {
+  #tab-scheduled-assessments .rk-seg { display: flex; flex-wrap: nowrap; width: 100%; overflow-x: auto; }
+  #tab-scheduled-assessments .rk-seg button { flex: 0 0 auto; padding: 0 12px; font-size: 12.5px; }
+}
