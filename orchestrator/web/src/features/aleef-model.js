@@ -67,7 +67,24 @@ export function runSummary(run) {
     };
   });
   var orphans = Array.isArray(r.orphans) ? r.orphans : [];
+  var model = rep ? (pick(rep, 'Model', 'model') || {}) : {};
+  var gen = rep ? (pick(rep, 'Generated', 'generated') || {}) : {};
+  var fnd = rep ? pick(rep, 'Findings', 'findings') : null;
+  var reasons = [];
+  var noFix = pick(gen, 'NoFixtureOps', 'no_fixture_ops') || {};
+  Object.keys(noFix).sort().forEach(function(op) {
+    reasons.push(op + ': the run had no test object of type "' + noFix[op] + '", so no test could be built. Add a setup step that creates one.');
+  });
+  rows.forEach(function(row) { if (row.skipped && reasons.indexOf(row.operation + ': ' + row.skipped) < 0) reasons.push(row.operation + ': ' + row.skipped); });
+  var halted = rep ? (pick(rep, 'Halted', 'halted') || '') : '';
+  if (halted) reasons.push('Halted: ' + halted);
   return {
+    operations: pick(model, 'Operations', 'operations') || 0,
+    runnable: pick(model, 'Runnable', 'runnable') || 0,
+    requests: rep ? (pick(rep, 'Requests', 'requests') || 0) : 0,
+    findings: Array.isArray(fnd) ? fnd.length : (fnd || 0),
+    verified: rep ? (pick(rep, 'Verified', 'verified') || 0) : 0,
+    reasons: reasons,
     runId: r.run_id || '', status: r.status || '', finished: isRunFinished(r.status || ''),
     error: r.error || '', haltedReason: r.halted_reason || '',
     orphans: orphans.map(function(o) {

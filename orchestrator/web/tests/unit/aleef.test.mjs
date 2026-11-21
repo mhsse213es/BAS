@@ -101,7 +101,7 @@ test('run card shows coverage, halted reason and an orphans warning, as text', (
   assert.match(host.textContent, /Halted: <img/);
   assert.match(host.textContent, /Orphaned objects: 1/);
   assert.match(host.textContent, /get_items/);
-  assert.match(host.textContent, /4 generated, 3 executed, 1 not executed/);
+  assert.match(host.textContent, /Tests generated43 executed, 1 not executed/);
 });
 
 test('class table defaults every operation to unknown and offers the five classes', () => {
@@ -299,4 +299,26 @@ test('download file name is sanitised and capped', () => {
   assert.equal(safeFileId('../../a b<c>.json'), '.._.._a_b_c_.json');
   assert.equal(safeFileId('x'.repeat(200)).length, 64);
   assert.equal(safeFileId(''), 'finding');
+});
+
+// Run summary built from the real report shape of completed run 074ed860 (one read operation, nothing generated).
+import { runSummary as rs2 } from '../../src/features/aleef-model.js';
+test('runSummary explains a run that generated no tests', () => {
+  const s = rs2({ run_id: 'r1', status: 'completed', report: {
+    Requests: 0, Findings: null, Verified: 0, Total: 0, Executed: 0,
+    Model: { Operations: 1, Runnable: 1 },
+    Generated: { NoFixtureOps: { get_accounts_by_id: 'account' } },
+    PerOperation: { get_accounts_by_id: { Class: 'read', Generated: 0, Skipped: 'no fixture object of resource type account' } } } });
+  assert.equal(s.operations, 1);
+  assert.equal(s.requests, 0);
+  assert.equal(s.findings, 0);
+  assert.equal(s.total, 0);
+  assert.match(s.reasons[0], /get_accounts_by_id: the run had no test object of type "account"/);
+  assert.equal(s.reasons.length, 2);
+});
+test('runSummary counts findings from an array', () => {
+  const s = rs2({ status: 'completed', report: { Findings: [{}, {}], Requests: 12, Model: { Operations: 2, Runnable: 2 } } });
+  assert.equal(s.findings, 2);
+  assert.equal(s.requests, 12);
+  assert.equal(s.reasons.length, 0);
 });

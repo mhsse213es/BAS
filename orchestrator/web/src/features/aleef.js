@@ -229,6 +229,14 @@ function tableOf(headers, rows) {
   return el('table', { class: 'tbl' }, [thead, tbody]);
 }
 
+function tile(label, value, note) {
+  return el('div', { class: 'aleef-tile' }, [
+    el('span', { class: 'aleef-tile-label', text: label }),
+    el('strong', { class: 'aleef-tile-value', text: String(value) }),
+    el('span', { class: 'aleef-tile-note', text: note })
+  ]);
+}
+
 export function renderRunCard(host, run, perms, confirming) {
   clear(host);
   if (!run) return;
@@ -246,10 +254,23 @@ export function renderRunCard(host, run, perms, confirming) {
     w.appendChild(tableOf(['Operation', 'Object id', 'Owner'], s.orphans.map(function(o) { return [o.operation, o.id, o.owner]; })));
     host.appendChild(w);
   }
-  if (s.total || s.coverage.length) {
-    host.appendChild(el('p', { text: 'Tests: ' + s.total + ' generated, ' + s.executed + ' executed, ' + s.notExecuted + ' not executed.' }));
-    host.appendChild(tableOf(['Operation', 'Class', 'Generated', 'Executed', 'Not executed', 'Findings', 'Verified', 'Skipped'],
+  var tiles = el('div', { class: 'aleef-tiles' }, [
+    tile('Operations found', s.operations, 'of ' + s.runnable + ' runnable'),
+    tile('Tests generated', s.total, s.executed + ' executed, ' + s.notExecuted + ' not executed'),
+    tile('Requests sent', s.requests, 'to the target'),
+    tile('Findings', s.findings, s.verified + ' verified')
+  ]);
+  host.appendChild(tiles);
+  if (s.reasons.length && s.finished) {
+    var why = el('div', { class: 'aleef-why', role: 'note' }, [el('strong', { text: s.total === 0 ? 'Why no tests ran' : 'Notes from this run' })]);
+    why.appendChild(el('ul', null, s.reasons.map(function(t) { return el('li', { text: t }); })));
+    host.appendChild(why);
+  }
+  if (s.coverage.length) {
+    var det = el('details', { class: 'aleef-details' }, [el('summary', { text: 'Coverage by operation' })]);
+    det.appendChild(tableOf(['Operation', 'Class', 'Generated', 'Executed', 'Not executed', 'Findings', 'Verified', 'Skipped'],
       s.coverage.map(function(c) { return [c.operation, c.cls, c.generated, c.executed, c.notExecuted, c.findings, c.verified, c.skipped]; })));
+    host.appendChild(det);
   }
   if (!s.finished && perms.run) {
     if (confirming) {

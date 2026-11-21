@@ -77,3 +77,17 @@
   #tab-aleef .aleef-card { padding: 16px 14px 18px 18px; }
   #tab-aleef .aleef-grid { grid-template-columns: 1fr; }
 }
+
+/* Run summary: four tiles, a plain-language explanation when nothing ran, and the detail table folded away. */
+#tab-aleef .aleef-tiles { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; margin: 12px 0 14px; }
+#tab-aleef .aleef-tile { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--elevated); }
+#tab-aleef .aleef-tile-label { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted-hi); }
+#tab-aleef .aleef-tile-value { font-size: 24px; font-weight: 800; color: var(--text); }
+#tab-aleef .aleef-tile-note { font-size: 12px; color: var(--muted-hi); }
+#tab-aleef .aleef-why { margin: 0 0 12px; padding: 12px 14px; border-radius: 11px; border: 1px solid rgba(251,191,36,.35); background: rgba(251,191,36,.08); color: #fde68a; font-size: 13px; line-height: 1.5; }
+#tab-aleef .aleef-why strong { display: block; margin-bottom: 4px; color: #fbbf24; }
+#tab-aleef .aleef-why ul { margin: 0; padding-left: 18px; }
+#tab-aleef .aleef-details { margin: 6px 0 12px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); }
+#tab-aleef .aleef-details > summary { cursor: pointer; padding: 10px 14px; font-weight: 700; font-size: 13px; }
+#tab-aleef .aleef-details > .tbl, #tab-aleef .aleef-details > table { margin: 0 10px 12px; width: calc(100% - 20px); }
+@media (max-width: 720px) { #tab-aleef .aleef-tiles { grid-template-columns: 1fr 1fr; } }
