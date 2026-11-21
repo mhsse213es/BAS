@@ -133,3 +133,14 @@
 #tab-aleef .aleef-cell-date { color: var(--muted); font-variant-numeric: tabular-nums; }
 #tab-aleef .aleef-hash { color: var(--muted); }
 #tab-aleef .aleef-findings-table th:first-child, #tab-aleef .aleef-findings-table td:first-child { padding-left: 14px; }
+
+/* Verified table fits the card: no forced width, Actions wraps its dropdown and buttons instead of pushing the table wider. */
+#tab-aleef .aleef-findings-table { min-width: 0; }
+#tab-aleef .aleef-findings-table td:last-child { min-width: 0; white-space: normal; }
+#tab-aleef .aleef-findings-table td:last-child .btn { white-space: normal; width: 100%; }
+#tab-aleef .aleef-findings-table td:last-child select { min-width: 0; }
+#tab-aleef .aleef-findings-table td[data-col="test"] { word-break: break-all; }
+#tab-aleef .aleef-findings-table th { white-space: normal; }
+#tab-aleef .aleef-findings-table td, #tab-aleef .aleef-findings-table th { padding-left: 10px; padding-right: 10px; }
+#tab-aleef .aleef-cell-date { white-space: normal; }
+#tab-aleef .aleef-findings-table td:first-child { padding-left: 14px; }
