@@ -259,7 +259,10 @@ func auditConfigNotes(settings [][]any, view []any) []string {
 		state = "present_not_selectable"
 	}
 	notes = append(notes, auditSourceName+"="+state)
-	extension := got["pgaudit_extension"] == "present"
+	loaded := preloadHasPgaudit(got["shared_preload_libraries"])
+	notes = append(notes, "pgaudit_loaded="+map[bool]string{true: "yes", false: "no"}[loaded])
+	// pgaudit records only when preloaded, so an installed but unloaded extension is inert.
+	extension := got["pgaudit_extension"] == "present" && loaded
 	policy := "absent"
 	if pl := got["pgaudit.log"]; pl != "" && pl != "none" {
 		policy = "not_met"
@@ -312,4 +315,15 @@ func pgauditEnables(v, class string) bool {
 		}
 	}
 	return on
+}
+
+// preloadHasPgaudit reports whether a shared_preload_libraries value lists pgaudit
+// exactly (comma-separated, whitespace tolerated).
+func preloadHasPgaudit(v string) bool {
+	for _, name := range strings.Split(v, ",") {
+		if strings.TrimSpace(name) == "pgaudit" {
+			return true
+		}
+	}
+	return false
 }
