@@ -136,3 +136,12 @@
 .init-empty-act .btn-primary { height: 40px; padding: 0 18px; border: 0; border-radius: 10px; color: #fff; font-weight: 600; background: linear-gradient(180deg, #4f8cff 0%, #2563eb 100%); box-shadow: 0 8px 22px rgba(37,99,235,.35), inset 0 1px 0 rgba(255,255,255,.25); }
 .init-empty-act .btn-primary:hover { background: linear-gradient(180deg, #60a0ff 0%, #2f6ff0 100%); }
 .init-empty-act .btn-primary { width: auto; min-width: 200px; }
+
+/* In-drawer confirmation for Detach, and the create and drawer error messages as callouts. */
+.init-confirm { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 14px; padding: 12px 14px; border: 1px solid var(--warning-border, rgba(245,158,11,.35)); border-left: 3px solid #f59e0b; border-radius: 12px; background: color-mix(in srgb, #f59e0b 9%, var(--elevated)); font-size: 13px; }
+.init-confirm b { font-weight: 700; }
+.init-confirm-acts { display: flex; gap: 8px; }
+.init-confirm-yes { height: 34px; border: 1px solid var(--danger-border); border-radius: 9px; background: var(--danger-dim); color: var(--danger-text); font-weight: 700; }
+.init-confirm-yes:hover { background: var(--danger); color: #fff; }
+#init-create-error:not(:empty), .init-dr-err:not(:empty) { padding: 10px 12px; border: 1px solid var(--danger-border); border-radius: 10px; background: var(--danger-dim); color: var(--danger-text); font-size: 13px; }
+#init-create-error:not(:empty) > div, .init-dr-err:not(:empty) > div { color: inherit; }

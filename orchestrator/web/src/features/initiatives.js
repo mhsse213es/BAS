@@ -231,9 +231,20 @@ function renderInitiativeDrawer(it, progress, jobs) {
   document.getElementById('init-drawer-foot').innerHTML = foot;
 }
 
+// Detach asks inside the drawer, not with the browser's confirm box: the question sits in the drawer's error
+// strip with a red "Detach job" and a "Keep". Nothing is sent until the first button is pressed.
 export function initiativeDetachJob(jobId) {
   if (!INIT_CURRENT) return;
-  if (!confirm('Detach this job from "' + INIT_CURRENT.Name + '"?')) return;
+  var el = document.getElementById('init-drawer-error');
+  if (el) el.innerHTML = '<div class="init-confirm" role="alert"><span>Detach this job from <b>' + x(INIT_CURRENT.Name) + '</b>?</span>' +
+    '<span class="init-confirm-acts"><button type="button" class="btn btn-sm init-confirm-yes"' + on('click', 'initiativeDetachConfirm', jobId) + '>Detach job</button>' +
+    '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'initiativeDetachCancel') + '>Keep</button></span></div>';
+}
+
+export function initiativeDetachCancel() { initiativeShowDrawerError(''); }
+
+export function initiativeDetachConfirm(jobId) {
+  if (!INIT_CURRENT) return;
   initiativeShowDrawerError('');
   apicall('/api/jobs/' + encodeURIComponent(jobId) + '/initiative', {
     method: 'PATCH', body: JSON.stringify({ initiativeId: '' })
