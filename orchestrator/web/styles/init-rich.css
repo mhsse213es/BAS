@@ -113,3 +113,21 @@
 #init-clear { height: 40px; padding: 0 16px; border-radius: 10px; font-weight: 600; }
 .init-card[data-state="archived"]::before { background: var(--border-hi); }
 .init-card[data-state="archived"] .init-prog > span:last-child { color: var(--muted-hi); }
+
+/* Phone width: the four views share one row and fill it evenly instead of wrapping "All" onto its own line. */
+@media (max-width: 560px) {
+  #init-filter { width: 100%; }
+  #init-filter .rk-seg { display: flex; width: 100%; }
+  #init-filter .rk-seg button { flex: 1 1 0; min-width: 0; padding: 0 6px; font-size: 12px; white-space: nowrap; }
+  #init-filter .rk-seg-n { margin-left: 3px; padding: 1px 5px; }
+}
+
+/* Create and attach dialogs: same field and button look as the rest of the page. */
+#init-create-overlay .init-mbd .modal-lbl, #init-attach-overlay .init-mbd .modal-lbl { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted-hi); }
+#init-create-overlay .init-field, #init-attach-overlay .init-field { height: 40px; padding: 9px 12px; border-radius: 9px; }
+#init-create-overlay textarea.init-field { height: auto; }
+#init-create-overlay .init-field:focus, #init-attach-overlay .init-field:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.35), 0 0 14px rgba(59,130,246,.25); }
+.init-mft .btn-primary { border: 0; border-radius: 10px; color: #fff; background: linear-gradient(180deg, #4f8cff 0%, #2563eb 100%); box-shadow: 0 8px 22px rgba(37,99,235,.35), inset 0 1px 0 rgba(255,255,255,.25); height: 38px; padding: 0 16px; font-weight: 600; }
+.init-mft .btn-primary:hover { background: linear-gradient(180deg, #60a0ff 0%, #2f6ff0 100%); }
+.init-mft .btn-outline { height: 38px; border-radius: 10px; }
+.init-attach-row { border-radius: 8px; }
