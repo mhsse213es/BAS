@@ -101,3 +101,21 @@
 .cmp-card .btn-outline.btn-sm { border-color: var(--accent-border); color: var(--accent); background: var(--accent-dim); font-weight: 600; border-radius: 9px; }
 .cmp-card .btn-outline.btn-sm:hover { background: var(--accent); color: #fff; }
 @media (max-width: 700px) { #campaign-toolbar .rk-seg { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; } }
+
+/* Campaign detail drawer: result actions and footer buttons match the accent style used on the cards. */
+#cmp-drawer-overlay .btn-outline.btn-sm { border-color: var(--accent-border); color: var(--accent); background: var(--accent-dim); font-weight: 600; border-radius: 9px; }
+#cmp-drawer-overlay .btn-outline.btn-sm:hover { background: var(--accent); color: #fff; }
+#cmp-drawer-overlay .sc-drawer-ft .btn-outline { border-radius: 10px; height: 38px; font-weight: 600; }
+
+/* New Campaign dialog: dropdowns and text fields use the same field look as the rest of the page. */
+#campaign-overlay select, #campaign-overlay input[type="text"], #campaign-overlay input[type="number"], #campaign-overlay textarea { min-height: 40px; border: 1px solid var(--border); border-radius: 9px; background-color: var(--elevated); color: var(--text); font: inherit; padding: 9px 12px; }
+#campaign-overlay select { appearance: none; -webkit-appearance: none; padding-right: 34px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b9bb4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 11px center; background-size: 14px; cursor: pointer; }
+#campaign-overlay select:focus, #campaign-overlay input:focus, #campaign-overlay textarea:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.35), 0 0 14px rgba(59,130,246,.25); }
+#campaign-overlay .btn-outline { border-radius: 10px; }
+#campaign-overlay .btn-primary { border: 0; border-radius: 10px; color: #fff; background: linear-gradient(180deg, #4f8cff 0%, #2563eb 100%); box-shadow: 0 8px 22px rgba(37,99,235,.35), inset 0 1px 0 rgba(255,255,255,.25); font-weight: 600; }
+#campaign-overlay .btn-primary:hover { background: linear-gradient(180deg, #60a0ff 0%, #2f6ff0 100%); }
+/* Stop campaign keeps its red destructive look in the drawer footer. */
+#cmp-drawer-overlay .btn-outline.btn-sm.init-del { color: var(--danger-text); border-color: var(--danger-border); background: transparent; }
+#cmp-drawer-overlay .btn-outline.btn-sm.init-del:hover { background: var(--danger-dim); color: var(--danger-text); }
+/* Footer Close stays a neutral secondary button. */
+#cmp-drawer-overlay .sc-drawer-ft .btn-outline.btn-sm:not(.init-del) { color: var(--text); background: transparent; border-color: var(--border); }
