@@ -73,3 +73,31 @@
 .init-attach-row:last-child { border-bottom: 0; }
 .init-attach-row:hover { background: var(--hover); }
 .init-attach-type { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+
+/* Richer initiative cards: a health accent along the top, a lifted hover, gradient avatars and a bold progress figure. */
+.init-card { position: relative; overflow: hidden; border-radius: 14px; padding: 18px 18px 16px; background: linear-gradient(180deg, var(--elevated) 0%, var(--panel, var(--elevated)) 100%); box-shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 6px 18px rgba(0,0,0,.18); transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+.init-card::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--accent); }
+.init-card[data-health="ok"]::before { background: linear-gradient(90deg, #22d3a6, #34d399); }
+.init-card[data-health="warn"]::before { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+.init-card[data-health="accent"]::before { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+.init-card:hover { transform: translateY(-2px); border-color: var(--accent-border); box-shadow: 0 14px 30px rgba(0,0,0,.28), 0 0 0 1px var(--accent-dim); }
+.init-card[data-state="closed"], .init-card[data-state="archived"] { opacity: .78; }
+.init-card h2 { font-size: 16px; letter-spacing: -.01em; }
+.init-sub .mono { padding: 2px 7px; border-radius: 6px; background: var(--hover); font-size: 11px; }
+.init-av { width: 22px; height: 22px; font-size: 10px; background: linear-gradient(135deg, #3b82f6, #22d3a6); color: #fff; box-shadow: 0 0 0 2px var(--elevated); }
+.init-desc { font-size: 13px; }
+.init-strip { gap: 3px; margin-top: 2px; }
+.init-strip i { height: 8px; border-radius: 4px; }
+.init-strip i.run { background: linear-gradient(90deg, #f59e0b, #fbbf24); box-shadow: 0 0 10px rgba(245,158,11,.35); }
+.init-strip i.done { background: linear-gradient(90deg, #22d3a6, #34d399); }
+.init-prog { align-items: baseline; margin-top: 12px; }
+.init-prog > span:last-child { font-size: 20px; font-weight: 800; letter-spacing: -.02em; color: var(--text); }
+.init-card[data-health="warn"] .init-prog > span:last-child { color: #fbbf24; }
+.init-card[data-health="ok"] .init-prog > span:last-child { color: #34d399; }
+.init-facts span { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 999px; background: var(--hover); }
+.init-facts span:last-child { background: transparent; padding: 0; }
+.init-meta { border-top-color: var(--border); }
+#init-filters .rk-search input { height: 40px; border-radius: 10px; }
+#init-filters .rk-search input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.35), 0 0 14px rgba(59,130,246,.25); outline: none; }
+#hero-initiatives .hero-actions .btn-primary { border: 0; background: linear-gradient(180deg, #4f8cff 0%, #2563eb 100%); box-shadow: 0 8px 22px rgba(37,99,235,.35), inset 0 1px 0 rgba(255,255,255,.25); border-radius: 10px; }
+#hero-initiatives .hero-actions .btn-primary:hover { background: linear-gradient(180deg, #60a0ff 0%, #2f6ff0 100%); }

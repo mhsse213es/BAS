@@ -129,7 +129,7 @@ function initiativeCard(it) {
   var strip = '<div class="init-strip">' + (segs.length ? segs.map(function(k) { return '<i class="' + k + '"></i>'; }).join('') : '<i></i>') + '</div>';
   var line = f ? (f.completed + ' of ' + f.total + (f.total === 1 ? ' job' : ' jobs') + ' completed') : 'Progress loading…';
   var side = f ? (f.running ? icon('play') + ' ' + f.running + ' running' : icon('ok') + ' ' + f.completed + ' completed') : '';
-  return '<div class="rk-card init-card" role="button" tabindex="0"' + on('click', 'openInitiativeDrawer', it.ID) + on('keydown', 'initiativeCardKeydown', it.ID) + '>' +
+  return '<div class="rk-card init-card" role="button" tabindex="0" data-health="' + M.barTone(it, f) + '" data-state="' + x(it.State || '') + '"' + on('click', 'openInitiativeDrawer', it.ID) + on('keydown', 'initiativeCardKeydown', it.ID) + '>' +
     '<div class="init-hd"><div class="init-hd-l"><h2>' + x(it.Name) + '</h2>' +
       '<div class="init-sub muted"><span class="mono">' + x(M.shortId(it.ID)) + '</span> · ' + avatar(it.CreatedBy) + ' ' + x(it.CreatedBy || '—') + '</div></div>' +
       '<div class="init-tags">' + chip(M.stateLabel(it.State), initiativeTone(it.State)) + (st ? pill(st.label, st.tone) : '') + '</div></div>' +
