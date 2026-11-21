@@ -510,10 +510,10 @@ steps:
       $svc = 'AudspectEM05_' + $sfx
       $since = Get-Date
       $created = $false; $cerr = ''
-      $scOut = (& sc.exe create $svc 'binPath=' 'C:\AudspectEM05_missing\probe.exe' 'start=' 'demand' 'DisplayName=' 'AudspectEM05 probe' 2>&1) | Out-String
+      $scOut = (& sc.exe create $svc 'binPath=' 'C:\AudspectEM05_missing\probe.exe' 'start=' 'demand' 'DisplayName=' "AudspectEM05 probe $sfx" 2>&1) | Out-String
       if ($LASTEXITCODE -eq 0) { $created = $true } else { $cerr = "sc.exe exit $($LASTEXITCODE): " + ($scOut -replace "\s+", " ").Trim() }
       Start-Sleep -Seconds 4
-      $d = Find-Ev 'System' @(7045) $svc $since
+      $d = Find-Ev 'System' @(7045) $sfx $since
       $cleanOk = $true
       if ($created) {
         & sc.exe delete $svc | Out-Null
@@ -985,11 +985,11 @@ steps:
       $made = $false; $werr = ''
       $stage = 'filter'
       try {
-        $flt = Set-WmiInstance -Namespace $ns -Class __EventFilter -Arguments @{Name=$fn; EventNamespace='root\cimv2'; QueryLanguage='WQL'; Query="SELECT * FROM __InstanceCreationEvent WITHIN 10 WHERE TargetInstance ISA 'Audspect_EM05_NeverExists'"} -ErrorAction Stop
+        $flt = New-CimInstance -Namespace $ns -ClassName __EventFilter -Property @{Name=$fn; EventNamespace='root/cimv2'; QueryLanguage='WQL'; Query="SELECT * FROM __InstanceCreationEvent WITHIN 10 WHERE TargetInstance ISA 'Audspect_EM05_NeverExists'"} -Key Name -ErrorAction Stop
         $stage = 'consumer'
-        $con = Set-WmiInstance -Namespace $ns -Class NTEventLogEventConsumer -Arguments @{Name=$cn; SourceName='Application'; EventID=1; EventType=4; Category=0; NumberOfInsertionStrings=1; InsertionStringTemplates=@('Synthetic BAS marker; never fires')} -ErrorAction Stop
+        $con = New-CimInstance -Namespace $ns -ClassName NTEventLogEventConsumer -Property @{Name=$cn; SourceName='Application'; EventID=[uint32]1; EventType=[uint32]4} -Key Name -ErrorAction Stop
         $stage = 'binding'
-        $null = Set-WmiInstance -Namespace $ns -Class __FilterToConsumerBinding -Arguments @{Filter=('__EventFilter.Name="' + $fn + '"'); Consumer=('NTEventLogEventConsumer.Name="' + $cn + '"')} -ErrorAction Stop
+        $null = New-CimInstance -Namespace $ns -ClassName __FilterToConsumerBinding -Property @{Filter=[Microsoft.Management.Infrastructure.CimInstance]$flt; Consumer=[Microsoft.Management.Infrastructure.CimInstance]$con} -ErrorAction Stop
         $made = $true
       } catch { $werr = "$stage stage: " + $_.Exception.Message }
       Start-Sleep -Seconds 4
