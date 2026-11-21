@@ -114,7 +114,8 @@ function renderCoverageAnalytics(d) {
     var runsTxt = d.runsAnalyzed + ' run' + (d.runsAnalyzed !== 1 ? 's' : '') + ' analysed';
     var tiles = grid(4, [
       kpi({ label: 'Techniques attempted', value: s.attempted, sub: runsTxt, icon: 'technique', tone: 'accent' }),
-      kpi({ label: 'Prevented', value: s.prevented, sub: (s.preventionRate || 0) + '% prevention rate', icon: 'ok', tone: 'ok' }),
+      // Run-window outcomes: counted over the runs above, not the last validated result the matrix shows.
+      kpi({ label: 'Prevented', value: s.prevented, sub: (s.preventionRate || 0) + '% of attempted, in these runs', icon: 'ok', tone: 'ok' }),
       kpi({ label: 'Detected only', value: s.detectedOnly, sub: 'EDR/SIEM alerted, not blocked', icon: 'warn', tone: 'warn' }),
       kpi({ label: 'Missed', value: s.missed, sub: 'No prevention, no detection', icon: 'bad', tone: 'bad' }),
     ]);
@@ -127,7 +128,7 @@ function renderCoverageAnalytics(d) {
         { name: 'Detected only', data: tac.map(function(t) { return t.detectedOnly; }), color: CHART_COLORS.warn },
         { name: 'Missed', data: tac.map(function(t) { return t.missed; }), color: CHART_COLORS.bad },
       ],
-    }) : empty('technique', 'No tactic data'), { actions: legendHtml() });
+    }) : empty('technique', 'No tactic data'), { actions: legendHtml(), sub: 'in the last ' + d.runsAnalyzed + (d.runsAnalyzed === 1 ? ' run' : ' runs') });
     var rings = card('Prevention vs detection',
       '<div class="cov-rings">' + ringBlock('Prevention rate', s.preventionRate || 0, covTone(s.preventionRate)) + ringBlock('Detection coverage', s.detectionCoverage || 0, covTone(s.detectionCoverage)) + '</div>');
     var missed = (d.byTechnique || []).filter(function(t) { return t.bestVerdict === 'missed' || t.bestVerdict === 'detectedOnly'; }).slice(0, 8);

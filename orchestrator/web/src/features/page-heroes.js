@@ -363,9 +363,9 @@ var HEROES = {
     sub: 'Detection coverage mapped to the ATT&CK matrix from validated scenario results.',
     actions: '<button type="button" class="btn btn-primary" data-on-click="recalcCoverage">' + svg('<path d="M20 11a8 8 0 10-2.3 5.7M20 5v6h-6"/>') + 'Recalculate</button>',
     stats: [
-      { id: 'cov-hs-covered', icon: ICON.mapped, value: '—', label: 'Techniques prevented' },
-      { id: 'cov-hs-detected', icon: ICON.ok, value: '—', label: 'Validated detected' },
-      { id: 'cov-hs-missed', icon: ICON.warn, value: '—', label: 'Missed' },
+      { id: 'cov-hs-covered', icon: ICON.mapped, value: '—', label: 'Prevented · last result' },
+      { id: 'cov-hs-detected', icon: ICON.ok, value: '—', label: 'Detected or prevented · last result' },
+      { id: 'cov-hs-missed', icon: ICON.warn, value: '—', label: 'Missed · last result' },
       { id: 'cov-hs-untested', icon: ICON.technique, value: '—', label: 'Untested' },
     ],
   },

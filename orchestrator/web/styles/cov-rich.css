@@ -95,3 +95,11 @@
 .cov-dr-link a { color: var(--accent); }
 
 @media (max-width: 600px) { .cov-utl-bar input, .cov-filters select { width: 100%; } }
+
+/* Privilege tiers: one column per tier, so the rings and their figures line up instead of wrapping. */
+.cov-tiers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: center; margin-bottom: 14px; }
+.cov-tiers .cov-tier { min-width: 0; }
+@media (max-width: 900px) { .cov-tiers { grid-template-columns: 1fr; } }
+
+/* Heatmap: the matrix is wider than the card on most screens, so its scrollbar stays visible. */
+.cov-heat .rg2-matrix { scrollbar-width: thin; scrollbar-color: var(--border-hi, #334155) transparent; padding-bottom: 8px; }
