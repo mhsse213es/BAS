@@ -28,21 +28,35 @@ func fixtureMarker(runID string) (string, error) {
 // run window. Any statement that is absent or was refused is FAIL, and the reason
 // names it.
 func MarkedQueryVerdict(recs []Record, marker, user string, since time.Time, want []string) (dbsim.RunResult, string) {
+	marked := markedConnections(recs, marker, user, since)
 	for _, text := range want {
-		if !auditedStatement(recs, marker, user, since, text) {
-			return dbsim.ResultFail, fmt.Sprintf("no successful marked statement for %s by %s inside the run window", text, user)
+		if !auditedStatement(recs, marked, user, since, text) {
+			return dbsim.ResultFail, fmt.Sprintf("no successful statement for %s by %s on a marked connection inside the run window", text, user)
 		}
 	}
 	return dbsim.ResultPass, fmt.Sprintf("all %d expected statements audited for %s", len(want), user)
 }
 
-func auditedStatement(recs []Record, marker, user string, since time.Time, text string) bool {
+// markedConnections returns the connection IDs that carry the run marker. MySQL can
+// drop the marker comment from a statement (GRANT is re-printed without it), so a
+// statement is attributed to the run through its connection, not its own text.
+func markedConnections(recs []Record, marker, user string, since time.Time) map[string]bool {
+	out := map[string]bool{}
+	for _, r := range recs {
+		if r.Name == "Query" && r.User == user && !r.Time.Before(since) && r.Status == 0 && strings.Contains(r.SQLText, marker) {
+			out[r.ConnectionID] = true
+		}
+	}
+	return out
+}
+
+func auditedStatement(recs []Record, marked map[string]bool, user string, since time.Time, text string) bool {
 	wantText := strings.ToUpper(text)
 	for _, r := range recs {
-		if r.Name != "Query" || r.User != user || r.Time.Before(since) || r.Status != 0 {
+		if r.Name != "Query" || r.User != user || r.Time.Before(since) || r.Status != 0 || !marked[r.ConnectionID] {
 			continue
 		}
-		if strings.Contains(r.SQLText, marker) && strings.Contains(strings.ToUpper(r.SQLText), wantText) {
+		if strings.Contains(strings.ToUpper(r.SQLText), wantText) {
 			return true
 		}
 	}

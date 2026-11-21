@@ -24,14 +24,14 @@ func DSNFromFile(path, addr string) (string, error) {
 func dsnFromFileFor(path, addr, user string) (string, error) {
 	fi, err := os.Stat(path)
 	if err != nil {
-		return "", fmt.Errorf("harness password file: %w", err)
+		return "", fmt.Errorf("password file for %s: %w", user, err)
 	}
 	if fi.Mode().Perm()&0o077 != 0 {
-		return "", fmt.Errorf("harness password file %s is readable by group or others (mode %v); chmod 600 it", path, fi.Mode().Perm())
+		return "", fmt.Errorf("password file %s for %s is readable by group or others (mode %v); chmod 600 it", path, user, fi.Mode().Perm())
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return "", fmt.Errorf("harness password file: %w", err)
+		return "", fmt.Errorf("password file for %s: %w", user, err)
 	}
 	cfg := mysql.NewConfig()
 	cfg.User = user

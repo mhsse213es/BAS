@@ -56,3 +56,30 @@ func TestFixtureRunIDIsSafeAndSpecific(t *testing.T) {
 		}
 	}
 }
+
+// MySQL drops the marker comment from some statements (GRANT is re-printed without it).
+// The run is still attributable: a marked statement on the same connection proves the
+// connection belongs to this run, and the unmarked statement is on that connection.
+func TestUnmarkedGrantIsAttributedThroughItsMarkedConnection(t *testing.T) {
+	recs := []Record{
+		fxQueryOn(FixtureUser, "77", "GRANT SELECT ON `dbsim_audit_fixture`.`sensitive_synth` TO 'dbsim_harness'@'%'", 0, fxSince.Add(time.Second)),
+		fxQueryOn(FixtureUser, "77", "/* "+fxMarker+" */ REVOKE SELECT ON dbsim_audit_fixture.sensitive_synth FROM 'dbsim_harness'@'%'", 0, fxSince.Add(2*time.Second)),
+	}
+	if res, why := MarkedQueryVerdict(recs, fxMarker, FixtureUser, fxSince, []string{"GRANT SELECT", "REVOKE SELECT"}); res != dbsim.ResultPass {
+		t.Fatalf("want PASS, got %s (%s)", res, why)
+	}
+}
+
+func TestUnmarkedStatementOnAnotherConnectionDoesNotCount(t *testing.T) {
+	recs := []Record{
+		fxQueryOn(FixtureUser, "12", "GRANT SELECT ON dbsim_audit_fixture.sensitive_synth TO 'dbsim_harness'@'%'", 0, fxSince.Add(time.Second)),
+		fxQueryOn(FixtureUser, "77", "/* "+fxMarker+" */ REVOKE SELECT ON dbsim_audit_fixture.sensitive_synth FROM 'dbsim_harness'@'%'", 0, fxSince.Add(2*time.Second)),
+	}
+	if res, _ := MarkedQueryVerdict(recs, fxMarker, FixtureUser, fxSince, []string{"GRANT SELECT", "REVOKE SELECT"}); res != dbsim.ResultFail {
+		t.Fatalf("a statement on a connection with no marked statement must not count, got %s", res)
+	}
+}
+
+func fxQueryOn(user, conn, sql string, status int, at time.Time) Record {
+	return Record{Name: "Query", Time: at, ConnectionID: conn, User: user, SQLText: sql, Status: status}
+}
