@@ -118,3 +118,18 @@
 #tab-aleef .aleef-findings-table td:last-child select { display: block; width: 100%; min-width: 0; margin-top: 8px; }
 #tab-aleef .aleef-findings-table td:last-child .btn { white-space: nowrap; }
 #tab-aleef .aleef-findings-table td[data-col="test"] { word-break: break-all; }
+
+/* Typography inside Aleef tables: one text colour for values, muted for headings and secondary text,
+   bold only for row titles and column headings. This replaces the mixed white, light and bold cells. */
+#tab-aleef .aleef-table-wrap table { color: var(--text); font-size: 13px; line-height: 1.5; }
+#tab-aleef .aleef-table-wrap th { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+#tab-aleef .aleef-table-wrap td { color: var(--text); font-weight: 400; }
+#tab-aleef .aleef-table-wrap tbody tr:nth-child(even) td { background: rgba(148,163,184,.04); }
+#tab-aleef .aleef-table-wrap tbody tr:hover td { background: var(--hover); }
+#tab-aleef .aleef-cell-title strong { font-weight: 600; color: var(--text); }
+#tab-aleef .aleef-table-wrap td code { color: #93c5fd; background: rgba(96,165,250,.10); padding: 1px 6px; border-radius: 5px; }
+#tab-aleef .aleef-table-wrap td:not(.aleef-cell-title):not(:has(code)):not(:has(.aleef-pill)):not(:has(.aleef-chip)) { color: var(--muted-hi); }
+#tab-aleef .aleef-table-wrap td:has(select), #tab-aleef .aleef-table-wrap td:has(.btn) { color: var(--text); }
+#tab-aleef .aleef-cell-date { color: var(--muted); font-variant-numeric: tabular-nums; }
+#tab-aleef .aleef-hash { color: var(--muted); }
+#tab-aleef .aleef-findings-table th:first-child, #tab-aleef .aleef-findings-table td:first-child { padding-left: 14px; }
