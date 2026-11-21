@@ -162,10 +162,10 @@ added twice. Total 31. Item 9 stays a separate scenario and Stage 5 is untouched
 | 26 | Operator session misuse | T1078 (proposed) | validated |
 | 27 | Payment transaction outside normal hours | T1078 (proposed) | validated with caveat |
 | 28 | Transaction limit modification attempt | none: `no_clean_attack_technique` | excluded from ATT&CK coverage %; included in execution and fraud-control reporting |
-| 29 | Financial document collection | T1005 | to validate at build |
-| 30 | Payment database staging simulation | T1074.001 | to validate at build |
-| 31 | Archive financial records | T1560.001 | to validate at build |
-| 32 | HTTPS financial data exfiltration simulation | T1041 | to validate at build; `.invalid` domain |
+| 29 | Financial document collection | T1005 | validated 2026-11-21 with caveat (attack.mitre.org T1005 page): collects only its own synthetic files, not existing local data |
+| 30 | Payment database staging simulation | T1074.001 | validated 2026-11-21 (attack.mitre.org T1074/001 page); no database queried |
+| 31 | Archive financial records | T1560.001 | validated 2026-11-21 (attack.mitre.org T1560/001 page); archive via PowerShell Compress-Archive |
+| 32 | HTTPS financial data exfiltration simulation | T1567 | CHANGED from T1041 and validated 2026-11-21: T1041 is exfiltration over an existing C2 channel, which this scenario lacks; T1567 (attack.mitre.org T1567 page) fits a web destination; `.invalid` domain |
 
 Only items 9 and 23–28 were validated in this pass; the rest are validated during the build.
 

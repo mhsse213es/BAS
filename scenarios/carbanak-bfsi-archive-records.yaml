@@ -1,0 +1,64 @@
+id: carbanak-bfsi-archive-records
+product_line: killchain
+name: Carbanak BFSI Archive Financial Records (Item 31)
+description: >
+  Compresses SYNTHETIC files into a run-specific archive in the temp folder,
+  verifies the archive exists, and removes the archive and its files in a
+  finally block. [BAS-SIM-CARBANAK-S31] tagged. Grounded in MITRE ATT&CK
+  T1560.001 (Archive Collected Data: Archive via Utility).
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - carbanak
+  - bfsi
+  - exfiltration
+  - t1560
+mitre_phases:
+  - collection
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+  - name: "Carbanak Item 31 -- Archive Financial Records (T1560.001)"
+    technique_id: T1560.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: lab-only
+    production_safe: true
+    risk: low
+    blast_radius: "Creates and removes one synthetic archive and its synthetic source files in a run-specific temp folder."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11 for the synthetic archive in the temp folder"
+    detection:
+      - "EDR: creation of a compressed archive of financial-named files in a temp folder by a non-administrative process"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- T1560.001"
+        url: "https://attack.mitre.org/techniques/T1560/001/"
+    last_reviewed: "2026-11-21"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $work = Join-Path $env:TEMP ('bas_carb_archive_' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+      $src = Join-Path $work 'src'
+      $zip = Join-Path $work 'records_synthetic.zip'
+      try {
+        New-Item -ItemType Directory -Path $src -Force | Out-Null
+        'Synthetic ledger extract - BAS test data, not real.' | Set-Content -Path (Join-Path $src 'ledger_synthetic.txt')
+        Compress-Archive -Path (Join-Path $src '*') -DestinationPath $zip -Force
+        $made = Test-Path -LiteralPath $zip
+        Write-Output "EXEC 31: synthetic archive created=$made. [BAS-SIM-CARBANAK-S31]"
+      } finally {
+        Remove-Item -Path $work -Recurse -Force
+      }
+      Write-Output "EXEC 31 cleanup: archive folder removed=$(-not (Test-Path -LiteralPath $work))"
+    cleanup: ""
