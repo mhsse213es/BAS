@@ -376,25 +376,33 @@ type PipelineStatus struct {
 // FactoryHealthReport is the full GET /api/analytics/factory-health
 // response (spec: docs/superpowers/specs/2026-10-13-tcf-phase11-factory-analytics-design.md).
 type FactoryHealthReport struct {
-	WindowSince               time.Time        `json:"windowSince"`
-	ThreatsProcessed          Metric           `json:"threatsProcessed"`
-	PublishedContent          Metric           `json:"publishedContent"`
-	MedianThreatToContentTCV  Metric           `json:"medianThreatToContentTcv"`
-	P95ThreatToContentTCV     Metric           `json:"p95ThreatToContentTcv"`
-	StaticValidationPassRate  Metric           `json:"staticValidationPassRate"`
-	DuplicateGenerationRate   Metric           `json:"duplicateGenerationRate"`
-	SourceToTechniqueCoverage Metric           `json:"sourceToTechniqueCoverage"`
-	ThreatsIngestedPerDay     Metric           `json:"threatsIngestedPerDay"`
-	CandidatesGenerated       Metric           `json:"candidatesGenerated"`
-	CandidatesGeneratedPerDay Metric           `json:"candidatesGeneratedPerDay"`
-	PublishedInWindow         Metric           `json:"publishedInWindow"`
-	PublishedPerDay           Metric           `json:"publishedPerDay"`
-	HandsOffPublished         Metric           `json:"handsOffPublished"`
-	HandsOffRate              Metric           `json:"handsOffRate"`
-	StageAutomationRate       Metric           `json:"stageAutomationRate"`
-	ContentFreshness          ContentFreshness `json:"contentFreshness"`
-	Pipeline                  PipelineStatus   `json:"pipeline"`
-	Trends                    Trends           `json:"trends"`
+	WindowSince                 time.Time        `json:"windowSince"`
+	ThreatsProcessed            Metric           `json:"threatsProcessed"`
+	PublishedContent            Metric           `json:"publishedContent"`
+	MedianThreatToContentTCV    Metric           `json:"medianThreatToContentTcv"`
+	P95ThreatToContentTCV       Metric           `json:"p95ThreatToContentTcv"`
+	StaticValidationPassRate    Metric           `json:"staticValidationPassRate"`
+	DuplicateGenerationRate     Metric           `json:"duplicateGenerationRate"`
+	SourceToTechniqueCoverage   Metric           `json:"sourceToTechniqueCoverage"`
+	ThreatsIngestedPerDay       Metric           `json:"threatsIngestedPerDay"`
+	CandidatesGenerated         Metric           `json:"candidatesGenerated"`
+	CandidatesGeneratedPerDay   Metric           `json:"candidatesGeneratedPerDay"`
+	PublishedInWindow           Metric           `json:"publishedInWindow"`
+	PublishedPerDay             Metric           `json:"publishedPerDay"`
+	HandsOffPublished           Metric           `json:"handsOffPublished"`
+	HandsOffRate                Metric           `json:"handsOffRate"`
+	StageAutomationRate         Metric           `json:"stageAutomationRate"`
+	ThreatsMapped               Metric           `json:"threatsMapped"`
+	CandidatesValidated         Metric           `json:"candidatesValidated"`
+	CandidatesValidatedPerDay   Metric           `json:"candidatesValidatedPerDay"`
+	CandidatesRejected          Metric           `json:"candidatesRejected"`
+	CandidatesRejectedPerDay    Metric           `json:"candidatesRejectedPerDay"`
+	RejectedByReason            map[string]int   `json:"rejectedByReason"`
+	ExecutionValidationPassRate Metric           `json:"executionValidationPassRate"`
+	ExecutionValidationErrors   Metric           `json:"executionValidationErrors"`
+	ContentFreshness            ContentFreshness `json:"contentFreshness"`
+	Pipeline                    PipelineStatus   `json:"pipeline"`
+	Trends                      Trends           `json:"trends"`
 }
 
 const staleAfter = 7 * 24 * time.Hour
@@ -447,6 +455,10 @@ func FactoryHealth(ctx context.Context, pool *pgxpool.Pool, window time.Duration
 	if err != nil {
 		return FactoryHealthReport{}, err
 	}
+	tp, err := factoryThroughput(ctx, pool, since, window)
+	if err != nil {
+		return FactoryHealthReport{}, err
+	}
 
 	median := noData("no threats have measured threat-to-emulation TCV yet")
 	p95 := noData("no threats have measured threat-to-emulation TCV yet")
@@ -456,24 +468,32 @@ func FactoryHealth(ctx context.Context, pool *pgxpool.Pool, window time.Duration
 	}
 
 	return FactoryHealthReport{
-		WindowSince:               since,
-		ThreatsProcessed:          counts.ThreatsProcessed,
-		PublishedContent:          counts.PublishedContent,
-		MedianThreatToContentTCV:  median,
-		P95ThreatToContentTCV:     p95,
-		StaticValidationPassRate:  passRate,
-		DuplicateGenerationRate:   dupRate,
-		SourceToTechniqueCoverage: counts.SourceToTechniqueCoverage,
-		ThreatsIngestedPerDay:     kpi.ThreatsIngestedPerDay,
-		CandidatesGenerated:       kpi.CandidatesGenerated,
-		CandidatesGeneratedPerDay: kpi.CandidatesGeneratedPerDay,
-		PublishedInWindow:         kpi.PublishedInWindow,
-		PublishedPerDay:           kpi.PublishedPerDay,
-		HandsOffPublished:         kpi.HandsOffPublished,
-		HandsOffRate:              kpi.HandsOffRate,
-		StageAutomationRate:       kpi.StageAutomationRate,
-		ContentFreshness:          kpi.ContentFreshness,
-		Pipeline:                  PipelineStatus{Ingestion: ingestion, Funnel: funnel, DataQuality: dq},
-		Trends:                    Trends{ThreatsProcessedByDay: threatsTrend, TCVByDay: tcvTrendPts},
+		WindowSince:                 since,
+		ThreatsProcessed:            counts.ThreatsProcessed,
+		PublishedContent:            counts.PublishedContent,
+		MedianThreatToContentTCV:    median,
+		P95ThreatToContentTCV:       p95,
+		StaticValidationPassRate:    passRate,
+		DuplicateGenerationRate:     dupRate,
+		SourceToTechniqueCoverage:   counts.SourceToTechniqueCoverage,
+		ThreatsIngestedPerDay:       kpi.ThreatsIngestedPerDay,
+		CandidatesGenerated:         kpi.CandidatesGenerated,
+		CandidatesGeneratedPerDay:   kpi.CandidatesGeneratedPerDay,
+		PublishedInWindow:           kpi.PublishedInWindow,
+		PublishedPerDay:             kpi.PublishedPerDay,
+		HandsOffPublished:           kpi.HandsOffPublished,
+		HandsOffRate:                kpi.HandsOffRate,
+		StageAutomationRate:         kpi.StageAutomationRate,
+		ThreatsMapped:               tp.ThreatsMapped,
+		CandidatesValidated:         tp.CandidatesValidated,
+		CandidatesValidatedPerDay:   tp.CandidatesValidatedPerDay,
+		CandidatesRejected:          tp.CandidatesRejected,
+		CandidatesRejectedPerDay:    tp.CandidatesRejectedPerDay,
+		RejectedByReason:            tp.RejectedByReason,
+		ExecutionValidationPassRate: tp.ExecutionValidationPassRate,
+		ExecutionValidationErrors:   tp.ExecutionValidationErrors,
+		ContentFreshness:            kpi.ContentFreshness,
+		Pipeline:                    PipelineStatus{Ingestion: ingestion, Funnel: funnel, DataQuality: dq},
+		Trends:                      Trends{ThreatsProcessedByDay: threatsTrend, TCVByDay: tcvTrendPts},
 	}, nil
 }
