@@ -76,3 +76,6 @@
 /* Charts row: the "N of M" value in the coverage gap card stays on one line. */
 #tp-charts .rk-hbar { grid-template-columns: minmax(90px, 150px) 1fr 84px; }
 #tp-charts .rk-hbar-v { white-space: nowrap; }
+
+/* Drawer History: a gap between the trend chart and the table under it. */
+.tp-hist-chart { margin-bottom: 14px; }

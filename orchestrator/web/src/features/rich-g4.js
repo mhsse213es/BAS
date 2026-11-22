@@ -370,7 +370,7 @@ export function tpHistoryHtml(hist) {
   var chart = rows.length >= 2
     ? chartSlot({ type: 'line', labels: rows.map(function(r) { return lbl(r, true); }), series: [{ name: 'Score', data: rows.map(function(r) { return r.s; }), color: C.accent }], h: 170 })
     : '';
-  return chart + '<table class="u-w100"><thead><tr><th>Date</th><th>Score</th></tr></thead><tbody>' +
+  return (chart ? '<div class="tp-hist-chart">' + chart + '</div>' : '') + '<table class="u-w100"><thead><tr><th>Date</th><th>Score</th></tr></thead><tbody>' +
     rows.map(function(r) { return '<tr><td>' + x(lbl(r)) + '</td><td>' + x(r.s) + '</td></tr>'; }).join('') + '</tbody></table>';
 }
 
