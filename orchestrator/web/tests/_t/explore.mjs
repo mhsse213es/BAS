@@ -1,0 +1,63 @@
+import { chromium } from 'playwright-core';
+import { createServer } from 'node:http'; import { extname, join, normalize, resolve } from 'node:path'; import { readFile } from 'node:fs/promises'; import { mkdirSync, writeFileSync } from 'node:fs';
+import { fixtureSet } from './fixtures-rich.mjs';
+const out = resolve(process.argv[2]); mkdirSync(out, { recursive: true });
+const dist = resolve('dist'); const strip = new RegExp('^[/]+');
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.woff2': 'font/woff2', '.svg': 'image/svg+xml' };
+const server = createServer(async (q, s) => { const p = decodeURIComponent(new URL(q.url, 'http://x').pathname); const f = join(dist, normalize(p === '/' ? '/index.html' : p).replace(strip, '')); let d; try { d = await readFile(f); } catch { s.writeHead(404).end(); return; } s.writeHead(200, { 'Content-Type': types[extname(f)] || 'application/octet-stream' }).end(d); });
+await new Promise((r) => server.listen(0, '127.0.0.1', r)); const origin = 'http://127.0.0.1:' + server.address().port;
+const fx = fixtureSet('rich'); const browser = await chromium.launch();
+const log = [];
+async function fresh(opts = {}) {
+  const page = await (await browser.newContext({ viewport: { width: opts.w || 1440, height: 900 } })).newPage();
+  const errs = []; page.on('dialog', (d) => { errs.push('dialog: ' + d.message().slice(0, 80)); d.accept(); }); page.on('pageerror', (e) => errs.push(e.message)); page.on('console', (m) => { if (m.type() === 'error') errs.push('console: ' + m.text().slice(0, 140)); });
+  await page.addInitScript(() => { localStorage.setItem('bas_role', 'admin'); localStorage.setItem('audspect_theme', 'dark'); });
+  await page.route('**/*', (r) => { const req = r.request(); const u = new URL(req.url());
+    if (u.pathname === '/api/initiatives' && opts.empty && req.method() === 'GET') return r.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    if (u.pathname === '/ready' || u.pathname.startsWith('/api/')) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fx(req.method(), u)) });
+    if (u.hostname !== '127.0.0.1') return r.fulfill({ status: 204, body: '' }); return r.continue(); });
+  await page.routeWebSocket(/ws/, () => {});
+  await page.goto(origin + '/index.html'); await page.waitForFunction(() => getComputedStyle(document.getElementById('app')).display !== 'none'); await page.waitForTimeout(700);
+  await page.evaluate(() => { const el = [...document.querySelectorAll('[data-on-click="showTab"]')].find((e) => JSON.parse(e.getAttribute('data-args') || '[]')[0] === 'initiatives'); el && el.click(); }); await page.waitForTimeout(1000);
+  return { page, errs };
+}
+const openSurfaces = (page) => page.evaluate(() => [...document.querySelectorAll('.overlay.open, .drawer-overlay.open, .ph-scrim')].map((e) => e.id || e.className));
+const toasts = (page) => page.evaluate(() => { const t = document.getElementById('toast'); const err = ['init-create-error','init-drawer-error','init-attach-error','init-empty'].map((id) => { const e = document.getElementById(id); return e && e.textContent.trim() ? id + ': ' + e.textContent.trim().slice(0, 90) : ''; }).filter(Boolean); return [t && t.className.includes('show') ? 'toast[' + t.className + ']: ' + t.textContent : '', ...err].filter(Boolean); });
+async function step(name, fn) {
+  const { page, errs } = await fresh(fn.opts || {});
+  let res;
+  try { res = await fn.run(page); } catch (e) { res = 'THREW: ' + e.message.split('\n')[0].slice(0, 120); }
+  await page.waitForTimeout(500);
+  const rec = { step: name, result: res, open: await openSurfaces(page), toast: await toasts(page), errors: errs.slice(0, 3) };
+  log.push(rec); console.log(JSON.stringify(rec));
+  await page.screenshot({ path: join(out, name.replace(/[^a-z0-9]+/gi, '_') + '.png') }).catch(() => {});
+  await page.context().close();
+}
+const clickText = (page, sel, re) => page.evaluate(([sel, re]) => { const b = [...document.querySelectorAll(sel)].find((x) => new RegExp(re).test(x.textContent) && x.offsetParent !== null); if (!b) return 'not found'; b.click(); return 'clicked: ' + b.textContent.trim().slice(0, 40); }, [sel, re]);
+const card = (page) => page.evaluate(() => { const c = document.querySelector('.init-card'); if (!c) return 'no card'; c.click(); return 'opened card'; });
+await step('filter Closed', { run: (p) => clickText(p, '#init-filter button', 'Closed') });
+await step('filter Archived', { run: (p) => clickText(p, '#init-filter button', 'Archived') });
+await step('filter All', { run: (p) => clickText(p, '#init-filter button', 'All') });
+await step('clear filters (search)', { run: async (p) => { await p.fill('#init-search', 'zzzz-nothing'); await p.waitForTimeout(500); return clickText(p, '#init-empty button, #init-clear', 'Clear'); } });
+await step('clear button after filter', { run: async (p) => { await clickText(p, '#init-filter button', 'Closed'); await p.waitForTimeout(400); return clickText(p, '#init-clear', 'Clear'); } });
+await step('refresh', { run: (p) => clickText(p, '#hero-initiatives button, button', 'Refresh') });
+await step('new initiative (hero)', { run: (p) => clickText(p, '#hero-initiatives button', 'New Initiative') });
+await step('closed initiative drawer buttons', { run: async (p) => { await clickText(p, '#init-filter button', 'Closed'); await p.waitForTimeout(500); await card(p); await p.waitForTimeout(500); return JSON.stringify(await p.evaluate(() => [...document.querySelectorAll('#init-drawer-overlay button')].map((b) => b.textContent.trim()))); } });
+await step('drawer: Archive (closed)', { run: async (p) => { await clickText(p, '#init-filter button', 'Closed'); await p.waitForTimeout(500); await card(p); await p.waitForTimeout(500); return clickText(p, '#init-drawer-overlay button', 'Archive Initiative'); } });
+await step('search no match', { run: async (p) => { await p.fill('#init-search', 'zzzz-nothing'); await p.waitForTimeout(600); return 'typed'; } });
+await step('create: empty name submit', { run: async (p) => { await clickText(p, '#hero-initiatives button', 'New Initiative'); await p.waitForTimeout(400); return clickText(p, '#init-create-overlay button', 'Create'); } });
+await step('create: cancel', { run: async (p) => { await clickText(p, '#hero-initiatives button', 'New Initiative'); await p.waitForTimeout(400); return clickText(p, '#init-create-overlay button', 'Cancel'); } });
+await step('card opens drawer', { run: (p) => card(p) });
+await step('drawer: Close', { run: async (p) => { await card(p); await p.waitForTimeout(500); return clickText(p, '#init-drawer-overlay button', '^Close$'); } });
+await step('drawer: Attach Job', { run: async (p) => { await card(p); await p.waitForTimeout(500); return clickText(p, '#init-drawer-overlay button', 'Attach Job'); } });
+await step('attach dialog: Cancel', { run: async (p) => { await card(p); await p.waitForTimeout(500); await clickText(p, '#init-drawer-overlay button', 'Attach Job'); await p.waitForTimeout(500); return clickText(p, '#init-attach-overlay button', 'Cancel'); } });
+await step('drawer: Detach first job', { run: async (p) => { await card(p); await p.waitForTimeout(500); return clickText(p, '#init-drawer-overlay button', 'Detach'); } });
+await step('detach: Keep', { run: async (p) => { await card(p); await p.waitForTimeout(500); await clickText(p, '#init-drawer-overlay button', 'Detach'); await p.waitForTimeout(300); return clickText(p, '#init-drawer-error button', 'Keep'); } });
+await step('detach: Detach job (confirm)', { run: async (p) => { await card(p); await p.waitForTimeout(500); await clickText(p, '#init-drawer-overlay button', 'Detach'); await p.waitForTimeout(300); return clickText(p, '#init-drawer-error button', 'Detach job'); } });
+await step('close: Keep open', { run: async (p) => { await card(p); await p.waitForTimeout(500); await clickText(p, '#init-drawer-overlay button', 'Close Initiative'); await p.waitForTimeout(300); return clickText(p, '#init-drawer-error button', 'Keep open'); } });
+await step('close: Close initiative (confirm)', { run: async (p) => { await card(p); await p.waitForTimeout(500); await clickText(p, '#init-drawer-overlay button', 'Close Initiative'); await p.waitForTimeout(300); return clickText(p, '#init-drawer-error button', 'Close initiative'); } });
+await step('drawer: Archive', { run: async (p) => { await card(p); await p.waitForTimeout(500); return clickText(p, '#init-drawer-overlay button', 'Archive'); } });
+await step('empty state: New Initiative', { opts: { empty: true }, run: (p) => clickText(p, '#init-empty button', 'New Initiative') });
+await step('mobile filter view', { opts: { w: 390 }, run: (p) => clickText(p, '#init-filter button', 'Archived') });
+writeFileSync(join(out, 'explore.json'), JSON.stringify(log, null, 1));
+await browser.close(); server.close();

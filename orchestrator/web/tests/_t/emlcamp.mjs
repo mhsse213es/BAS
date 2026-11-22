@@ -1,0 +1,26 @@
+import { chromium } from 'playwright-core';
+import { createServer } from 'node:http'; import { extname, join, normalize, resolve } from 'node:path'; import { readFile } from 'node:fs/promises';
+import { fixtureSet } from './fixtures-rich.mjs';
+import * as DC from './demo-c.mjs'; import * as DG15 from './demo-g15.mjs'; import * as DG16 from './demo-g16.mjs'; import * as DG17 from './demo-g17.mjs';
+const DATA = { ...DC.DEMO, ...DG15.DEMO, ...(DG16.DEMO || {}), ...(DG17.DEMO || {}) };
+const dist = resolve('dist'); const strip = new RegExp('^[/]+');
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.woff2': 'font/woff2', '.svg': 'image/svg+xml' };
+const server = createServer(async (q, s) => { const p = decodeURIComponent(new URL(q.url, 'http://x').pathname); const f = join(dist, normalize(p === '/' ? '/index.html' : p).replace(strip, '')); let d; try { d = await readFile(f); } catch { s.writeHead(404).end(); return; } s.writeHead(200, { 'Content-Type': types[extname(f)] || 'application/octet-stream' }).end(d); });
+await new Promise((r) => server.listen(0, '127.0.0.1', r)); const origin = 'http://127.0.0.1:' + server.address().port;
+const fx = fixtureSet('rich');
+const browser = await chromium.launch(); const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
+const logs = []; page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') logs.push(m.type() + ': ' + m.text().slice(0, 160)); });
+await page.addInitScript(() => { localStorage.setItem('bas_role', 'admin'); localStorage.setItem('audspect_theme', 'dark'); });
+await page.route('**/*', (r) => { const req = r.request(); const u = new URL(req.url()); const key = req.method() + ' ' + u.pathname;
+  if (DATA[key] !== undefined) { const v = typeof DATA[key] === 'function' ? DATA[key](u) : DATA[key]; return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(v) }); }
+  if (u.pathname === '/ready' || u.pathname.startsWith('/api/')) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fx(req.method(), u)) });
+  if (u.hostname !== '127.0.0.1') return r.fulfill({ status: 204, body: '' }); return r.continue(); });
+await page.routeWebSocket(/ws/, () => {});
+await page.goto(origin + '/index.html'); await page.waitForFunction(() => getComputedStyle(document.getElementById('app')).display !== 'none'); await page.waitForTimeout(700);
+await page.evaluate(() => { const el = [...document.querySelectorAll('[data-on-click="showTab"]')].find((e) => JSON.parse(e.getAttribute('data-args') || '[]')[0] === 'email'); el && el.click(); }); await page.waitForTimeout(2200);
+const state = () => page.evaluate(() => { const t = [...document.querySelectorAll('#tab-email table')].find((x) => [...x.querySelectorAll('th')].some((h) => h.textContent.trim().toUpperCase() === 'CAMPAIGN')); return { rows: t ? [...t.querySelectorAll('tbody tr')].map((r) => r.innerText.split('\n')[0].slice(0, 30) + ' ~ ' + (r.querySelector('.pill, .badge, span') || {}).textContent) : null, toolbar: document.getElementById('email-campaigns-toolbar') ? document.getElementById('email-campaigns-toolbar').innerText.replace(/\n/g, ' ') : null }; });
+console.log('before', JSON.stringify(await state()));
+await page.locator('#email-campaigns-toolbar button', { hasText: 'Running' }).first().click(); await page.waitForTimeout(1200);
+console.log('after', JSON.stringify(await state()));
+console.log('console', JSON.stringify(logs.slice(0, 6)));
+await browser.close(); server.close();

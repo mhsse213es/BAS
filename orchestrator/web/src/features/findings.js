@@ -7,6 +7,7 @@ import { covSegHtml, statTileCard } from './attack-path.js';
 import { openModal, scenarioFramework } from './reports.js';
 import { ROLE, _riskScoreColor, showTab } from './shell.js';
 import { setDisplay } from '../core/inline-style.js';
+import { openConfirmDiffModal } from './compliance.js';
 import { cssVars } from '../core/css-vars.js';
 import { kpi, card, grid, hbars, bar, seg, searchBox, empty, pill, kv, icon } from '../core/kit.js';
 import * as M from './fnd-model.js';
@@ -291,10 +292,40 @@ export function fndTech(id) {
   document.getElementById('results-overlay').classList.remove('open', 'run-mode');
   openTechnique(id);
 }
+// Accepting a risk is a decision someone has to own, so it asks first. Other statuses change straight away.
 export function setFindingStatus(id, status) {
+  if (status === 'risk_accepted') {
+    openConfirmDiffModal('Accept this risk?',
+      '<p class="tiny">Marking this finding as risk accepted records that the exposure is known and will not be fixed for now. It stays on record and can be reopened.</p>',
+      function() { _postFindingStatus(id, status); },
+      { sub: 'This is a risk decision, not a fix.', confirmLabel: 'Accept risk' });
+    return;
+  }
+  _postFindingStatus(id, status);
+}
+
+function _postFindingStatus(id, status) {
   apicall('/api/findings/' + encodeURIComponent(id) + '/status', { method: 'POST', body: JSON.stringify({ status: status }) })
     .then(function() { showToast('Finding ' + status.replace('_', ' '), 'ok'); openFinding(id); loadFindings(); })
     .catch(function(e) { showToast(e.message, 'err'); });
+}
+
+// Pick the ITSM connector (when there is more than one) and confirm the ticket(s) before anything is created.
+// Replaces the browser prompt() this used to open, which could not show the choice clearly and is not a
+// confirmation at all.
+function _confirmTicketPush(enabled, count, onPick) {
+  var multi = enabled.length > 1;
+  var list = multi
+    ? '<div class="fnd-conn-list">' + enabled.map(function(c, i) {
+        return '<label class="fnd-conn"><input type="radio" name="fnd-conn" value="' + x(c.id) + '"' + (i === 0 ? ' checked' : '') + '> ' + x(c.name) + '</label>';
+      }).join('') + '</div>'
+    : '<p class="tiny">Connector: <b>' + x(enabled[0].name) + '</b></p>';
+  var what = count === 1 ? 'one ticket for this finding' : count + ' tickets, one per finding';
+  var body = '<p class="tiny">This creates ' + what + ' in the ITSM system. Each ticket is a new record there.</p>' + list;
+  openConfirmDiffModal(count === 1 ? 'Create an ITSM ticket' : 'Create ' + count + ' ITSM tickets', body, function() {
+    var picked = multi ? document.querySelector('input[name="fnd-conn"]:checked') : null;
+    onPick(picked ? picked.value : enabled[0].id);
+  }, { sub: 'Creating tickets sends data to an external system.', confirmLabel: 'Create ticket' + (count === 1 ? '' : 's') });
 }
 
 // ── Remediation ──────────────────────────────────────────────────────────────
@@ -611,21 +642,15 @@ export function pushFindingToITSM(findingId) {
     if (!cfgs || !cfgs.length) { showToast('No ITSM connectors configured — add one in Integrations first', 'err'); return; }
     var enabled = cfgs.filter(function(c) { return c.enabled; });
     if (!enabled.length) { showToast('All connectors are disabled', 'err'); return; }
-    // If only one connector, push directly; otherwise prompt via a simple select
-    var configId = enabled.length === 1 ? enabled[0].id : null;
-    if (!configId) {
-      var chosen = prompt('Multiple connectors:\n' + enabled.map(function(c,i) { return (i+1) + '. ' + c.name; }).join('\n') + '\nEnter number:');
-      var idx = parseInt(chosen, 10) - 1;
-      if (isNaN(idx) || idx < 0 || idx >= enabled.length) return;
-      configId = enabled[idx].id;
-    }
-    apicall('/api/ticketing/push', { method: 'POST', body: JSON.stringify({ findingId: findingId, configId: configId, recordType: 'incident' }) })
-      .then(function(r) {
-        if (r.error) { showToast(r.error, 'err'); return; }
-        var msg = r.ticketId ? 'Ticket created: ' + r.ticketId : 'Ticket created';
-        showToast(msg, 'ok');
-        openFinding(findingId); // refresh drawer to show new ticket
-      }).catch(function(e) { showToast(e.message, 'err'); });
+    _confirmTicketPush(enabled, 1, function(configId) {
+      apicall('/api/ticketing/push', { method: 'POST', body: JSON.stringify({ findingId: findingId, configId: configId, recordType: 'incident' }) })
+        .then(function(r) {
+          if (r.error) { showToast(r.error, 'err'); return; }
+          var msg = r.ticketId ? 'Ticket created: ' + r.ticketId : 'Ticket created';
+          showToast(msg, 'ok');
+          openFinding(findingId); // refresh drawer to show new ticket
+        }).catch(function(e) { showToast(e.message, 'err'); });
+    });
   });
 }
 
@@ -661,22 +686,17 @@ export function bulkPushSelectedFindings() {
   loadTicketingConfigs(function(cfgs) {
     var enabled = (cfgs || []).filter(function(c) { return c.enabled; });
     if (!enabled.length) { showToast('No ITSM connectors configured', 'err'); return; }
-    var configId = enabled.length === 1 ? enabled[0].id : null;
-    if (!configId) {
-      var chosen = prompt('Multiple connectors:\n' + enabled.map(function(c,i) { return (i+1) + '. ' + c.name; }).join('\n') + '\nEnter number:');
-      var idx = parseInt(chosen, 10) - 1;
-      if (isNaN(idx) || idx < 0 || idx >= enabled.length) return;
-      configId = enabled[idx].id;
-    }
-    apicall('/api/ticketing/push/bulk', { method: 'POST', body: JSON.stringify({ findingIds: ids, configId: configId, recordType: 'incident' }) })
-      .then(function(results) {
-        if (!Array.isArray(results)) { showToast((results && results.error) || 'Push failed', 'err'); return; }
-        var ok = results.filter(function(r) { return !r.error; }).length;
-        var fail = results.length - ok;
-        showToast(ok + ' ticket' + (ok === 1 ? '' : 's') + ' created' + (fail ? ', ' + fail + ' failed' : ''), ok ? 'ok' : 'err');
-        toggleFindingsBulkMode(false);
-        loadFindings();
-      }).catch(function(e) { showToast(e.message, 'err'); });
+    _confirmTicketPush(enabled, ids.length, function(configId) {
+      apicall('/api/ticketing/push/bulk', { method: 'POST', body: JSON.stringify({ findingIds: ids, configId: configId, recordType: 'incident' }) })
+        .then(function(results) {
+          if (!Array.isArray(results)) { showToast((results && results.error) || 'Push failed', 'err'); return; }
+          var ok = results.filter(function(r) { return !r.error; }).length;
+          var fail = results.length - ok;
+          showToast(ok + ' ticket' + (ok === 1 ? '' : 's') + ' created' + (fail ? ', ' + fail + ' failed' : ''), ok ? 'ok' : 'err');
+          toggleFindingsBulkMode(false);
+          loadFindings();
+        }).catch(function(e) { showToast(e.message, 'err'); });
+    });
   });
 }
 
@@ -703,18 +723,13 @@ function _pushFindingTickets(findingIds, onOk) {
   loadTicketingConfigs(function(cfgs) {
     var enabled = (cfgs || []).filter(function(c) { return c.enabled; });
     if (!enabled.length) { showToast('No ITSM connectors configured — add one in Integrations', 'err'); return; }
-    var configId = enabled.length === 1 ? enabled[0].id : null;
-    if (!configId) {
-      var chosen = prompt('Multiple connectors:\n' + enabled.map(function(c,i) { return (i+1) + '. ' + c.name; }).join('\n') + '\nEnter number:');
-      var idx = parseInt(chosen, 10) - 1;
-      if (isNaN(idx) || idx < 0 || idx >= enabled.length) return;
-      configId = enabled[idx].id;
-    }
-    apicall('/api/ticketing/push/bulk', { method: 'POST', body: JSON.stringify({ findingIds: findingIds, configId: configId, recordType: 'incident' }) })
-      .then(function(results) {
-        var ok = (results || []).filter(function(r) { return !r.error; }).length;
-        showToast(ok + ' ticket' + (ok === 1 ? '' : 's') + ' created', ok ? 'ok' : 'err');
-        if (ok && onOk) onOk();
-      }).catch(function(e) { showToast(e.message, 'err'); });
+    _confirmTicketPush(enabled, findingIds.length, function(configId) {
+      apicall('/api/ticketing/push/bulk', { method: 'POST', body: JSON.stringify({ findingIds: findingIds, configId: configId, recordType: 'incident' }) })
+        .then(function(results) {
+          var ok = (results || []).filter(function(r) { return !r.error; }).length;
+          showToast(ok + ' ticket' + (ok === 1 ? '' : 's') + ' created', ok ? 'ok' : 'err');
+          if (ok && onOk) onOk();
+        }).catch(function(e) { showToast(e.message, 'err'); });
+    });
   });
 }

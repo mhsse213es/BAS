@@ -1,0 +1,41 @@
+import { chromium } from 'playwright-core';
+import { createServer } from 'node:http'; import { extname, join, normalize, resolve } from 'node:path'; import { readFile } from 'node:fs/promises';
+import { fixtureSet } from './fixtures-rich.mjs';
+import * as DC from './demo-c.mjs'; import * as DG15 from './demo-g15.mjs'; import * as DG16 from './demo-g16.mjs'; import * as DG17 from './demo-g17.mjs'; import * as DG3 from './demo-g3.mjs'; import * as DG12 from './demo-g12.mjs'; import * as DG18 from './demo-g18.mjs';
+const DATA = { ...DC.DEMO, ...DG15.DEMO, ...(DG16.DEMO || {}), ...(DG17.DEMO || {}), ...(DG3.DEMO || {}), ...(DG12.DEMO || {}), ...(DG18.DEMO || {}) };
+const CONFIGS = JSON.parse(process.env.CONFIGS || '[{"id":"tk-1","name":"ServiceNow","enabled":true}]');
+const dist = resolve('dist'); const strip = new RegExp('^[/]+');
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.woff2': 'font/woff2', '.svg': 'image/svg+xml' };
+const server = createServer(async (q, s) => { const p = decodeURIComponent(new URL(q.url, 'http://x').pathname); const f = join(dist, normalize(p === '/' ? '/index.html' : p).replace(strip, '')); let d; try { d = await readFile(f); } catch { s.writeHead(404).end(); return; } s.writeHead(200, { 'Content-Type': types[extname(f)] || 'application/octet-stream' }).end(d); });
+await new Promise((r) => server.listen(0, '127.0.0.1', r)); const origin = 'http://127.0.0.1:' + server.address().port;
+const fx = fixtureSet('rich');
+const browser = await chromium.launch(); const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
+const posts = []; const errs = []; page.on('pageerror', (e) => errs.push(e.message.slice(0, 140)));
+await page.addInitScript(() => { localStorage.setItem('bas_role', 'admin'); localStorage.setItem('audspect_theme', 'dark'); });
+await page.route('**/*', (r) => { const req = r.request(); const u = new URL(req.url()); const key = req.method() + ' ' + u.pathname;
+  if (req.method() !== 'GET' && u.pathname.startsWith('/api/')) posts.push(req.method() + ' ' + u.pathname);
+  if (u.pathname === '/api/ticketing/configs' || u.pathname === '/api/ticketing/connectors') return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(CONFIGS) });
+  if (u.pathname === '/api/ticketing/push') return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ticketId: 'INC0012345' }) });
+  if (DATA[key] !== undefined) { const v = typeof DATA[key] === 'function' ? DATA[key](u) : DATA[key]; return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(v) }); }
+  if (u.pathname === '/ready' || u.pathname.startsWith('/api/')) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fx(req.method(), u)) });
+  if (u.hostname !== '127.0.0.1') return r.fulfill({ status: 204, body: '' }); return r.continue(); });
+await page.routeWebSocket(/ws/, () => {});
+await page.goto(origin + '/index.html'); await page.waitForFunction(() => getComputedStyle(document.getElementById('app')).display !== 'none'); await page.waitForTimeout(700);
+await page.evaluate(() => { const el = [...document.querySelectorAll('[data-on-click="showTab"]')].find((e) => JSON.parse(e.getAttribute('data-args') || '[]')[0] === 'findings'); el && el.click(); }); await page.waitForTimeout(2200);
+const modal = () => page.evaluate(() => { const o = document.getElementById('confirm-diff-overlay'); return o && o.classList.contains('open') ? { title: document.getElementById('confirm-diff-title').textContent, sub: document.getElementById('confirm-diff-sub').textContent, btn: document.getElementById('confirm-diff-submit-btn').textContent, body: document.getElementById('confirm-diff-body').innerText.replace(/\n+/g, ' | ').slice(0, 160) } : null; });
+// 1. risk accept via the row select
+const sel = page.locator('#tab-findings tbody tr').first().locator('select.triage-sel');
+await sel.selectOption('risk_accepted'); await page.waitForTimeout(500);
+console.log('risk select ->', JSON.stringify({ modal: await modal(), posts: posts.slice() }));
+await page.locator('#confirm-diff-overlay button:has-text("Cancel")').first().click(); await page.waitForTimeout(300);
+console.log('risk cancel ->', JSON.stringify({ posts: posts.slice() }));
+await page.locator('#tab-findings tbody tr').first().locator('select.triage-sel').selectOption('risk_accepted'); await page.waitForTimeout(400);
+await page.locator('#confirm-diff-submit-btn').click(); await page.waitForTimeout(700);
+console.log('risk confirm ->', JSON.stringify({ posts: posts.slice() }));
+// 2. ticket push from the row
+await page.locator('#tab-findings tbody tr').nth(1).locator('button:has-text("+ ticket")').first().click({ timeout: 4000 }).catch(() => {}); await page.waitForTimeout(600);
+console.log('ticket ->', JSON.stringify({ modal: await modal(), posts: posts.slice() }));
+await page.locator('#confirm-diff-submit-btn').click().catch(() => {}); await page.waitForTimeout(700);
+console.log('ticket confirm ->', JSON.stringify({ posts: posts.slice(), errors: errs.slice(0, 2) }));
+await page.locator('#confirm-diff-overlay').screenshot({ path: 'C:/Users/Administrator/AppData/Local/Temp/fnd-modal.png' }).catch(() => {});
+await browser.close(); server.close();

@@ -1,0 +1,40 @@
+import { chromium } from 'playwright-core';
+import { createServer } from 'node:http'; import { extname, join, normalize, resolve } from 'node:path'; import { readFile } from 'node:fs/promises'; import { mkdirSync } from 'node:fs';
+import { fixtureSet } from './fixtures-rich.mjs';
+const out = resolve(process.argv[2]); mkdirSync(out, { recursive: true });
+const dist = resolve('dist'); const strip = new RegExp('^[/]+');
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.woff2': 'font/woff2', '.svg': 'image/svg+xml' };
+const server = createServer(async (q, s) => { const p = decodeURIComponent(new URL(q.url, 'http://x').pathname); const f = join(dist, normalize(p === '/' ? '/index.html' : p).replace(strip, '')); let d; try { d = await readFile(f); } catch { s.writeHead(404).end(); return; } s.writeHead(200, { 'Content-Type': types[extname(f)] || 'application/octet-stream' }).end(d); });
+await new Promise((r) => server.listen(0, '127.0.0.1', r)); const origin = 'http://127.0.0.1:' + server.address().port;
+const fx = fixtureSet('rich'); const browser = await chromium.launch();
+const CAT = { scenarios: [{ id: 'aws-bucket', name: 'Bucket walk', provider: 'aws', description: 'Reads buckets', steps: [{}] }] };
+async function run(mode) {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } }); const page = await ctx.newPage();
+  const errs = []; page.on('pageerror', (e) => errs.push(e.message.slice(0, 120)));
+  const posted = [];
+  await page.addInitScript(() => { localStorage.setItem('bas_role', 'admin'); localStorage.setItem('audspect_theme', 'dark'); });
+  await page.route('**/*', (r) => { const req = r.request(); const u = new URL(req.url());
+    if (u.pathname === '/api/cloud-scenarios') return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(CAT) });
+    if (u.pathname === '/api/cloud-runs' && req.method() === 'POST') { posted.push(JSON.parse(req.postData())); if (mode === 'ok') return r.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ id: 'disc-0001', status: 'completed', label: 'prod-audit' }) }); if (mode === 'forbidden') return r.fulfill({ status: 403, contentType: 'application/json', body: '{"error":"account not allowed"}' }); if (mode === 'busy') return r.fulfill({ status: 409, contentType: 'application/json', body: '{"error":"busy"}' }); return r.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"boom"}' }); }
+    if (u.pathname === '/api/cloud-runs' && req.method() === 'GET') return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'disc-0001', startedAt: new Date().toISOString(), label: 'prod-audit', account: '111111111111', status: 'completed', initiatedBy: 'me' }]) });
+    if (u.pathname === '/ready' || u.pathname.startsWith('/api/')) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fx(req.method(), u)) });
+    if (u.hostname !== '127.0.0.1') return r.fulfill({ status: 204, body: '' }); return r.continue(); });
+  await page.routeWebSocket(/ws/, () => {});
+  await page.goto(origin + '/index.html'); await page.waitForFunction(() => getComputedStyle(document.getElementById('app')).display !== 'none'); await page.waitForTimeout(700);
+  await page.evaluate(() => { const el = [...document.querySelectorAll('[data-on-click="showTab"]')].find((e) => JSON.parse(e.getAttribute('data-args') || '[]')[0] === 'cloud-scenarios'); el && el.click(); }); await page.waitForTimeout(1000);
+  await page.fill('#cloud-disc-label', 'prod-audit');
+  await page.selectOption('#cloud-disc-provider', 'aws');
+  await page.fill('#cloud-disc-account', '111111111111');
+  await page.fill('#cloud-disc-region', 'ap-south-1');
+  await page.fill('#cloud-disc-target', 'arn:aws:iam::111111111111:role/payments-admin');
+  await page.fill('#cloud-disc-held', 'arn:aws:iam::111111111111:user/asha, arn:aws:iam::111111111111:role/deploy\nci-bot');
+  await page.click('#cloud-disc-submit'); await page.waitForTimeout(700);
+  const result = await page.$eval('#cloud-disc-result', (e) => e.innerText.trim());
+  const toast = await page.evaluate(() => { const t = document.getElementById('toast'); return t && t.className.includes('show') ? t.textContent : ''; });
+  const runs = await page.$eval('#cloud-runs-list', (e) => e.innerText.slice(0, 160)).catch(() => '');
+  await page.locator('#cloud-disc-result').screenshot({ path: join(out, 'res-' + mode + '.png') }).catch(() => {});
+  console.log(JSON.stringify({ mode, posted: posted[0] || null, result, toast, runs, errs }));
+  await ctx.close();
+}
+for (const m of ['ok', 'forbidden', 'busy', 'server']) await run(m);
+await browser.close(); server.close();

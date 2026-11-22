@@ -176,9 +176,16 @@ export function _renderConnectorCard(prefix, enabled, stat, rawCountElId, retain
 // and passes a zero-arg onConfirm that performs the actual save.
 var CONFIRM_DIFF_PENDING = null; // onConfirm callback awaiting the modal's Save click
 
-export function openConfirmDiffModal(title, diffHtml, onConfirm) {
+// opts (optional): { sub, confirmLabel } replace the default subtitle and confirm button text, so a
+// confirmation for something other than a config save can say what it will do.
+export function openConfirmDiffModal(title, diffHtml, onConfirm, opts) {
+  opts = opts || {};
   document.getElementById('confirm-diff-title').textContent = title;
   document.getElementById('confirm-diff-body').innerHTML = diffHtml;
+  var sub = document.getElementById('confirm-diff-sub');
+  if (sub) sub.textContent = opts.sub || 'Review what will change before saving.';
+  var btn = document.getElementById('confirm-diff-submit-btn');
+  if (btn) btn.textContent = opts.confirmLabel || 'Save';
   CONFIRM_DIFF_PENDING = onConfirm;
   document.getElementById('confirm-diff-overlay').classList.add('open');
 }

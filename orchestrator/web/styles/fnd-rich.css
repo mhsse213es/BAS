@@ -49,3 +49,9 @@
 .fnd-foot { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--border); }
 .fnd-foot .btn { height: 34px; width: auto; display: inline-flex; align-items: center; padding: 0 14px; font-size: 13px; }
 .fnd-foot .btn svg { width: 15px; height: 15px; margin-right: 6px; flex: none; }
+
+/* ITSM connector choice inside the ticket confirmation. */
+.fnd-conn-list { display: grid; gap: 6px; margin-top: 10px; }
+.fnd-conn { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); font-size: 13px; cursor: pointer; }
+.fnd-conn:hover { border-color: var(--accent-border, var(--border)); }
+.fnd-conn input { margin: 0; }
