@@ -92,3 +92,95 @@ func TestFactoryKPIs_CountsWindowThroughputAndPublishes(t *testing.T) {
 		}
 	})
 }
+
+// seedPublishedWithEvents inserts a published version created_by createdBy with
+// the given lifecycle events (to_lifecycle, actor), the last being the publish.
+func seedPublishedWithEvents(t *testing.T, pool *pgxpool.Pool, contentID, createdBy string, events [][2]string) string {
+	t.Helper()
+	mustExec(t, pool, `INSERT INTO scenarios (scenario_id, origin) VALUES ($1, 'LOCAL') ON CONFLICT DO NOTHING`, contentID)
+	var vid string
+	if err := pool.QueryRow(context.Background(), `
+		INSERT INTO content_versions (content_id, origin, version, artifact_sha256, artifact_size, artifact_bytes,
+			trust_level, lifecycle, intake_source, schema_version, created_by)
+		VALUES ($1, 'LOCAL', 1, 'sha-'||$1, 1, 'x', 'LOCAL_TRUSTED', 'PUBLISHED_LOCAL', 'custom', 1, $2)
+		RETURNING id`, contentID, createdBy).Scan(&vid); err != nil {
+		t.Fatalf("seedPublishedWithEvents version: %v", err)
+	}
+	for _, ev := range events {
+		mustExec(t, pool, `
+			INSERT INTO content_version_events (content_version_id, to_lifecycle, to_trust, actor, at)
+			VALUES ($1, $2, 'UNTRUSTED', $3, NOW() - interval '1 hour')`, vid, ev[0], ev[1])
+	}
+	return vid
+}
+
+func linkGeneratedFor(t *testing.T, pool *pgxpool.Pool, versionID, threatID string) {
+	t.Helper()
+	mustExec(t, pool, `INSERT INTO content_version_threats
+		(content_version_id, threat_id, relationship_kind, provenance_type, provenance_ref)
+		VALUES ($1, $2, 'generated_for', 'generator', 'test')`, versionID, threatID)
+}
+
+func TestHandsOffAndStageAutomation_CountFactoryContentWithOnlyTheGateHuman(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		seedThreatWithActor(t, pool, "ho-threat-1", "Actor HO 1")
+		seedThreatWithActor(t, pool, "ho-threat-2", "Actor HO 2")
+		auto := [][2]string{{"VALIDATING", "system:validator"}, {"VALIDATED", "system:validator"}, {"PUBLISHED_LOCAL", "user:pub"}}
+
+		// 1. Factory generation (generated_for link), only the publish gate is human: hands-off.
+		v1 := seedPublishedWithEvents(t, pool, "ho-gen", "generator:connector", auto)
+		linkGeneratedFor(t, pool, v1, "ho-threat-1")
+		// 2. Composer output: hands-off.
+		seedPublishedWithEvents(t, pool, "ho-composed", "composer:admin", auto)
+		// 3. Plain intel intake shares the generator actor but has no generated_for link: NOT factory output.
+		seedPublishedWithEvents(t, pool, "ho-intake", "generator:connector",
+			[][2]string{{"DRAFT", "intake"}, {"PUBLISHED_LOCAL", "user:pub"}})
+		// 4. Human-authored version (creator is a user): NOT factory output.
+		seedPublishedWithEvents(t, pool, "ho-human", "user:alice", [][2]string{{"PUBLISHED_LOCAL", "user:alice"}})
+		// 5. Factory output, but a person also drove validation: touched, NOT hands-off.
+		v5 := seedPublishedWithEvents(t, pool, "ho-touched", "generator:connector",
+			[][2]string{{"VALIDATING", "user:bob"}, {"VALIDATED", "system:validator"}, {"PUBLISHED_LOCAL", "user:pub"}})
+		linkGeneratedFor(t, pool, v5, "ho-threat-2")
+
+		window := 30 * 24 * time.Hour
+		kpi, err := factoryKPIs(context.Background(), pool, time.Now().Add(-window), window)
+		if err != nil {
+			t.Fatalf("factoryKPIs: %v", err)
+		}
+		if *kpi.PublishedInWindow.Value != 5 {
+			t.Fatalf("PublishedInWindow = %v, want 5", *kpi.PublishedInWindow.Value)
+		}
+		if kpi.HandsOffPublished.State != DataMeasured || *kpi.HandsOffPublished.Value != 2 {
+			t.Fatalf("HandsOffPublished = %+v, want 2 (generated + composed only)", kpi.HandsOffPublished)
+		}
+		if kpi.HandsOffRate.State != DataMeasured || *kpi.HandsOffRate.Value != 0.4 {
+			t.Fatalf("HandsOffRate = %+v, want 0.4 (2 of 5)", kpi.HandsOffRate)
+		}
+		// 12 events across the five versions, 6 by non-human actors.
+		if kpi.StageAutomationRate.State != DataMeasured || *kpi.StageAutomationRate.Value != 0.5 {
+			t.Fatalf("StageAutomationRate = %+v, want 0.5 (6 of 12)", kpi.StageAutomationRate)
+		}
+	})
+}
+
+func TestHandsOffAndStageAutomation_NoDataWhenNothingPublishedInWindow(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		window := 30 * 24 * time.Hour
+		kpi, err := factoryKPIs(context.Background(), pool, time.Now().Add(-window), window)
+		if err != nil {
+			t.Fatalf("factoryKPIs: %v", err)
+		}
+		if kpi.HandsOffRate.State != DataNoData || kpi.StageAutomationRate.State != DataNoData {
+			t.Fatalf("empty window: HandsOffRate=%+v StageAutomationRate=%+v, want both NO_DATA", kpi.HandsOffRate, kpi.StageAutomationRate)
+		}
+		if kpi.HandsOffPublished.State != DataMeasured || *kpi.HandsOffPublished.Value != 0 {
+			t.Fatalf("HandsOffPublished = %+v, want a measured 0", kpi.HandsOffPublished)
+		}
+	})
+}

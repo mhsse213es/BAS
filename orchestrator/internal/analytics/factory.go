@@ -389,6 +389,9 @@ type FactoryHealthReport struct {
 	CandidatesGeneratedPerDay Metric           `json:"candidatesGeneratedPerDay"`
 	PublishedInWindow         Metric           `json:"publishedInWindow"`
 	PublishedPerDay           Metric           `json:"publishedPerDay"`
+	HandsOffPublished         Metric           `json:"handsOffPublished"`
+	HandsOffRate              Metric           `json:"handsOffRate"`
+	StageAutomationRate       Metric           `json:"stageAutomationRate"`
 	ContentFreshness          ContentFreshness `json:"contentFreshness"`
 	Pipeline                  PipelineStatus   `json:"pipeline"`
 	Trends                    Trends           `json:"trends"`
@@ -466,6 +469,9 @@ func FactoryHealth(ctx context.Context, pool *pgxpool.Pool, window time.Duration
 		CandidatesGeneratedPerDay: kpi.CandidatesGeneratedPerDay,
 		PublishedInWindow:         kpi.PublishedInWindow,
 		PublishedPerDay:           kpi.PublishedPerDay,
+		HandsOffPublished:         kpi.HandsOffPublished,
+		HandsOffRate:              kpi.HandsOffRate,
+		StageAutomationRate:       kpi.StageAutomationRate,
 		ContentFreshness:          kpi.ContentFreshness,
 		Pipeline:                  PipelineStatus{Ingestion: ingestion, Funnel: funnel, DataQuality: dq},
 		Trends:                    Trends{ThreatsProcessedByDay: threatsTrend, TCVByDay: tcvTrendPts},
