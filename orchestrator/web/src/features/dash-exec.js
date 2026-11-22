@@ -46,9 +46,9 @@ export function renderExecForecast(fc) {
   } else {
     var series = [{ name: proj.length ? 'Risk score (history + forecast)' : 'Risk score', data: all.map(function(p) { return p.score; }), color: CHART_COLORS.warn }];
     if (proj.length) series.push({ name: 'Upper bound', data: all.map(function(p) { return typeof p.high === 'number' ? p.high : p.score; }), color: CHART_COLORS.bad, dash: true });
-    body = chartSlot({ type: 'line', labels: all.map(function(p) { return 'd' + p.dayIndex; }), series: series, h: 220, area: true }) +
+    body = chartSlot({ type: 'line', labels: all.map(function(p, i) { return i < hist.length ? (hist.length - 1 - i ? (hist.length - 1 - i) + 'd ago' : 'Today') : '+' + (p.dayIndex - hist[hist.length - 1].dayIndex) + 'd'; }), series: series, h: 220, area: true }) +
       '<div class="rk-note">' + (proj.length
-        ? 'Projected to reach <b>' + x(proj[proj.length - 1].score) + '</b> by day ' + x(proj[proj.length - 1].dayIndex) + ' if the current trend continues' + (fc.confidence && fc.confidence !== 'none' ? '. Confidence: ' + x(fc.confidence) + ' (based on ' + hist.length + ' snapshots).' : '.')
+        ? 'Projected to reach <b>' + x(proj[proj.length - 1].score) + '</b> in ' + x(proj[proj.length - 1].dayIndex - (hist.length ? hist[hist.length - 1].dayIndex : 0)) + ' days if the current trend continues' + (fc.confidence && fc.confidence !== 'none' ? '. Confidence: ' + x(fc.confidence) + ' (based on ' + hist.length + ' snapshots).' : '.')
         : x(fc.note || 'Insufficient history for a forecast.')) + '</div>';
   }
   var lg = '<div class="legend"><span class="lg"><i class="dl-sw" data-bg="' + CHART_COLORS.warn + '"></i>Risk</span>' + (proj.length ? '<span class="lg"><i class="dl-sw" data-bg="' + CHART_COLORS.bad + '"></i>Upper bound</span>' : '') + '</div>';
@@ -110,8 +110,8 @@ export function renderExecRisks(findings) {
   if (!r.length) { cell('ed-risks', card('Top business risks', empty('check', findings ? 'No open critical or high findings' : 'Loading…'))); return; }
   cell('ed-risks', card('Top business risks', r.map(function(f) {
     return '<div class="rk-check rk-click"' + on('click', 'openFindingFromDashboard', f.id) + '>' + chip(f.severity, sevTone(f.severity)) +
-      '<div class="rk-check-t"><b>' + x(f.techniqueName || f.techniqueId) + '</b><span>' + x((f.controlClass || 'Unclassified') + ' domain') + '</span></div></div>';
-  }).join('')));
+      '<div class="rk-check-t"><b>' + x(f.techniqueName || f.techniqueId) + '</b><span>' + x((f.controlClass || 'Unclassified') + ' domain') + '</span></div>' + icon('chevron') + '</div>';
+  }).join(''), { actions: '<button type="button" class="rk-link"' + on('click', 'openFindingsWithStatus', 'open') + '>Open findings →</button>' }));
 }
 
 export function renderExecAll(o) {
