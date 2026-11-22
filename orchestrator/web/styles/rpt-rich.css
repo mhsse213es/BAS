@@ -150,3 +150,7 @@ td.rpt-acts { display: table-cell; white-space: nowrap; text-align: right; }
   .rpt-exec { grid-template-columns: minmax(0, 1fr) auto auto; }
   .rpt-exec-counts { display: none; }
 }
+
+/* History table: the row menu button lines up with Download. */
+.rpt-acts.end { align-items: center; }
+.rpt-menu summary { display: inline-flex; align-items: center; justify-content: center; height: 30px; }

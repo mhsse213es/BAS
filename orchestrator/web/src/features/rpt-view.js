@@ -112,7 +112,7 @@ function agentCardHtml(r) {
       '<div class="rpt-metric"><span class="rpt-metric-ico">' + RUNS_SVG + '</span><div><b>' + r.total + '</b><span>Total runs' + (r.failed ? ' · ' + r.failed + ' failed' : '') + '</span></div></div>' +
       '<div class="rpt-metric"><span class="rpt-metric-ico">' + SCEN_SVG + '</span><div><b>' + r.scenarios + '</b><span>Scenario' + (r.scenarios === 1 ? '' : 's') + '</span></div></div>' +
       '<button type="button" class="btn btn-outline btn-sm rpt-hist" aria-expanded="' + (open ? 'true' : 'false') + '"' + on('click', 'toggleRepRuns', r.id) + '>View Full History <span aria-hidden="true">' + (open ? '&#9652;' : '&#9662;') + '</span></button>' +
-    '</div>' + recentExecutionsHtml(r) + (open ? runListHtml(r) : '') + '</div>';
+    '</div>' + (open ? runListHtml(r) : recentExecutionsHtml(r)) + '</div>';
 }
 
 export function paintAvailable(rows) {
