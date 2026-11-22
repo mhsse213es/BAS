@@ -422,6 +422,10 @@ type FactoryHealthReport struct {
 	RejectedByReason            map[string]int   `json:"rejectedByReason"`
 	ExecutionValidationPassRate Metric           `json:"executionValidationPassRate"`
 	ExecutionValidationErrors   Metric           `json:"executionValidationErrors"`
+	FactoryVersions             Metric           `json:"factoryVersions"`
+	ComposedFromLibrary         Metric           `json:"composedFromLibrary"`
+	ReuseRate                   Metric           `json:"reuseRate"`
+	LibraryComponentsReused     Metric           `json:"libraryComponentsReused"`
 	ContentFreshness            ContentFreshness `json:"contentFreshness"`
 	Pipeline                    PipelineStatus   `json:"pipeline"`
 	Trends                      Trends           `json:"trends"`
@@ -481,6 +485,10 @@ func FactoryHealth(ctx context.Context, pool *pgxpool.Pool, window time.Duration
 	if err != nil {
 		return FactoryHealthReport{}, err
 	}
+	ru, err := factoryReuse(ctx, pool, since)
+	if err != nil {
+		return FactoryHealthReport{}, err
+	}
 
 	median := noData("no threats have measured threat-to-emulation TCV yet")
 	p95 := noData("no threats have measured threat-to-emulation TCV yet")
@@ -514,6 +522,10 @@ func FactoryHealth(ctx context.Context, pool *pgxpool.Pool, window time.Duration
 		RejectedByReason:            tp.RejectedByReason,
 		ExecutionValidationPassRate: tp.ExecutionValidationPassRate,
 		ExecutionValidationErrors:   tp.ExecutionValidationErrors,
+		FactoryVersions:             ru.FactoryVersions,
+		ComposedFromLibrary:         ru.ComposedFromLibrary,
+		ReuseRate:                   ru.ReuseRate,
+		LibraryComponentsReused:     ru.LibraryComponentsReused,
 		ContentFreshness:            kpi.ContentFreshness,
 		Pipeline:                    PipelineStatus{Ingestion: ingestion, Funnel: funnel, DataQuality: dq},
 		Trends:                      Trends{ThreatsProcessedByDay: threatsTrend, TCVByDay: tcvTrendPts},
