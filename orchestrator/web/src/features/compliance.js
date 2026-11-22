@@ -29,7 +29,9 @@ export function openComplianceDetail(frameworkId, agentId) {
     var agSel = document.getElementById('cmp-agent-sel');
     if (fwSel) fwSel.value = frameworkId;
     if (agSel && agentId) agSel.value = agentId;
-    loadComplianceReport();
+    // A tile that carries no agent has nothing to generate yet: land on the tab with the framework chosen instead of
+    // greeting the user with a "Select an agent first" warning.
+    if (agSel && agSel.value) loadComplianceReport();
   });
 }
 

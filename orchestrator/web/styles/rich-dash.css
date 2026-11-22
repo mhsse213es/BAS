@@ -56,7 +56,7 @@
 .rk-reg.rk-click:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--kc) 55%, var(--border)); }
 .rk-reg-h { display: flex; flex-direction: column; gap: 1px; font-size: 11px; }
 .rk-reg-h b { letter-spacing: .04em; white-space: nowrap; }
-.rk-reg-h span { font-size: 10.5px; color: var(--muted); }
+.rk-reg-h span { font-size: 10.5px; color: var(--muted); min-height: 1.3em; }
 .rk-reg-v { font-family: var(--font-display); font-size: 28px; font-weight: 700; margin: 8px 0 8px; letter-spacing: -.02em; color: var(--kc, var(--text)); font-variant-numeric: tabular-nums; }
 .rk-reg .rk-bar { margin-bottom: 8px; }
 .rk-reg-m { font-size: 11.5px; color: var(--muted); margin-top: 2px; line-height: 1.35; }
@@ -160,7 +160,7 @@ td.num, th.num { text-align: right; }
 .dp-posture { display: grid; grid-template-columns: minmax(150px, 200px) 1fr; gap: 20px; align-items: center; }
 .dp-posture-side { min-width: 0; }
 .dp-dom-h { margin: 10px 0 4px; }
-.dp-dom { display: grid; grid-template-columns: 96px 1fr 64px auto; gap: 10px; align-items: center; margin: 6px 0; font-size: 12.5px; }
+.dp-dom { display: grid; grid-template-columns: 96px minmax(0, 1fr) 64px 78px; gap: 10px; align-items: center; margin: 6px 0; font-size: 12.5px; }
 .dp-dom-c { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted-hi); }
 .dp-dom .rk-bar { min-width: 0; }
 @media (max-width: 700px) { .dp-posture { grid-template-columns: 1fr; } }
@@ -210,3 +210,14 @@ body.theme-light .sidebar-brand .brand-full.logo-onlight { box-shadow: 0 1px 4px
 /* Wide, stacked cards: keep the donut legend close to its donut instead of stretching across the card. */
 #dop-ce .donut-wrap, #dop-kev .donut-wrap { justify-content: flex-start; gap: 40px; }
 #dop-ce .donut-legend, #dop-kev .donut-legend { flex: 0 1 460px; }
+
+/* Note under the Control effectiveness donut. */
+.dp-ce-note { margin: 8px 0 12px; font-size: 11.5px; line-height: 1.45; }
+
+/* Executive KPI cards: the change line takes the card's tone, so a rising risk score reads as a warning. */
+#dash-view-executive .rk-kpi.tone-ok .rk-kpi-sub { color: var(--success); }
+#dash-view-executive .rk-kpi.tone-bad .rk-kpi-sub { color: var(--danger); }
+#dash-view-executive .rk-kpi.tone-warn .rk-kpi-sub { color: var(--warning); }
+/* Top business risks: a row opens its finding, so it carries the same chevron as the rows above it. */
+#ed-risks .rk-check > svg { flex: none; width: 16px; height: 16px; color: var(--muted); }
+#ed-risks .rk-check.rk-click:hover .rk-check-t b { color: var(--accent); }
