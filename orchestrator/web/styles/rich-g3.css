@@ -66,10 +66,6 @@
 
 .g3-tools .rk-search input, .rk-filters .rk-search input { height: 36px; }
 
-/* The compliance banner carries two selects and the export buttons: let the actions wrap under the title instead of squeezing it. */
-#hero-compliance .hero-main { flex-wrap: wrap; }
-#hero-compliance .hero-text { flex: 1 1 320px; }
-#hero-compliance .hero-actions { flex: 1 1 100%; margin-left: 0; }
 
 .g3-page .rk-card .tbl-wrap { overflow-x: auto; }
 .g3-tools .rk-seg { flex-wrap: wrap; max-width: 100%; }

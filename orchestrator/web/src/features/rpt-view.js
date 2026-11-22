@@ -35,6 +35,11 @@ export function setReportingAgents(n) { HERO.agents = n; paintHero(); }
 export function loadReportsHero() {
   apicall('/api/reports').then(function(list) { var h = M.heroStats(list, null); HERO.reports = h.reports; HERO.latest = h.latest; paintHero(); }).catch(function() {});
   apicall('/api/compliance/frameworks').then(function(f) { HERO.frameworks = M.heroStats(null, f).frameworks; paintHero(); }).catch(function() {});
+  // The Compliance and SLA sub-tabs share this banner but never paint the agent list, so without this the
+  // "Agents Reporting" number stayed a dash until the Reports tab had been opened. Same counting as that tab.
+  if (HERO.agents == null) {
+    apicall('/api/scenarios/runs').then(function(runs) { setReportingAgents(M.agentRows(runs, {}, {}).length); }).catch(function() {});
+  }
 }
 
 // ── Reports tab: reports by agent ───────────────────────────────────────────

@@ -652,7 +652,7 @@ export function initComplianceTab() {
     _cmpInitPromise = apicall('/api/compliance/frameworks').then(function(fws) {
       _cmpFrameworks = fws || [];
       fwSel.innerHTML = _cmpFrameworks.map(function(f) {
-        return '<option value="' + f.id + '">' + f.name + ' ' + f.version + '</option>';
+        return '<option value="' + x(f.id) + '">' + x(f.name) + (f.version ? ' ' + x(f.version) : '') + '</option>';
       }).join('');
     }).catch(function() {
       fwSel.innerHTML = '<option value="">Error loading frameworks</option>';
