@@ -131,11 +131,12 @@ func duplicateGenerationRate(ctx context.Context, pool *pgxpool.Pool, since time
 // deliberately distinct from a non-nil-but-old timestamp (stale), which
 // dataQuality reports separately.
 type SourceHealth struct {
-	SourceInstanceID string     `json:"sourceInstanceId"`
-	DisplayName      string     `json:"displayName"`
-	LastSuccessAt    *time.Time `json:"lastSuccessAt"`
-	FailuresInWindow int        `json:"failuresInWindow"`
-	LastDiagnostic   string     `json:"lastDiagnostic,omitempty"`
+	SourceInstanceID string            `json:"sourceInstanceId"`
+	DisplayName      string            `json:"displayName"`
+	LastSuccessAt    *time.Time        `json:"lastSuccessAt"`
+	FailuresInWindow int               `json:"failuresInWindow"`
+	LastDiagnostic   string            `json:"lastDiagnostic,omitempty"`
+	Reliability      SourceReliability `json:"reliability"`
 }
 
 type IngestionHealth struct {
@@ -164,6 +165,7 @@ func ingestionHealth(ctx context.Context, pool *pgxpool.Pool, since time.Time) (
 		if err := rows.Scan(&s.SourceInstanceID, &s.DisplayName, &s.LastSuccessAt, &s.FailuresInWindow, &diagnostic); err != nil {
 			return IngestionHealth{}, err
 		}
+		s.Reliability = noReliability()
 		if diagnostic != nil {
 			s.LastDiagnostic = *diagnostic
 		}
@@ -171,6 +173,26 @@ func ingestionHealth(ctx context.Context, pool *pgxpool.Pool, since time.Time) (
 	}
 	if err := rows.Err(); err != nil {
 		return IngestionHealth{}, err
+	}
+
+	rel, err := sourceReliability(ctx, pool, since)
+	if err != nil {
+		return IngestionHealth{}, err
+	}
+	for i := range sources {
+		if r, ok := rel[sources[i].SourceInstanceID]; ok {
+			// fill only the rates that have data; the rest stay NO_DATA
+			if r.SyncsInWindow == 0 {
+				r.SyncSuccessRate = sources[i].Reliability.SyncSuccessRate
+			}
+			if r.Observations == 0 {
+				r.ResolutionRate = sources[i].Reliability.ResolutionRate
+			}
+			if r.ThreatsContributed == 0 {
+				r.UsefulnessRate = sources[i].Reliability.UsefulnessRate
+			}
+			sources[i].Reliability = r
+		}
 	}
 
 	var unresolved int
