@@ -2,10 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { setupDom, load } from './dom.mjs';
 
-const rows = [{ id: 'a1', host: 'HOST-1', os: 'windows', online: true, recent: true, lastName: 'APT29', last: '2026-11-04T00:00:00Z', runs: 2, failed: 1, list: [
-  { id: 'run-ok', name: 'APT29', status: 'completed', at: '2026-11-04T00:00:00Z', reportable: true },
-  { id: 'run-bad', name: 'AV/NGAV <b>x</b>', status: 'failed', at: '2026-11-02T00:00:00Z', reportable: false },
+const rows = [{ id: 'a1', host: 'HOST-1', os: 'windows', online: true, recent: true, lastName: 'APT29', last: '2026-11-04T00:00:00Z', runs: 2, failed: 1, total: 2, scenarios: 2, list: [
+  { id: 'run-ok', name: 'APT29', status: 'completed', at: '2026-11-04T00:00:00Z', reportable: true, verdict: { result: 'FAIL', pass: 3, fail: 2, error: 0, skipped: 0 } },
+  { id: 'run-bad', name: 'AV/NGAV <b>x</b>', status: 'failed', at: '2026-11-02T00:00:00Z', reportable: false, verdict: { result: '' } },
 ] }];
+rows[0].recentExecutions = rows[0].list;
 
 // The page remembers which agents are open, and the module is shared between tests, so start each one collapsed.
 async function ready() {
@@ -22,7 +23,11 @@ test('an agent card shows its host, latest scenario, counts and status, and stay
   const txt = body().textContent;
   assert.match(txt, /HOST-1/);
   assert.match(txt, /APT29/);
-  assert.match(txt, /2\s*Runs · 1 failed/);
+  assert.match(txt, /2\s*Total runs · 1 failed/);
+  assert.match(txt, /2\s*Scenarios/);
+  assert.match(txt, /Recent executions/);
+  assert.match(txt, /2 fail · 3 pass/);
+  assert.match(txt, /FAIL/);
   assert.match(txt, /Recent activity/);
   assert.ok(body().querySelector('.rpt-dot.on'), 'an online agent has a green dot');
   assert.ok(body().querySelector('.rpt-os.os-windows svg'));

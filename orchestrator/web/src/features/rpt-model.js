@@ -117,24 +117,55 @@ var LIVE = { running: 1, queued: 1, pending: 1, paused: 1, dispatched: 1 };
 // A report is offered only for a run that finished and produced results.
 export function isReportable(status) { return status === 'completed' || status === 'partial'; }
 
+// runResult: the headline verdict of one run, from the same counts the Live Runs badge uses (score first, then the
+// per-step results). Errors and skips are not passes, so a run with errors and no failures reads ERROR, never PASS.
+// Returns { result, pass, fail, error, skipped }; result is '' when the run carries no verdicts (e.g. it failed to start).
+export function runResult(r) {
+  var sc = r && r.score, c;
+  if (sc && typeof sc.totalTechniques !== 'undefined') {
+    c = { pass: n(sc.passedTechniques), fail: n(sc.failedTechniques), error: n(sc.erroredTechniques), skipped: n(sc.skippedTechniques) + n(sc.vetoedTechniques) };
+  } else {
+    var res = (r && r.results) || [], by = function(f) { return res.filter(f).length; };
+    c = { pass: by(function(x) { return x.result === 'pass' || x.result === 'blocked'; }), fail: by(function(x) { return x.result === 'fail'; }),
+          error: by(function(x) { return x.result === 'error'; }), skipped: by(function(x) { return x.result === 'skipped' || x.result === 'vetoed'; }) };
+  }
+  var total = c.pass + c.fail + c.error + c.skipped;
+  c.result = !total ? '' : c.fail ? 'FAIL' : c.error ? 'ERROR' : c.pass ? 'PASS' : 'SKIPPED';
+  return c;
+}
+
 // agentRows: one row per agent that has finished runs, newest first. `runs` counts the runs that can be reported on and
 // `list` holds every finished run of the agent (failed ones too, marked as such) so none is hidden behind "latest".
+// `recentExecutions` holds up to 5 most recent scenario runs (newest first) with name, status, and timestamp.
 // Sweep rows are grouped on Live Runs and left out here.
 export function agentRows(runs, hostOf, infoOf, now) {
   var by = {}, order = [];
   (runs || []).forEach(function(r) {
     var id = r.agentId;
     if (!id || r.sweepId || r.emSweepId || LIVE[r.status]) return;
-    if (!by[id]) { by[id] = { id: id, host: (hostOf && hostOf[id]) || id, lastName: '', last: '', runs: 0, failed: 0, list: [] }; order.push(id); }
+    if (!by[id]) { by[id] = { id: id, host: (hostOf && hostOf[id]) || id, lastName: '', last: '', runs: 0, failed: 0, total: 0, scenarios: 0, recentExecutions: [], list: [] }; order.push(id); }
     var row = by[id], ok = isReportable(r.status);
     var at = r.completedAt || r.startedAt || '';
-    row.list.push({ id: r.id || '', name: r.name || 'unnamed scenario', status: r.status || '', at: at, reportable: ok && !!r.id });
+    row.list.push({ id: r.id || '', name: r.name || 'unnamed scenario', status: r.status || '', at: at, reportable: ok && !!r.id, verdict: runResult(r) });
     if (ok) {
       if (!row.lastName) { row.lastName = r.name || ''; row.last = at; }
       row.runs++;
     } else { row.failed++; }
   });
-  order.forEach(function(id) { if (!by[id].lastName && by[id].list.length) { by[id].lastName = by[id].list[0].name; by[id].last = by[id].list[0].at; } });
+  order.forEach(function(id) {
+    var row = by[id];
+    if (!row.lastName && row.list.length) { row.lastName = row.list[0].name; row.last = row.list[0].at; }
+    // Every finished run counts as an execution (failed ones too); `scenarios` is how many distinct ones they cover.
+    row.total = row.list.length;
+    var names = {}; row.list.forEach(function(e) { names[e.name] = 1; });
+    row.scenarios = Object.keys(names).length;
+    // Newest first for the at-a-glance list. The sort is on a copy so `list` keeps the order the server sent; a run
+    // with no timestamp sinks to the bottom rather than posing as the newest.
+    var stamp = function(e) { var v = Date.parse(e.at); return isNaN(v) ? -Infinity : v; };
+    row.recentExecutions = row.list.map(function(e, i) { return { e: e, i: i }; })
+      .sort(function(a, b) { var d = stamp(b.e) - stamp(a.e); return d === 0 || isNaN(d) ? a.i - b.i : d; })
+      .map(function(w) { return w.e; });
+  });
   var t = now == null ? Date.now() : now;
   return order.map(function(id) {
     var row = by[id], info = (infoOf && infoOf[id]) || {};

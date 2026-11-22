@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { typeLabel, formatsFor, historyRows, typeOptions, filterHistory, heroStats, agentRows, frameworkCards, medianDays, daysText, slaKpis, slaSeverityRows, slaTrend, slaTone } from '../../src/features/rpt-model.js';
+import { typeLabel, formatsFor, historyRows, typeOptions, filterHistory, heroStats, agentRows, frameworkCards, medianDays, daysText, slaKpis, slaSeverityRows, slaTrend, slaTone, runResult } from '../../src/features/rpt-model.js';
 
 test('typeLabel and formatsFor follow the report endpoint', () => {
   assert.equal(typeLabel('audit'), 'Audit pack');
@@ -174,4 +174,27 @@ test('agentRows marks online agents and a run in the last day as recent', () => 
   ], {}, { a1: { os: 'Windows 11', status: 'idle' }, a2: { os: 'Ubuntu', status: 'offline' } }, now);
   assert.deepEqual([r[0].os, r[0].online, r[0].recent], ['windows', true, true]);
   assert.deepEqual([r[1].os, r[1].online, r[1].recent], ['linux', false, false]);
+});
+
+test('agentRows lists executions newest first, counts executions (not scenarios), and keeps list order', () => {
+  const r = agentRows([
+    { id: 'a', agentId: 'x', status: 'completed', name: 'Same', completedAt: '2026-10-01T00:00:00Z' },
+    { id: 'b', agentId: 'x', status: 'completed', name: 'Same', completedAt: '2026-10-03T00:00:00Z' },
+    { id: 'c', agentId: 'x', status: 'failed', name: 'Other', completedAt: '2026-10-02T00:00:00Z' },
+    { id: 'd', agentId: 'x', status: 'completed', name: 'Undated' },
+  ], {})[0];
+  assert.equal(r.total, 4, 'three runs of two scenarios plus one more is four executions');
+  assert.equal(r.scenarios, 3);
+  assert.deepEqual(r.recentExecutions.map(e => e.name), ['Same', 'Other', 'Same', 'Undated'], 'newest first, undated last');
+  assert.deepEqual(r.list.map(e => e.id), ['a', 'b', 'c', 'd'], 'the full list keeps the order the server sent');
+});
+
+test('runResult: errors and skips are never a pass', () => {
+  const sc = (p, f, e, k) => ({ score: { totalTechniques: p + f + e + k, passedTechniques: p, failedTechniques: f, erroredTechniques: e, skippedTechniques: k } });
+  assert.equal(runResult(sc(3, 0, 0, 0)).result, 'PASS');
+  assert.equal(runResult(sc(3, 2, 1, 0)).result, 'FAIL');
+  assert.equal(runResult(sc(0, 0, 19, 1)).result, 'ERROR', 'the 0 pass / 19 errored run must not read as a pass');
+  assert.equal(runResult(sc(0, 0, 0, 4)).result, 'SKIPPED');
+  assert.equal(runResult({ status: 'failed' }).result, '', 'no verdicts, no result');
+  assert.equal(runResult({ results: [{ result: 'blocked' }, { result: 'fail' }] }).result, 'FAIL');
 });

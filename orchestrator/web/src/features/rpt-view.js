@@ -49,6 +49,7 @@ var OS_SVG = {
   other: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></svg>'
 };
 var RUNS_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 20V11M12 20V5M18 20v-6"/></svg>';
+var SCEN_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg>';
 var CLOCK_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
 
 // The runs of one agent: every finished run with its own PDF download. A failed run is listed but has no report.
@@ -67,18 +68,51 @@ export function runListHtml(r) {
     '<table class="rpt-runs"><thead><tr><th>Scenario run</th><th>Result</th><th>When</th><th></th></tr></thead><tbody>' + body + '</tbody></table></div>';
 }
 
+// One execution's result chip: the verdict (PASS / FAIL / ERROR / SKIPPED) when the run carries one, else the run status.
+function execChip(e) {
+  var v = e.verdict || {};
+  if (v.result) {
+    var tone = v.result === 'PASS' ? 'ok' : v.result === 'FAIL' ? 'bad' : v.result === 'ERROR' ? 'warn' : 'muted';
+    return chip(v.result, tone);
+  }
+  return chip(e.status || '—', e.status === 'failed' ? 'bad' : 'muted');
+}
+function execCounts(e) {
+  var v = e.verdict || {};
+  if (!v.result) return '';
+  var bits = [];
+  if (v.fail) bits.push(v.fail + ' fail');
+  if (v.pass) bits.push(v.pass + ' pass');
+  if (v.error) bits.push(v.error + ' error');
+  if (v.skipped) bits.push(v.skipped + ' skipped');
+  return bits.join(' · ');
+}
+// The latest three executions (newest first) with their results; the rest are counted, and the full list sits behind View Full History.
+function recentExecutionsHtml(r) {
+  var all = r.recentExecutions || [];
+  if (!all.length) return '';
+  var shown = all.slice(0, 3), more = all.length - shown.length;
+  var rows = shown.map(function(e) {
+    return '<div class="rpt-exec"><span class="rpt-exec-name" title="' + x(e.name) + '">' + x(e.name) + '</span>' +
+      '<span class="rpt-exec-counts tiny muted">' + x(execCounts(e)) + '</span>' + execChip(e) +
+      '<span class="rpt-exec-time tiny muted">' + ago(e.at) + '</span></div>';
+  }).join('');
+  return '<div class="rpt-recent-execs"><div class="rpt-exec-label">Recent executions</div>' + rows +
+    (more > 0 ? '<div class="rpt-exec-more">+ ' + more + ' more execution' + (more === 1 ? '' : 's') + '</div>' : '') + '</div>';
+}
+
 function agentCardHtml(r) {
   var open = !!OPEN[r.id];
   return '<div class="rpt-agent' + (open ? ' open' : '') + '">' +
     '<div class="rpt-agent-row">' +
       '<span class="rpt-dot ' + (r.online ? 'on' : 'off') + '" title="' + (r.online ? 'Agent online' : 'Agent offline') + '"></span>' +
       '<span class="rpt-os os-' + x(r.os || 'other') + '">' + (OS_SVG[r.os] || OS_SVG.other) + '</span>' +
-      '<div class="rpt-agent-name"><b>' + x(r.host) + '</b><span>' + x(r.lastName || 'unnamed scenario') + '</span></div>' +
+      '<div class="rpt-agent-name"><b>' + x(r.host) + '</b><span>' + (r.online ? 'Online' : 'Offline') + '</span></div>' +
       (r.recent ? '<span class="rpt-recent">Recent activity</span>' : '') +
-      '<div class="rpt-metric"><span class="rpt-metric-ico">' + RUNS_SVG + '</span><div><b>' + r.runs + '</b><span>Runs' + (r.failed ? ' · ' + r.failed + ' failed' : '') + '</span></div></div>' +
-      '<div class="rpt-metric"><span class="rpt-metric-ico">' + CLOCK_SVG + '</span><div><b>' + ago(r.last) + '</b><span>Last run</span></div></div>' +
-      '<button type="button" class="btn btn-outline btn-sm rpt-hist" aria-expanded="' + (open ? 'true' : 'false') + '"' + on('click', 'toggleRepRuns', r.id) + '>View History <span aria-hidden="true">' + (open ? '&#9652;' : '&#9662;') + '</span></button>' +
-    '</div>' + (open ? runListHtml(r) : '') + '</div>';
+      '<div class="rpt-metric"><span class="rpt-metric-ico">' + RUNS_SVG + '</span><div><b>' + r.total + '</b><span>Total runs' + (r.failed ? ' · ' + r.failed + ' failed' : '') + '</span></div></div>' +
+      '<div class="rpt-metric"><span class="rpt-metric-ico">' + SCEN_SVG + '</span><div><b>' + r.scenarios + '</b><span>Scenario' + (r.scenarios === 1 ? '' : 's') + '</span></div></div>' +
+      '<button type="button" class="btn btn-outline btn-sm rpt-hist" aria-expanded="' + (open ? 'true' : 'false') + '"' + on('click', 'toggleRepRuns', r.id) + '>View Full History <span aria-hidden="true">' + (open ? '&#9652;' : '&#9662;') + '</span></button>' +
+    '</div>' + recentExecutionsHtml(r) + (open ? runListHtml(r) : '') + '</div>';
 }
 
 export function paintAvailable(rows) {
