@@ -786,7 +786,7 @@ function renderControlsTable(controls, filter) {
           '<span class="cmp-ev-detail">' + x((ev.details || '').substring(0, 120)) + '</span>' +
         '</div>';
       }).join('') + '</div>' : '';
-    var expandBtn = hasEv ? '<span class="cmp-expand-btn" '+ on('click', 'toggleEvidence', evId) + '>&#9658; ' + c.evidence.length + ' tests</span>' : '';
+    var expandBtn = hasEv ? '<span class="cmp-expand-btn" '+ on('click', 'toggleEvidence', evId) + '>&#9658; ' + c.evidence.length + (c.evidence.length === 1 ? ' test' : ' tests') + '</span>' : '';
     return '<tr><td>' + badge + '</td>' +
       '<td><span class="cmp-ctrl-id">' + x(c.id) + '</span></td>' +
       '<td>' + x(c.name) + expandBtn + '<div class="cmp-tech-cov">' + (c.techniquesTested||0) + ' of ' + (c.techniquesMapped||0) + ' mapped techniques tested' + (c.reference ? ' · source ' + x(c.reference) : '') + '</div>' + evHtml + '</td>' +
@@ -807,7 +807,7 @@ export function toggleEvidence(id, btn) {
   if (!el) return;
   el.classList.toggle('open');
   var count = el.querySelectorAll('.cmp-ev-row').length;
-  if (btn) btn.textContent = el.classList.contains('open') ? '▼ ' + count + ' tests' : '► ' + count + ' tests';
+  if (btn) btn.textContent = el.classList.contains('open') ? '▼ ' + count + (count === 1 ? ' test' : ' tests') : '► ' + count + (count === 1 ? ' test' : ' tests');
 }
 
 export function filterControls(status) {
