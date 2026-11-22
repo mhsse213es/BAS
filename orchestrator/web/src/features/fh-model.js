@@ -23,6 +23,7 @@ export function sourceRows(sources) {
       lastSuccessAt: s.lastSuccessAt || null,
       failures: n(s.failuresInWindow),
       diagnostic: s.lastDiagnostic || '',
+      rel: s.reliability || {},
     };
   });
 }
@@ -103,9 +104,65 @@ export function tileCaption(key, r, nowTs) {
   return '';
 }
 
+// ── KPI tiles ────────────────────────────────────────────────────────────────
+
+// rateValue: the number of a measured metric, or null when it has no data (or is absent, as from an older server).
+export function rateValue(m) { return m && m.state === 'measured' && isFinite(Number(m.value)) ? Number(m.value) : null; }
+
+// rateText: a 0..1 rate as a whole percentage; an em dash when there is no data. A measured zero is "0%".
+export function rateText(m) { var v = rateValue(m); return v == null ? '—' : Math.round(v * 100) + '%'; }
+
+function perDayText(m) { var v = rateValue(m); return v == null ? null : v.toFixed(1) + ' / day'; }
+function countText(m) { var v = rateValue(m); return v == null ? null : String(Math.round(v)); }
+function pctOrNull(m) { var v = rateValue(m); return v == null ? null : Math.round(v * 100) + '%'; }
+
+// freshnessText: how old the published content is, from the four age buckets.
+export function freshnessText(f) {
+  if (!f || !n(f.total)) return 'Nothing published yet';
+  var parts = [];
+  if (n(f.under30Days)) parts.push(n(f.under30Days) + ' under 30d');
+  if (n(f.days31To90)) parts.push(n(f.days31To90) + ' at 31–90d');
+  if (n(f.days91To365)) parts.push(n(f.days91To365) + ' at 91–365d');
+  if (n(f.over365Days)) parts.push(n(f.over365Days) + ' over a year');
+  return parts.join(' · ');
+}
+
+// kpiTiles: the throughput, quality and automation tiles. value is null when the metric has no data, which the
+// page shows as NO DATA with the server's reason; nothing is invented. A report from an older server that lacks
+// these fields gives all-null tiles rather than an error.
+export function kpiTiles(r) {
+  r = r || {};
+  var errs = rateValue(r.executionValidationErrors);
+  var fresh = r.contentFreshness || {};
+  return [
+    { key: 'ingested', label: 'Threats ingested', value: perDayText(r.threatsIngestedPerDay), m: r.threatsIngestedPerDay, caption: 'average per day', icon: 'layers', tone: 'accent' },
+    { key: 'mapped', label: 'Threats mapped', value: countText(r.threatsMapped), m: r.threatsMapped, caption: 'with at least one technique', icon: 'mapped', tone: 'ok' },
+    { key: 'generated', label: 'Candidates generated', value: perDayText(r.candidatesGeneratedPerDay), m: r.candidatesGeneratedPerDay, caption: 'average per day', icon: 'refresh', tone: 'accent' },
+    { key: 'validated', label: 'Candidates validated', value: countText(r.candidatesValidated), m: r.candidatesValidated, caption: 'in the window', icon: 'check', tone: 'info' },
+    { key: 'rejected', label: 'Candidates rejected', value: countText(r.candidatesRejected), m: r.candidatesRejected, caption: rejectedCaption(r.rejectedByReason), icon: 'alert', tone: 'warn' },
+    { key: 'published', label: 'Published', value: perDayText(r.publishedPerDay), m: r.publishedPerDay, caption: 'average per day', icon: 'check', tone: 'ok' },
+    { key: 'execpass', label: 'Execution validation pass rate', value: pctOrNull(r.executionValidationPassRate), m: r.executionValidationPassRate,
+      caption: errs ? 'PASS of PASS+FAIL · ' + errs + (errs === 1 ? ' error' : ' errors') + ' not counted' : 'PASS of PASS+FAIL', icon: 'shield', tone: 'ok' },
+    { key: 'handsoff', label: 'Hands-off rate', value: pctOrNull(r.handsOffRate), m: r.handsOffRate, caption: 'published with only the approval gate human', icon: 'bolt', tone: 'cyan' },
+    { key: 'stageauto', label: 'Stage automation', value: pctOrNull(r.stageAutomationRate), m: r.stageAutomationRate, caption: 'lifecycle steps done by the system', icon: 'bolt', tone: 'cyan' },
+    { key: 'reuse', label: 'Reuse rate', value: pctOrNull(r.reuseRate), m: r.reuseRate, caption: 'built from existing components', icon: 'refresh', tone: 'muted' },
+    { key: 'freshness', label: 'Published content age', value: String(n(fresh.total)), m: null, caption: freshnessText(r.contentFreshness), icon: 'clock', tone: 'muted' },
+  ];
+}
+
+// rejectedCaption: the top rejection reasons, so a count is never shown without its why.
+function rejectedCaption(by) {
+  var e = Object.keys(by || {}).map(function(k) { return [k, n(by[k])]; }).filter(function(p) { return p[1] > 0; }).sort(function(a, b) { return b[1] - a[1]; });
+  if (!e.length) return 'in the window';
+  return e.slice(0, 2).map(function(p) { return p[1] + ' ' + p[0].replace(/_/g, ' '); }).join(' · ');
+}
+
 // ── Source table ─────────────────────────────────────────────────────────────
 
-export var COLUMNS = ['Source', 'State', 'Last success', 'Failures', 'Last diagnostic'];
+export var COLUMNS = ['Source', 'State', 'Last success', 'Failures', 'Sync success', 'Resolution', 'Usefulness', 'Last diagnostic'];
+
+// Columns holding a number, right-aligned by the page.
+export var NUM_COLS = [3, 4, 5, 6];
 
 // cellText: the text of one cell, used for the table filter and the CSV.
 export function cellText(row, col) {
@@ -114,6 +171,9 @@ export function cellText(row, col) {
     case 1: return row.state.label;
     case 2: return row.lastSuccessAt ? row.lastSuccessAt : 'never synced';
     case 3: return String(row.failures);
+    case 4: return rateText(row.rel.syncSuccessRate);
+    case 5: return rateText(row.rel.resolutionRate);
+    case 6: return rateText(row.rel.usefulnessRate);
     default: return row.diagnostic || '';
   }
 }
@@ -130,6 +190,9 @@ function sortKey(r, col) {
     case 1: return r.state.label;
     case 2: return r.lastSuccessAt ? Date.parse(r.lastSuccessAt) : null;
     case 3: return r.failures;
+    case 4: return rateValue(r.rel.syncSuccessRate);
+    case 5: return rateValue(r.rel.resolutionRate);
+    case 6: return rateValue(r.rel.usefulnessRate);
     default: return r.diagnostic || null;
   }
 }
