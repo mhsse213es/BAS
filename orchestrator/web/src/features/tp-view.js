@@ -58,7 +58,9 @@ function skeletonHtml() {
 
 function trendCell(a) {
   var t = M.trendInfo(a);
-  return '<span class="tp-tr tp-tr-' + t.cls + '">' + x(t.text) + '</span>';
+  // A rising score means the actor matters more to this estate, so rising reads as a warning and falling as easing.
+  var tip = t.cls === 'up' ? 'Relevance rose since the previous model run' : t.cls === 'down' ? 'Relevance fell since the previous model run' : t.text === 'New' ? 'No earlier run to compare with' : 'No change since the previous model run';
+  return '<span class="tp-tr tp-tr-' + t.cls + '" title="' + x(tip) + '">' + x(t.text) + '</span>';
 }
 
 function cellHtml(col, a, nums) {
