@@ -376,16 +376,22 @@ type PipelineStatus struct {
 // FactoryHealthReport is the full GET /api/analytics/factory-health
 // response (spec: docs/superpowers/specs/2026-10-13-tcf-phase11-factory-analytics-design.md).
 type FactoryHealthReport struct {
-	WindowSince               time.Time      `json:"windowSince"`
-	ThreatsProcessed          Metric         `json:"threatsProcessed"`
-	PublishedContent          Metric         `json:"publishedContent"`
-	MedianThreatToContentTCV  Metric         `json:"medianThreatToContentTcv"`
-	P95ThreatToContentTCV     Metric         `json:"p95ThreatToContentTcv"`
-	StaticValidationPassRate  Metric         `json:"staticValidationPassRate"`
-	DuplicateGenerationRate   Metric         `json:"duplicateGenerationRate"`
-	SourceToTechniqueCoverage Metric         `json:"sourceToTechniqueCoverage"`
-	Pipeline                  PipelineStatus `json:"pipeline"`
-	Trends                    Trends         `json:"trends"`
+	WindowSince               time.Time        `json:"windowSince"`
+	ThreatsProcessed          Metric           `json:"threatsProcessed"`
+	PublishedContent          Metric           `json:"publishedContent"`
+	MedianThreatToContentTCV  Metric           `json:"medianThreatToContentTcv"`
+	P95ThreatToContentTCV     Metric           `json:"p95ThreatToContentTcv"`
+	StaticValidationPassRate  Metric           `json:"staticValidationPassRate"`
+	DuplicateGenerationRate   Metric           `json:"duplicateGenerationRate"`
+	SourceToTechniqueCoverage Metric           `json:"sourceToTechniqueCoverage"`
+	ThreatsIngestedPerDay     Metric           `json:"threatsIngestedPerDay"`
+	CandidatesGenerated       Metric           `json:"candidatesGenerated"`
+	CandidatesGeneratedPerDay Metric           `json:"candidatesGeneratedPerDay"`
+	PublishedInWindow         Metric           `json:"publishedInWindow"`
+	PublishedPerDay           Metric           `json:"publishedPerDay"`
+	ContentFreshness          ContentFreshness `json:"contentFreshness"`
+	Pipeline                  PipelineStatus   `json:"pipeline"`
+	Trends                    Trends           `json:"trends"`
 }
 
 const staleAfter = 7 * 24 * time.Hour
@@ -434,6 +440,11 @@ func FactoryHealth(ctx context.Context, pool *pgxpool.Pool, window time.Duration
 		return FactoryHealthReport{}, err
 	}
 
+	kpi, err := factoryKPIs(ctx, pool, since, window)
+	if err != nil {
+		return FactoryHealthReport{}, err
+	}
+
 	median := noData("no threats have measured threat-to-emulation TCV yet")
 	p95 := noData("no threats have measured threat-to-emulation TCV yet")
 	if tcvAgg.SampleSize > 0 {
@@ -450,6 +461,12 @@ func FactoryHealth(ctx context.Context, pool *pgxpool.Pool, window time.Duration
 		StaticValidationPassRate:  passRate,
 		DuplicateGenerationRate:   dupRate,
 		SourceToTechniqueCoverage: counts.SourceToTechniqueCoverage,
+		ThreatsIngestedPerDay:     kpi.ThreatsIngestedPerDay,
+		CandidatesGenerated:       kpi.CandidatesGenerated,
+		CandidatesGeneratedPerDay: kpi.CandidatesGeneratedPerDay,
+		PublishedInWindow:         kpi.PublishedInWindow,
+		PublishedPerDay:           kpi.PublishedPerDay,
+		ContentFreshness:          kpi.ContentFreshness,
 		Pipeline:                  PipelineStatus{Ingestion: ingestion, Funnel: funnel, DataQuality: dq},
 		Trends:                    Trends{ThreatsProcessedByDay: threatsTrend, TCVByDay: tcvTrendPts},
 	}, nil
