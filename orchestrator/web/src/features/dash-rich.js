@@ -103,7 +103,7 @@ export function complianceCard(fw) {
   var t = !has ? 'muted' : !sufficient ? 'warn' : pct >= 75 ? 'ok' : pct >= 50 ? 'warn' : 'bad';
   var title = fw.frameworkName + '\n' + (has ? 'Resistance rate ' + pct + '% — ' + passing + ' of ' + tested + ' tested controls resisted the executed techniques, ' + failing + ' failed, ' + untested + ' untested. Control coverage ' + tested + ' of ' + testable + '. This is not a compliance determination.' : 'No controls tested yet.');
   return '<div class="rk-reg rk-click tone-' + t + '"' + on('click', 'openComplianceDetail', fw.frameworkId, fw.agentId) + ' title="' + x(title) + '">' +
-    '<div class="rk-reg-h"><b>' + x(String(fw.shortName || '').toUpperCase()) + '</b><span>' + x(fw.regulator) + '</span></div>' +
+    '<div class="rk-reg-h"><b>' + x(String(fw.shortName || '').toUpperCase()) + '</b><span>' + (String(fw.regulator || '').toLowerCase() === String(fw.shortName || '').toLowerCase() ? '' : x(fw.regulator)) + '</span></div>' +
     '<div class="rk-reg-v">' + (has ? PCT(pct) : '—') + '</div>' +
     '<div class="rk-reg-m">' + (has ? 'resistance rate (of tested controls)' : 'No controls tested yet') + '</div>' +
     (has ? bar(cov, toneOf(cov)) : bar(0, 'muted')) +
@@ -195,7 +195,7 @@ function renderEndpoint() {
   renderAgentHealth(gh);
 }
 function renderAgentHealth(gh) {
-  cell('dop-agh', gh.length ? card('Agent health by group', hbars(gh.map(function(g) { return [g.name, g.pct, g.pct >= 90 ? 'ok' : g.pct >= 75 ? 'warn' : 'bad', g.online + '/' + g.total]; })), { sub: 'agents online' })
+  cell('dop-agh', gh.length ? card('Agent health by group', hbars(gh.map(function(g) { return [g.name, g.pct, g.pct >= 90 ? 'ok' : g.pct >= 75 ? 'warn' : 'bad', g.online + '/' + g.total]; })), { sub: gh.reduce(function(a, g) { return a + g.online; }, 0) + ' of ' + gh.reduce(function(a, g) { return a + g.total; }, 0) + ' agents online' })
     : emptyCard('Agent health by group', 'agents', D.agents ? 'No agents yet' : 'Loading…'));
 }
 
@@ -228,11 +228,17 @@ function renderReadiness() {
 
 // ── Posture score / Control effectiveness ──────────────────────────────────
 function runBarsSvg(runs) {
-  var n = runs.length, W = 560, H = 100, slot = W / n, bw = Math.min(42, slot - 10), out = '';
+  var n = runs.length, W = 560, H = 112, slot = W / n, bw = Math.min(42, slot - 10), out = '';
+  // Runs often land on the same day, so a bare date repeats under every bar. When it does, add the time of day.
+  var days = {}; runs.forEach(function(r) { var d = new Date(r.completedAt || r.startedAt); var k = isNaN(d) ? '' : d.getMonth() + '/' + d.getDate(); days[k] = (days[k] || 0) + 1; });
   runs.forEach(function(r, i) {
     var v = M.prevPctOf(r), h = Math.max(2, v * 0.7), x0 = i * slot + (slot - bw) / 2, d = new Date(r.completedAt || r.startedAt);
+    var lbl = isNaN(d) ? '' : (d.getMonth() + 1) + '/' + d.getDate();
+    var same = !isNaN(d) && days[d.getMonth() + '/' + d.getDate()] > 1;
     out += '<rect x="' + x0.toFixed(1) + '" y="' + (78 - h).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="3" fill="' + colorOf(toneOf(v)) + '" data-tip="' + x(v + '%') + '"/>' +
-      '<text x="' + (x0 + bw / 2).toFixed(1) + '" y="94" text-anchor="middle" class="axis-t">' + (isNaN(d) ? '' : (d.getMonth() + 1) + '/' + d.getDate()) + '</text>';
+      '<text x="' + (x0 + bw / 2).toFixed(1) + '" y="' + (74 - h).toFixed(1) + '" text-anchor="middle" class="axis-t">' + Math.round(v) + '%</text>' +
+      '<text x="' + (x0 + bw / 2).toFixed(1) + '" y="94" text-anchor="middle" class="axis-t">' + lbl + '</text>' +
+      (same ? '<text x="' + (x0 + bw / 2).toFixed(1) + '" y="107" text-anchor="middle" class="axis-t">' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + '</text>' : '');
   });
   // A guide at 80%, the point where a run counts as strong (the same cut-off as toneOf), so the bar colours have a reference.
   var guide = '<line x1="0" y1="22" x2="' + W + '" y2="22" class="dp-thr"/>';
@@ -263,6 +269,7 @@ function renderCE() {
   if (e.other > 0) segs.push({ label: 'Not tested', value: e.other, color: CHART_COLORS.muted });
   var oc = M.openByControl(D.findings);
   cell('dop-ce', card('Control effectiveness', chartSlot({ type: 'donut', h: 150, center: (e.prevented + e.detected + e.missed) ? Math.round(e.prevented / base * 100) + '%' : '—', centerSub: 'PREVENTED', segments: segs }) +
+    (e.other > 0 ? '<div class="tiny muted dp-ce-note">The centre figure is prevented out of tested results, so it leaves out the ' + e.other + ' not tested. The percentages beside the legend count them.</div>' : '') +
     (e.detected === 0 ? '<div class="rk-note">Detected-only appears once a SIEM/EDR integration is reporting alerts.</div>' : '') +
     (oc.length ? '<div class="dp-sub">Open findings by expected control</div>' + hbars(oc.slice(0, 5).map(function(r) { return [r[0], r[1] / oc[0][1] * 100, 'bad', String(r[1])]; })) : ''), { actions: link('Breakdown →', 'openControlDetail') + link('Open findings →', 'openFindingsWithStatus', ['open']) }));
 }

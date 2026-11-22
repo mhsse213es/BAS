@@ -4,7 +4,7 @@ import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { fmtDate, showToast } from '../core/util.js';
 import { loadScenarios, showThreatPriorityDetail } from './attack-path.js';
-import { refreshDashboardCampaigns } from './compliance.js';
+import { refreshDashboardCampaigns, openConfirmDiffModal } from './compliance.js';
 import { findingSevBadge } from './findings.js';
 import { viewRunResults } from './reports.js';
 import { ROLE, activateTab, showTab } from './shell.js';
@@ -547,17 +547,19 @@ export function loadKEVPack() {
     if (!pack || !pack.hasData) { showToast('KEV data not available — reseed content pack first', 'err'); return; }
     var msg = 'Create "' + pack.suggestedName + '" with ' + pack.techniqueCount + ' KEV-linked techniques' +
               (pack.ransomwareCount > 0 ? ' (' + pack.ransomwareCount + ' ransomware-linked techniques)' : '') + '?';
-    if (!confirm(msg)) return;
-    apicall('/api/scenarios', { method: 'POST', body: JSON.stringify(pack.suggestedScenario) })
-      .then(function(res) {
-        if (res && res.error) {
-          if (res.error.indexOf('already exists') >= 0) { _selectCmpScenario(pack.suggestedId); }
-          else { showToast('Failed: ' + res.error, 'err'); }
-          return;
-        }
-        showToast('KEV Exposure Pack created — ' + pack.techniqueCount + ' techniques', 'ok');
-        loadScenarios(); setTimeout(function() { _selectCmpScenario(pack.suggestedId); }, 600);
-      }).catch(function() { showToast('Failed to create KEV Pack', 'err'); });
+    // Asks in the page's own dialog (not the browser's) and creates nothing until the user confirms.
+    openConfirmDiffModal('Create the KEV Exposure Pack?', '<p class="tiny">' + x(msg) + '</p>', function() {
+      apicall('/api/scenarios', { method: 'POST', body: JSON.stringify(pack.suggestedScenario) })
+        .then(function(res) {
+          if (res && res.error) {
+            if (res.error.indexOf('already exists') >= 0) { _selectCmpScenario(pack.suggestedId); }
+            else { showToast('Failed: ' + res.error, 'err'); }
+            return;
+          }
+          showToast('KEV Exposure Pack created — ' + pack.techniqueCount + ' techniques', 'ok');
+          loadScenarios(); setTimeout(function() { _selectCmpScenario(pack.suggestedId); }, 600);
+        }).catch(function() { showToast('Failed to create KEV Pack', 'err'); });
+    }, { sub: 'This adds a scenario to your library. It does not run anything.', confirmLabel: 'Create pack' });
   }).catch(function() { showToast('Could not fetch KEV data', 'err'); });
 }
 
