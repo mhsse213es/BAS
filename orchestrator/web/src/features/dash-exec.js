@@ -3,7 +3,7 @@
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { chartSlot, CHART_COLORS } from '../core/charts.js';
-import { kpi, grid, card, chip, empty, icon, seg } from '../core/kit.js';
+import { kpi, grid, card, chip, empty, icon, seg, bar } from '../core/kit.js';
 import { sevTone } from './rich-g3.js';
 import { toneGauge } from './dash-rich.js';
 import { execInsights, riskBand, topRisks, trendDelta, riskKpi, exposureKpi, detectionKpi, domainBreakdown } from './dash-model.js';
@@ -64,14 +64,14 @@ export function renderExecPosture(current, forecast, findings) {
   var score = Number(current.avgRiskScore) || 0, band = riskBand(score);
   var hist = ((forecast && forecast.history) || []).slice(-30);
   var trend = hist.length >= 2
-    ? chartSlot({ type: 'line', labels: hist.map(function(p) { return 'd' + p.dayIndex; }), series: [{ name: 'Risk score', data: hist.map(function(p) { return p.score; }), color: CHART_COLORS.warn }], h: 150, area: true })
+    ? chartSlot({ type: 'line', labels: hist.map(function(p, i) { return i === hist.length - 1 ? 'Today' : (hist.length - 1 - i) + 'd ago'; }), series: [{ name: 'Risk score', data: hist.map(function(p) { return p.score; }), color: CHART_COLORS.warn }], h: 150, area: true })
     : empty('trend', 'Not enough history for a trend', 'A trend needs a few daily snapshots.');
   var doms = domainBreakdown(findings), max = doms.reduce(function(m, d) { return Math.max(m, d.open); }, 0);
   var domHtml = !findings ? empty('layers', 'Loading…')
     : !doms.length ? empty('check', 'No open findings', 'Nothing is open in any domain.')
     : doms.map(function(d) {
         return '<div class="dp-dom"><span class="dp-dom-n">' + x(d.domain) + '</span>' +
-          '<div class="rk-bar"><i style="width:' + Math.round(100 * d.open / max) + '%"></i></div>' +
+          bar(100 * d.open / max, sevTone(d.worst)) +
           '<span class="dp-dom-c">' + d.open + ' open</span>' + chip(d.worst, sevTone(d.worst)) + '</div>';
       }).join('');
   cell('ed-posture', card(title,
