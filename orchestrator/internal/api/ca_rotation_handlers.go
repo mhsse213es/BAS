@@ -114,80 +114,25 @@ func (h *Handler) CARotationStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := map[string]any{"state": string(state), "checkedAt": time.Now().UTC()}
-	if state == pki.RotationPrepared {
-		fp, err := pemFingerprint(filepath.Join(h.pkiDir, "next-ca-cert.pem"))
-		if err != nil {
-			jsonError(w, "read the prepared CA root: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-		rows, err := h.db.Query(r.Context(), `
-			SELECT agent_id, COALESCE(trusted_root_fps, '[]'::jsonb) ? $1
-			  FROM agents
-			 WHERE COALESCE(state,'active') NOT IN ('revoked','uninstalling','uninstalled')
-			 ORDER BY agent_id`, fp)
-		if err != nil {
-			jsonError(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		defer rows.Close()
-		pending := []string{}
-		total, have := 0, 0
-		for rows.Next() {
-			var id string
-			var has bool
-			if rows.Scan(&id, &has) != nil {
-				continue
-			}
-			total++
-			if has {
-				have++
-			} else {
-				pending = append(pending, id)
-			}
-		}
-		resp["newRootFingerprint"] = fp
-		resp["agentsTotal"] = total
-		resp["agentsWithNewRoot"] = have
-		resp["agentsPending"] = pending
-		resp["readyToPromote"] = total > 0 && have == total
+	rd, applies, err := CARotationReadiness(r.Context(), h.db, h.pkiDir, state)
+	if err != nil {
+		jsonError(w, "rotation readiness: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
-	if state == pki.RotationPromoted {
-		newID, err := caKeyID(filepath.Join(h.pkiDir, "ca-cert.pem"))
-		if err != nil {
-			jsonError(w, "read the new CA: "+err.Error(), http.StatusInternalServerError)
-			return
+	if applies {
+		resp["agentsTotal"] = rd.Total
+		if rd.Step == "promote" {
+			resp["newRootFingerprint"] = rd.Marker
+			resp["agentsWithNewRoot"] = rd.Done
+			resp["agentsPending"] = rd.Pending
+			resp["readyToPromote"] = rd.Ready
+		} else {
+			resp["newCAKeyId"] = rd.Marker
+			resp["agentsOnNewCA"] = rd.Done
+			resp["agentsPendingRenewal"] = rd.Pending
+			// An agent whose issuer is unknown counts as pending: retiring early locks out any agent still on an old cert.
+			resp["readyToRetire"] = rd.Ready
 		}
-		rows, err := h.db.Query(r.Context(), `
-			SELECT agent_id, COALESCE(cert_issuer_key_id,'') = $1
-			  FROM agents
-			 WHERE COALESCE(state,'active') NOT IN ('revoked','uninstalling','uninstalled')
-			 ORDER BY agent_id`, newID)
-		if err != nil {
-			jsonError(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		defer rows.Close()
-		pending := []string{}
-		total, on := 0, 0
-		for rows.Next() {
-			var id string
-			var onNew bool
-			if rows.Scan(&id, &onNew) != nil {
-				continue
-			}
-			total++
-			if onNew {
-				on++
-			} else {
-				pending = append(pending, id)
-			}
-		}
-		resp["newCAKeyId"] = newID
-		resp["agentsTotal"] = total
-		resp["agentsOnNewCA"] = on
-		resp["agentsPendingRenewal"] = pending
-		// An agent whose issuer is unknown counts as pending: retiring early locks out any agent still on an old cert.
-		resp["readyToRetire"] = total > 0 && on == total
 	}
 	respond(w, resp)
 }

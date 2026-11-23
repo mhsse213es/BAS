@@ -25,6 +25,7 @@ import { loadIntegrations, loadResponseConnectors, renderResponseConnectorList }
 import { loadIOCRegistry } from './iocs.js';
 import { loadExercisesTab } from './openaev.js';
 import { loadFactoryHealth } from './factory-health.js';
+import { loadCARotation } from './ca-rotation.js';
 import { loadApiInventory } from './api-inventory.js';
 import { loadSegmentation } from './segmentation.js';
 import { loadReports, loadRuns } from './reports.js';
@@ -636,7 +637,7 @@ function stopDashCampPoll() { clearInterval(state._dashCampPoll); }
 export function showTab(name) {
   try { localStorage.setItem('bas_last_tab', name); } catch(e) {}
   activateTab(name);
-  if (name === 'agents') { loadAgents(); loadAgentGroupTree(); }
+  if (name === 'agents') { loadAgents(); loadAgentGroupTree(); loadCARotation(); }
   if (name === 'runs') loadRuns();
   if (name === 'campaigns') closeCampaignDetail();
   if (name === 'scheduled-assessments') loadScheduledAssessments();
