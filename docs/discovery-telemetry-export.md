@@ -31,13 +31,15 @@ own product's tooling, and map its field names to these before setting the varia
 | Correlation | ERROR | The file is not JSON lines, lacks the fields above, or the probe record is missing. |
 | Integration health | PASS | The export parses and its newest event is within 24 hours. |
 | Integration health | SKIP (unverified) | The export is older than 24 hours, so it cannot evidence the probes. |
+| Sync-folder probe | SKIP (unverified) | Opt-in not set, a sync client is running, or no sync folder exists. Nothing was written. |
 | Evidence completeness | PASS | Both probes recorded process id, UTC time and file path. |
 | Evidence completeness | ERROR | A probe record is missing or incomplete. |
 
 ## What is not covered
 
-- Sync-folder access detection: the scenario never places a probe file in a synced folder,
-  because it would be uploaded. That step records UNVERIFIED.
+- Sync-folder access detection runs only when `BAS_SYNC_PROBE=1` is set, no sync client process
+  is running, and a sync folder exists. It writes a synthetic file in a dedicated subfolder and
+  deletes it at once. Otherwise the probe reports UNVERIFIED. Set the variable only on a test host.
 - Full T1619 cloud object discovery and full T1114 email collection are not claimed. The
   scenario covers local discovery only.
 - No browser database, cookie, password, token, mailbox or cloud file is opened or read.

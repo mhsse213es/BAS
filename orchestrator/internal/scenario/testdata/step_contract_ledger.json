@@ -4259,15 +4259,24 @@
   {
     "scenario": "collection-browser-cloud-email-discovery.yaml",
     "index": 1,
-    "technique_id": "T1539",
+    "technique_id": "T1619",
     "action_key": "",
     "framework": "custom",
-    "class": "non_destructive",
-    "status": "not_required_non_destructive"
+    "class": "destructive",
+    "status": "self_cleaning_declared"
   },
   {
     "scenario": "collection-browser-cloud-email-discovery.yaml",
     "index": 2,
+    "technique_id": "T1114",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "collection-browser-cloud-email-discovery.yaml",
+    "index": 3,
     "technique_id": "T1539",
     "action_key": "",
     "framework": "custom",
@@ -4276,26 +4285,17 @@
   },
   {
     "scenario": "collection-browser-cloud-email-discovery.yaml",
-    "index": 3,
-    "technique_id": "T1619",
-    "action_key": "",
-    "framework": "custom",
-    "class": "destructive",
-    "status": "self_cleaning_declared"
-  },
-  {
-    "scenario": "collection-browser-cloud-email-discovery.yaml",
     "index": 4,
-    "technique_id": "T1619",
+    "technique_id": "T1539",
     "action_key": "",
     "framework": "custom",
-    "class": "destructive",
-    "status": "self_cleaning_declared"
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
   },
   {
     "scenario": "collection-browser-cloud-email-discovery.yaml",
     "index": 5,
-    "technique_id": "T1114",
+    "technique_id": "T1619",
     "action_key": "",
     "framework": "custom",
     "class": "destructive",
@@ -4304,7 +4304,7 @@
   {
     "scenario": "collection-browser-cloud-email-discovery.yaml",
     "index": 6,
-    "technique_id": "T1114",
+    "technique_id": "T1619",
     "action_key": "",
     "framework": "custom",
     "class": "destructive",
@@ -4313,7 +4313,7 @@
   {
     "scenario": "collection-browser-cloud-email-discovery.yaml",
     "index": 7,
-    "technique_id": "T1114",
+    "technique_id": "T1619",
     "action_key": "",
     "framework": "custom",
     "class": "destructive",
@@ -4331,6 +4331,33 @@
   {
     "scenario": "collection-browser-cloud-email-discovery.yaml",
     "index": 9,
+    "technique_id": "T1114",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "collection-browser-cloud-email-discovery.yaml",
+    "index": 10,
+    "technique_id": "T1114",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "collection-browser-cloud-email-discovery.yaml",
+    "index": 11,
+    "technique_id": "T1114",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "collection-browser-cloud-email-discovery.yaml",
+    "index": 12,
     "technique_id": "T1217",
     "action_key": "",
     "framework": "custom",
