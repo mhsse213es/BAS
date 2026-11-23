@@ -1201,6 +1201,7 @@ func main() {
 		validationTimeout := validationlab.ClampValidationTimeout(cfg.ValidationLabTimeoutMinutes)
 		validationOrchestrator.SetTimeout(validationTimeout)
 		validationOrchestrator.Start()
+		gen.SetNewDraftHook(validationOrchestrator.Kick) // REQ-055: a new generated draft starts validating now, not at the next poll
 		log.Printf("[validationlab] enabled, lab agent %s, poll every %dm, run timeout %s", cfg.ValidationLabAgentID, pollMinutes, validationTimeout)
 	} else {
 		log.Println("[validationlab] disabled (VALIDATION_LAB_AGENT_ID not set)")
