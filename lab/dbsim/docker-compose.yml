@@ -115,7 +115,7 @@ services:
     ports:
       - "127.0.0.1:59200:9200"
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf -u elastic:$$ELASTIC_PASSWORD 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s' >/dev/null"]
+      test: ["CMD-SHELL", "curl -sf -u elastic:$$ELASTIC_PASSWORD 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s' >/dev/null"]  # gitleaks:allow - env-var reference, not a literal credential
       interval: 10s
       timeout: 10s
       retries: 30
