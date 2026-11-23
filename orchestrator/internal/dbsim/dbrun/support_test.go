@@ -18,20 +18,6 @@ import (
 // pair that is not shipped (a test-only scenario id) falls back to the lab
 // default: allow + detection.
 
-type labExpectation struct {
-	prevention string // "allow" | "deny"
-	detection  bool
-	requireObs bool
-}
-
-func labExpectationFor(scenarioID, probeID string) labExpectation {
-	e, ok := dbsim.ExpectationFor(scenarioID, probeID)
-	if !ok {
-		return labExpectation{prevention: "allow", detection: true}
-	}
-	return labExpectation{prevention: e.ExpectedPrevention, detection: e.ExpectDetection, requireObs: e.RequireObservation}
-}
-
 func labMeta(scenarioID string, spec dbsim.DBProbeSpec) dbsim.ScenarioMeta {
 	m, err := dbbuild.MetaFor(&scenario.Scenario{ID: scenarioID, ProductLine: scenario.ProductLineDBSim}, spec)
 	if err != nil {

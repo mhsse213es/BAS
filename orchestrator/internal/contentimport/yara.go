@@ -17,18 +17,13 @@ type YaraRule struct {
 	Meta       map[string]string
 	strs       []yaraString
 	cond       string
-	node       condNode
-	header     []byte   // required leading bytes (an MZ or ELF magic test in the condition)
-	condNotes  []string // parts of the condition that are not reproduced
-	strNotes   []string
 	techniques []string
 }
 
 type yaraString struct {
-	id    string
-	data  []byte
-	why   string // set when the string cannot be reproduced
-	fixed bool
+	id   string
+	data []byte
+	why  string // set when the string cannot be reproduced
 }
 
 var (

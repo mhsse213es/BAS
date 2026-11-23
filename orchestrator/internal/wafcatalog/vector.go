@@ -48,7 +48,7 @@ func validateStandards(s StandardsMapping) error {
 		}
 	}
 	if len(s.CWEIDs) == 0 && s.WSTGCategory == "" && s.Top10Category == "" && s.APITop10Category == "" {
-		return fmt.Errorf("Standards must set at least one of CWEIDs, WSTGCategory, Top10Category, APITop10Category")
+		return fmt.Errorf("vector standards must set at least one of CWEIDs, WSTGCategory, Top10Category, APITop10Category")
 	}
 	return nil
 }

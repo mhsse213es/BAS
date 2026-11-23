@@ -178,37 +178,3 @@ func splitLines(s string) []string {
 	}
 	return out
 }
-
-func splitFields(s string) []string {
-	var out []string
-	inField := false
-	start := 0
-	for i := 0; i <= len(s); i++ {
-		isSpace := i == len(s) || s[i] == ' ' || s[i] == '\t'
-		if inField && isSpace {
-			out = append(out, s[start:i])
-			inField = false
-		} else if !inField && !isSpace {
-			start = i
-			inField = true
-		}
-	}
-	return out
-}
-
-func trimPrefix(s, prefix string) string {
-	if len(s) >= len(prefix) && s[:len(prefix)] == prefix {
-		return s[len(prefix):]
-	}
-	return s
-}
-
-func toLower(s string) string {
-	b := []byte(s)
-	for i, c := range b {
-		if c >= 'A' && c <= 'Z' {
-			b[i] = c + 32
-		}
-	}
-	return string(b)
-}

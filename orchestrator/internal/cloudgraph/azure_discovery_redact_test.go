@@ -14,6 +14,7 @@ func TestAzureDiscoveryConfig_FormattingRedactsSecret(t *testing.T) {
 		fmt.Sprintf("%v", cfg),
 		fmt.Sprintf("%+v", cfg),
 		fmt.Sprintf("%#v", cfg),
+		//lint:ignore S1025 the %s verb is the thing under test: no print verb may reveal the secret
 		fmt.Sprintf("%s", cfg),
 	} {
 		if strings.Contains(form, secret) {
