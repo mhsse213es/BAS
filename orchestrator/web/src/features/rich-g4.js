@@ -194,6 +194,7 @@ export function expFilterOpts(assets) {
     { id: 'discovered', label: 'Discovered', count: count(assets, function(a) { return a.asset && !a.asset.managed; }) },
     { id: 'crown', label: 'Crown jewels', count: count(assets, function(a) { return a.asset && a.asset.crownJewel; }) },
     { id: 'kev', label: 'KEV exposed', count: count(assets, function(a) { return a.kevExposed; }) },
+    { id: 'internet', label: 'Internet-facing', count: count(assets, function(a) { return a.asset && a.asset.internetFacing; }) },
   ];
 }
 
@@ -205,6 +206,7 @@ export function expFilterAssets(assets, filter, query) {
     if (filter === 'discovered' && as.managed) return false;
     if (filter === 'crown' && !as.crownJewel) return false;
     if (filter === 'kev' && !a.kevExposed) return false;
+    if (filter === 'internet' && !as.internetFacing) return false;
     if (q && (String(as.label || '') + ' ' + String(as.hostKey || '') + ' ' + String(as.crownJewel || '')).toLowerCase().indexOf(q) === -1) return false;
     return true;
   });

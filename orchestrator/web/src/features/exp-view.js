@@ -2,6 +2,7 @@
 // columns, page size, CSV, selection, sortable headers, pager), the two host charts and the detail drawer.
 // The toolbar is built once per load so typing in the filter keeps focus. Pure helpers live in exp-model.js.
 import { apicall } from '../core/api.js';
+let _openSeq = 0; // a slow answer for an earlier asset must not overwrite the one now open
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { failureOf, failureHtml } from '../core/load-state.js';
@@ -15,9 +16,10 @@ import * as M from './exp-model.js';
 
 var ASSETS = [];
 var FILTER = 'all';
-var T = { q: '', col: -1, dir: 1, page: 0, per: 8, sel: {}, hidden: {} };
+var T = { q: '', col: 2, dir: 1, page: 0, per: 25, sel: {}, hidden: {} }; // most exposed (lowest score) first
+var PAGE_SIZES = [10, 25, 50, 100];
 var TITLE = 'Per-asset exposure score';
-var NOTE = 'Attack-path exposure, detection coverage, CVE / KEV / EPSS risk and findings — one composite score per host';
+var NOTE = 'One composite score per host (attack paths, detection, CVE / KEV / EPSS, findings). 0–100: higher is safer, lowest first.';
 
 function ico(d) { return '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>'; }
 function setText(id, t) { var e = document.getElementById(id); if (e) e.textContent = t; }
@@ -37,7 +39,7 @@ function skeletonHtml() {
       '<label class="dt-search">' + ico('<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>') + '<input type="search" id="exp-search" placeholder="Filter rows…" aria-label="Filter rows"' + on('input', 'onExposureSearch') + '></label>' +
       '<span class="dt-count muted" id="exp-count"></span><span class="grow"></span>' +
       '<div class="dt-colwrap"><button type="button" class="btn btn-outline btn-sm"' + on('click', 'toggleExpCols') + '>' + ico('<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>') + 'Columns</button><div class="dt-cols" id="exp-cols" hidden></div></div>' +
-      '<select id="exp-dt-per" class="dt-per" aria-label="Rows per page"' + on('change', 'setExpPer') + '><option value="5">5 / page</option><option value="8" selected>8 / page</option><option value="15">15 / page</option><option value="9999">All rows</option></select>' +
+      '<select id="exp-dt-per" class="dt-per" aria-label="Rows per page"' + on('change', 'setExpPer') + '>' + PAGE_SIZES.map(function(n) { return '<option value="' + n + '">' + n + ' / page</option>'; }).join('') + '<option value="9999">All rows</option></select>' +
       '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'exportExpCsv') + '>' + ico('<path d="M12 4v11M7 11l5 5 5-5M5 20h14"/>') + 'Export CSV</button></div>' +
     '<div class="dt-bulk" id="exp-bulk" hidden><b id="exp-bulk-n">0</b><span>selected</span><span class="grow"></span><button type="button" class="btn btn-outline btn-sm"' + on('click', 'exportExpSelected') + '>Export selected</button><button type="button" class="btn btn-ghost btn-sm"' + on('click', 'clearExpSelection') + '>Clear selection</button></div>' +
     '<div class="tbl-wrap dt-scroll" id="exp-table-wrap"><table><thead id="exp-thead"></thead><tbody id="exp-table-body"></tbody></table></div>' +
@@ -49,7 +51,7 @@ function skeletonHtml() {
 function cellHtml(col, a) {
   var as = a.asset || {};
   switch (col) {
-    case 0: return '<td><b>' + x(as.label || as.hostKey) + '</b></td>';
+    case 0: return '<td><b>' + x(as.label || as.hostKey) + '</b>' + (as.internetFacing ? ' <span class="exp-inet" title="Reachable from the internet">Internet-facing</span>' : '') + '</td>';
     case 1: return '<td>' + (as.managed ? chip('Managed', 'ok') : chip('Discovered', 'muted')) + '</td>';
     case 2: return '<td class="exp-progcell">' + (isFinite(Number(a.exposureScore)) && a.exposureScore != null
       ? '<div class="exp-prog"><div class="grow">' + bar(a.exposureScore, M.scoreTone(a.exposureScore)) + '</div><span class="mono muted">' + x(a.exposureScore) + '%</span></div>'
@@ -76,7 +78,7 @@ function paintTable() {
   var onList = list.filter(function(a) { return T.sel[keyOf(a)]; }).length;
   document.getElementById('exp-thead').innerHTML = '<tr><th class="dt-selcol"><input type="checkbox" class="dt-cb" id="exp-sel-all" title="Select all on this table"' + on('change', 'expSelectAll') + '></th>' +
     cols.map(function(c) {
-      return '<th class="dt-th' + (M.NUM_COLS[c] ? ' num' : '') + (T.col === c ? ' sorted' : '') + '"' + on('click', 'expSortBy', c) + '>' + x(M.COLUMNS[c]) + '<span class="dt-arrow">' + (T.col === c ? (T.dir > 0 ? '▲' : '▼') : '') + '</span></th>';
+      return '<th class="dt-th' + (M.NUM_COLS[c] ? ' num' : '') + (T.col === c ? ' sorted' : '') + '"' + (c >= 2 && c <= 4 ? ' title="Score 0–100. Higher is safer."' : '') + on('click', 'expSortBy', c) + '>' + x(M.COLUMNS[c]) + '<span class="dt-arrow">' + (T.col === c ? (T.dir > 0 ? '▲' : '▼') : '') + '</span></th>';
     }).join('') + '</tr>';
   var all = document.getElementById('exp-sel-all');
   if (all) { all.checked = list.length > 0 && onList === list.length; all.indeterminate = onList > 0 && onList < list.length; }
@@ -106,7 +108,7 @@ function paintTable() {
   var emp = document.getElementById('exp-empty');
   if (emp) {
     emp.hidden = list.length > 0;
-    if (!list.length) emp.innerHTML = empty('search', 'No matching rows', 'Try a different search term, or clear the filter.') + '<div class="dt-empty-act"><button class="btn btn-outline btn-sm"' + on('click', 'clearExpTableQuery') + '>Clear filter</button></div>';
+    if (!list.length) emp.innerHTML = empty('search', 'No matching rows', 'Try a different search, or clear the filters.') + '<div class="dt-empty-act"><button class="btn btn-outline btn-sm"' + on('click', 'clearExpTableQuery') + '>Clear filters</button></div>';
   }
   setHidden('exp-table-wrap', !list.length);
   setHidden('exp-dt-foot', !list.length);
@@ -130,12 +132,12 @@ function renderHero() {
 // The two host charts under the table; a chart with nothing behind it says so.
 function chartsHtml() {
   if (!ASSETS.length) return '';
-  var hb = M.hostBars(ASSETS);
+  var hb = M.hostBars(ASSETS, 8);
   var fr = M.findingsRows(ASSETS);
   return '<div class="exp-charts">' + grid(2, [
-    card('Exposure by host', hb.labels.length
-      ? chartSlot({ type: 'bar', labels: hb.labels, h: 200, series: [{ name: 'Exposure', color: CHART_COLORS.warn, data: hb.data }] })
-      : empty('', 'No data yet'), { sub: hb.sub }),
+    card('Most exposed hosts', hb.labels.length
+      ? hbars(hb.labels.map(function(l, i) { return [l, hb.data[i], M.scoreTone(hb.data[i]), String(hb.data[i])]; }))
+      : empty('', 'No scores yet', 'No host has a measurable score.'), { sub: hb.sub ? hb.sub + ', lowest first' : 'lowest scores first (higher is safer)' }),
     card('Open findings by host', fr.length ? hbars(fr) : empty('', 'No open findings', 'No host has an open finding right now.')),
   ]) + '</div>';
 }
@@ -169,8 +171,8 @@ export function loadExposureAssets() {
 // ── Table controls ──
 export function setExposureFilter(id) { FILTER = id; T.page = 0; paintTable(); }
 export function onExposureSearch(el) { T.q = String((el && el.value) || ''); T.page = 0; paintTable(); }
-export function clearExpTableQuery() { T.q = ''; T.page = 0; var q = document.getElementById('exp-search'); if (q) q.value = ''; paintTable(); }
-export function setExpPer(el) { T.per = Number(el && el.value) || 8; T.page = 0; paintTable(); }
+export function clearExpTableQuery() { T.q = ''; FILTER = 'all'; T.page = 0; var q = document.getElementById('exp-search'); if (q) q.value = ''; paintTable(); }
+export function setExpPer(el) { T.per = Number(el && el.value) || 25; T.page = 0; paintTable(); }
 export function expPage(d) { T.page += Number(d) || 0; paintTable(); }
 export function expSortBy(col) {
   col = Number(col);
@@ -219,6 +221,7 @@ function section(title, body) { return '<h4 class="sc-h4">' + x(title) + '</h4>'
 function emptyNote(t) { return '<div class="tiny muted">' + x(t) + '</div>'; }
 
 export function openExposureDetail(hostKey) {
+  var seq = ++_openSeq;
   var row = ASSETS.filter(function(a) { return keyOf(a) === hostKey; })[0];
   setText('exp-detail-title', (row && row.asset && row.asset.label) || hostKey);
   setText('exp-detail-sub', row ? M.drawerSub(row.asset) : '');
@@ -226,8 +229,9 @@ export function openExposureDetail(hostKey) {
   body.innerHTML = '<div class="empty">Loading…</div>';
   document.getElementById('exposure-detail-overlay').classList.add('open');
   apicall('/api/exposure/assets/' + encodeURIComponent(hostKey)).then(function(p) {
+    if (seq !== _openSeq) return;
     var pf = failureOf(p) || (p && (!p.asset) ? { kind: 'error' } : null);
-    if (pf) { body.innerHTML = failureHtml('this asset', pf); return; }
+    if (pf) { body.innerHTML = failureHtml('this asset', pf) + (pf.kind === 'error' ? '<div class="exp-retry"><button type="button" class="btn btn-outline btn-sm"' + on('click', 'openExposureDetail', hostKey) + '>Try again</button></div>' : ''); return; }
     setText('exp-detail-title', (p.asset && p.asset.label) || hostKey);
     setText('exp-detail-sub', M.drawerSub(p.asset));
     var h = '<div class="exp-dr-chips">' + M.chipRows(p.asset).map(function(c) { return chip(c[0], c[1]); }).join('') + '</div>';
@@ -282,7 +286,8 @@ export function openExposureDetail(hostKey) {
 
     body.innerHTML = h;
   }).catch(function(e) {
-    body.innerHTML = failureHtml('this asset', { kind: 'error' });
+    if (seq !== _openSeq) return;
+    body.innerHTML = failureHtml('this asset', { kind: 'error' }) + '<div class="exp-retry"><button type="button" class="btn btn-outline btn-sm"' + on('click', 'openExposureDetail', hostKey) + '>Try again</button></div>';
   });
 }
 

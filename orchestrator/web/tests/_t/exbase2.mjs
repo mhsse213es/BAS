@@ -1,0 +1,12 @@
+import { boot } from './exlib2.mjs';
+const b = await boot(); const { page, T } = b; await b.go();
+console.log('errors', JSON.stringify(b.errs), '| per', await page.inputValue('#exp-dt-per'), '|', await page.locator('#exp-dt-range').innerText(), '| segs', (await page.locator('#exp-seg').innerText()).replace(/\s+/g,' '));
+console.log('first rows', (await page.locator('#exp-table-body tr').first().innerText()).replace(/\s+/g,' '));
+await page.locator('#exp-seg button', { hasText: 'Internet-facing' }).click(); await page.waitForTimeout(200); console.log('internet seg ->', await page.locator('#exp-count').innerText());
+await page.locator('#exp-seg button', { hasText: 'All' }).click();
+await page.screenshot({ path: T + 'ex-1.png', fullPage: true });
+b.state.fail['/api/exposure/assets/'] = 'x'; await page.locator('#exp-table-body tr').first().click(); await page.waitForTimeout(700);
+console.log('retry btn:', await page.locator('.exp-retry button').count());
+delete b.state.fail['/api/exposure/assets/']; await page.locator('.exp-retry button').click(); await page.waitForTimeout(700);
+console.log('after retry sections:', await page.locator('#exp-detail-body .sc-h4').count());
+await b.close();

@@ -27,3 +27,6 @@
 .exp-dr-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
 #exposure-detail-overlay .sc-dh-ico svg { width: 24px; height: 24px; }
 #exposure-detail-overlay .sc-drawer-ft .btn { display: inline-flex; align-items: center; gap: 6px; }
+
+.exp-inet { margin-left: 8px; padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 600; letter-spacing: .02em; color: var(--danger-text, var(--danger)); border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border)); white-space: nowrap; }
+.exp-retry { padding: 0 16px 18px; text-align: center; }
