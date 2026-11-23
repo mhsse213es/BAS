@@ -5,7 +5,7 @@ import { ago, showToast } from '../core/util.js';
 import { apColor } from './attack-path.js';
 import { freshness as apAgeChip } from './ap-model.js';
 import { apRichBody } from './rich-g4.js';
-import { setExRows, setExError, setExPlans, setExPlansError, execDetailHtml, scenarioDetailHtml, launchFormHtml } from './ex-view.js';
+import { setExRows, setExError, setExPlans, setExPlansError, execDetailHtml, scenarioDetailHtml, launchFormHtml, focusNewPlanNext } from './ex-view.js';
 import { _diffRow, _diffSecretRow, openConfirmDiffModal } from './compliance.js';
 import { ROLE, showTab } from './shell.js';
 import { describePhishingRun } from './phishing-run-view.js';
@@ -314,7 +314,7 @@ export function abortExecution(id) {
 
 export function createPlanFromOpenAEV(id) {
   exCall('/api/openaev/scenarios/' + encodeURIComponent(id) + '/create-plan', { method: 'POST' })
-    .then(function() { showToast('Exercise plan created', 'ok'); closeOpenAEVDetail(); showTab('exercises'); })
+    .then(function() { showToast('Exercise plan created', 'ok'); closeOpenAEVDetail(); focusNewPlanNext(); showTab('exercises'); })
     .catch(function(e) { showToast('Create failed: ' + (e.message || 'error'), 'err'); });
 }
 

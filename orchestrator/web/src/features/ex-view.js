@@ -118,7 +118,7 @@ function paintTable(kind) {
     var i = all.indexOf(r);
     var o = rowOpen(kind, r);
     var live = kind === 'execs' && M.isLive(r);
-    return '<tr class="dt-click" tabindex="0"' + on('click', o.name, o.arg) + on('keydown', 'exRowKeydown', o.name, o.arg) + '>' +
+    return '<tr class="dt-click" tabindex="0"' + on('click', o.name, o.arg) + on('keydown', 'exRowKeydown', o.arg) + '>' +
       (full ? '<td class="dt-selcol"' + on('click', 'stopEvent') + '><input type="checkbox" class="dt-cb" aria-label="Select row"' + (T.sel[i] ? ' checked' : '') + on('change', 'exTblSelectRow', kind, i) + '></td>' : '') +
       cols.map(function(c) { return cellHtml(kind, c, r); }).join('') +
       (kind === 'execs' ? '<td class="td-r">' + (live ? '<button class="btn btn-outline-red btn-sm"' + on('click', 'abortExecutionStop', r.id) + '>&#9632; Abort</button>' : '') + '</td>' : '') +
@@ -188,6 +188,20 @@ export function setExError(kind, msg) {
 }
 
 // setExPlans paints the Exercise plans list: name and caption on the left, Launch on the right.
+var FOCUS_NEW_PLAN = false;
+// focusNewPlanNext: the next plans paint scrolls to the newest plan and highlights it (used after "Create exercise plan",
+// whose result would otherwise land out of sight below the scenarios table).
+export function focusNewPlanNext() { FOCUS_NEW_PLAN = true; }
+function focusNewestPlan() {
+  FOCUS_NEW_PLAN = false;
+  var best = -1, bt = '';
+  PLANS.forEach(function(p, i) { var t = String(p.created_at || ''); if (best < 0 || t >= bt) { best = i; bt = t; } });
+  var node = el('ex-plans-body') && el('ex-plans-body').querySelectorAll('.ex-plan')[best];
+  if (!node) return;
+  node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  node.classList.add('ex-plan-new');
+  setTimeout(function() { node.classList.remove('ex-plan-new'); }, 3000);
+}
 export function setExPlans(plans) {
   PLANS = Array.isArray(plans) ? plans : [];
   var body = el('ex-plans-body');
@@ -200,6 +214,7 @@ export function setExPlans(plans) {
       : '<div id="ex-plans-empty">' + empty('campaign', 'No exercise plans yet', 'Create one from an OpenAEV scenario.') + '</div>';
   }
   renderHero();
+  if (FOCUS_NEW_PLAN && PLANS.length) focusNewestPlan();
 }
 
 export function setExPlansError(msg) {
@@ -236,7 +251,8 @@ export function exTblSelectAll(kind, elm) {
 export function exTblClearSel(kind) { ST[kind].t.sel = {}; paintTable(kind); }
 
 // exRowKeydown: Enter / Space on a focused row opens its detail drawer like a click.
-export function exRowKeydown(name, arg, elm, event) {
+// A row has one shared data-args list (its id), so the handler receives (id, element, event).
+export function exRowKeydown(arg, elm, event) {
   if (!(event && (event.key === 'Enter' || event.key === ' ') && event.target === elm)) return;
   event.preventDefault();
   elm.click();
