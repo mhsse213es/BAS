@@ -76,6 +76,78 @@ steps:
       }
       Write-Output "PASS: browser discovery recorded | observed=installed profile roots=[$($found -join ', ')] of 3 checked; profile folder names=[$($names -join ', ')] | expected=discovery evidence, not a detection result | source=Test-Path and Get-ChildItem -Directory on profile roots. No profile file was opened or read."
     cleanup: ""
+  - name: "Surveyed Data 11 — Cloud Object Discovery, local S3 endpoint (T1619)"
+    check_id: discovery-cloud-objects-s3
+    technique_id: T1619
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 45
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Lists object names in one bucket on a local rclone S3 endpoint and records only the count. No object content is read or copied."
+    telemetry:
+      - "Process creation: rclone.exe"
+      - "Network: connection to the local S3 endpoint"
+    detection:
+      - "Listing evidence only; detection is not scored by this step"
+    command: |
+      if (-not $env:BAS_S3_ENDPOINT -or -not $env:BAS_S3_BUCKET) { Write-Output 'SKIP: not configured; set BAS_S3_ENDPOINT and BAS_S3_BUCKET to a local rclone serve s3 instance | observed=unset | expected=object listing | source=environment'; exit 0 }
+      if (-not (Get-Command rclone -ErrorAction SilentlyContinue)) { Write-Output 'SKIP: not configured; rclone is not on PATH | observed=missing | expected=object listing | source=PATH'; exit 0 }
+      $env:RCLONE_S3_PROVIDER = 'Other'
+      $env:RCLONE_S3_ENDPOINT = $env:BAS_S3_ENDPOINT
+      $env:RCLONE_S3_ACCESS_KEY_ID = $env:BAS_S3_ACCESS_KEY
+      $env:RCLONE_S3_SECRET_ACCESS_KEY = $env:BAS_S3_SECRET_KEY
+      $out = & rclone lsf -R (':s3:' + $env:BAS_S3_BUCKET) 2>&1
+      if ($LASTEXITCODE -ne 0) { Write-Output "ERROR: object listing failed (rclone exit $LASTEXITCODE) | source=rclone lsf -R" ; exit 0 }
+      $count = @($out | Where-Object { $_ -and -not $_.EndsWith('/') }).Count
+      Write-Output "PASS: cloud object discovery recorded | observed=objects listed=$count; object names not recorded | expected=listing evidence, not a detection result | source=rclone lsf -R against the local S3 endpoint. No object content was read."
+    cleanup: ""
+  - name: "Surveyed Data 12 — Mailbox Discovery, local IMAP (T1114)"
+    check_id: discovery-mailbox-imap
+    technique_id: T1114
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 45
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Logs in to a local synthetic test mailbox, lists folders, and records the INBOX message count. No header, body or attachment is fetched."
+    telemetry:
+      - "Network: IMAP connection to the local test mail server"
+      - "Authentication event on the mail server"
+    detection:
+      - "Mailbox listing evidence only; collection of message content is not exercised"
+    command: |
+      if (-not $env:BAS_IMAP_HOST -or -not $env:BAS_IMAP_USER -or -not $env:BAS_IMAP_PASSWORD) { Write-Output 'SKIP: not configured; set BAS_IMAP_HOST, BAS_IMAP_USER and BAS_IMAP_PASSWORD for a local test mailbox | observed=unset | expected=mailbox listing | source=environment'; exit 0 }
+      $port = if ($env:BAS_IMAP_PORT) { [int]$env:BAS_IMAP_PORT } else { 143 }
+      $tcp = New-Object System.Net.Sockets.TcpClient
+      try { $tcp.Connect($env:BAS_IMAP_HOST, $port) } catch { Write-Output "ERROR: IMAP connect failed to $($env:BAS_IMAP_HOST):$port | source=TCP"; exit 0 }
+      $ns = $tcp.GetStream()
+      $sw = New-Object IO.StreamWriter($ns); $sw.NewLine = "`r`n"; $sw.AutoFlush = $true
+      $sr = New-Object IO.StreamReader($ns)
+      function Invoke-ImapCommand([string]$Tag, [string]$Cmd) {
+        $sw.WriteLine("$Tag $Cmd")
+        $lines = @()
+        while ($true) { $l = $sr.ReadLine(); if ($null -eq $l) { break }; $lines += $l; if ($l.StartsWith("$Tag ")) { break } }
+        return $lines
+      }
+      [void]$sr.ReadLine()
+      $login = Invoke-ImapCommand 'a1' ('LOGIN "' + $env:BAS_IMAP_USER + '" "' + $env:BAS_IMAP_PASSWORD + '"')
+      if (-not (@($login)[-1] -match '^a1 OK')) { Write-Output "ERROR: IMAP login rejected by the test mailbox | source=IMAP LOGIN (password not recorded)"; $tcp.Close(); exit 0 }
+      $list = Invoke-ImapCommand 'a2' 'LIST "" "*"'
+      $folders = @($list | Where-Object { $_ -match '^\* LIST' } | ForEach-Object { if ($_ -match '"([^"]*)"\s*$') { $matches[1] } else { ($_ -split ' ')[-1] } })
+      $exam = Invoke-ImapCommand 'a3' 'EXAMINE "INBOX"'
+      $exists = @($exam | Where-Object { $_ -match '^\* (\d+) EXISTS' } | ForEach-Object { $matches[1] })
+      $count = if ($exists.Count) { [int]$exists[0] } else { 0 }
+      [void](Invoke-ImapCommand 'a4' 'LOGOUT')
+      $tcp.Close()
+      Write-Output "PASS: mailbox discovery recorded | observed=folders=[$($folders -join ', ')]; INBOX message count=$count; no header or body was fetched | expected=listing evidence, not a detection result | source=IMAP LIST and EXAMINE against the local test mailbox"
+    cleanup: ""
   - name: "Surveyed Data 2 — Synthetic Cookie-Store Access Probe (T1539)"
     check_id: probe-browser-cookie-store
     technique_id: T1539
