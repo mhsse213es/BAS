@@ -188,6 +188,43 @@ func containsAny(list []string, want string) bool {
 	return slices.Contains(list, want)
 }
 
+// assertCitationsGroundedInScenario proves a primitive's cited telemetry and evidence strings genuinely appear in the
+// committed scenario, and that the scenario is read-only (no step needs cleanup), so the primitive's "no cleanup
+// required" statement is true. The exposure-audit scenarios hold several stages, so each citation may come from any
+// stage; what must not drift is that a cited string exists somewhere in the real scenario.
+func assertCitationsGroundedInScenario(t *testing.T, cs CapabilityState, sc *scenario.Scenario, path string) {
+	t.Helper()
+	if len(sc.Steps) == 0 {
+		t.Fatalf("%s has no steps", path)
+	}
+	inSomeStep := func(pick func(scenario.Step) []string, want string) bool {
+		for _, st := range sc.Steps {
+			if containsAny(pick(st), want) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, telemetry := range cs.TelemetrySources {
+		if !inSomeStep(func(st scenario.Step) []string { return st.Telemetry }, telemetry) {
+			t.Errorf("cited telemetry %q not found in any of %s's %d steps", telemetry, path, len(sc.Steps))
+		}
+	}
+	for _, evidence := range cs.EvidenceRequirements {
+		if !inSomeStep(func(st scenario.Step) []string { return st.Detection }, evidence) {
+			t.Errorf("cited evidence %q not found in any of %s's %d steps", evidence, path, len(sc.Steps))
+		}
+	}
+	for _, st := range sc.Steps {
+		if st.Cleanup != "" {
+			t.Fatalf("test assumes every real cleanup is empty (read-only); %q in %s now has %q -- update the curated Cleanup citation", st.Name, path, st.Cleanup)
+		}
+	}
+	if len(cs.Cleanup) == 0 {
+		t.Error("must explicitly state no cleanup is required, citing the real stage")
+	}
+}
+
 // TestCapabilityStates_DCSyncExposureCheckCitesRealScenarioContent mirrors
 // TestCapabilityStates_KerberoastingCitesRealScenarioContent for the new
 // dcsync-replication-right-exposure-check primitive: parses the real,
@@ -304,30 +341,9 @@ func TestCapabilityStates_ADCSExposureCheckCitesRealScenarioContent(t *testing.T
 	if err != nil {
 		t.Fatalf("parse %s: %v", path, err)
 	}
-	if len(sc.Steps) != 1 {
-		t.Fatalf("expected exactly 1 step in %s, got %d", path, len(sc.Steps))
-	}
-	step := sc.Steps[0]
-
 	byID := capStatesByID(t)
 	cs := byID["adcs-esc-exposure-check"]
-
-	for _, telemetry := range cs.TelemetrySources {
-		if !containsAny(step.Telemetry, telemetry) {
-			t.Errorf("cited telemetry %q not found in %s's real Telemetry list %v", telemetry, step.Name, step.Telemetry)
-		}
-	}
-	for _, evidence := range cs.EvidenceRequirements {
-		if !containsAny(step.Detection, evidence) {
-			t.Errorf("cited evidence %q not found in %s's real Detection list %v", evidence, step.Name, step.Detection)
-		}
-	}
-	if step.Cleanup != "" {
-		t.Fatalf("test assumes the real cleanup is empty (read-only); file now has %q -- update the curated Cleanup citation", step.Cleanup)
-	}
-	if len(cs.Cleanup) == 0 {
-		t.Error("must explicitly state no cleanup is required, citing the real stage")
-	}
+	assertCitationsGroundedInScenario(t, cs, sc, path)
 	if len(cs.ExpectedPostconditions) != 1 || cs.ExpectedPostconditions[0].Kind != adprimitive.CapADCSTemplateExposureKnown {
 		t.Fatalf("expected postcondition CapADCSTemplateExposureKnown (discovery, not certificate request), got %+v", cs.ExpectedPostconditions)
 	}
@@ -361,28 +377,8 @@ func TestCapabilityStates_DelegationTrustGPOExposureChecksCiteRealScenarioConten
 			if err != nil {
 				t.Fatalf("parse %s: %v", path, err)
 			}
-			if len(sc.Steps) != 1 {
-				t.Fatalf("expected exactly 1 step in %s, got %d", path, len(sc.Steps))
-			}
-			step := sc.Steps[0]
 			cs := byID[tc.primitiveID]
-
-			for _, telemetry := range cs.TelemetrySources {
-				if !containsAny(step.Telemetry, telemetry) {
-					t.Errorf("cited telemetry %q not found in %s's real Telemetry list %v", telemetry, step.Name, step.Telemetry)
-				}
-			}
-			for _, evidence := range cs.EvidenceRequirements {
-				if !containsAny(step.Detection, evidence) {
-					t.Errorf("cited evidence %q not found in %s's real Detection list %v", evidence, step.Name, step.Detection)
-				}
-			}
-			if step.Cleanup != "" {
-				t.Fatalf("test assumes the real cleanup is empty (read-only); file now has %q", step.Cleanup)
-			}
-			if len(cs.Cleanup) == 0 {
-				t.Error("must explicitly state no cleanup is required, citing the real stage")
-			}
+			assertCitationsGroundedInScenario(t, cs, sc, path)
 			if len(cs.ExpectedPostconditions) != 1 || cs.ExpectedPostconditions[0].Kind != tc.wantPost {
 				t.Fatalf("expected discovery postcondition %q, got %+v", tc.wantPost, cs.ExpectedPostconditions)
 			}

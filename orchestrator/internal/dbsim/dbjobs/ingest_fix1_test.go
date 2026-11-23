@@ -91,7 +91,7 @@ func TestIngestCancelDuringGradingSavesNothing(t *testing.T) {
 	if !handled || err != nil {
 		t.Fatalf("handled=%v err=%v, want true,nil", handled, err)
 	}
-	if r.conn.calls == 0 {
+	if r.conn.calls.Load() == 0 {
 		t.Fatal("test setup: the connector was never asked")
 	}
 	if r.sink.saves != 0 || r.status() != dbsim.JobCancelled {
@@ -197,7 +197,7 @@ func TestIngestUnknownPrincipalSkipsCorrelation(t *testing.T) {
 	}
 	row, _ := r.sink.row(runIDx, scDB05)
 	rep := reportOf(t, row)
-	if r.conn.calls != 0 {
+	if r.conn.calls.Load() != 0 {
 		t.Error("no principal: the SIEM must not be queried")
 	}
 	if rep.Record.Telemetry != dlpreport.TelemetryUnverifiable || row.Result == string(dbsim.ResultPass) {
@@ -219,8 +219,8 @@ func TestIngestUnavailableTargetSkipsCorrelation(t *testing.T) {
 		t.Fatal("no row")
 	}
 	rep := reportOf(t, row)
-	if r.conn.calls != 0 || rep.Record.Telemetry != dlpreport.TelemetryUnverifiable || !strings.Contains(rep.Record.Limitations, "target unavailable") {
-		t.Errorf("calls=%d telemetry=%v limitations=%q", r.conn.calls, rep.Record.Telemetry, rep.Record.Limitations)
+	if r.conn.calls.Load() != 0 || rep.Record.Telemetry != dlpreport.TelemetryUnverifiable || !strings.Contains(rep.Record.Limitations, "target unavailable") {
+		t.Errorf("calls=%d telemetry=%v limitations=%q", r.conn.calls.Load(), rep.Record.Telemetry, rep.Record.Limitations)
 	}
 }
 
@@ -235,8 +235,8 @@ func TestIngestPrincipalComesFromServiceFunc(t *testing.T) {
 	if _, err := r.svc.Ingest(context.Background(), r.sub(r.results())); err != nil {
 		t.Fatal(err)
 	}
-	if gotJob.ID != runIDx || gotRec.ID != "lab-db" || r.conn.calls == 0 {
-		t.Errorf("job=%s rec=%s calls=%d", gotJob.ID, gotRec.ID, r.conn.calls)
+	if gotJob.ID != runIDx || gotRec.ID != "lab-db" || r.conn.calls.Load() == 0 {
+		t.Errorf("job=%s rec=%s calls=%d", gotJob.ID, gotRec.ID, r.conn.calls.Load())
 	}
 }
 

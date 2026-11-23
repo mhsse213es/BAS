@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -61,12 +62,12 @@ func (f *fakeSink) row(runID, scenarioID string) (RunRecord, bool) {
 }
 
 type ingestConn struct {
-	calls int
+	calls atomic.Int64
 	reply func(detectverify.VerifyRequest) (detectverify.VerifyResult, error)
 }
 
 func (c *ingestConn) Verify(_ context.Context, r detectverify.VerifyRequest) (detectverify.VerifyResult, error) {
-	c.calls++
+	c.calls.Add(1)
 	if c.reply == nil {
 		return detectverify.VerifyResult{Verdict: detectverify.VerdictNotDetected}, nil
 	}
@@ -482,7 +483,7 @@ func TestIngestUsesConnectorFromFactory(t *testing.T) {
 	if _, err := r.svc.Ingest(context.Background(), r.sub(r.results())); err != nil {
 		t.Fatal(err)
 	}
-	if r.conn.calls == 0 {
+	if r.conn.calls.Load() == 0 {
 		t.Error("the injected connector was never asked about the marker")
 	}
 }

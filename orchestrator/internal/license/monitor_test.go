@@ -10,6 +10,13 @@ import (
 	"time"
 )
 
+// waitMonitor cancels the monitor's context and waits for its goroutine to exit. Deferred after the defer that restores
+// PublicKeyPEM, it runs first, so the monitor is never mid-tick reading the key while the test puts it back.
+func waitMonitor(cancel context.CancelFunc, done <-chan struct{}) {
+	cancel()
+	<-done
+}
+
 func TestSetInitial_ThenCurrent(t *testing.T) {
 	want := Info{State: StateGrace, DaysRemaining: 3}
 	SetInitial(want)
@@ -41,7 +48,7 @@ func TestStartMonitor_PicksUpStateChangeOnTick(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	StartMonitor(ctx, licPath, 20*time.Millisecond, nil)
+	defer waitMonitor(cancel, startMonitor(ctx, licPath, 20*time.Millisecond, nil))
 
 	// Flip the file to an already-locked license (deep in the past) —
 	// signed fresh, so this is a legitimate renewal/downgrade, not tampering.
@@ -76,7 +83,7 @@ func TestStartMonitor_OnLockFiresExactlyOnceOnTransition(t *testing.T) {
 	var calls atomic.Int32
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	StartMonitor(ctx, licPath, 20*time.Millisecond, func() { calls.Add(1) })
+	defer waitMonitor(cancel, startMonitor(ctx, licPath, 20*time.Millisecond, func() { calls.Add(1) }))
 
 	time.Sleep(200 * time.Millisecond) // several ticks — onLock must still fire only once
 	if n := calls.Load(); n != 1 {
@@ -115,7 +122,7 @@ func TestStartMonitor_TamperedExpiryAfterStartup_NeverRestoresAccess(t *testing.
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	StartMonitor(ctx, licPath, 20*time.Millisecond, nil)
+	defer waitMonitor(cancel, startMonitor(ctx, licPath, 20*time.Millisecond, nil))
 
 	// Simulate the attack: edit expires_at directly in the raw JSON bytes,
 	// to a far-future date, WITHOUT touching signature. This is exactly
@@ -182,7 +189,7 @@ func TestStartMonitor_TamperedCustomerIDOrFeatures_FailsClosed(t *testing.T) {
 
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			StartMonitor(ctx, licPath, 20*time.Millisecond, nil)
+			defer waitMonitor(cancel, startMonitor(ctx, licPath, 20*time.Millisecond, nil))
 
 			var raw map[string]any
 			if err := json.Unmarshal(data, &raw); err != nil {
@@ -228,7 +235,7 @@ func TestStartMonitor_FileDeletedOrCorrupted_FailsClosed_NotLastKnownState(t *te
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		StartMonitor(ctx, licPath, 20*time.Millisecond, nil)
+		defer waitMonitor(cancel, startMonitor(ctx, licPath, 20*time.Millisecond, nil))
 
 		if err := os.Remove(licPath); err != nil {
 			t.Fatalf("remove license: %v", err)
@@ -252,7 +259,7 @@ func TestStartMonitor_FileDeletedOrCorrupted_FailsClosed_NotLastKnownState(t *te
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		StartMonitor(ctx, licPath, 20*time.Millisecond, nil)
+		defer waitMonitor(cancel, startMonitor(ctx, licPath, 20*time.Millisecond, nil))
 
 		if err := os.WriteFile(licPath, []byte("{not valid json"), 0644); err != nil {
 			t.Fatalf("corrupt license: %v", err)
@@ -289,7 +296,7 @@ func TestStartMonitor_RecoversWhenOriginalValidLicenseRestored(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	StartMonitor(ctx, licPath, 20*time.Millisecond, nil)
+	defer waitMonitor(cancel, startMonitor(ctx, licPath, 20*time.Millisecond, nil))
 
 	// Corrupt it, confirm it goes Invalid.
 	if err := os.WriteFile(licPath, []byte("garbage"), 0644); err != nil {
@@ -334,7 +341,7 @@ func TestStartMonitor_DevModeBypass_NeverEnforces(t *testing.T) {
 	defer cancel()
 	// licPath deliberately points at a file that will never exist — if
 	// the monitor started anyway, this would fail-closed into Invalid.
-	StartMonitor(ctx, filepath.Join(t.TempDir(), "never-created.lic"), 20*time.Millisecond, nil)
+	defer waitMonitor(cancel, startMonitor(ctx, filepath.Join(t.TempDir(), "never-created.lic"), 20*time.Millisecond, nil))
 
 	time.Sleep(200 * time.Millisecond)
 	if got := Current().State; got != StateValid {
