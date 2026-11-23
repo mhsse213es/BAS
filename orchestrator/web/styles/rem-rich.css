@@ -47,3 +47,13 @@
 .rem-chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted-hi); background: transparent; }
 .rem-chip-more { font-style: italic; }
 .rem-ep-f .rem-fix-acts { margin-top: 8px; }
+
+.rem-retry { margin-top: 12px; }
+/* An open endpoint card no longer stretches its neighbour to the same height. */
+.rem-grid.g2 { align-items: start; }
+.rem-ep-head { cursor: pointer; }
+.rem-ep-head::after { content: '\25BE'; margin-left: auto; opacity: .6; transition: transform .15s; }
+.rem-ep-head[aria-expanded="true"]::after { transform: rotate(180deg); }
+/* Drawer header actions on one row */
+.rem-dr-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.rem-dr-acts .btn { width: auto; flex: 0 0 auto; }

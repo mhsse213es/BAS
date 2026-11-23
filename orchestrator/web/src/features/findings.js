@@ -1,5 +1,5 @@
 import { state } from '../core/state.js';
-import { apicall } from '../core/api.js';
+import { apicall, apicallOk } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { fmtDate, showToast } from '../core/util.js';
@@ -330,14 +330,21 @@ function _confirmTicketPush(enabled, count, onPick) {
 
 // ── Remediation ──────────────────────────────────────────────────────────────
 export function loadRemediations() {
-  Promise.all([apicall('/api/remediations'), apicall('/api/remediations/by-endpoint')]).then(function(res) {
-    state._rems = res[0] || [];
-    state._remEps = res[1] || [];
+  Promise.all([apicallOk('/api/remediations'), apicallOk('/api/remediations/by-endpoint')]).then(function(res) {
+    state._rems = Array.isArray(res[0]) ? res[0] : [];
+    state._remEps = Array.isArray(res[1]) ? res[1] : [];
     var hs = RM.heroStats(state._rems);
     setHeroStat('rem-hs-open', hs.open);
     setHeroStat('rem-hs-critical', hs.critical);
     renderRemTiles(); renderRemToolbar(); renderRemList();
-  }).catch(function(e) { document.getElementById('rem-list').innerHTML = '<div class="empty g1-s-be6df18e">' + x(e.message) + '</div>'; });
+    var ta = document.getElementById('rem-ticket-actions');
+    if (ta) setDisplay(ta, state._rems.length && (ROLE === 'admin' || ROLE === 'analyst') ? 'flex' : 'none');
+  }).catch(function(e) {
+    document.getElementById('rem-list').innerHTML = card('', '<div class="empty g1-s-be6df18e">Failed to load remediations: ' + x(e.message || 'unknown error') +
+      '<div class="rem-retry"><button type="button" class="btn btn-outline btn-sm"' + on('click', 'loadRemediations') + '>Try again</button></div></div>');
+    ['rem-tiles', 'rem-toolbar'].forEach(function(id) { var el = document.getElementById(id); if (el) el.innerHTML = ''; });
+    setHeroStat('rem-hs-open', '—'); setHeroStat('rem-hs-critical', '—');
+  });
 }
 // Three tiles under the banner, same as the design demo: open fixes, findings they close, critical fixes.
 function renderRemTiles() {
@@ -440,12 +447,12 @@ function endpointFindingHtml(f) {
       (mits.length > shown.length ? '<span class="rem-chip rem-chip-more">+' + (mits.length - shown.length) + ' more</span>' : '') + '</div>'
     : '<div class="muted rem-ep-mit">No ATT&amp;CK mitigation recorded for this technique.</div>';
   var idx = remIndexFor(f.techniqueId);
-  var done = !!REM_TICKETED[f.techniqueId];
+  var done = !!REM_TICKETED_F[f.id] || !!REM_TICKETED[f.techniqueId];
   var canTicket = ROLE === 'admin' || ROLE === 'analyst';
   var acts = '<div class="rem-fix-acts">' +
     (idx >= 0 ? '<button class="btn btn-outline btn-sm"' + on('click', 'openRemediation', idx) + '>View</button>' : '') +
-    (canTicket && idx >= 0 ? '<button class="btn btn-outline btn-sm"' + on('click', 'remSingleTicket', idx) + (done ? ' disabled' : '') + '>' + (done ? '&#10003; Ticketed' : '&#128279; Ticket') + '</button>' : '') +
-    '<button class="btn btn-primary btn-sm"' + on('click', 'revalidateRemediation', f.techniqueId) + '>&#8635; Re-validate</button>' +
+    (canTicket && f.id ? '<button class="btn btn-outline btn-sm" title="Creates one ticket, for this endpoint\'s finding only"' + on('click', 'remEpTicket', f.id) + (done ? ' disabled' : '') + '>' + (done ? '&#10003; Ticketed' : '&#128279; Ticket') + '</button>' : '') +
+    (canTicket ? '<button class="btn btn-primary btn-sm"' + on('click', 'revalidateRemediation', f.techniqueId) + '>&#8635; Re-validate</button>' : '') +
   '</div>';
   return '<div class="rem-ep-f">' +
     '<div class="rem-ep-row"><span class="rem-tid">' + x(f.techniqueId) + '</span>' +
@@ -496,7 +503,7 @@ function renderRemList() {
       '<div class="rem-fix-acts">' +
         '<button class="btn btn-outline btn-sm"' + on('click', 'openRemediation', i) + '>View</button>' +
         (canTicket ? '<button class="btn btn-outline btn-sm"' + on('click', 'remSingleTicket', i) + (done ? ' disabled' : '') + '>' + (done ? '&#10003; Ticketed' : '&#128279; Ticket') + '</button>' : '') +
-        '<button class="btn btn-primary btn-sm"' + on('click', 'revalidateRemediation', v.techniqueId) + '>&#8635; Re-validate</button>' +
+        (canTicket ? '<button class="btn btn-primary btn-sm"' + on('click', 'revalidateRemediation', v.techniqueId) + '>&#8635; Re-validate</button>' : '') +
       '</div>' +
     '</div>';
   }).join('') + '</div>';
@@ -505,16 +512,16 @@ export function openRemediation(i) {
   var r = (state._rems || [])[i];
   if (!r) return;
   document.getElementById('results-title').textContent = r.techniqueId + ' — Remediation';
-  document.getElementById('results-export').innerHTML =
+  document.getElementById('results-export').innerHTML = '<div class="rem-dr-acts">' +
     (ROLE === 'admin' || ROLE === 'analyst' ? '<button class="btn btn-outline btn-sm"' + on('click', 'remSingleTicket', i) + '>&#128279; Create Ticket</button>' : '') +
-    '<button class="btn btn-primary btn-sm"' + on('click', 'revalidateRemediation', r.techniqueId) + '>&#8635; Re-validate</button>';
+    (ROLE === 'admin' || ROLE === 'analyst' ? '<button class="btn btn-primary btn-sm"' + on('click', 'revalidateRemediation', r.techniqueId) + '>&#8635; Re-validate</button>' : '') + '</div>';
   var v = RM.drawerView(r);
   var steps = v.steps.map(function(m, idx) {
     return '<div class="rem-step"><div class="rem-step-n">' + (idx + 1) + '</div>' +
       '<div class="rem-step-tx"><div class="nm">' + x(m.name) + '</div>' +
       (m.description ? '<div class="ds">' + x(m.description) + '</div>' : '') + '</div></div>';
   }).join('') || '<div class="tiny muted">No ATT&amp;CK mitigations listed for this technique.</div>';
-  var agents = v.targets.map(function(a) { return '<span class="tool-tag">' + x(a) + '</span>'; }).join(' ') || '<span class="tiny muted">—</span>';
+  var agents = v.targets.length ? '<div class="rem-chips">' + v.targets.map(function(a) { return '<span class="rem-chip">' + x(a) + '</span>'; }).join('') + '</div>' : '<span class="tiny muted">—</span>';
   var detection = v.detection
     ? '<div class="rem-eyebrow">ATT&amp;CK Detection Guidance</div><div class="tiny">' + x(v.detection) + '</div>'
     : '';
@@ -534,6 +541,8 @@ export function revalidateRemediation(techniqueId) {
   // wizard skips to Options and dispatches only that one technique.
   // Priority: (1) scenario whose artTechniques list contains the ID (most common),
   //           (2) scenario with a custom step whose techniqueId matches.
+  // The wizard must not open behind the detail drawer the click came from.
+  var _ro = document.getElementById('results-overlay'); if (_ro) _ro.classList.remove('open');
   var tid = (techniqueId || '').toUpperCase();
   var match = null;
   var matchFw = 'art';
@@ -603,11 +612,16 @@ function loadTicketCandidates() {
   }).catch(function() { _ticketCandidateIds = null; });
 }
 
-export function loadTicketingConfigs(cb) {
-  apicall('/api/ticketing/configs').then(function(list) {
-    _ticketingConfigs = list || [];
+// onErr (optional): called with the message when the connector list could not be read, so a caller can say so
+// instead of claiming no connector is configured.
+export function loadTicketingConfigs(cb, onErr) {
+  apicallOk('/api/ticketing/configs').then(function(list) {
+    _ticketingConfigs = Array.isArray(list) ? list : [];
     if (cb) cb(_ticketingConfigs);
-  }).catch(function() { _ticketingConfigs = []; if (cb) cb([]); });
+  }).catch(function(e) {
+    _ticketingConfigs = [];
+    if (onErr) onErr(e.message || 'error'); else if (cb) cb([]);
+  });
 }
 
 // ── Dashboard ITSM widget ───────────────────────────────────────────────────
@@ -701,14 +715,25 @@ export function bulkPushSelectedFindings() {
 }
 
 // ── Remediation bulk tickets ─────────────────────────────────────────────────
+// A technique counts as ticketed only when every one of its findings got a ticket.
+function markTicketed(rems, okIds) {
+  rems.forEach(function(r) {
+    var ids = r.findingIds || [];
+    if (ids.length && ids.every(function(id) { return okIds[id]; })) REM_TICKETED[r.techniqueId] = true;
+  });
+}
 export function remBulkTicket(filter) {
   var rems = state._rems || [];
-  var targets = filter === 'critical' ? rems.filter(function(r) { return r.severity === 'Critical'; }) : rems;
+  var targets = filter === 'critical' ? rems.filter(function(r) { return RM.cardView(r).sev === 'Critical'; }) : rems;
   if (!targets.length) { showToast('No remediations to ticket', 'err'); return; }
-  var findingIds = [];
-  targets.forEach(function(r) { (r.findingIds || []).forEach(function(id) { findingIds.push(id); }); });
+  var findingIds = [], empties = 0;
+  targets.forEach(function(r) {
+    if (!(r.findingIds || []).length) empties++;
+    (r.findingIds || []).forEach(function(id) { if (findingIds.indexOf(id) < 0) findingIds.push(id); });
+  });
   if (!findingIds.length) { showToast('Remediations have no finding IDs — re-validate first', 'err'); return; }
-  _pushFindingTickets(findingIds, function() { targets.forEach(function(r) { REM_TICKETED[r.techniqueId] = true; }); renderRemList(); });
+  _pushFindingTickets(findingIds, function(okIds) { markTicketed(targets, okIds); renderRemList(); },
+    empties ? empties + ' technique' + (empties === 1 ? ' has' : 's have') + ' no findings to ticket' : '');
 }
 
 export function remSingleTicket(i) {
@@ -716,20 +741,34 @@ export function remSingleTicket(i) {
   if (!r) return;
   var findingIds = r.findingIds || [];
   if (!findingIds.length) { showToast(r.techniqueId + ' has no finding IDs — re-validate first', 'err'); return; }
-  _pushFindingTickets(findingIds, function() { REM_TICKETED[r.techniqueId] = true; renderRemList(); });
+  _pushFindingTickets(findingIds, function(okIds) { markTicketed([r], okIds); renderRemList(); });
 }
 
-function _pushFindingTickets(findingIds, onOk) {
+// A finding on an endpoint card: ticket that one finding, not every endpoint's finding for the technique.
+var REM_TICKETED_F = {};
+export function remEpTicket(findingId) {
+  _pushFindingTickets([findingId], function(okIds) { if (okIds[findingId]) REM_TICKETED_F[findingId] = true; renderRemList(); });
+}
+
+// Pushes the tickets and says exactly what happened: all created, some created (with the first reason the
+// others failed), or none (with the reason). onOk gets a map of the finding ids that did get a ticket.
+function _pushFindingTickets(findingIds, onOk, note) {
   loadTicketingConfigs(function(cfgs) {
     var enabled = (cfgs || []).filter(function(c) { return c.enabled; });
     if (!enabled.length) { showToast('No ITSM connectors configured — add one in Integrations', 'err'); return; }
     _confirmTicketPush(enabled, findingIds.length, function(configId) {
-      apicall('/api/ticketing/push/bulk', { method: 'POST', body: JSON.stringify({ findingIds: findingIds, configId: configId, recordType: 'incident' }) })
+      apicallOk('/api/ticketing/push/bulk', { method: 'POST', body: JSON.stringify({ findingIds: findingIds, configId: configId, recordType: 'incident' }) })
         .then(function(results) {
-          var ok = (results || []).filter(function(r) { return !r.error; }).length;
-          showToast(ok + ' ticket' + (ok === 1 ? '' : 's') + ' created', ok ? 'ok' : 'err');
-          if (ok && onOk) onOk();
-        }).catch(function(e) { showToast(e.message, 'err'); });
+          results = Array.isArray(results) ? results : [];
+          var okIds = {}, firstErr = '', failed = 0;
+          results.forEach(function(r) { if (r.error) { failed++; if (!firstErr) firstErr = r.error; } else okIds[r.findingId] = true; });
+          var ok = results.length - failed;
+          var tail = note ? ' (' + note + ')' : '';
+          if (!ok) showToast('No tickets were created' + (firstErr ? ': ' + firstErr : '') + tail, 'err');
+          else if (failed) showToast(ok + ' of ' + findingIds.length + ' tickets created, ' + failed + ' failed: ' + firstErr + tail, 'warn');
+          else showToast(ok + ' ticket' + (ok === 1 ? '' : 's') + ' created' + tail, 'ok');
+          if (ok && onOk) onOk(okIds);
+        }).catch(function(e) { showToast('Could not create tickets: ' + (e.message || 'error'), 'err'); });
     });
-  });
+  }, function(msg) { showToast('Could not read the ITSM connectors: ' + msg, 'err'); });
 }
