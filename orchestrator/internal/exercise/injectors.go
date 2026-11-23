@@ -33,7 +33,11 @@ func (i *SMSInjector) Send(ctx context.Context, to []string, body string) (map[s
 	}
 	sent, failed := 0, 0
 	var errs []string
+	var interrupted string
 	for _, num := range to {
+		if ctx.Err() != nil {
+			break // aborted: do not start the next message
+		}
 		payload, _ := json.Marshal(map[string]string{"to": num, "from": i.cfg.From, "body": body})
 		req, _ := http.NewRequestWithContext(ctx, http.MethodPost, i.cfg.URL, bytes.NewReader(payload))
 		req.Header.Set("Content-Type", "application/json")
@@ -42,6 +46,11 @@ func (i *SMSInjector) Send(ctx context.Context, to []string, body string) (map[s
 		}
 		resp, err := injectorHTTPClient.Do(req)
 		if err != nil {
+			if ctx.Err() != nil {
+				// Cancelled mid-request: whether it was delivered is unknown, so it is neither sent nor failed.
+				interrupted = num
+				break
+			}
 			failed++
 			errs = append(errs, num+": "+err.Error())
 			continue
@@ -57,6 +66,14 @@ func (i *SMSInjector) Send(ctx context.Context, to []string, body string) (map[s
 	res := map[string]any{"channel": "sms", "sent": sent, "failed": failed}
 	if len(errs) > 0 {
 		res["errors"] = errs
+	}
+	if err := ctx.Err(); err != nil {
+		// Aborted part-way. What already went out is real and stays in the result; the caller sees the error.
+		res["cancelled"] = true
+		if interrupted != "" {
+			res["interrupted"] = interrupted
+		}
+		return res, err
 	}
 	return res, nil
 }
@@ -82,6 +99,25 @@ func NewTeamsInjector(webhookURL string) *TeamsInjector {
 func (i *TeamsInjector) Send(ctx context.Context, text string) (map[string]any, error) {
 	// Teams incoming webhooks accept a simple {"text": ...} payload.
 	return postWebhookJSON(ctx, "teams", i.webhookURL, map[string]any{"text": text})
+}
+
+// googleChatMaxBytes is Google Chat's documented maximum message size (32,000 bytes, not characters).
+const googleChatMaxBytes = 32000
+
+// GoogleChatInjector posts to a Google Chat space through its incoming webhook URL (the URL carries the
+// space, key and secret token). Google also limits a space to one request per second, shared by every
+// webhook in it, so a plan should not fire several google_chat steps at the same instant.
+type GoogleChatInjector struct{ webhookURL string }
+
+func NewGoogleChatInjector(webhookURL string) *GoogleChatInjector {
+	return &GoogleChatInjector{webhookURL: webhookURL}
+}
+
+func (i *GoogleChatInjector) Send(ctx context.Context, text string) (map[string]any, error) {
+	if len(text) > googleChatMaxBytes {
+		return nil, fmt.Errorf("google_chat message is %d bytes, over Google Chat's %d byte limit", len(text), googleChatMaxBytes)
+	}
+	return postWebhookJSON(ctx, "google_chat", i.webhookURL, map[string]any{"text": text})
 }
 
 func postWebhookJSON(ctx context.Context, channel, url string, payload map[string]any) (map[string]any, error) {

@@ -20,6 +20,13 @@ const (
 	StepTypeNotify    StepType = "notify"
 	StepTypeSlack     StepType = "slack"
 	StepTypeTeams     StepType = "teams"
+	// google_chat posts to a Google Chat space through its incoming webhook; ticket opens a clearly
+	// labelled exercise ticket in the configured ServiceNow or Jira connector.
+	StepTypeGoogleChat StepType = "google_chat"
+	StepTypeTicket     StepType = "ticket"
+	// wait_for_ticket waits until a ticket opened by an earlier ticket step is acknowledged (or resolved) by
+	// whoever works that queue, and records it as the SOC's acknowledgement.
+	StepTypeWaitForTicket StepType = "wait_for_ticket"
 	// Event-based waits — step enters StepWaiting and the trigger registry
 	// checks the condition on every executor tick.
 	StepTypeWaitForAgent     StepType = "wait_for_agent"     // waits until a BAS run completes
@@ -97,6 +104,12 @@ type StepConfig struct {
 	Slack *SlackStepConfig `json:"slack,omitempty"`
 	// teams
 	Teams *TeamsStepConfig `json:"teams,omitempty"`
+	// google_chat
+	GoogleChat *GoogleChatStepConfig `json:"google_chat,omitempty"`
+	// ticket
+	Ticket *TicketStepConfig `json:"ticket,omitempty"`
+	// wait_for_ticket
+	WaitForTicket *WaitForTicketConfig `json:"wait_for_ticket,omitempty"`
 	// wait_for_agent
 	WaitForAgent *WaitForAgentConfig `json:"wait_for_agent,omitempty"`
 	// wait_for_detection
@@ -128,6 +141,31 @@ type SlackStepConfig struct {
 
 type TeamsStepConfig struct {
 	Text string `json:"text"`
+}
+
+// WaitForTicketConfig configures a wait_for_ticket step. TicketStepID names a ticket step in the same plan.
+// Until is "acknowledged" (the default: the ticket is in progress or resolved) or "resolved". Set the step's
+// timeout_secs: if nobody acknowledges in time the step completes as timed out, and the score records no
+// acknowledgement. Without a timeout it waits for as long as the exercise runs.
+type WaitForTicketConfig struct {
+	TicketStepID string `json:"ticket_step_id"`
+	Until        string `json:"until,omitempty"`
+}
+
+type GoogleChatStepConfig struct {
+	Text string `json:"text"`
+}
+
+// TicketStepConfig opens one exercise ticket. ConnectorID is the id of a configured ticketing connector
+// (ServiceNow or Jira); RecordType is optional and falls back to "incident".
+type TicketStepConfig struct {
+	ConnectorID string `json:"connector_id"`
+	Subject     string `json:"subject"`
+	Body        string `json:"body,omitempty"`
+	RecordType  string `json:"record_type,omitempty"`
+	// KeepOpen leaves the drill ticket open when the exercise ends. By default it is closed, so a drill does not
+	// leave open tickets in a real ITSM queue.
+	KeepOpen bool `json:"keep_open,omitempty"`
 }
 
 type AgentTaskConfig struct {
@@ -335,6 +373,8 @@ type TechnicalScore struct {
 	SOCAcknowledged bool `json:"soc_acknowledged"`
 	MTTDSeconds     int  `json:"mttd_seconds,omitempty"`
 	MTTRSeconds     int  `json:"mttr_seconds,omitempty"`
+	// TimeToAcknowledgeSeconds runs from the injected ticket to the SOC acknowledging it; 0 when it did not.
+	TimeToAcknowledgeSeconds int `json:"time_to_acknowledge_s,omitempty"`
 }
 
 type ManagementScore struct {

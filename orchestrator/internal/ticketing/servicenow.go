@@ -257,3 +257,62 @@ func splitSnowID(ticketID string) (table, sysID string, err error) {
 	}
 	return parts[0], parts[1], nil
 }
+
+// CloseWithNote resolves an exercise ticket with its own note, so a drill is never closed with finding text.
+func (s *snowConnector) CloseWithNote(ctx context.Context, ticketID, note string) error {
+	table, sysID, err := splitSnowID(ticketID)
+	if err != nil {
+		return err
+	}
+	payload := map[string]any{
+		"state":       "6",
+		"close_code":  "Solved (Permanently)",
+		"close_notes": note,
+	}
+	if table == "problem" {
+		payload["state"] = "107"
+		delete(payload, "close_code")
+		delete(payload, "close_notes")
+		payload["cause_notes"] = note
+		payload["fix_notes"] = note
+	}
+	_, err = s.doRequest(ctx, "PATCH", "/api/now/table/"+table+"/"+sysID, payload)
+	return err
+}
+
+// Notify opens an exercise ticket: a labelled title and a body that says it is a drill. The connector's own
+// assignment group and category still apply, so the ticket lands where the SOC works.
+func (s *snowConnector) Notify(ctx context.Context, subject, body string, rt RecordType) (TicketRef, error) {
+	title, err := exerciseSubject(subject, 160)
+	if err != nil {
+		return TicketRef{}, err
+	}
+	table := tableForRecord(rt)
+	payload := map[string]any{
+		"short_description": title,
+		"description":       exerciseDescription(body),
+		"category":          s.category,
+	}
+	if s.assignGroup != "" {
+		payload["assignment_group"] = s.assignGroup
+	}
+	resp, err := s.doRequest(ctx, "POST", "/api/now/table/"+table, payload)
+	if err != nil {
+		return TicketRef{}, err
+	}
+	var result struct {
+		Result struct {
+			SysID  string `json:"sys_id"`
+			Number string `json:"number"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(resp, &result); err != nil || result.Result.SysID == "" {
+		return TicketRef{}, fmt.Errorf("servicenow: unexpected create response: %s", resp)
+	}
+	ticketID := table + "/" + result.Result.SysID
+	ticketURL := s.instanceURL + "/nav_to.do?uri=" + table + ".do?sys_id=" + result.Result.SysID
+	if result.Result.Number != "" {
+		ticketURL = s.instanceURL + "/nav_to.do?uri=" + table + ".do?number=" + result.Result.Number
+	}
+	return TicketRef{TicketID: ticketID, TicketURL: ticketURL}, nil
+}

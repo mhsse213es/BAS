@@ -814,6 +814,12 @@ func main() {
 	exExecutor := exercise.NewExecutor(exStore, exChain, exRegistry, exScheduler, nil).WithMetrics(exMetrics)
 	exExecutor.WithVerification(verificationStore)
 	exExecutor.RegisterBuiltins(smtpInj, smsInj, slackInj, teamsInj)
+	// Google Chat (webhook) and exercise tickets (ServiceNow/Jira through the configured ticketing connectors).
+	var gchatInj *exercise.GoogleChatInjector
+	if cfg.GoogleChatWebhookURL != "" {
+		gchatInj = exercise.NewGoogleChatInjector(cfg.GoogleChatWebhookURL)
+	}
+	exExecutor.RegisterChannelBuiltins(gchatInj, ticketingManager)
 	exExecutor.RegisterBuiltinTriggers()
 	if err := exStore.SeedBuiltinTemplates(context.Background()); err != nil {
 		log.Printf("warn: seed built-in exercise templates: %v", err)

@@ -97,6 +97,8 @@ type Config struct {
 	SMSGatewayFrom  string `json:"sms_gateway_from,omitempty"`
 	SlackWebhookURL string `json:"slack_webhook_url,omitempty"`
 	TeamsWebhookURL string `json:"teams_webhook_url,omitempty"`
+	// Google Chat incoming-webhook URL. It carries a secret token, so treat it like a credential.
+	GoogleChatWebhookURL string `json:"google_chat_webhook_url,omitempty"`
 
 	// Threat-intel connector (MISP / OpenCTI)
 	MISPUrl              string   `json:"misp_url,omitempty"`
@@ -362,6 +364,9 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("TEAMS_WEBHOOK_URL"); v != "" {
 		cfg.TeamsWebhookURL = v
+	}
+	if v := os.Getenv("GOOGLE_CHAT_WEBHOOK_URL"); v != "" {
+		cfg.GoogleChatWebhookURL = v
 	}
 	if v := os.Getenv("MISP_URL"); v != "" {
 		cfg.MISPUrl = v

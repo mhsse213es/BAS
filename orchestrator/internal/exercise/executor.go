@@ -29,6 +29,8 @@ type Executor struct {
 	dispatch     AgentDispatchFn
 	verification VerificationReader
 	metrics      *observability.MetricsRegistry
+	tickets      TicketNotifier // set by RegisterChannelBuiltins; also read for status and cleanup
+	inflight     inflightSends  // sends running now, so AbortExecution can cancel them
 }
 
 // VerificationReader is the narrow read interface the detection bridge
@@ -106,11 +108,28 @@ func (e *Executor) RegisterBuiltins(smtp *SMTPInjector, sms *SMSInjector, slack 
 	e.registry.Register(StepTypeWaitForWebhook, StepHandlerFunc(e.handleWaitForWebhook))
 }
 
+// TicketNotifier opens one exercise ticket in a configured ITSM connector and reports what was created.
+// ticketing.Manager implements it; the exercise package depends only on this interface.
+type TicketNotifier interface {
+	NotifyStep(ctx context.Context, connectorID, subject, body, recordType string) (map[string]any, error)
+}
+
+// RegisterChannelBuiltins wires the Google Chat and ticket steps. It is separate from RegisterBuiltins so that
+// function's signature, which many callers use, stays stable. Either argument may be nil: the step then fails
+// with "not configured" instead of pretending to send.
+func (e *Executor) RegisterChannelBuiltins(gchat *GoogleChatInjector, tickets TicketNotifier) {
+	e.tickets = tickets
+	e.registry.Register(StepTypeWaitForTicket, StepHandlerFunc(e.handleWaitForTicket))
+	e.registry.Register(StepTypeGoogleChat, StepHandlerFunc(e.handleGoogleChat(gchat)))
+	e.registry.Register(StepTypeTicket, StepHandlerFunc(e.handleTicket(tickets)))
+}
+
 // RegisterBuiltinTriggers wires the event-driven trigger functions.
 func (e *Executor) RegisterBuiltinTriggers() {
 	e.triggers.Register(StepTypeWaitForAgent, e.triggerWaitForAgent)
 	e.triggers.Register(StepTypeWaitForDetection, e.triggerWaitForDetection)
 	e.triggers.Register(StepTypeWaitForWebhook, e.triggerWaitForWebhook)
+	e.triggers.Register(StepTypeWaitForTicket, e.triggerWaitForTicket)
 	e.triggers.Register(StepTypeAgentTask, e.triggerWaitForBASDetection)
 }
 
@@ -209,7 +228,7 @@ func (e *Executor) advance(ctx context.Context, ex *Execution) error {
 		if ps.TimeoutSecs > 0 && se.StartedAt != nil &&
 			now.After(se.StartedAt.Add(time.Duration(ps.TimeoutSecs)*time.Second)) {
 			switch ps.Type {
-			case StepTypeWaitForAgent, StepTypeWaitForDetection, StepTypeWaitForWebhook:
+			case StepTypeWaitForAgent, StepTypeWaitForDetection, StepTypeWaitForWebhook, StepTypeWaitForTicket:
 				_ = e.store.SetStepResult(ctx, ex.ID, ps.ID, mergeMaps(se.Result, map[string]any{"timed_out": true}))
 				_ = e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepCompleted, "timeout")
 				_ = e.store.RecordEvent(ctx, ex.ID, ps.ID, "timeout", "system", nil)
@@ -257,6 +276,7 @@ func (e *Executor) advance(ctx context.Context, ex *Execution) error {
 		score := e.computeScore(ctx, ex)
 		_ = e.store.UpdateExecutionScore(ctx, ex.ID, score)
 		_ = e.store.RecordEvent(ctx, ex.ID, "", "completed", "system", nil)
+		e.cleanupExecution(ctx, ex) // after scoring, so cleanup evidence can never affect the score
 		return e.store.UpdateExecutionStatus(ctx, ex.ID, ExecCompleted)
 	}
 
@@ -349,9 +369,15 @@ func (e *Executor) handleSendEmail(smtp *SMTPInjector) func(context.Context, *Ex
 			return nil
 		}
 		go func() {
-			bctx := context.Background()
-			result, err := smtp.Send(bctx, se.ID, ex.ID, cfg, ex.Targets)
+			sctx, done := e.beginSend(ex.ID, ps.ID)
+			defer done()
+			bctx := context.Background() // database writes outlive an abort
+			result, err := smtp.Send(sctx, se.ID, ex.ID, cfg, ex.Targets)
 			if err != nil {
+				if sctx.Err() != nil {
+					e.recordCancelledSend(ex, ps, result)
+					return // aborted: AbortExecution already marked this step cancelled
+				}
 				_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepFailed, err.Error())
 				return
 			}
@@ -374,9 +400,15 @@ func (e *Executor) handleSendSMS(sms *SMSInjector) func(context.Context, *Execut
 			return e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed, "missing sms config")
 		}
 		go func() {
-			bctx := context.Background()
-			result, err := sms.Send(bctx, cfg.To, cfg.Body)
+			sctx, done := e.beginSend(ex.ID, ps.ID)
+			defer done()
+			bctx := context.Background() // database writes outlive an abort
+			result, err := sms.Send(sctx, cfg.To, cfg.Body)
 			if err != nil {
+				if sctx.Err() != nil {
+					e.recordCancelledSend(ex, ps, result)
+					return // aborted: AbortExecution already marked this step cancelled
+				}
 				_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepFailed, err.Error())
 				return
 			}
@@ -399,15 +431,92 @@ func (e *Executor) handleSlack(slack *SlackInjector) func(context.Context, *Exec
 			return e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed, "missing slack config")
 		}
 		go func() {
-			bctx := context.Background()
-			result, err := slack.Send(bctx, cfg.Text)
+			sctx, done := e.beginSend(ex.ID, ps.ID)
+			defer done()
+			bctx := context.Background() // database writes outlive an abort
+			result, err := slack.Send(sctx, cfg.Text)
 			if err != nil {
+				if sctx.Err() != nil {
+					e.recordCancelledSend(ex, ps, result)
+					return // aborted: AbortExecution already marked this step cancelled
+				}
 				_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepFailed, err.Error())
 				return
 			}
 			_ = e.store.SetStepResult(bctx, ex.ID, ps.ID, result)
 			_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepCompleted, "")
 			_, _ = e.evidence.Append(bctx, ex.ID, se.ID, "slack_sent", "system", "slack_injector", result)
+			_ = e.store.RecordEvent(bctx, ex.ID, ps.ID, "step_completed", "system", result)
+		}()
+		return nil
+	}
+}
+
+func (e *Executor) handleGoogleChat(gchat *GoogleChatInjector) func(context.Context, *Execution, *PlanStep, *StepExecution) error {
+	return func(ctx context.Context, ex *Execution, ps *PlanStep, se *StepExecution) error {
+		if gchat == nil {
+			return e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed, "Google Chat not configured")
+		}
+		cfg := ps.Config.GoogleChat
+		if cfg == nil {
+			return e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed, "missing google_chat config")
+		}
+		go func() {
+			sctx, done := e.beginSend(ex.ID, ps.ID)
+			defer done()
+			bctx := context.Background() // database writes outlive an abort
+			result, err := gchat.Send(sctx, cfg.Text)
+			if err != nil {
+				if sctx.Err() != nil {
+					return // aborted: AbortExecution already marked this step cancelled
+				}
+				_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepFailed, err.Error())
+				return
+			}
+			_ = e.store.SetStepResult(bctx, ex.ID, ps.ID, result)
+			_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepCompleted, "")
+			_, _ = e.evidence.Append(bctx, ex.ID, se.ID, "google_chat_sent", "system", "google_chat_injector", result)
+			_ = e.store.RecordEvent(bctx, ex.ID, ps.ID, "step_completed", "system", result)
+		}()
+		return nil
+	}
+}
+
+func (e *Executor) handleTicket(tickets TicketNotifier) func(context.Context, *Execution, *PlanStep, *StepExecution) error {
+	return func(ctx context.Context, ex *Execution, ps *PlanStep, se *StepExecution) error {
+		if tickets == nil {
+			return e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed, "ticketing not configured")
+		}
+		cfg := ps.Config.Ticket
+		if cfg == nil {
+			return e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed, "missing ticket config")
+		}
+		// A blank ticket in a real ITSM is noise someone has to clean up; refuse it up front.
+		if strings.TrimSpace(cfg.Subject) == "" {
+			return e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed, "ticket step needs a subject")
+		}
+		go func() {
+			sctx, done := e.beginSend(ex.ID, ps.ID)
+			defer done()
+			bctx := context.Background() // database writes outlive an abort
+			result, err := tickets.NotifyStep(sctx, cfg.ConnectorID, cfg.Subject, cfg.Body, cfg.RecordType)
+			if err != nil {
+				if sctx.Err() != nil {
+					return // aborted: AbortExecution already marked this step cancelled
+				}
+				_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepFailed, err.Error())
+				return
+			}
+			// The ticket exists now, so keep what cleanup needs even if the connector's reply omitted it.
+			if result == nil {
+				result = map[string]any{}
+			}
+			result["connector_id"] = cfg.ConnectorID
+			_ = e.store.SetStepResult(bctx, ex.ID, ps.ID, result)
+			_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepCompleted, "")
+			// "ticket_injected", not "ticket_created": the score reads ticket_created as the defenders raising a
+			// ticket, and a ticket the exercise opens itself is not that signal.
+			_, _ = e.evidence.Append(bctx, ex.ID, se.ID, "ticket_injected", "system", "ticket_injector", result)
 			_ = e.store.RecordEvent(bctx, ex.ID, ps.ID, "step_completed", "system", result)
 		}()
 		return nil
@@ -424,9 +533,15 @@ func (e *Executor) handleTeams(teams *TeamsInjector) func(context.Context, *Exec
 			return e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed, "missing teams config")
 		}
 		go func() {
-			bctx := context.Background()
-			result, err := teams.Send(bctx, cfg.Text)
+			sctx, done := e.beginSend(ex.ID, ps.ID)
+			defer done()
+			bctx := context.Background() // database writes outlive an abort
+			result, err := teams.Send(sctx, cfg.Text)
 			if err != nil {
+				if sctx.Err() != nil {
+					e.recordCancelledSend(ex, ps, result)
+					return // aborted: AbortExecution already marked this step cancelled
+				}
 				_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepFailed, err.Error())
 				return
 			}
@@ -1032,12 +1147,20 @@ func (e *Executor) AbortExecution(ctx context.Context, execID string) error {
 	if err != nil {
 		return err
 	}
+	// Stop sends that are running right now and mark those steps cancelled. Pending and waiting steps are
+	// cancelled below; other running steps (a BAS run on an agent) are left as they were.
+	for _, stepID := range e.cancelInflight(execID) {
+		_ = e.store.SetStepStatus(ctx, execID, stepID, StepCancelled, "aborted")
+	}
 	for _, se := range steps {
 		if se.Status == StepPending || se.Status == StepWaiting {
 			_ = e.store.SetStepStatus(ctx, execID, se.StepID, StepCancelled, "aborted")
 		}
 	}
 	_ = e.store.RecordEvent(ctx, execID, "", "aborted", "system", nil)
+	if ex, gerr := e.store.GetExecution(ctx, execID); gerr == nil && ex != nil {
+		e.cleanupExecution(ctx, ex) // close drill tickets; a failure is recorded and never blocks the abort
+	}
 	return e.store.UpdateExecutionStatus(ctx, execID, ExecAborted)
 }
 
@@ -1067,8 +1190,13 @@ func (e *Executor) computeScore(ctx context.Context, ex *Execution) *ExerciseSco
 		EDRBlocked:    counts["edr_blocked"] > 0,
 		SIEMAlerted:   counts["siem_alerted"] > 0,
 		TicketCreated: counts["ticket_created"] > 0,
+		// Set only by a wait_for_ticket step that saw the ticket picked up; a timeout leaves it false.
+		SOCAcknowledged: counts["soc_acknowledged"] > 0,
 		MTTDSeconds:   mttd,
 		MTTRSeconds:   mttr,
+	}
+	if t.SOCAcknowledged {
+		t.TimeToAcknowledgeSeconds, _ = e.store.SumDurationByType(ctx, ex.ID, "ticket_injected", "soc_acknowledged")
 	}
 	detBonus := 0.0
 	if t.EDRDetected {
