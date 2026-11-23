@@ -29,6 +29,8 @@ type Executor struct {
 	dispatch     AgentDispatchFn
 	verification VerificationReader
 	metrics      *observability.MetricsRegistry
+	tickets      TicketNotifier // set by RegisterChannelBuiltins; also read for status and cleanup
+	inflight     inflightSends  // sends running now, so AbortExecution can cancel them
 }
 
 // VerificationReader is the narrow read interface the detection bridge
@@ -116,6 +118,7 @@ type TicketNotifier interface {
 // function's signature, which many callers use, stays stable. Either argument may be nil: the step then fails
 // with "not configured" instead of pretending to send.
 func (e *Executor) RegisterChannelBuiltins(gchat *GoogleChatInjector, tickets TicketNotifier) {
+	e.tickets = tickets
 	e.registry.Register(StepTypeGoogleChat, StepHandlerFunc(e.handleGoogleChat(gchat)))
 	e.registry.Register(StepTypeTicket, StepHandlerFunc(e.handleTicket(tickets)))
 }
@@ -271,6 +274,7 @@ func (e *Executor) advance(ctx context.Context, ex *Execution) error {
 		score := e.computeScore(ctx, ex)
 		_ = e.store.UpdateExecutionScore(ctx, ex.ID, score)
 		_ = e.store.RecordEvent(ctx, ex.ID, "", "completed", "system", nil)
+		e.cleanupExecution(ctx, ex) // after scoring, so cleanup evidence can never affect the score
 		return e.store.UpdateExecutionStatus(ctx, ex.ID, ExecCompleted)
 	}
 
@@ -438,9 +442,14 @@ func (e *Executor) handleGoogleChat(gchat *GoogleChatInjector) func(context.Cont
 			return e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed, "missing google_chat config")
 		}
 		go func() {
-			bctx := context.Background()
-			result, err := gchat.Send(bctx, cfg.Text)
+			sctx, done := e.beginSend(ex.ID, ps.ID)
+			defer done()
+			bctx := context.Background() // database writes outlive an abort
+			result, err := gchat.Send(sctx, cfg.Text)
 			if err != nil {
+				if sctx.Err() != nil {
+					return // aborted: AbortExecution already marked this step cancelled
+				}
 				_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepFailed, err.Error())
 				return
 			}
@@ -467,12 +476,22 @@ func (e *Executor) handleTicket(tickets TicketNotifier) func(context.Context, *E
 			return e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed, "ticket step needs a subject")
 		}
 		go func() {
-			bctx := context.Background()
-			result, err := tickets.NotifyStep(bctx, cfg.ConnectorID, cfg.Subject, cfg.Body, cfg.RecordType)
+			sctx, done := e.beginSend(ex.ID, ps.ID)
+			defer done()
+			bctx := context.Background() // database writes outlive an abort
+			result, err := tickets.NotifyStep(sctx, cfg.ConnectorID, cfg.Subject, cfg.Body, cfg.RecordType)
 			if err != nil {
+				if sctx.Err() != nil {
+					return // aborted: AbortExecution already marked this step cancelled
+				}
 				_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepFailed, err.Error())
 				return
 			}
+			// The ticket exists now, so keep what cleanup needs even if the connector's reply omitted it.
+			if result == nil {
+				result = map[string]any{}
+			}
+			result["connector_id"] = cfg.ConnectorID
 			_ = e.store.SetStepResult(bctx, ex.ID, ps.ID, result)
 			_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepCompleted, "")
 			// "ticket_injected", not "ticket_created": the score reads ticket_created as the defenders raising a
@@ -1102,12 +1121,20 @@ func (e *Executor) AbortExecution(ctx context.Context, execID string) error {
 	if err != nil {
 		return err
 	}
+	// Stop sends that are running right now and mark those steps cancelled. Pending and waiting steps are
+	// cancelled below; other running steps (a BAS run on an agent) are left as they were.
+	for _, stepID := range e.cancelInflight(execID) {
+		_ = e.store.SetStepStatus(ctx, execID, stepID, StepCancelled, "aborted")
+	}
 	for _, se := range steps {
 		if se.Status == StepPending || se.Status == StepWaiting {
 			_ = e.store.SetStepStatus(ctx, execID, se.StepID, StepCancelled, "aborted")
 		}
 	}
 	_ = e.store.RecordEvent(ctx, execID, "", "aborted", "system", nil)
+	if ex, gerr := e.store.GetExecution(ctx, execID); gerr == nil && ex != nil {
+		e.cleanupExecution(ctx, ex) // close drill tickets; a failure is recorded and never blocks the abort
+	}
 	return e.store.UpdateExecutionStatus(ctx, execID, ExecAborted)
 }
 

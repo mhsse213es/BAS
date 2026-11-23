@@ -149,6 +149,9 @@ type TicketStepConfig struct {
 	Subject     string `json:"subject"`
 	Body        string `json:"body,omitempty"`
 	RecordType  string `json:"record_type,omitempty"`
+	// KeepOpen leaves the drill ticket open when the exercise ends. By default it is closed, so a drill does not
+	// leave open tickets in a real ITSM queue.
+	KeepOpen bool `json:"keep_open,omitempty"`
 }
 
 type AgentTaskConfig struct {
