@@ -15,30 +15,37 @@ controls:
     category: "Secure Zone"
     techniques: [T1190, T1078, T1021]
     testable: false
+    architectures: [A1, A2, A3]
   - id: "1.2"
     name: "Operating System Privileged Account Control (Mandatory)"
     domain: "1 Restrict Internet Access and Protect Critical Systems"
     category: "Privileged Access"
     techniques: [T1078.003, T1068, T1548]
     testable: false
+    architectures: [A1, A2, A3, A4, B]
+    advisory_for: [B]
   - id: "1.3"
     name: "Virtualisation or Cloud Platform Protection (Mandatory)"
     domain: "1 Restrict Internet Access and Protect Critical Systems"
     category: "Virtualisation"
     techniques: [T1610, T1578]
     testable: false
+    architectures: [A1, A2, A3, A4, B]
+    advisory_for: [B]
   - id: "1.4"
     name: "Restriction of Internet Access (Mandatory)"
     domain: "1 Restrict Internet Access and Protect Critical Systems"
     category: "Network Egress"
     techniques: [T1071.001, T1567, T1189]
     testable: false
+    architectures: [A1, A2, A3, A4, B]
   - id: "1.5"
     name: "Customer Environment Protection (Mandatory)"
     domain: "1 Restrict Internet Access and Protect Critical Systems"
     category: "Environment Hardening"
     techniques: [T1199, T1195.002]
     testable: false
+    architectures: [A4]
 
   # ── 2 Reduce the Attack Surface and Vulnerabilities ──
   - id: "2.1"
@@ -47,66 +54,80 @@ controls:
     category: "Data Flow Security"
     techniques: [T1557, T1040]
     testable: false
+    architectures: [A1, A2, A3]
   - id: "2.2"
     name: "Security Updates (Mandatory)"
     domain: "2 Reduce the Attack Surface and Vulnerabilities"
     category: "Patch Management"
     techniques: [T1190, T1068]
     testable: false
+    architectures: [A1, A2, A3, A4, B]
   - id: "2.3"
     name: "System Hardening (Mandatory)"
     domain: "2 Reduce the Attack Surface and Vulnerabilities"
     category: "System Hardening"
     techniques: [T1562.001, T1543]
     testable: false
+    architectures: [A1, A2, A3, A4, B]
   - id: "2.4"
     name: "Back-Office Data Flow Security (Mandatory)"
     domain: "2 Reduce the Attack Surface and Vulnerabilities"
     category: "Data Flow Security"
     techniques: [T1565.002, T1557]
     testable: false
+    architectures: [A1, A2, A3, A4]
   - id: "2.5A"
     name: "External Transmission Data Protection (Advisory)"
     domain: "2 Reduce the Attack Surface and Vulnerabilities"
     category: "Data Flow Security"
     techniques: [T1557, T1040]
     testable: false
+    architectures: [A1, A2, A3, A4]
+    advisory_for: [A1, A2, A3, A4]
   - id: "2.6"
     name: "Operator Session Confidentiality and Integrity (Mandatory)"
     domain: "2 Reduce the Attack Surface and Vulnerabilities"
     category: "Operator Sessions"
     techniques: [T1563, T1185, T1557]
     testable: false
+    architectures: [A1, A2, A3, A4, B]
   - id: "2.7"
     name: "Vulnerability Scanning (Mandatory)"
     domain: "2 Reduce the Attack Surface and Vulnerabilities"
     category: "Vulnerability Management"
     techniques: [T1595.002, T1190]
     testable: false
+    architectures: [A1, A2, A3, A4, B]
+    advisory_for: [B]
   - id: "2.8"
     name: "Outsourced Critical Activity Protection (Mandatory)"
     domain: "2 Reduce the Attack Surface and Vulnerabilities"
     category: "Third-Party Risk"
     techniques: [T1199, T1195]
     testable: false
+    architectures: [A1, A2, A3, A4, B]
   - id: "2.9"
     name: "Transaction Business Controls (Mandatory)"
     domain: "2 Reduce the Attack Surface and Vulnerabilities"
     category: "Transaction Controls"
     techniques: [T1565.002, T1565.001]
     testable: false
+    architectures: [A1, A2, A3, A4, B]
   - id: "2.10"
     name: "Application Hardening (Mandatory)"
     domain: "2 Reduce the Attack Surface and Vulnerabilities"
     category: "Application Hardening"
     techniques: [T1190, T1505.003]
     testable: false
+    architectures: [A1, A2, A3]
   - id: "2.11A"
     name: "RMA Business Controls (Advisory)"
     domain: "2 Reduce the Attack Surface and Vulnerabilities"
     category: "Transaction Controls"
     techniques: [T1565.002, T1078]
     testable: false
+    architectures: [A1, A2, A3, A4, B]
+    advisory_for: [A1, A2, A3, A4, B]
 
   # ── 3 Physically Secure the Environment ──
   - id: "3.1"
@@ -115,6 +136,7 @@ controls:
     category: "Physical Security"
     techniques: [T1200, T1091]
     testable: false
+    architectures: [A1, A2, A3, A4, B]
 
   # ── 4 Prevent Compromise of Credentials ──
   - id: "4.1"
@@ -123,12 +145,14 @@ controls:
     category: "Credential Management"
     techniques: [T1110, T1110.001]
     testable: false
+    architectures: [A1, A2, A3, A4, B]
   - id: "4.2"
     name: "Multi-Factor Authentication (Mandatory)"
     domain: "4 Prevent Compromise of Credentials"
     category: "Authentication"
     techniques: [T1110.003, T1556, T1078]
     testable: false
+    architectures: [A1, A2, A3, A4, B]
 
   # ── 5 Manage Identities and Separate Privileges ──
   - id: "5.1"
@@ -137,24 +161,29 @@ controls:
     category: "Access Control"
     techniques: [T1078, T1098]
     testable: false
+    architectures: [A1, A2, A3, A4, B]
   - id: "5.2"
     name: "Token Management (Mandatory)"
     domain: "5 Manage Identities and Separate Privileges"
     category: "Token Management"
     techniques: [T1528, T1550.001]
     testable: false
+    architectures: [A1, A2, A3, A4, B]
   - id: "5.3A"
     name: "Staff Screening Process (Advisory)"
     domain: "5 Manage Identities and Separate Privileges"
     category: "Personnel Security"
     techniques: [T1078]
     testable: false
+    architectures: [A1, A2, A3, A4, B]
+    advisory_for: [A1, A2, A3, A4, B]
   - id: "5.4"
     name: "Password Repository Protection (Mandatory)"
     domain: "5 Manage Identities and Separate Privileges"
     category: "Credential Management"
     techniques: [T1555, T1552.001]
     testable: false
+    architectures: [A1, A2, A3, A4, B]
 
   # ── 6 Detect Anomalous Activity to Systems or Transaction Records ──
   - id: "6.1"
@@ -163,30 +192,38 @@ controls:
     category: "Malware Protection"
     techniques: [T1204, T1055]
     testable: false
+    architectures: [A1, A2, A3, A4, B]
   - id: "6.2"
     name: "Software Integrity (Mandatory)"
     domain: "6 Detect Anomalous Activity to Systems or Transaction Records"
     category: "Software Integrity"
     techniques: [T1195.002, T1554]
     testable: false
+    architectures: [A1, A2, A3, A4]
+    advisory_for: [A4]
   - id: "6.3"
     name: "Database Integrity (Mandatory)"
     domain: "6 Detect Anomalous Activity to Systems or Transaction Records"
     category: "Data Integrity"
     techniques: [T1565.001, T1565.002]
     testable: false
+    architectures: [A1, A2, A4]
+    advisory_for: [A4]
   - id: "6.4"
     name: "Logging and Monitoring (Mandatory)"
     domain: "6 Detect Anomalous Activity to Systems or Transaction Records"
     category: "Logging and Monitoring"
     techniques: [T1070, T1562.002]
     testable: false
+    architectures: [A1, A2, A3, A4, B]
   - id: "6.5A"
     name: "Intrusion Detection (Advisory)"
     domain: "6 Detect Anomalous Activity to Systems or Transaction Records"
     category: "Intrusion Detection"
     techniques: [T1071.001, T1021]
     testable: false
+    architectures: [A1, A2, A3, A4]
+    advisory_for: [A1, A2, A3, A4]
 
   # ── 7 Plan for Incident Response and Information Sharing ──
   - id: "7.1"
@@ -195,21 +232,27 @@ controls:
     category: "Incident Response"
     techniques: [T1486, T1490]
     testable: false
+    architectures: [A1, A2, A3, A4, B]
   - id: "7.2"
     name: "Security Training and Awareness (Mandatory)"
     domain: "7 Plan for Incident Response and Information Sharing"
     category: "Awareness"
     techniques: [T1566, T1204]
     testable: false
+    architectures: [A1, A2, A3, A4, B]
   - id: "7.3A"
     name: "Penetration Testing (Advisory)"
     domain: "7 Plan for Incident Response and Information Sharing"
     category: "Testing"
     techniques: [T1190, T1078]
     testable: false
+    architectures: [A1, A2, A3, A4, B]
+    advisory_for: [A1, A2, A3, A4, B]
   - id: "7.4A"
     name: "Scenario-based Risk Assessment (Advisory)"
     domain: "7 Plan for Incident Response and Information Sharing"
     category: "Risk Assessment"
     techniques: [T1566, T1565.002]
     testable: false
+    architectures: [A1, A2, A3, A4, B]
+    advisory_for: [A1, A2, A3, A4, B]

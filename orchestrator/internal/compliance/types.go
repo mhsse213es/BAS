@@ -37,6 +37,11 @@ type ControlDef struct {
 	// planning) CANNOT be proven by running an attack — they require manual
 	// attestation. Omitted/nil ⇒ true (the technical-control default).
 	Testable *bool `yaml:"testable"`
+	// Architectures lists the framework's architecture types a control applies to (SWIFT CSCF: A1, A2, A3, A4, B).
+	// Empty for frameworks without architecture types.
+	Architectures []string `yaml:"architectures"`
+	// AdvisoryFor lists the architecture types for which a control is advisory rather than mandatory.
+	AdvisoryFor []string `yaml:"advisory_for"`
 }
 
 // IsTestable reports whether the control is BAS-testable (default true).

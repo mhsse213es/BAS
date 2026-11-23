@@ -23,9 +23,11 @@ var swiftCSCF2027IDs = []string{
 type swiftFile struct {
 	ID       string `yaml:"id"`
 	Controls []struct {
-		ID         string   `yaml:"id"`
-		Name       string   `yaml:"name"`
-		Techniques []string `yaml:"techniques"`
+		ID            string   `yaml:"id"`
+		Name          string   `yaml:"name"`
+		Techniques    []string `yaml:"techniques"`
+		Architectures []string `yaml:"architectures"`
+		AdvisoryFor   []string `yaml:"advisory_for"`
 	} `yaml:"controls"`
 }
 
@@ -96,4 +98,84 @@ func TestSWIFTCSCF2027_TechniquesExistInATTACKData(t *testing.T) {
 			}
 		}
 	}
+}
+
+// swiftArchMatrix is the architecture applicability of each control from the SWIFT CSCF v2027 summary table
+// (PDF page 30). advisoryFor lists the architectures where a mandatory control is advisory only, from the
+// "Control Type: Mandatory / Advisory for X" headers. Advisory-suffix controls are advisory everywhere they apply.
+var swiftArchMatrix = map[string]struct{ arch, advisoryFor []string }{
+	"1.1":   {[]string{"A1", "A2", "A3"}, nil},
+	"1.2":   {all5, []string{"B"}},
+	"1.3":   {all5, []string{"B"}},
+	"1.4":   {all5, nil},
+	"1.5":   {[]string{"A4"}, nil},
+	"2.1":   {[]string{"A1", "A2", "A3"}, nil},
+	"2.2":   {all5, nil},
+	"2.3":   {all5, nil},
+	"2.4":   {[]string{"A1", "A2", "A3", "A4"}, nil},
+	"2.5A":  {[]string{"A1", "A2", "A3", "A4"}, []string{"A1", "A2", "A3", "A4"}},
+	"2.6":   {all5, nil},
+	"2.7":   {all5, []string{"B"}},
+	"2.8":   {all5, nil},
+	"2.9":   {all5, nil},
+	"2.10":  {[]string{"A1", "A2", "A3"}, nil},
+	"2.11A": {all5, all5},
+	"3.1":   {all5, nil},
+	"4.1":   {all5, nil},
+	"4.2":   {all5, nil},
+	"5.1":   {all5, nil},
+	"5.2":   {all5, nil},
+	"5.3A":  {all5, all5},
+	"5.4":   {all5, nil},
+	"6.1":   {all5, nil},
+	"6.2":   {[]string{"A1", "A2", "A3", "A4"}, []string{"A4"}},
+	"6.3":   {[]string{"A1", "A2", "A4"}, []string{"A4"}},
+	"6.4":   {all5, nil},
+	"6.5A":  {[]string{"A1", "A2", "A3", "A4"}, []string{"A1", "A2", "A3", "A4"}},
+	"7.1":   {all5, nil},
+	"7.2":   {all5, nil},
+	"7.3A":  {all5, all5},
+	"7.4A":  {all5, all5},
+}
+
+var all5 = []string{"A1", "A2", "A3", "A4", "B"}
+
+func TestSWIFTCSCF2027_ArchitectureMatrixMatchesSummaryTable(t *testing.T) {
+	raw, err := os.ReadFile("mappings/swift_cscf.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fw swiftFile
+	if err := yaml.Unmarshal(raw, &fw); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range fw.Controls {
+		want, ok := swiftArchMatrix[c.ID]
+		if !ok {
+			t.Errorf("control %s has no architecture row in the test matrix", c.ID)
+			continue
+		}
+		if !sameSet(c.Architectures, want.arch) {
+			t.Errorf("control %s architectures %v, summary table has %v", c.ID, c.Architectures, want.arch)
+		}
+		if !sameSet(c.AdvisoryFor, want.advisoryFor) {
+			t.Errorf("control %s advisory_for %v, control headers give %v", c.ID, c.AdvisoryFor, want.advisoryFor)
+		}
+	}
+}
+
+func sameSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	m := make(map[string]bool, len(a))
+	for _, x := range a {
+		m[x] = true
+	}
+	for _, x := range b {
+		if !m[x] {
+			return false
+		}
+	}
+	return true
 }
