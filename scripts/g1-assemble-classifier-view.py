@@ -38,7 +38,11 @@ ON_CALL = re.compile(r"(?<![\w$.])(?<!function )on\(")
 # options.actions and options.cls are not), so it is presented as g1card(...) and the classifier inspects the body.
 # Only a name the module really imports from core/kit.js is rewritten: a module that defines its own pill() (the
 # agent-drawer one interpolates its tone unescaped) or imports from elsewhere keeps the name and stays unproven.
-SAFE_KIT = {"empty", "pill", "chip", "hbars", "kv", "bar", "icon"}
+SAFE_KIT = {"empty", "pill", "chip", "hbars", "kv", "bar", "icon", "seg", "tabs", "kpi", "searchBox"}
+# seg/tabs/kpi/searchBox: every text value goes through x(), tone() is a constant lookup, and actionAttrs() escapes the
+# action name and its arguments. grid, filterBar and checkRow are NOT here: they splice caller-supplied HTML.
+# scripts/test_g1_kit_safe_set.py pins the reviewed source of every helper in this set, so editing one in kit.js
+# fails CI until a person re-reads it.
 CARD_KIT = {"card"}
 KIT_IMPORT = re.compile(r"^import\s*\{([^}]*)\}\s*from\s*['\"]([^'\"]+)['\"]\s*;?[ 	]*$", re.M)
 

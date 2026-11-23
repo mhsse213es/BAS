@@ -64,8 +64,11 @@ class TestAssembleRewritesOnlyImportedKitHelpers(unittest.TestCase):
         self.assertIn("return pill('a', t) + g1safe('b');", out)
 
     def test_helpers_that_take_raw_html_are_never_marked_safe(self):
-        out = assembled("import { grid, kpi, seg } from '../core/kit.js';\nfunction r() { return grid(2, items) + kpi(o) + seg(a, b, c); }\n")
-        self.assertIn("grid(2, items) + kpi(o) + seg(a, b, c)", out)
+        # grid, filterBar and checkRow splice caller-supplied HTML (so they are only as safe as their arguments).
+        # kpi and seg were listed here before their source was read; both escape every text value, so they are
+        # trusted (and pinned) in test_g1_kit_safe_set.py.
+        out = assembled("import { grid, filterBar, checkRow } from '../core/kit.js';\nfunction r() { return grid(2, items) + filterBar(a) + checkRow(s, t, u, v); }\n")
+        self.assertIn("grid(2, items) + filterBar(a) + checkRow(s, t, u, v)", out)
         self.assertNotIn("g1safe", out)
         self.assertNotIn("g1card", out)
 
