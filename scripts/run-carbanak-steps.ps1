@@ -60,15 +60,24 @@ foreach ($p in $StepPrefix) {
     Write-Output ("DRY RUN: '{0}' -> {1} characters extracted" -f $p.Trim(), $cmd.Length)
     continue
   }
-  $tmp = Join-Path $env:TEMP ('bas_step_' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '.ps1')
+  # Each step's script is kept in a fixed file so it can be run directly to see its own errors.
+  $tmp = Join-Path $env:TEMP ('bas_carbanak_step_' + ($p.Trim() -replace '[^A-Za-z0-9]', '') + '.ps1')
   try {
     Set-Content -LiteralPath $tmp -Value $cmd -Encoding UTF8
     Write-Output ('==== ' + $p.Trim())
-    $out = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $tmp 2>&1 | ForEach-Object { "$_" }
+    # The step's stderr is evidence, not a runner failure. Under 'Stop', a native command's stderr
+    # would end this runner, so relax the preference for the child call only.
+    $prevPref = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+      $out = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $tmp 2>&1 | ForEach-Object { "$_" }
+    } finally {
+      $ErrorActionPreference = $prevPref
+    }
     $out | ForEach-Object { Write-Output $_ }
     $results += [pscustomobject]@{ Step = $p.Trim(); Output = ($out -join "`n") }
   } finally {
-    Remove-Item -LiteralPath $tmp -ErrorAction SilentlyContinue
+    Write-Output ('   (step script kept at ' + $tmp + ')')
   }
 }
 
