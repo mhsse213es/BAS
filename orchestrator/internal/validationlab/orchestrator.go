@@ -33,8 +33,11 @@ type Orchestrator struct {
 	pollInterval time.Duration
 	stopCh       chan struct{}
 	stopOnce     sync.Once
-	timeout      time.Duration
-	pollEvery    time.Duration
+	// kick wakes the loop early so new drafts start without waiting for the next poll (REQ-055). Buffer 1: a kick
+	// that finds one already pending adds nothing, so Kick never blocks.
+	kick      chan struct{}
+	timeout   time.Duration
+	pollEvery time.Duration
 
 	// retryBackoff is the minimum gap between two attempts at one version. A field, not only the constant, so
 	// tests can exercise the attempt cap without waiting.
@@ -76,7 +79,7 @@ func (o *Orchestrator) noteAttempt(versionID string) {
 func NewOrchestrator(pool *pgxpool.Pool, reg *contentregistry.Registry, d dispatcher, labAgentID string, pollInterval time.Duration) *Orchestrator {
 	return &Orchestrator{
 		pool: pool, reg: reg, dispatcher: d, labAgentID: labAgentID, pollInterval: pollInterval,
-		stopCh: make(chan struct{}), timeout: ClampValidationTimeout(0), pollEvery: 5 * time.Second,
+		stopCh: make(chan struct{}), kick: make(chan struct{}, 1), timeout: ClampValidationTimeout(0), pollEvery: 5 * time.Second,
 		retryBackoff: validationRetryBackoff, attempts: make(map[string]attemptState),
 	}
 }
@@ -487,6 +490,15 @@ func (o *Orchestrator) Stop() {
 	o.stopOnce.Do(func() { close(o.stopCh) })
 }
 
+// Kick asks the loop to run now instead of at the next poll. It never blocks: when a kick is already pending, one
+// run covers both, and eligibility is still decided by runOnce, so a kick cannot bypass the attempt limits.
+func (o *Orchestrator) Kick() {
+	select {
+	case o.kick <- struct{}{}:
+	default:
+	}
+}
+
 func (o *Orchestrator) run() {
 	ticker := time.NewTicker(o.pollInterval)
 	defer ticker.Stop()
@@ -497,12 +509,18 @@ func (o *Orchestrator) run() {
 		case <-o.stopCh:
 			return
 		case <-ticker.C:
-			if err := o.runOnce(ctx); err != nil {
-				log.Printf("[validationlab] runOnce: %v", err)
-			}
-			_ = o.resolveOrphaned(ctx)
+			o.tick(ctx)
+		case <-o.kick:
+			o.tick(ctx)
 		}
 	}
+}
+
+func (o *Orchestrator) tick(ctx context.Context) {
+	if err := o.runOnce(ctx); err != nil {
+		log.Printf("[validationlab] runOnce: %v", err)
+	}
+	_ = o.resolveOrphaned(ctx)
 }
 
 // resolveOrphaned scans every VALIDATING version and resolves it from durable
