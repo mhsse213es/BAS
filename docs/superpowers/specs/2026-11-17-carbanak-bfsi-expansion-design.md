@@ -1,7 +1,8 @@
 # Carbanak BFSI Pack Expansion — Design
 
-Status: APPROVED direction (user decisions recorded below). ATT&CK mapping validation and
-acceptance criteria documented. Implementation NOT started. Nothing built.
+Status: APPROVED (direction and implementation plan, 2026-11-21). Built so far: the ledger service
+(`cmd/carbanak-ledger-sim`), the attack-gap schema, Stage 3/4/8 corrections, and scenarios 9 and 23-28.
+Remaining: scenarios 10-15, 17-22, 29-32 and validation. See `docs/superpowers/plans/2026-11-17-carbanak-bfsi-expansion.md`.
 
 ## Intent
 
@@ -54,8 +55,8 @@ file and deletes it, so it measures nothing about the bank.
 - Windows-only endpoint stages (`supported_os: [windows]`).
 - Signing gate: every edit to a scenario file requires re-signing its `.sig`.
 - Step-contract ledger and baseline regenerated (`STEP_CONTRACT_WRITE=1`) with no new gaps.
-- `TestBuiltinScenarios_AllHaveValidProductLine` hardcodes the scenario count (currently 147);
-  bump it by one for each file added.
+- `TestBuiltinScenarios_AllHaveValidProductLine` checks a floor of 180, not an exact count;
+  no bump is needed for each file added.
 - Credential-access tier (from the approved APT29 work): LSASS uses query-only
   `PROCESS_QUERY_LIMITED_INFORMATION` (0x1000), never `PROCESS_VM_READ`. Credential Manager and
   browser stores are enumerated or probed for existence only, never read.
@@ -143,28 +144,28 @@ added twice. Total 31. Item 9 stays a separate scenario and Stage 5 is untouched
 | Spec # | Scenario | ATT&CK | Status |
 |---|---|---|---|
 | 9 | Banking application and process discovery | T1057 | validated (see below) |
-| 10 | Payment gateway configuration discovery | T1083 | to validate at build |
-| 11 | Database server and service discovery | T1046 | to validate at build |
-| 12 | Domain privileged account enumeration | T1069.002 | to validate at build |
-| 13 | Network share discovery for financial data | T1135 | to validate at build |
-| 14 | Windows Credential Manager access attempt | T1555.004 | to validate at build |
-| 15 | Browser credential-store access probe | T1555.003 | to validate at build |
-| 17 | Kerberos service account enumeration | T1558.003 | to validate at build |
-| 18 | Synthetic operator credential discovery | T1552 | to validate at build (sub-technique likely) |
-| 19 | SMB administrative share access | T1021.002 | to validate at build; needs `BAS_CARBANAK_TARGET_HOST` |
-| 20 | WinRM remote execution simulation | T1021.006 | to validate at build; needs target host |
-| 21 | Remote service creation | T1569.002 | to validate at build; needs target host |
-| 22 | Remote scheduled task creation | T1053.005 | to validate at build; needs target host |
+| 10 | Payment gateway configuration discovery | T1083 | validated 2026-11-21 (attack.mitre.org T1083 page) |
+| 11 | Database server and service discovery | T1046 | validated 2026-11-21 (attack.mitre.org T1046 page); scoped to local listeners |
+| 12 | Domain privileged account enumeration | T1069.002 | validated 2026-11-21 (attack.mitre.org T1069/002 page) |
+| 13 | Network share discovery for financial data | T1135 | validated 2026-11-21 (attack.mitre.org T1135 page); scoped to local shares |
+| 14 | Windows Credential Manager access attempt | T1555.004 | validated 2026-11-21 (attack.mitre.org T1555/004 page); existence check only |
+| 15 | Browser credential-store access probe | T1555.003 | validated 2026-11-21 (attack.mitre.org T1555/003 page); existence check only |
+| 17 | Kerberos service account enumeration | T1558.003 | validated 2026-11-21 (attack.mitre.org T1558/003 page); LDAP query only, no ticket requested |
+| 18 | Synthetic operator credential discovery | T1552 | validated 2026-11-21 at parent level; T1552.001 (Credentials In Files) is the likely refinement, to confirm against its page |
+| 19 | SMB administrative share access | T1021.002 | validated 2026-11-21 (attack.mitre.org T1021/002 page); existence check only; needs `BAS_CARBANAK_TARGET_HOST` |
+| 20 | WinRM remote execution simulation | T1021.006 | validated 2026-11-21 (attack.mitre.org T1021/006 page); benign echo only; needs target host |
+| 21 | Remote service creation | T1569.002 | validated 2026-11-21 with caveat: the service is created and removed but never started, so this exercises creation, not payload execution; needs target host |
+| 22 | Remote scheduled task creation | T1053.005 | validated 2026-11-21 (attack.mitre.org T1053/005 page); task dated 2099 and removed; needs target host |
 | 23 | Unauthorized payment beneficiary creation | none: `no_clean_attack_technique` | excluded from ATT&CK coverage %; included in execution and fraud-control reporting |
 | 24 | Transaction amount manipulation | T1565.002 (proposed) | validated with caveat |
 | 25 | Unauthorized transaction approval | T1078 (proposed) | validated with caveat |
 | 26 | Operator session misuse | T1078 (proposed) | validated |
 | 27 | Payment transaction outside normal hours | T1078 (proposed) | validated with caveat |
 | 28 | Transaction limit modification attempt | none: `no_clean_attack_technique` | excluded from ATT&CK coverage %; included in execution and fraud-control reporting |
-| 29 | Financial document collection | T1005 | to validate at build |
-| 30 | Payment database staging simulation | T1074.001 | to validate at build |
-| 31 | Archive financial records | T1560.001 | to validate at build |
-| 32 | HTTPS financial data exfiltration simulation | T1041 | to validate at build; `.invalid` domain |
+| 29 | Financial document collection | T1005 | validated 2026-11-21 with caveat (attack.mitre.org T1005 page): collects only its own synthetic files, not existing local data |
+| 30 | Payment database staging simulation | T1074.001 | validated 2026-11-21 (attack.mitre.org T1074/001 page); no database queried |
+| 31 | Archive financial records | T1560.001 | validated 2026-11-21 (attack.mitre.org T1560/001 page); archive via PowerShell Compress-Archive |
+| 32 | HTTPS financial data exfiltration simulation | T1567 | CHANGED from T1041 and validated 2026-11-21: T1041 is exfiltration over an existing C2 channel, which this scenario lacks; T1567 (attack.mitre.org T1567 page) fits a web destination; `.invalid` domain |
 
 Only items 9 and 23–28 were validated in this pass; the rest are validated during the build.
 
@@ -240,5 +241,9 @@ Registration and verification:
 ## Open decisions for you
 
 Decided: items 23 and 28 use `no_clean_attack_technique` (option b). No open decisions remain in
-this doc. Next: implementation plan, which is not to be executed until the plan and acceptance
+this doc.
+
+Ruling (plan Task 0): scenarios 24-27 are "validated with caveat", so their mappings count as validated
+and carry no `mapping: proposed` marker. Cost if wrong: caveated mappings appear in coverage reporting;
+reversible in one edit. Next: implementation plan, which is not to be executed until the plan and acceptance
 criteria are approved.

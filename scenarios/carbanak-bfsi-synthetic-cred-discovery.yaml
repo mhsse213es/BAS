@@ -1,0 +1,55 @@
+id: carbanak-bfsi-synthetic-cred-discovery
+product_line: killchain
+name: Carbanak BFSI Synthetic Operator Credential Discovery (Item 18)
+description: >
+  Lists the NAMES of files under the user's Documents folder (depth 2) that
+  look like credential files. File contents are never opened. [BAS-SIM-
+  CARBANAK-S18] tagged. Grounded in MITRE ATT&CK T1552 (Unsecured
+  Credentials); the Credentials In Files sub-technique (T1552.001) is the
+  likely refinement, to confirm.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - carbanak
+  - bfsi
+  - discovery
+  - t1552
+mitre_phases:
+  - credential-access
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+  - name: "Carbanak Item 18 -- Synthetic Operator Credential Discovery (T1552)"
+    technique_id: T1552
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: lab-only
+    production_safe: true
+    risk: low
+    blast_radius: "Lists file names under Documents to depth 2. No file is opened."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11 is NOT expected: the probe lists file names only"
+    detection:
+      - "EDR: name-only search of user documents for credential-like file names"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- T1552"
+        url: "https://attack.mitre.org/techniques/T1552/"
+    last_reviewed: "2026-11-21"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $docs = [Environment]::GetFolderPath('MyDocuments')
+      $hits = Get-ChildItem -Path $docs -Recurse -Depth 2 -File -Include '*cred*','*password*','*secret*' | Select-Object -ExpandProperty Name
+      Write-Output "EXEC 18: $(@($hits).Count) credential-like file name(s) under Documents. Names only; no contents read. [BAS-SIM-CARBANAK-S18]"
+    cleanup: ""

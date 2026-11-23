@@ -1,0 +1,53 @@
+id: carbanak-bfsi-browser-probe
+product_line: killchain
+name: Carbanak BFSI Browser Credential Store Existence Probe (Item 15)
+description: >
+  Checks only whether browser profile folders EXIST for the current user. No
+  profile file is opened, read, copied or decrypted. [BAS-SIM-CARBANAK-S15]
+  tagged. Grounded in MITRE ATT&CK T1555.003 (Credentials from Web Browsers).
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - carbanak
+  - bfsi
+  - discovery
+  - t1555
+mitre_phases:
+  - credential-access
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+  - name: "Carbanak Item 15 -- Browser Credential Store Existence Probe (T1555.003)"
+    technique_id: T1555.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: lab-only
+    production_safe: true
+    risk: low
+    blast_radius: "Tests whether two profile folders exist. Reads no file inside them."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11 is NOT expected: the probe checks folder existence only"
+    detection:
+      - "EDR: existence checks of browser profile folders by a non-administrative process"
+    threat_intel_sources:
+      - reference: "MITRE ATT&CK -- T1555.003"
+        url: "https://attack.mitre.org/techniques/T1555/003/"
+    last_reviewed: "2026-11-21"
+    family_attribution_confidence: reported
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $roots = @("$env:LOCALAPPDATA\Google\Chrome\User Data", "$env:LOCALAPPDATA\Microsoft\Edge\User Data")
+      $present = @($roots | Where-Object { Test-Path -LiteralPath $_ })
+      Write-Output "EXEC 15: browser profile folder(s) present: $($present.Count) of 2. Existence check only; no contents read. [BAS-SIM-CARBANAK-S15]"
+    cleanup: ""

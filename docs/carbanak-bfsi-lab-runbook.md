@@ -54,7 +54,7 @@ For each stage, confirm in the run output:
 - [ ] Endpoint result recorded (pass, fail, blocked, error, skipped or vetoed).
 - [ ] Where the stage calls the ledger: a `BAS-FRAUD-CONTROL` marker with `ledger_called`, `ledger_decision`, `rule_fired` and `audit_hash`.
 - [ ] Stages 19–22 and item 26 either ran (target or replay host set) or printed a SKIP line naming the variable.
-- [ ] Stage 32 posts only to `192.0.2.1` (RFC 5737, non-routable).
+- [ ] Stage 32 posts only to `bas-exfil-sim.invalid` (`.invalid` is reserved and never resolves; a destination that is not a `.invalid` name is refused before anything is sent).
 - [ ] Cleanup left no `bas_carbanak_*` files or `BAS-SIM-*` services or tasks on the target.
 
 ## 4. Endpoint-vs-fraud reporting check
