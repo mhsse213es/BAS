@@ -2,126 +2,55 @@
   "version": 1,
   "waivers": [
     {
-      "function": "fetchAuditPage",
-      "target": "tbody",
+      "function": "loadExposureAssets",
+      "target": "if (sum) sum",
       "op": "=",
-      "from_tier": 0,
-      "to_tier": 1,
-      "sink_ids": [
-        "fetchAuditPage:tbody:=:23096db0eea1",
-        "fetchAuditPage:tbody:=:2d052d1ed2cd"
-      ],
-      "reason": "Was fully static in the October baseline; it now puts server data into the markup. Read the sink and the helpers it calls: every server value goes through x() or a core/kit.js helper that escapes its arguments, ids go through encodeURIComponent, and counts are coerced with Number().",
-      "reviewed_by": "Claude Sonnet 5.5 (manual read of the sink and its helpers; awaiting human sign-off in the PR)",
-      "reviewed_on": "2026-11-23"
-    },
-    {
-      "function": "loadAgtOverview",
-      "target": "pane",
-      "op": "=",
-      "from_tier": 3,
+      "from_tier": 2,
       "to_tier": 4,
       "sink_ids": [
-        "loadAgtOverview:pane:=:aa054c5d26b6"
+        "loadExposureAssets:if (sum) sum:=:7e97cf7191f8"
       ],
-      "reason": "overviewHtml(a) in agent-drawer.js builds the panel from local helpers dl(), note() and actBtn(), which the classifier cannot trace. Read by hand: every agent field is passed through x(), on() or the pill tone lookup; a.binaryHash is only an argument to on(), which escapes it. The waiver covers the call expression, not the body of overviewHtml: an edit inside that function does not change the sink id.",
+      "reason": "Local builder function chartsHtml() in exp-view.js. Read in full on 2026-11-23: every server value reaches the markup through hbars() (escapes labels and values), card() sub (escaped) or empty() (escaped); scores are numbers. The waiver covers the call expression, not the body of chartsHtml(): an edit inside that function does not change the sink id and will not re-flag.",
       "reviewed_by": "Claude Sonnet 5.5 (manual read of the sink and its helpers; awaiting human sign-off in the PR)",
       "reviewed_on": "2026-11-23"
     },
     {
-      "function": "loadVariantCoverage",
-      "target": "el",
+      "function": "loadThreatPriorityActors",
+      "target": "if (charts) charts",
       "op": "=",
-      "from_tier": 0,
-      "to_tier": 1,
-      "sink_ids": [
-        "loadVariantCoverage:el:=:5ffdeacc1e03",
-        "loadVariantCoverage:el:=:b474fefe1681",
-        "loadVariantCoverage:el:=:e5e239560bc1",
-        "loadVariantCoverage:el:=:fc2c67863bff"
-      ],
-      "reason": "Was fully static in the October baseline; it now puts server data into the markup. Read the sink and the helpers it calls: every server value goes through x() or a core/kit.js helper that escapes its arguments, ids go through encodeURIComponent, and counts are coerced with Number().",
-      "reviewed_by": "Claude Sonnet 5.5 (manual read of the sink and its helpers; awaiting human sign-off in the PR)",
-      "reviewed_on": "2026-11-23"
-    },
-    {
-      "function": "renderIOCRegistryTable",
-      "target": "tbody",
-      "op": "=",
-      "from_tier": 0,
-      "to_tier": 1,
-      "sink_ids": [
-        "renderIOCRegistryTable:tbody:=:a4306a0e20bc"
-      ],
-      "reason": "Was fully static in the October baseline; it now puts server data into the markup. Read the sink and the helpers it calls: every server value goes through x() or a core/kit.js helper that escapes its arguments, ids go through encodeURIComponent, and counts are coerced with Number().",
-      "reviewed_by": "Claude Sonnet 5.5 (manual read of the sink and its helpers; awaiting human sign-off in the PR)",
-      "reviewed_on": "2026-11-23"
-    },
-    {
-      "function": "renderLegacyMigrationPanel",
-      "target": "el",
-      "op": "=",
-      "from_tier": 3,
+      "from_tier": 2,
       "to_tier": 4,
       "sink_ids": [
-        "renderLegacyMigrationPanel:el:=:ea635579f3fa"
+        "loadThreatPriorityActors:if (charts) charts:=:7e97cf7191f8"
       ],
-      "reason": "migrationPanelHtml() in agents-insights.js is a builder the classifier rates unescaped_text. Read by hand: hostname, agentId, time, count and label all go through x(); the tone comes from the model. The waiver covers the call expression, not the body of migrationPanelHtml.",
+      "reason": "Local builder function chartsHtml() in tp-view.js. Read in full on 2026-11-23: every server value reaches the markup through hbars() (actor names escaped; counts coerced with Number()) or chartSlot(), which returns only a fixed div with a counter id and keeps the data in a JS registry. The waiver covers the call expression, not the body of chartsHtml(): an edit inside that function does not change the sink id and will not re-flag.",
       "reviewed_by": "Claude Sonnet 5.5 (manual read of the sink and its helpers; awaiting human sign-off in the PR)",
       "reviewed_on": "2026-11-23"
     },
     {
-      "function": "renderList",
-      "target": "el",
+      "function": "openExposureDetail",
+      "target": "body",
       "op": "=",
-      "from_tier": 0,
-      "to_tier": 1,
+      "from_tier": 1,
+      "to_tier": 3,
       "sink_ids": [
-        "renderList:el:=:1e555838f538"
+        "openExposureDetail:body:=:4dc3d8b62238",
+        "openExposureDetail:body:=:893416bdd99c"
       ],
-      "reason": "Was fully static in the October baseline; it now puts server data into the markup. Read the sink and the helpers it calls: every server value goes through x() or a core/kit.js helper that escapes its arguments, ids go through encodeURIComponent, and counts are coerced with Number().",
+      "reason": "body.innerHTML = h in exp-view.js, where h is built from the asset detail response. Read in full on 2026-11-23: CVE ids, hosts, technique and group names, reasons and states go through x(), chip(), kv() or kpi() (all escape; tones come from a validated lookup); ids go through on(), which escapes them; failures use failureHtml(), which escapes. The waiver covers the text 'body.innerHTML = h', not the code that builds h: an edit to that code will not re-flag.",
       "reviewed_by": "Claude Sonnet 5.5 (manual read of the sink and its helpers; awaiting human sign-off in the PR)",
       "reviewed_on": "2026-11-23"
     },
     {
-      "function": "renderRemList",
-      "target": "el",
+      "function": "renderRunsSummary",
+      "target": "if (ch) ch",
       "op": "=",
-      "from_tier": 0,
-      "to_tier": 1,
+      "from_tier": 2,
+      "to_tier": 4,
       "sink_ids": [
-        "renderRemList:el:=:9f73877bd780",
-        "renderRemList:el:=:ddca0eed8a3a"
+        "renderRunsSummary:if (ch) ch:=:3aabe203202a"
       ],
-      "reason": "Was fully static in the October baseline; it now puts server data into the markup. Read the sink and the helpers it calls: every server value goes through x() or a core/kit.js helper that escapes its arguments, ids go through encodeURIComponent, and counts are coerced with Number().",
-      "reviewed_by": "Claude Sonnet 5.5 (manual read of the sink and its helpers; awaiting human sign-off in the PR)",
-      "reviewed_on": "2026-11-23"
-    },
-    {
-      "function": "vfLoadEvidence",
-      "target": "host",
-      "op": "=",
-      "from_tier": 0,
-      "to_tier": 1,
-      "sink_ids": [
-        "vfLoadEvidence:host:=:2a1d0a164a3a"
-      ],
-      "reason": "Was fully static in the October baseline; it now puts server data into the markup. Read the sink and the helpers it calls: every server value goes through x() or a core/kit.js helper that escapes its arguments, ids go through encodeURIComponent, and counts are coerced with Number().",
-      "reviewed_by": "Claude Sonnet 5.5 (manual read of the sink and its helpers; awaiting human sign-off in the PR)",
-      "reviewed_on": "2026-11-23"
-    },
-    {
-      "function": "vfLoadQueue",
-      "target": "box",
-      "op": "=",
-      "from_tier": 0,
-      "to_tier": 1,
-      "sink_ids": [
-        "vfLoadQueue:box:=:1602624981a2",
-        "vfLoadQueue:box:=:3a3603678503",
-        "vfLoadQueue:box:=:c31a69074737"
-      ],
-      "reason": "Was fully static in the October baseline; it now puts server data into the markup. Read the sink and the helpers it calls: every server value goes through x() or a core/kit.js helper that escapes its arguments, ids go through encodeURIComponent, and counts are coerced with Number().",
+      "reason": "Local builder function chartsHtml() in runs-rich.js. Read in full on 2026-11-23: every server value reaches the markup through static card titles, a static legend, chartSlot() placeholders (data kept in a JS registry) or empty(); no server text reaches the markup. The waiver covers the call expression, not the body of chartsHtml(): an edit inside that function does not change the sink id and will not re-flag.",
       "reviewed_by": "Claude Sonnet 5.5 (manual read of the sink and its helpers; awaiting human sign-off in the PR)",
       "reviewed_on": "2026-11-23"
     }
