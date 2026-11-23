@@ -75,7 +75,12 @@ def line_of(pos):
             hi = mid - 1
     return lo + 1  # 1-indexed
 
-ESCAPER_NAMES = {"x", "escHtml", "escapeHTML", "escapeHtml", "esc"}
+ESCAPER_NAMES = {"x", "escHtml", "escapeHTML", "escapeHtml", "esc", "g1safe"}
+# g1safe(...) is how the assembled view presents a call to a core/kit.js helper that escapes every argument
+# (empty, pill, chip, hbars, kv, bar, icon); see scripts/g1-assemble-classifier-view.py. g1card(...) is a card():
+# its title is escaped but its body, options.actions and options.cls are not, so it is only as safe as its body.
+CARD_WRAPPER = "g1card"
+CARD_RAW_OPTION_KEYS = ("actions", "cls")
 
 SINK_RE = re.compile(r"\.innerHTML\s*(\+=|=)(?!=)")
 
@@ -610,10 +615,65 @@ _INDIRECT_COMBINED = {"indirect_builder", "indirect_variable"}
 def _combine(a, b):
     return a if _RANK.index(a) <= _RANK.index(b) else b
 
+def split_call_args(h, name):
+    """Top-level argument texts of `h` when h is exactly one call `name(...)`, else None (fail closed). Strings are
+    skipped, nesting is tracked, and anything it cannot read with certainty (template literals, regex literals,
+    unbalanced text, anything after the closing paren) returns None, so the caller claims nothing."""
+    h = h.strip()
+    if not h.startswith(name):
+        return None
+    i = len(name)
+    while i < len(h) and h[i].isspace():
+        i += 1
+    if i >= len(h) or h[i] != "(":
+        return None
+    i += 1
+    depth, start, args, quote = 1, i, [], None
+    while i < len(h):
+        c = h[i]
+        if quote:
+            if c == "\\":
+                i += 2
+                continue
+            if c == quote:
+                quote = None
+        elif c in "'\"":
+            quote = c
+        elif c in "`/":
+            return None
+        elif c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+            if depth == 0:
+                if h[i + 1:].strip():
+                    return None
+                args.append(h[start:i])
+                return args
+        elif c == "," and depth == 1:
+            args.append(h[start:i])
+            start = i + 1
+        i += 1
+    return None
+
+def classify_card_call(h):
+    """Verdict for g1card(title, body[, options]): the body decides. Returns None when the call is not shaped as we
+    can prove (wrong argument count, or options that put raw text into the markup)."""
+    args = split_call_args(h, CARD_WRAPPER)
+    if args is None or len(args) < 2 or len(args) > 3:
+        return None
+    if len(args) == 3 and any(re.search(r"(?<![\w$])" + k + r"(?![\w$])", args[2]) for k in CARD_RAW_OPTION_KEYS):
+        return None
+    return _hole_verdict(classify_expr(args[1]))
+
 def classify_hole(h):
     h = h.strip()
     if ESCAPER_CALL_RE.match(h):
         return "escaped"
+    if h.startswith(CARD_WRAPPER):
+        verdict = classify_card_call(h)
+        if verdict is not None:
+            return verdict
     # A ternary nested inside this +-term, e.g. (cond ? '<span>'+x(v)+'</span>' : ''),
     # isn't the whole RHS so classify_expr's own ternary-split never sees it -
     # recurse into just the two branches (never into h itself, to avoid

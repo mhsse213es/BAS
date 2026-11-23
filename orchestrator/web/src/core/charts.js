@@ -45,7 +45,7 @@ function drawLine(cfg, W) {
   const series = cfg.series.map((s) => ({ ...s, data: nums(s.data) }));
   const all = series.flatMap((s) => s.data);
   const max = cfg.yMax || niceMax(Math.max(...all, 1)), min = cfg.yMin || 0;
-  const x = (i) => L + (n <= 1 ? 0 : i * (W - L - R) / (n - 1));
+  const px = (i) => L + (n <= 1 ? 0 : i * (W - L - R) / (n - 1));
   const y = (v) => T + (H - T - B) * (1 - (v - min) / (max - min));
   const gid = 'lg' + (++seq);
   let out = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" class="chart-svg"><defs><linearGradient id="' + gid + '" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="' + series[0].color + '" stop-opacity=".30"/><stop offset="1" stop-color="' + series[0].color + '" stop-opacity="0"/></linearGradient></defs>';
@@ -55,16 +55,16 @@ function drawLine(cfg, W) {
   }
   const longest = Math.max(...labels.map((l) => String(l).length));
   const every = Math.max(1, Math.ceil(n / Math.max(2, Math.floor((W - L) / (longest * 6.6 + 22)))));
-  labels.forEach((lb, i) => { if (i % every === 0) out += '<text x="' + x(i) + '" y="' + (H - 6) + '" class="axis-t" text-anchor="middle">' + esc(lb) + '</text>'; });
-  if (cfg.area !== false) out += '<polygon points="' + L + ',' + (H - B) + ' ' + series[0].data.map((v, i) => x(i) + ',' + y(v)).join(' ') + ' ' + x(n - 1) + ',' + (H - B) + '" fill="url(#' + gid + ')"/>';
+  labels.forEach((lb, i) => { if (i % every === 0) out += '<text x="' + px(i) + '" y="' + (H - 6) + '" class="axis-t" text-anchor="middle">' + esc(lb) + '</text>'; });
+  if (cfg.area !== false) out += '<polygon points="' + L + ',' + (H - B) + ' ' + series[0].data.map((v, i) => px(i) + ',' + y(v)).join(' ') + ' ' + px(n - 1) + ',' + (H - B) + '" fill="url(#' + gid + ')"/>';
   series.forEach((s, k) => {
-    out += '<polyline points="' + s.data.map((v, i) => x(i) + ',' + y(v)).join(' ') + '" fill="none" stroke="' + s.color + '" stroke-width="' + (k ? 1.6 : 2.4) + '"' + (s.dash ? ' stroke-dasharray="5 5"' : '') + ' stroke-linejoin="round" stroke-linecap="round"/>';
-    if (!k) out += '<circle cx="' + x(n - 1) + '" cy="' + y(s.data[n - 1]) + '" r="4" fill="' + s.color + '" class="chart-dot" stroke-width="2"/>';
+    out += '<polyline points="' + s.data.map((v, i) => px(i) + ',' + y(v)).join(' ') + '" fill="none" stroke="' + s.color + '" stroke-width="' + (k ? 1.6 : 2.4) + '"' + (s.dash ? ' stroke-dasharray="5 5"' : '') + ' stroke-linejoin="round" stroke-linecap="round"/>';
+    if (!k) out += '<circle cx="' + px(n - 1) + '" cy="' + y(s.data[n - 1]) + '" r="4" fill="' + s.color + '" class="chart-dot" stroke-width="2"/>';
   });
   const step = n > 1 ? (W - L - R) / (n - 1) : W;
   labels.forEach((lb, i) => {
     const tip = lb + ' — ' + series.map((s) => (s.name || 'Value') + ': ' + s.data[i] + (cfg.suffix || '')).join(' · ');
-    out += '<rect x="' + (x(i) - step / 2) + '" y="' + T + '" width="' + step + '" height="' + (H - T - B) + '" fill="transparent" data-tip="' + esc(tip) + '" class="hit"/>';
+    out += '<rect x="' + (px(i) - step / 2) + '" y="' + T + '" width="' + step + '" height="' + (H - T - B) + '" fill="transparent" data-tip="' + esc(tip) + '" class="hit"/>';
   });
   return out + '</svg>';
 }
@@ -129,8 +129,8 @@ function drawSpark(cfg, W) {
   const v = nums(cfg.data);
   if (v.length < 2) return '';
   const H = cfg.h || 36, max = Math.max(...v), min = Math.min(...v), n = v.length;
-  const x = (i) => (i / (n - 1)) * (W - 2) + 1, y = (val) => 3 + (H - 6) * (1 - (val - min) / ((max - min) || 1));
-  const pts = v.map((val, i) => x(i) + ',' + y(val)).join(' ');
+  const px = (i) => (i / (n - 1)) * (W - 2) + 1, y = (val) => 3 + (H - 6) * (1 - (val - min) / ((max - min) || 1));
+  const pts = v.map((val, i) => px(i) + ',' + y(val)).join(' ');
   const gid = 'sg' + (++seq);
   return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" class="spark"><defs><linearGradient id="' + gid + '" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="' + cfg.color + '" stop-opacity=".35"/><stop offset="1" stop-color="' + cfg.color + '" stop-opacity="0"/></linearGradient></defs><polygon points="1,' + H + ' ' + pts + ' ' + (W - 1) + ',' + H + '" fill="url(#' + gid + ')"/><polyline points="' + pts + '" fill="none" stroke="' + cfg.color + '" stroke-width="1.8" stroke-linejoin="round"/></svg>';
 }

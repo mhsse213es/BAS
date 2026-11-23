@@ -33,9 +33,38 @@ inventory of every sink in the console, and it says nothing about sinks the clas
 The guard cannot be satisfied by committing regenerated artifacts: the 17 regressions would still fail the comparison against
 the committed baseline, and the guard has no reviewed-exception mechanism. The real fix is to teach the classifier the
 `kit.js` helpers as escaping (so the slots return to their previous tiers) or to add a reviewed-waiver file. Either changes the
-security tool itself, so it is left for an explicit decision. Nothing in `security/g1/` or `scripts/` was changed here.
+security tool itself, so it was left for an explicit decision. (Option 1 was then chosen and built; see the update below.)
 
 ## Not done
 
-- Classifier or guard changes; regenerating and committing the artifacts.
+- A reviewed-waiver mechanism for the guard, and regenerating and committing the `security/g1/` artifacts (see the update below).
 - A full re-inventory of all sinks; the style-policy (`.style.<prop>`) work that depends on it.
+
+## Update: classifier taught the kit.js helpers (option 1)
+
+Done on this branch:
+
+- `scripts/g1-assemble-classifier-view.py` now reads each module's imports from `core/kit.js` and presents calls to the
+  helpers that escape every argument (`empty`, `pill`, `chip`, `hbars`, `kv`, `bar`, `icon`) as `g1safe(...)`, and
+  `card(...)` as `g1card(...)`. Only names the module actually imports from `core/kit.js` are rewritten: a module that defines
+  its own `pill()` (agent-drawer.js does, and its version interpolates the tone unescaped) or imports from elsewhere keeps the
+  name and stays unproven. `grid`, `kpi` and `seg` take raw HTML and are never trusted.
+- `scripts/g1-innerhtml-sink-classifier.py` treats `g1safe` as an escaper, and `g1card(title, body, options)` as exactly as
+  safe as its body. It refuses (falls back to "indirect builder") when the options contain `actions` or `cls` (both reach the
+  markup unescaped), when the argument count is wrong, or when the call has template literals, regex literals or unbalanced
+  text. Tests: `scripts/test_g1_kit_helpers.py` (16 cases); the other 61 G1 tests still pass.
+- Canonical escaper check now passes. Two real defects behind it were fixed: `core/charts.js` had two local numeric functions
+  named `x` (renamed `px`, 8 lines), and `features/execution-coverage.js` carried a second full escaper `esc()` (replaced by the
+  shared `x()`; all three uses are HTML text, where the extra `'` escape did nothing). Web suite 952/952.
+
+Result: the guard's regressions went from **17 to 10**. The ones that remain are a different kind and teaching the helpers
+cannot clear them:
+
+| Slots | What it is |
+|---|---|
+| 8 slots, tier 0 to 1: `fetchAuditPage`, `loadVariantCoverage` (2), `renderIOCRegistryTable`, `renderList`, `renderRemList`, `vfLoadEvidence`, `vfLoadQueue` | Code that was fully static in the October baseline now puts server data into markup, escaped. The guard counts that as "more dangerous", which is its design. Each was read by hand above and is escaped. |
+| 2 slots, tier 3 to 4: `loadAgtOverview`, `renderLegacyMigrationPanel` | Builder functions that assemble their result from local variables and local helpers (`dl`, `note`, `actBtn`); the classifier cannot prove them without a deeper trace. Read by hand: every server value passes through `x()`, `on()` or a validated tone. |
+
+These ten cannot be accepted by regenerating and committing the artifacts: the guard has no way to record a reviewed
+exception, so the next PR would fail against `main`'s baseline. That needs a small reviewed-waiver file, which is the part of
+option 2 that remains a separate decision. The regenerated `security/g1/` artifacts were deliberately not committed.
