@@ -65,12 +65,6 @@ steps:
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
       }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
-      }
       Add-Type -AssemblyName System.Windows.Forms
 
       try { [void][System.Windows.Forms.Clipboard]; Out-Verdict 'SKIP' 'CONFIGURED' 'clipboard API loads; precondition only, no protection claimed' }
@@ -101,12 +95,6 @@ steps:
       }
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
-      }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
       }
       Add-Type -AssemblyName System.Windows.Forms
 
@@ -139,12 +127,6 @@ steps:
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
       }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
-      }
       $v = Get-PolicyValue 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' 'AllowClipboardHistory'
       if ($null -eq $v) { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'history: policy value AllowClipboardHistory not set' }
       else { Out-Verdict 'SKIP' 'CONFIGURED' ('history: policy value AllowClipboardHistory={0}; not enforcement' -f $v) }
@@ -174,12 +156,6 @@ steps:
       }
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
-      }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
       }
       $v = Get-PolicyValue 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' 'AllowCrossDeviceClipboard'
       if ($null -eq $v) { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'cross-device: policy value AllowCrossDeviceClipboard not set' }
@@ -211,12 +187,6 @@ steps:
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
       }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
-      }
       Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'no supported Windows policy restricts script clipboard access in this release' 
     cleanup: ""
 
@@ -245,15 +215,38 @@ steps:
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
       }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
+      function Get-AdapterResult([string]$flag) {
+        # Evidence-file adapter. Configuring an integration (BAS_CLP_ADAPTER_<NAME>=1) is not enough to score.
+        # The operator also points BAS_CLP_EVIDENCE_<NAME> at a JSON export of that vendor's events. Nothing here
+        # calls the vendor, reads a credential or changes a control.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return @{ State = 'NOT_CONFIGURED' } }
+        $name = $flag -replace '^BAS_CLP_ADAPTER_', ''
+        $key = $null
+        if ($env:BAS_RUN_ID) { $key = $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) }
+        if (-not $key) { return @{ State = 'UNVERIFIED'; Reason = 'has no run id to correlate events with' } }
+        $evPath = [Environment]::GetEnvironmentVariable(($flag -replace '_ADAPTER_', '_EVIDENCE_'))
+        if (-not $evPath -or -not (Test-Path -LiteralPath $evPath)) { return @{ State = 'UNVERIFIED'; Reason = 'has no evidence export (BAS_CLP_EVIDENCE_' + $name + ' not set)' } }
+        try { $events = @(Get-Content -LiteralPath $evPath -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return @{ State = 'ERROR'; Reason = 'evidence export is not valid JSON' } }
+        $cutoff = (Get-Date).ToUniversalTime().AddMinutes(-15)
+        $fresh = @($events | Where-Object { $_.time -and ([datetime]$_.time).ToUniversalTime() -ge $cutoff })
+        $mine = @($fresh | Where-Object { $_.run_id -eq $key })
+        if (@($mine | Where-Object { $_.event -eq 'transfer' }).Count -gt 0) { return @{ State = 'FAIL'; Detail = 'correlated transfer event for run ' + $key } }
+        $ctl = @($mine | Where-Object { $_.event -eq 'block' -or $_.event -eq 'alert' })
+        if ($ctl.Count -gt 0) { return @{ State = 'PASS'; Detail = 'correlated ' + $ctl[0].event + ' event for run ' + $key } }
+        if ($fresh.Count -eq 0) { return @{ State = 'UNVERIFIED'; Reason = 'has no fresh evidence (none within 15 minutes)' } }
+        return @{ State = 'UNVERIFIED'; Reason = 'has no correlated event for run ' + $key + ' in fresh evidence' }
       }
-      $st = Get-AdapterState 'BAS_CLP_ADAPTER_DEFENDER'
-      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'non-interactive clipboard access monitoring: integration defender is not configured' }
-      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'non-interactive clipboard access monitoring: integration defender is configured but no operational probe is implemented in this release' }
+      function Out-AdapterVerdict($r, [string]$desc, [string]$name) {
+        switch ($r.State) {
+          'NOT_CONFIGURED' { Out-Verdict 'SKIP' 'NOT_CONFIGURED' ($desc + ': integration ' + $name + ' is not configured') }
+          'UNVERIFIED'     { Out-Verdict 'SKIP' 'UNVERIFIED' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'ERROR'          { Out-Verdict 'ERROR' 'ERROR' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'FAIL'           { Out-Verdict 'FAIL' 'CORRELATED_TRANSFER' ($desc + ': ' + $r.Detail) }
+          'PASS'           { Out-Verdict 'PASS' 'CORRELATED_EVENT' ($desc + ': ' + $r.Detail) }
+        }
+      }
+      $r = Get-AdapterResult 'BAS_CLP_ADAPTER_DEFENDER'
+      Out-AdapterVerdict $r 'non-interactive clipboard access monitoring' 'defender'
     cleanup: ""
 
   - name: "Clipboard 2.1 — Defender for Endpoint integration (T1115)"
@@ -281,15 +274,38 @@ steps:
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
       }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
+      function Get-AdapterResult([string]$flag) {
+        # Evidence-file adapter. Configuring an integration (BAS_CLP_ADAPTER_<NAME>=1) is not enough to score.
+        # The operator also points BAS_CLP_EVIDENCE_<NAME> at a JSON export of that vendor's events. Nothing here
+        # calls the vendor, reads a credential or changes a control.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return @{ State = 'NOT_CONFIGURED' } }
+        $name = $flag -replace '^BAS_CLP_ADAPTER_', ''
+        $key = $null
+        if ($env:BAS_RUN_ID) { $key = $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) }
+        if (-not $key) { return @{ State = 'UNVERIFIED'; Reason = 'has no run id to correlate events with' } }
+        $evPath = [Environment]::GetEnvironmentVariable(($flag -replace '_ADAPTER_', '_EVIDENCE_'))
+        if (-not $evPath -or -not (Test-Path -LiteralPath $evPath)) { return @{ State = 'UNVERIFIED'; Reason = 'has no evidence export (BAS_CLP_EVIDENCE_' + $name + ' not set)' } }
+        try { $events = @(Get-Content -LiteralPath $evPath -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return @{ State = 'ERROR'; Reason = 'evidence export is not valid JSON' } }
+        $cutoff = (Get-Date).ToUniversalTime().AddMinutes(-15)
+        $fresh = @($events | Where-Object { $_.time -and ([datetime]$_.time).ToUniversalTime() -ge $cutoff })
+        $mine = @($fresh | Where-Object { $_.run_id -eq $key })
+        if (@($mine | Where-Object { $_.event -eq 'transfer' }).Count -gt 0) { return @{ State = 'FAIL'; Detail = 'correlated transfer event for run ' + $key } }
+        $ctl = @($mine | Where-Object { $_.event -eq 'block' -or $_.event -eq 'alert' })
+        if ($ctl.Count -gt 0) { return @{ State = 'PASS'; Detail = 'correlated ' + $ctl[0].event + ' event for run ' + $key } }
+        if ($fresh.Count -eq 0) { return @{ State = 'UNVERIFIED'; Reason = 'has no fresh evidence (none within 15 minutes)' } }
+        return @{ State = 'UNVERIFIED'; Reason = 'has no correlated event for run ' + $key + ' in fresh evidence' }
       }
-      $st = Get-AdapterState 'BAS_CLP_ADAPTER_DEFENDER'
-      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'Microsoft Defender for Endpoint telemetry: integration defender is not configured' }
-      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'Microsoft Defender for Endpoint telemetry: integration defender is configured but no operational probe is implemented in this release' }
+      function Out-AdapterVerdict($r, [string]$desc, [string]$name) {
+        switch ($r.State) {
+          'NOT_CONFIGURED' { Out-Verdict 'SKIP' 'NOT_CONFIGURED' ($desc + ': integration ' + $name + ' is not configured') }
+          'UNVERIFIED'     { Out-Verdict 'SKIP' 'UNVERIFIED' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'ERROR'          { Out-Verdict 'ERROR' 'ERROR' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'FAIL'           { Out-Verdict 'FAIL' 'CORRELATED_TRANSFER' ($desc + ': ' + $r.Detail) }
+          'PASS'           { Out-Verdict 'PASS' 'CORRELATED_EVENT' ($desc + ': ' + $r.Detail) }
+        }
+      }
+      $r = Get-AdapterResult 'BAS_CLP_ADAPTER_DEFENDER'
+      Out-AdapterVerdict $r 'Microsoft Defender for Endpoint telemetry' 'defender'
     cleanup: ""
 
   - name: "Clipboard 2.2 — Microsoft Purview Endpoint DLP integration (T1115)"
@@ -317,15 +333,38 @@ steps:
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
       }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
+      function Get-AdapterResult([string]$flag) {
+        # Evidence-file adapter. Configuring an integration (BAS_CLP_ADAPTER_<NAME>=1) is not enough to score.
+        # The operator also points BAS_CLP_EVIDENCE_<NAME> at a JSON export of that vendor's events. Nothing here
+        # calls the vendor, reads a credential or changes a control.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return @{ State = 'NOT_CONFIGURED' } }
+        $name = $flag -replace '^BAS_CLP_ADAPTER_', ''
+        $key = $null
+        if ($env:BAS_RUN_ID) { $key = $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) }
+        if (-not $key) { return @{ State = 'UNVERIFIED'; Reason = 'has no run id to correlate events with' } }
+        $evPath = [Environment]::GetEnvironmentVariable(($flag -replace '_ADAPTER_', '_EVIDENCE_'))
+        if (-not $evPath -or -not (Test-Path -LiteralPath $evPath)) { return @{ State = 'UNVERIFIED'; Reason = 'has no evidence export (BAS_CLP_EVIDENCE_' + $name + ' not set)' } }
+        try { $events = @(Get-Content -LiteralPath $evPath -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return @{ State = 'ERROR'; Reason = 'evidence export is not valid JSON' } }
+        $cutoff = (Get-Date).ToUniversalTime().AddMinutes(-15)
+        $fresh = @($events | Where-Object { $_.time -and ([datetime]$_.time).ToUniversalTime() -ge $cutoff })
+        $mine = @($fresh | Where-Object { $_.run_id -eq $key })
+        if (@($mine | Where-Object { $_.event -eq 'transfer' }).Count -gt 0) { return @{ State = 'FAIL'; Detail = 'correlated transfer event for run ' + $key } }
+        $ctl = @($mine | Where-Object { $_.event -eq 'block' -or $_.event -eq 'alert' })
+        if ($ctl.Count -gt 0) { return @{ State = 'PASS'; Detail = 'correlated ' + $ctl[0].event + ' event for run ' + $key } }
+        if ($fresh.Count -eq 0) { return @{ State = 'UNVERIFIED'; Reason = 'has no fresh evidence (none within 15 minutes)' } }
+        return @{ State = 'UNVERIFIED'; Reason = 'has no correlated event for run ' + $key + ' in fresh evidence' }
       }
-      $st = Get-AdapterState 'BAS_CLP_ADAPTER_PURVIEW'
-      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'Microsoft Purview Endpoint DLP telemetry: integration purview is not configured' }
-      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'Microsoft Purview Endpoint DLP telemetry: integration purview is configured but no operational probe is implemented in this release' }
+      function Out-AdapterVerdict($r, [string]$desc, [string]$name) {
+        switch ($r.State) {
+          'NOT_CONFIGURED' { Out-Verdict 'SKIP' 'NOT_CONFIGURED' ($desc + ': integration ' + $name + ' is not configured') }
+          'UNVERIFIED'     { Out-Verdict 'SKIP' 'UNVERIFIED' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'ERROR'          { Out-Verdict 'ERROR' 'ERROR' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'FAIL'           { Out-Verdict 'FAIL' 'CORRELATED_TRANSFER' ($desc + ': ' + $r.Detail) }
+          'PASS'           { Out-Verdict 'PASS' 'CORRELATED_EVENT' ($desc + ': ' + $r.Detail) }
+        }
+      }
+      $r = Get-AdapterResult 'BAS_CLP_ADAPTER_PURVIEW'
+      Out-AdapterVerdict $r 'Microsoft Purview Endpoint DLP telemetry' 'purview'
     cleanup: ""
 
   - name: "Clipboard 2.3 — Trellix DLP integration (T1115)"
@@ -353,15 +392,38 @@ steps:
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
       }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
+      function Get-AdapterResult([string]$flag) {
+        # Evidence-file adapter. Configuring an integration (BAS_CLP_ADAPTER_<NAME>=1) is not enough to score.
+        # The operator also points BAS_CLP_EVIDENCE_<NAME> at a JSON export of that vendor's events. Nothing here
+        # calls the vendor, reads a credential or changes a control.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return @{ State = 'NOT_CONFIGURED' } }
+        $name = $flag -replace '^BAS_CLP_ADAPTER_', ''
+        $key = $null
+        if ($env:BAS_RUN_ID) { $key = $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) }
+        if (-not $key) { return @{ State = 'UNVERIFIED'; Reason = 'has no run id to correlate events with' } }
+        $evPath = [Environment]::GetEnvironmentVariable(($flag -replace '_ADAPTER_', '_EVIDENCE_'))
+        if (-not $evPath -or -not (Test-Path -LiteralPath $evPath)) { return @{ State = 'UNVERIFIED'; Reason = 'has no evidence export (BAS_CLP_EVIDENCE_' + $name + ' not set)' } }
+        try { $events = @(Get-Content -LiteralPath $evPath -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return @{ State = 'ERROR'; Reason = 'evidence export is not valid JSON' } }
+        $cutoff = (Get-Date).ToUniversalTime().AddMinutes(-15)
+        $fresh = @($events | Where-Object { $_.time -and ([datetime]$_.time).ToUniversalTime() -ge $cutoff })
+        $mine = @($fresh | Where-Object { $_.run_id -eq $key })
+        if (@($mine | Where-Object { $_.event -eq 'transfer' }).Count -gt 0) { return @{ State = 'FAIL'; Detail = 'correlated transfer event for run ' + $key } }
+        $ctl = @($mine | Where-Object { $_.event -eq 'block' -or $_.event -eq 'alert' })
+        if ($ctl.Count -gt 0) { return @{ State = 'PASS'; Detail = 'correlated ' + $ctl[0].event + ' event for run ' + $key } }
+        if ($fresh.Count -eq 0) { return @{ State = 'UNVERIFIED'; Reason = 'has no fresh evidence (none within 15 minutes)' } }
+        return @{ State = 'UNVERIFIED'; Reason = 'has no correlated event for run ' + $key + ' in fresh evidence' }
       }
-      $st = Get-AdapterState 'BAS_CLP_ADAPTER_TRELLIX'
-      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'Trellix DLP telemetry: integration trellix is not configured' }
-      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'Trellix DLP telemetry: integration trellix is configured but no operational probe is implemented in this release' }
+      function Out-AdapterVerdict($r, [string]$desc, [string]$name) {
+        switch ($r.State) {
+          'NOT_CONFIGURED' { Out-Verdict 'SKIP' 'NOT_CONFIGURED' ($desc + ': integration ' + $name + ' is not configured') }
+          'UNVERIFIED'     { Out-Verdict 'SKIP' 'UNVERIFIED' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'ERROR'          { Out-Verdict 'ERROR' 'ERROR' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'FAIL'           { Out-Verdict 'FAIL' 'CORRELATED_TRANSFER' ($desc + ': ' + $r.Detail) }
+          'PASS'           { Out-Verdict 'PASS' 'CORRELATED_EVENT' ($desc + ': ' + $r.Detail) }
+        }
+      }
+      $r = Get-AdapterResult 'BAS_CLP_ADAPTER_TRELLIX'
+      Out-AdapterVerdict $r 'Trellix DLP telemetry' 'trellix'
     cleanup: ""
 
   - name: "Clipboard 2.4 — Egress telemetry integration (T1048)"
@@ -389,15 +451,38 @@ steps:
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
       }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
+      function Get-AdapterResult([string]$flag) {
+        # Evidence-file adapter. Configuring an integration (BAS_CLP_ADAPTER_<NAME>=1) is not enough to score.
+        # The operator also points BAS_CLP_EVIDENCE_<NAME> at a JSON export of that vendor's events. Nothing here
+        # calls the vendor, reads a credential or changes a control.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return @{ State = 'NOT_CONFIGURED' } }
+        $name = $flag -replace '^BAS_CLP_ADAPTER_', ''
+        $key = $null
+        if ($env:BAS_RUN_ID) { $key = $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) }
+        if (-not $key) { return @{ State = 'UNVERIFIED'; Reason = 'has no run id to correlate events with' } }
+        $evPath = [Environment]::GetEnvironmentVariable(($flag -replace '_ADAPTER_', '_EVIDENCE_'))
+        if (-not $evPath -or -not (Test-Path -LiteralPath $evPath)) { return @{ State = 'UNVERIFIED'; Reason = 'has no evidence export (BAS_CLP_EVIDENCE_' + $name + ' not set)' } }
+        try { $events = @(Get-Content -LiteralPath $evPath -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return @{ State = 'ERROR'; Reason = 'evidence export is not valid JSON' } }
+        $cutoff = (Get-Date).ToUniversalTime().AddMinutes(-15)
+        $fresh = @($events | Where-Object { $_.time -and ([datetime]$_.time).ToUniversalTime() -ge $cutoff })
+        $mine = @($fresh | Where-Object { $_.run_id -eq $key })
+        if (@($mine | Where-Object { $_.event -eq 'transfer' }).Count -gt 0) { return @{ State = 'FAIL'; Detail = 'correlated transfer event for run ' + $key } }
+        $ctl = @($mine | Where-Object { $_.event -eq 'block' -or $_.event -eq 'alert' })
+        if ($ctl.Count -gt 0) { return @{ State = 'PASS'; Detail = 'correlated ' + $ctl[0].event + ' event for run ' + $key } }
+        if ($fresh.Count -eq 0) { return @{ State = 'UNVERIFIED'; Reason = 'has no fresh evidence (none within 15 minutes)' } }
+        return @{ State = 'UNVERIFIED'; Reason = 'has no correlated event for run ' + $key + ' in fresh evidence' }
       }
-      $st = Get-AdapterState 'BAS_CLP_ADAPTER_EGRESS'
-      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'firewall or proxy egress telemetry: integration egress is not configured' }
-      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'firewall or proxy egress telemetry: integration egress is configured but no operational probe is implemented in this release' }
+      function Out-AdapterVerdict($r, [string]$desc, [string]$name) {
+        switch ($r.State) {
+          'NOT_CONFIGURED' { Out-Verdict 'SKIP' 'NOT_CONFIGURED' ($desc + ': integration ' + $name + ' is not configured') }
+          'UNVERIFIED'     { Out-Verdict 'SKIP' 'UNVERIFIED' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'ERROR'          { Out-Verdict 'ERROR' 'ERROR' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'FAIL'           { Out-Verdict 'FAIL' 'CORRELATED_TRANSFER' ($desc + ': ' + $r.Detail) }
+          'PASS'           { Out-Verdict 'PASS' 'CORRELATED_EVENT' ($desc + ': ' + $r.Detail) }
+        }
+      }
+      $r = Get-AdapterResult 'BAS_CLP_ADAPTER_EGRESS'
+      Out-AdapterVerdict $r 'firewall or proxy egress telemetry' 'egress'
     cleanup: ""
 
   - name: "Clipboard 2.5 — Synthetic clipboard write detected by monitoring (T1115)"
@@ -425,15 +510,38 @@ steps:
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
       }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
+      function Get-AdapterResult([string]$flag) {
+        # Evidence-file adapter. Configuring an integration (BAS_CLP_ADAPTER_<NAME>=1) is not enough to score.
+        # The operator also points BAS_CLP_EVIDENCE_<NAME> at a JSON export of that vendor's events. Nothing here
+        # calls the vendor, reads a credential or changes a control.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return @{ State = 'NOT_CONFIGURED' } }
+        $name = $flag -replace '^BAS_CLP_ADAPTER_', ''
+        $key = $null
+        if ($env:BAS_RUN_ID) { $key = $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) }
+        if (-not $key) { return @{ State = 'UNVERIFIED'; Reason = 'has no run id to correlate events with' } }
+        $evPath = [Environment]::GetEnvironmentVariable(($flag -replace '_ADAPTER_', '_EVIDENCE_'))
+        if (-not $evPath -or -not (Test-Path -LiteralPath $evPath)) { return @{ State = 'UNVERIFIED'; Reason = 'has no evidence export (BAS_CLP_EVIDENCE_' + $name + ' not set)' } }
+        try { $events = @(Get-Content -LiteralPath $evPath -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return @{ State = 'ERROR'; Reason = 'evidence export is not valid JSON' } }
+        $cutoff = (Get-Date).ToUniversalTime().AddMinutes(-15)
+        $fresh = @($events | Where-Object { $_.time -and ([datetime]$_.time).ToUniversalTime() -ge $cutoff })
+        $mine = @($fresh | Where-Object { $_.run_id -eq $key })
+        if (@($mine | Where-Object { $_.event -eq 'transfer' }).Count -gt 0) { return @{ State = 'FAIL'; Detail = 'correlated transfer event for run ' + $key } }
+        $ctl = @($mine | Where-Object { $_.event -eq 'block' -or $_.event -eq 'alert' })
+        if ($ctl.Count -gt 0) { return @{ State = 'PASS'; Detail = 'correlated ' + $ctl[0].event + ' event for run ' + $key } }
+        if ($fresh.Count -eq 0) { return @{ State = 'UNVERIFIED'; Reason = 'has no fresh evidence (none within 15 minutes)' } }
+        return @{ State = 'UNVERIFIED'; Reason = 'has no correlated event for run ' + $key + ' in fresh evidence' }
       }
-      $st = Get-AdapterState 'BAS_CLP_ADAPTER_DEFENDER'
-      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'monitoring evidence for a synthetic clipboard write: integration defender is not configured' }
-      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'monitoring evidence for a synthetic clipboard write: integration defender is configured but no operational probe is implemented in this release' }
+      function Out-AdapterVerdict($r, [string]$desc, [string]$name) {
+        switch ($r.State) {
+          'NOT_CONFIGURED' { Out-Verdict 'SKIP' 'NOT_CONFIGURED' ($desc + ': integration ' + $name + ' is not configured') }
+          'UNVERIFIED'     { Out-Verdict 'SKIP' 'UNVERIFIED' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'ERROR'          { Out-Verdict 'ERROR' 'ERROR' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'FAIL'           { Out-Verdict 'FAIL' 'CORRELATED_TRANSFER' ($desc + ': ' + $r.Detail) }
+          'PASS'           { Out-Verdict 'PASS' 'CORRELATED_EVENT' ($desc + ': ' + $r.Detail) }
+        }
+      }
+      $r = Get-AdapterResult 'BAS_CLP_ADAPTER_DEFENDER'
+      Out-AdapterVerdict $r 'monitoring evidence for a synthetic clipboard write' 'defender'
     cleanup: ""
 
   - name: "Clipboard 3.1 — Synthetic capture round trip with compare-before-clear (T1115)"
@@ -460,12 +568,6 @@ steps:
       }
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
-      }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
       }
       Add-Type -AssemblyName System.Windows.Forms
       $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
@@ -519,15 +621,38 @@ steps:
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
       }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
+      function Get-AdapterResult([string]$flag) {
+        # Evidence-file adapter. Configuring an integration (BAS_CLP_ADAPTER_<NAME>=1) is not enough to score.
+        # The operator also points BAS_CLP_EVIDENCE_<NAME> at a JSON export of that vendor's events. Nothing here
+        # calls the vendor, reads a credential or changes a control.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return @{ State = 'NOT_CONFIGURED' } }
+        $name = $flag -replace '^BAS_CLP_ADAPTER_', ''
+        $key = $null
+        if ($env:BAS_RUN_ID) { $key = $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) }
+        if (-not $key) { return @{ State = 'UNVERIFIED'; Reason = 'has no run id to correlate events with' } }
+        $evPath = [Environment]::GetEnvironmentVariable(($flag -replace '_ADAPTER_', '_EVIDENCE_'))
+        if (-not $evPath -or -not (Test-Path -LiteralPath $evPath)) { return @{ State = 'UNVERIFIED'; Reason = 'has no evidence export (BAS_CLP_EVIDENCE_' + $name + ' not set)' } }
+        try { $events = @(Get-Content -LiteralPath $evPath -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return @{ State = 'ERROR'; Reason = 'evidence export is not valid JSON' } }
+        $cutoff = (Get-Date).ToUniversalTime().AddMinutes(-15)
+        $fresh = @($events | Where-Object { $_.time -and ([datetime]$_.time).ToUniversalTime() -ge $cutoff })
+        $mine = @($fresh | Where-Object { $_.run_id -eq $key })
+        if (@($mine | Where-Object { $_.event -eq 'transfer' }).Count -gt 0) { return @{ State = 'FAIL'; Detail = 'correlated transfer event for run ' + $key } }
+        $ctl = @($mine | Where-Object { $_.event -eq 'block' -or $_.event -eq 'alert' })
+        if ($ctl.Count -gt 0) { return @{ State = 'PASS'; Detail = 'correlated ' + $ctl[0].event + ' event for run ' + $key } }
+        if ($fresh.Count -eq 0) { return @{ State = 'UNVERIFIED'; Reason = 'has no fresh evidence (none within 15 minutes)' } }
+        return @{ State = 'UNVERIFIED'; Reason = 'has no correlated event for run ' + $key + ' in fresh evidence' }
       }
-      $st = Get-AdapterState 'BAS_CLP_ADAPTER_DEFENDER'
-      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'detection of the synthetic capture attempt: integration defender is not configured' }
-      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'detection of the synthetic capture attempt: integration defender is configured but no operational probe is implemented in this release' }
+      function Out-AdapterVerdict($r, [string]$desc, [string]$name) {
+        switch ($r.State) {
+          'NOT_CONFIGURED' { Out-Verdict 'SKIP' 'NOT_CONFIGURED' ($desc + ': integration ' + $name + ' is not configured') }
+          'UNVERIFIED'     { Out-Verdict 'SKIP' 'UNVERIFIED' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'ERROR'          { Out-Verdict 'ERROR' 'ERROR' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'FAIL'           { Out-Verdict 'FAIL' 'CORRELATED_TRANSFER' ($desc + ': ' + $r.Detail) }
+          'PASS'           { Out-Verdict 'PASS' 'CORRELATED_EVENT' ($desc + ': ' + $r.Detail) }
+        }
+      }
+      $r = Get-AdapterResult 'BAS_CLP_ADAPTER_DEFENDER'
+      Out-AdapterVerdict $r 'detection of the synthetic capture attempt' 'defender'
     cleanup: ""
 
   - name: "Clipboard 3.3 — Cleanup verification (T1115)"
@@ -554,12 +679,6 @@ steps:
       }
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
-      }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
       }
       Add-Type -AssemblyName System.Windows.Forms
 
@@ -592,12 +711,6 @@ steps:
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
       }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
-      }
       Add-Type -AssemblyName System.Windows.Forms
 
       if ([System.Windows.Forms.Clipboard]::ContainsText()) { Out-Verdict 'SKIP' 'USER_CONTENT_PRESENT' 'user content present; the probe never overwrites it' }
@@ -629,12 +742,6 @@ steps:
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
       }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
-      }
       Out-Verdict 'SKIP' 'NOT_APPLICABLE' 'the probe writes no clipboard content to disk or to any output other than its own marker' 
     cleanup: ""
 
@@ -662,12 +769,6 @@ steps:
       }
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
-      }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
       }
 
       $pol = Get-PolicyValue 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' 'AllowClipboardHistory'
@@ -704,12 +805,6 @@ steps:
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
       }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
-      }
 
       $pol = Get-PolicyValue 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' 'AllowCrossDeviceClipboard'
       $eff = Get-PolicyValue 'HKCU:\Software\Microsoft\Clipboard' 'CloudClipboardAutomaticUpload'
@@ -745,12 +840,6 @@ steps:
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
       }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
-      }
       $v = Get-PolicyValue 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' 'AllowCrossDeviceClipboard'
       if ($null -eq $v) { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'cross-device restriction: policy value AllowCrossDeviceClipboard not set' }
       else { Out-Verdict 'SKIP' 'CONFIGURED' ('cross-device restriction: policy value AllowCrossDeviceClipboard={0}; not enforcement' -f $v) }
@@ -781,12 +870,6 @@ steps:
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
       }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
-      }
       Out-Verdict 'SKIP' 'CANNOT_VERIFY' 'clipboard history content is not readable without UI interaction; history is not inspected' 
     cleanup: ""
 
@@ -814,12 +897,6 @@ steps:
       }
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
-      }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
       }
       $v = Get-PolicyValue 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' 'fDisableClip'
       if ($null -eq $v) { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'RDP redirection: policy value fDisableClip not set' }
@@ -851,12 +928,6 @@ steps:
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
       }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
-      }
       Out-Verdict 'SKIP' 'CANNOT_VERIFY' 'effective redirection needs a remote session; this probe opens none' 
     cleanup: ""
 
@@ -884,12 +955,6 @@ steps:
       }
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
-      }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
       }
 
       $svc = Get-Service -Name TermService -ErrorAction SilentlyContinue
@@ -922,15 +987,38 @@ steps:
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
       }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
+      function Get-AdapterResult([string]$flag) {
+        # Evidence-file adapter. Configuring an integration (BAS_CLP_ADAPTER_<NAME>=1) is not enough to score.
+        # The operator also points BAS_CLP_EVIDENCE_<NAME> at a JSON export of that vendor's events. Nothing here
+        # calls the vendor, reads a credential or changes a control.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return @{ State = 'NOT_CONFIGURED' } }
+        $name = $flag -replace '^BAS_CLP_ADAPTER_', ''
+        $key = $null
+        if ($env:BAS_RUN_ID) { $key = $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) }
+        if (-not $key) { return @{ State = 'UNVERIFIED'; Reason = 'has no run id to correlate events with' } }
+        $evPath = [Environment]::GetEnvironmentVariable(($flag -replace '_ADAPTER_', '_EVIDENCE_'))
+        if (-not $evPath -or -not (Test-Path -LiteralPath $evPath)) { return @{ State = 'UNVERIFIED'; Reason = 'has no evidence export (BAS_CLP_EVIDENCE_' + $name + ' not set)' } }
+        try { $events = @(Get-Content -LiteralPath $evPath -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return @{ State = 'ERROR'; Reason = 'evidence export is not valid JSON' } }
+        $cutoff = (Get-Date).ToUniversalTime().AddMinutes(-15)
+        $fresh = @($events | Where-Object { $_.time -and ([datetime]$_.time).ToUniversalTime() -ge $cutoff })
+        $mine = @($fresh | Where-Object { $_.run_id -eq $key })
+        if (@($mine | Where-Object { $_.event -eq 'transfer' }).Count -gt 0) { return @{ State = 'FAIL'; Detail = 'correlated transfer event for run ' + $key } }
+        $ctl = @($mine | Where-Object { $_.event -eq 'block' -or $_.event -eq 'alert' })
+        if ($ctl.Count -gt 0) { return @{ State = 'PASS'; Detail = 'correlated ' + $ctl[0].event + ' event for run ' + $key } }
+        if ($fresh.Count -eq 0) { return @{ State = 'UNVERIFIED'; Reason = 'has no fresh evidence (none within 15 minutes)' } }
+        return @{ State = 'UNVERIFIED'; Reason = 'has no correlated event for run ' + $key + ' in fresh evidence' }
       }
-      $st = Get-AdapterState 'BAS_CLP_ADAPTER_DEFENDER'
-      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'remote session clipboard enforcement telemetry: integration defender is not configured' }
-      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'remote session clipboard enforcement telemetry: integration defender is configured but no operational probe is implemented in this release' }
+      function Out-AdapterVerdict($r, [string]$desc, [string]$name) {
+        switch ($r.State) {
+          'NOT_CONFIGURED' { Out-Verdict 'SKIP' 'NOT_CONFIGURED' ($desc + ': integration ' + $name + ' is not configured') }
+          'UNVERIFIED'     { Out-Verdict 'SKIP' 'UNVERIFIED' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'ERROR'          { Out-Verdict 'ERROR' 'ERROR' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'FAIL'           { Out-Verdict 'FAIL' 'CORRELATED_TRANSFER' ($desc + ': ' + $r.Detail) }
+          'PASS'           { Out-Verdict 'PASS' 'CORRELATED_EVENT' ($desc + ': ' + $r.Detail) }
+        }
+      }
+      $r = Get-AdapterResult 'BAS_CLP_ADAPTER_DEFENDER'
+      Out-AdapterVerdict $r 'remote session clipboard enforcement telemetry' 'defender'
     cleanup: ""
 
   - name: "Clipboard 6.1 — Synthetic sensitive-pattern detection (T1115)"
@@ -958,15 +1046,38 @@ steps:
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
       }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
+      function Get-AdapterResult([string]$flag) {
+        # Evidence-file adapter. Configuring an integration (BAS_CLP_ADAPTER_<NAME>=1) is not enough to score.
+        # The operator also points BAS_CLP_EVIDENCE_<NAME> at a JSON export of that vendor's events. Nothing here
+        # calls the vendor, reads a credential or changes a control.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return @{ State = 'NOT_CONFIGURED' } }
+        $name = $flag -replace '^BAS_CLP_ADAPTER_', ''
+        $key = $null
+        if ($env:BAS_RUN_ID) { $key = $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) }
+        if (-not $key) { return @{ State = 'UNVERIFIED'; Reason = 'has no run id to correlate events with' } }
+        $evPath = [Environment]::GetEnvironmentVariable(($flag -replace '_ADAPTER_', '_EVIDENCE_'))
+        if (-not $evPath -or -not (Test-Path -LiteralPath $evPath)) { return @{ State = 'UNVERIFIED'; Reason = 'has no evidence export (BAS_CLP_EVIDENCE_' + $name + ' not set)' } }
+        try { $events = @(Get-Content -LiteralPath $evPath -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return @{ State = 'ERROR'; Reason = 'evidence export is not valid JSON' } }
+        $cutoff = (Get-Date).ToUniversalTime().AddMinutes(-15)
+        $fresh = @($events | Where-Object { $_.time -and ([datetime]$_.time).ToUniversalTime() -ge $cutoff })
+        $mine = @($fresh | Where-Object { $_.run_id -eq $key })
+        if (@($mine | Where-Object { $_.event -eq 'transfer' }).Count -gt 0) { return @{ State = 'FAIL'; Detail = 'correlated transfer event for run ' + $key } }
+        $ctl = @($mine | Where-Object { $_.event -eq 'block' -or $_.event -eq 'alert' })
+        if ($ctl.Count -gt 0) { return @{ State = 'PASS'; Detail = 'correlated ' + $ctl[0].event + ' event for run ' + $key } }
+        if ($fresh.Count -eq 0) { return @{ State = 'UNVERIFIED'; Reason = 'has no fresh evidence (none within 15 minutes)' } }
+        return @{ State = 'UNVERIFIED'; Reason = 'has no correlated event for run ' + $key + ' in fresh evidence' }
       }
-      $st = Get-AdapterState 'BAS_CLP_ADAPTER_PURVIEW'
-      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'DLP detection of the synthetic test pattern BAS-TEST-PATTERN-0000: integration purview is not configured' }
-      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'DLP detection of the synthetic test pattern BAS-TEST-PATTERN-0000: integration purview is configured but no operational probe is implemented in this release' }
+      function Out-AdapterVerdict($r, [string]$desc, [string]$name) {
+        switch ($r.State) {
+          'NOT_CONFIGURED' { Out-Verdict 'SKIP' 'NOT_CONFIGURED' ($desc + ': integration ' + $name + ' is not configured') }
+          'UNVERIFIED'     { Out-Verdict 'SKIP' 'UNVERIFIED' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'ERROR'          { Out-Verdict 'ERROR' 'ERROR' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'FAIL'           { Out-Verdict 'FAIL' 'CORRELATED_TRANSFER' ($desc + ': ' + $r.Detail) }
+          'PASS'           { Out-Verdict 'PASS' 'CORRELATED_EVENT' ($desc + ': ' + $r.Detail) }
+        }
+      }
+      $r = Get-AdapterResult 'BAS_CLP_ADAPTER_PURVIEW'
+      Out-AdapterVerdict $r 'DLP detection of the synthetic test pattern BAS-TEST-PATTERN-0000' 'purview'
     cleanup: ""
 
   - name: "Clipboard 6.2 — Clipboard DLP block versus audit mode (T1115)"
@@ -994,15 +1105,38 @@ steps:
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
       }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
+      function Get-AdapterResult([string]$flag) {
+        # Evidence-file adapter. Configuring an integration (BAS_CLP_ADAPTER_<NAME>=1) is not enough to score.
+        # The operator also points BAS_CLP_EVIDENCE_<NAME> at a JSON export of that vendor's events. Nothing here
+        # calls the vendor, reads a credential or changes a control.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return @{ State = 'NOT_CONFIGURED' } }
+        $name = $flag -replace '^BAS_CLP_ADAPTER_', ''
+        $key = $null
+        if ($env:BAS_RUN_ID) { $key = $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) }
+        if (-not $key) { return @{ State = 'UNVERIFIED'; Reason = 'has no run id to correlate events with' } }
+        $evPath = [Environment]::GetEnvironmentVariable(($flag -replace '_ADAPTER_', '_EVIDENCE_'))
+        if (-not $evPath -or -not (Test-Path -LiteralPath $evPath)) { return @{ State = 'UNVERIFIED'; Reason = 'has no evidence export (BAS_CLP_EVIDENCE_' + $name + ' not set)' } }
+        try { $events = @(Get-Content -LiteralPath $evPath -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return @{ State = 'ERROR'; Reason = 'evidence export is not valid JSON' } }
+        $cutoff = (Get-Date).ToUniversalTime().AddMinutes(-15)
+        $fresh = @($events | Where-Object { $_.time -and ([datetime]$_.time).ToUniversalTime() -ge $cutoff })
+        $mine = @($fresh | Where-Object { $_.run_id -eq $key })
+        if (@($mine | Where-Object { $_.event -eq 'transfer' }).Count -gt 0) { return @{ State = 'FAIL'; Detail = 'correlated transfer event for run ' + $key } }
+        $ctl = @($mine | Where-Object { $_.event -eq 'block' -or $_.event -eq 'alert' })
+        if ($ctl.Count -gt 0) { return @{ State = 'PASS'; Detail = 'correlated ' + $ctl[0].event + ' event for run ' + $key } }
+        if ($fresh.Count -eq 0) { return @{ State = 'UNVERIFIED'; Reason = 'has no fresh evidence (none within 15 minutes)' } }
+        return @{ State = 'UNVERIFIED'; Reason = 'has no correlated event for run ' + $key + ' in fresh evidence' }
       }
-      $st = Get-AdapterState 'BAS_CLP_ADAPTER_TRELLIX'
-      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'DLP block or audit mode: integration trellix is not configured' }
-      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'DLP block or audit mode: integration trellix is configured but no operational probe is implemented in this release' }
+      function Out-AdapterVerdict($r, [string]$desc, [string]$name) {
+        switch ($r.State) {
+          'NOT_CONFIGURED' { Out-Verdict 'SKIP' 'NOT_CONFIGURED' ($desc + ': integration ' + $name + ' is not configured') }
+          'UNVERIFIED'     { Out-Verdict 'SKIP' 'UNVERIFIED' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'ERROR'          { Out-Verdict 'ERROR' 'ERROR' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'FAIL'           { Out-Verdict 'FAIL' 'CORRELATED_TRANSFER' ($desc + ': ' + $r.Detail) }
+          'PASS'           { Out-Verdict 'PASS' 'CORRELATED_EVENT' ($desc + ': ' + $r.Detail) }
+        }
+      }
+      $r = Get-AdapterResult 'BAS_CLP_ADAPTER_TRELLIX'
+      Out-AdapterVerdict $r 'DLP block or audit mode' 'trellix'
     cleanup: ""
 
   - name: "Clipboard 6.3 — Policy-triggered action evidence (T1115)"
@@ -1030,15 +1164,38 @@ steps:
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
       }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
+      function Get-AdapterResult([string]$flag) {
+        # Evidence-file adapter. Configuring an integration (BAS_CLP_ADAPTER_<NAME>=1) is not enough to score.
+        # The operator also points BAS_CLP_EVIDENCE_<NAME> at a JSON export of that vendor's events. Nothing here
+        # calls the vendor, reads a credential or changes a control.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return @{ State = 'NOT_CONFIGURED' } }
+        $name = $flag -replace '^BAS_CLP_ADAPTER_', ''
+        $key = $null
+        if ($env:BAS_RUN_ID) { $key = $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) }
+        if (-not $key) { return @{ State = 'UNVERIFIED'; Reason = 'has no run id to correlate events with' } }
+        $evPath = [Environment]::GetEnvironmentVariable(($flag -replace '_ADAPTER_', '_EVIDENCE_'))
+        if (-not $evPath -or -not (Test-Path -LiteralPath $evPath)) { return @{ State = 'UNVERIFIED'; Reason = 'has no evidence export (BAS_CLP_EVIDENCE_' + $name + ' not set)' } }
+        try { $events = @(Get-Content -LiteralPath $evPath -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return @{ State = 'ERROR'; Reason = 'evidence export is not valid JSON' } }
+        $cutoff = (Get-Date).ToUniversalTime().AddMinutes(-15)
+        $fresh = @($events | Where-Object { $_.time -and ([datetime]$_.time).ToUniversalTime() -ge $cutoff })
+        $mine = @($fresh | Where-Object { $_.run_id -eq $key })
+        if (@($mine | Where-Object { $_.event -eq 'transfer' }).Count -gt 0) { return @{ State = 'FAIL'; Detail = 'correlated transfer event for run ' + $key } }
+        $ctl = @($mine | Where-Object { $_.event -eq 'block' -or $_.event -eq 'alert' })
+        if ($ctl.Count -gt 0) { return @{ State = 'PASS'; Detail = 'correlated ' + $ctl[0].event + ' event for run ' + $key } }
+        if ($fresh.Count -eq 0) { return @{ State = 'UNVERIFIED'; Reason = 'has no fresh evidence (none within 15 minutes)' } }
+        return @{ State = 'UNVERIFIED'; Reason = 'has no correlated event for run ' + $key + ' in fresh evidence' }
       }
-      $st = Get-AdapterState 'BAS_CLP_ADAPTER_PURVIEW'
-      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'policy-triggered action evidence: integration purview is not configured' }
-      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'policy-triggered action evidence: integration purview is configured but no operational probe is implemented in this release' }
+      function Out-AdapterVerdict($r, [string]$desc, [string]$name) {
+        switch ($r.State) {
+          'NOT_CONFIGURED' { Out-Verdict 'SKIP' 'NOT_CONFIGURED' ($desc + ': integration ' + $name + ' is not configured') }
+          'UNVERIFIED'     { Out-Verdict 'SKIP' 'UNVERIFIED' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'ERROR'          { Out-Verdict 'ERROR' 'ERROR' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'FAIL'           { Out-Verdict 'FAIL' 'CORRELATED_TRANSFER' ($desc + ': ' + $r.Detail) }
+          'PASS'           { Out-Verdict 'PASS' 'CORRELATED_EVENT' ($desc + ': ' + $r.Detail) }
+        }
+      }
+      $r = Get-AdapterResult 'BAS_CLP_ADAPTER_PURVIEW'
+      Out-AdapterVerdict $r 'policy-triggered action evidence' 'purview'
     cleanup: ""
 
   - name: "Clipboard 6.4 — DLP source present (T1115)"
@@ -1066,15 +1223,38 @@ steps:
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
       }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
+      function Get-AdapterResult([string]$flag) {
+        # Evidence-file adapter. Configuring an integration (BAS_CLP_ADAPTER_<NAME>=1) is not enough to score.
+        # The operator also points BAS_CLP_EVIDENCE_<NAME> at a JSON export of that vendor's events. Nothing here
+        # calls the vendor, reads a credential or changes a control.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return @{ State = 'NOT_CONFIGURED' } }
+        $name = $flag -replace '^BAS_CLP_ADAPTER_', ''
+        $key = $null
+        if ($env:BAS_RUN_ID) { $key = $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) }
+        if (-not $key) { return @{ State = 'UNVERIFIED'; Reason = 'has no run id to correlate events with' } }
+        $evPath = [Environment]::GetEnvironmentVariable(($flag -replace '_ADAPTER_', '_EVIDENCE_'))
+        if (-not $evPath -or -not (Test-Path -LiteralPath $evPath)) { return @{ State = 'UNVERIFIED'; Reason = 'has no evidence export (BAS_CLP_EVIDENCE_' + $name + ' not set)' } }
+        try { $events = @(Get-Content -LiteralPath $evPath -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return @{ State = 'ERROR'; Reason = 'evidence export is not valid JSON' } }
+        $cutoff = (Get-Date).ToUniversalTime().AddMinutes(-15)
+        $fresh = @($events | Where-Object { $_.time -and ([datetime]$_.time).ToUniversalTime() -ge $cutoff })
+        $mine = @($fresh | Where-Object { $_.run_id -eq $key })
+        if (@($mine | Where-Object { $_.event -eq 'transfer' }).Count -gt 0) { return @{ State = 'FAIL'; Detail = 'correlated transfer event for run ' + $key } }
+        $ctl = @($mine | Where-Object { $_.event -eq 'block' -or $_.event -eq 'alert' })
+        if ($ctl.Count -gt 0) { return @{ State = 'PASS'; Detail = 'correlated ' + $ctl[0].event + ' event for run ' + $key } }
+        if ($fresh.Count -eq 0) { return @{ State = 'UNVERIFIED'; Reason = 'has no fresh evidence (none within 15 minutes)' } }
+        return @{ State = 'UNVERIFIED'; Reason = 'has no correlated event for run ' + $key + ' in fresh evidence' }
       }
-      $st = Get-AdapterState 'BAS_CLP_ADAPTER_TRELLIX'
-      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'DLP source presence: integration trellix is not configured' }
-      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'DLP source presence: integration trellix is configured but no operational probe is implemented in this release' }
+      function Out-AdapterVerdict($r, [string]$desc, [string]$name) {
+        switch ($r.State) {
+          'NOT_CONFIGURED' { Out-Verdict 'SKIP' 'NOT_CONFIGURED' ($desc + ': integration ' + $name + ' is not configured') }
+          'UNVERIFIED'     { Out-Verdict 'SKIP' 'UNVERIFIED' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'ERROR'          { Out-Verdict 'ERROR' 'ERROR' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'FAIL'           { Out-Verdict 'FAIL' 'CORRELATED_TRANSFER' ($desc + ': ' + $r.Detail) }
+          'PASS'           { Out-Verdict 'PASS' 'CORRELATED_EVENT' ($desc + ': ' + $r.Detail) }
+        }
+      }
+      $r = Get-AdapterResult 'BAS_CLP_ADAPTER_TRELLIX'
+      Out-AdapterVerdict $r 'DLP source presence' 'trellix'
     cleanup: ""
 
   - name: "Clipboard 7.1 — Controlled .invalid resolution (T1048.003)"
@@ -1101,12 +1281,6 @@ steps:
       }
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
-      }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
       }
       $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
 
@@ -1141,15 +1315,38 @@ steps:
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
       }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
+      function Get-AdapterResult([string]$flag) {
+        # Evidence-file adapter. Configuring an integration (BAS_CLP_ADAPTER_<NAME>=1) is not enough to score.
+        # The operator also points BAS_CLP_EVIDENCE_<NAME> at a JSON export of that vendor's events. Nothing here
+        # calls the vendor, reads a credential or changes a control.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return @{ State = 'NOT_CONFIGURED' } }
+        $name = $flag -replace '^BAS_CLP_ADAPTER_', ''
+        $key = $null
+        if ($env:BAS_RUN_ID) { $key = $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) }
+        if (-not $key) { return @{ State = 'UNVERIFIED'; Reason = 'has no run id to correlate events with' } }
+        $evPath = [Environment]::GetEnvironmentVariable(($flag -replace '_ADAPTER_', '_EVIDENCE_'))
+        if (-not $evPath -or -not (Test-Path -LiteralPath $evPath)) { return @{ State = 'UNVERIFIED'; Reason = 'has no evidence export (BAS_CLP_EVIDENCE_' + $name + ' not set)' } }
+        try { $events = @(Get-Content -LiteralPath $evPath -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return @{ State = 'ERROR'; Reason = 'evidence export is not valid JSON' } }
+        $cutoff = (Get-Date).ToUniversalTime().AddMinutes(-15)
+        $fresh = @($events | Where-Object { $_.time -and ([datetime]$_.time).ToUniversalTime() -ge $cutoff })
+        $mine = @($fresh | Where-Object { $_.run_id -eq $key })
+        if (@($mine | Where-Object { $_.event -eq 'transfer' }).Count -gt 0) { return @{ State = 'FAIL'; Detail = 'correlated transfer event for run ' + $key } }
+        $ctl = @($mine | Where-Object { $_.event -eq 'block' -or $_.event -eq 'alert' })
+        if ($ctl.Count -gt 0) { return @{ State = 'PASS'; Detail = 'correlated ' + $ctl[0].event + ' event for run ' + $key } }
+        if ($fresh.Count -eq 0) { return @{ State = 'UNVERIFIED'; Reason = 'has no fresh evidence (none within 15 minutes)' } }
+        return @{ State = 'UNVERIFIED'; Reason = 'has no correlated event for run ' + $key + ' in fresh evidence' }
       }
-      $st = Get-AdapterState 'BAS_CLP_ADAPTER_EGRESS'
-      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'egress control event for the resolver probe: integration egress is not configured' }
-      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'egress control event for the resolver probe: integration egress is configured but no operational probe is implemented in this release' }
+      function Out-AdapterVerdict($r, [string]$desc, [string]$name) {
+        switch ($r.State) {
+          'NOT_CONFIGURED' { Out-Verdict 'SKIP' 'NOT_CONFIGURED' ($desc + ': integration ' + $name + ' is not configured') }
+          'UNVERIFIED'     { Out-Verdict 'SKIP' 'UNVERIFIED' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'ERROR'          { Out-Verdict 'ERROR' 'ERROR' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'FAIL'           { Out-Verdict 'FAIL' 'CORRELATED_TRANSFER' ($desc + ': ' + $r.Detail) }
+          'PASS'           { Out-Verdict 'PASS' 'CORRELATED_EVENT' ($desc + ': ' + $r.Detail) }
+        }
+      }
+      $r = Get-AdapterResult 'BAS_CLP_ADAPTER_EGRESS'
+      Out-AdapterVerdict $r 'egress control event for the resolver probe' 'egress'
     cleanup: ""
 
   - name: "Clipboard 7.3 — Network control evidence (T1048.003)"
@@ -1177,15 +1374,38 @@ steps:
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
       }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
+      function Get-AdapterResult([string]$flag) {
+        # Evidence-file adapter. Configuring an integration (BAS_CLP_ADAPTER_<NAME>=1) is not enough to score.
+        # The operator also points BAS_CLP_EVIDENCE_<NAME> at a JSON export of that vendor's events. Nothing here
+        # calls the vendor, reads a credential or changes a control.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return @{ State = 'NOT_CONFIGURED' } }
+        $name = $flag -replace '^BAS_CLP_ADAPTER_', ''
+        $key = $null
+        if ($env:BAS_RUN_ID) { $key = $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) }
+        if (-not $key) { return @{ State = 'UNVERIFIED'; Reason = 'has no run id to correlate events with' } }
+        $evPath = [Environment]::GetEnvironmentVariable(($flag -replace '_ADAPTER_', '_EVIDENCE_'))
+        if (-not $evPath -or -not (Test-Path -LiteralPath $evPath)) { return @{ State = 'UNVERIFIED'; Reason = 'has no evidence export (BAS_CLP_EVIDENCE_' + $name + ' not set)' } }
+        try { $events = @(Get-Content -LiteralPath $evPath -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return @{ State = 'ERROR'; Reason = 'evidence export is not valid JSON' } }
+        $cutoff = (Get-Date).ToUniversalTime().AddMinutes(-15)
+        $fresh = @($events | Where-Object { $_.time -and ([datetime]$_.time).ToUniversalTime() -ge $cutoff })
+        $mine = @($fresh | Where-Object { $_.run_id -eq $key })
+        if (@($mine | Where-Object { $_.event -eq 'transfer' }).Count -gt 0) { return @{ State = 'FAIL'; Detail = 'correlated transfer event for run ' + $key } }
+        $ctl = @($mine | Where-Object { $_.event -eq 'block' -or $_.event -eq 'alert' })
+        if ($ctl.Count -gt 0) { return @{ State = 'PASS'; Detail = 'correlated ' + $ctl[0].event + ' event for run ' + $key } }
+        if ($fresh.Count -eq 0) { return @{ State = 'UNVERIFIED'; Reason = 'has no fresh evidence (none within 15 minutes)' } }
+        return @{ State = 'UNVERIFIED'; Reason = 'has no correlated event for run ' + $key + ' in fresh evidence' }
       }
-      $st = Get-AdapterState 'BAS_CLP_ADAPTER_DEFENDER'
-      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'network control evidence: integration defender is not configured' }
-      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'network control evidence: integration defender is configured but no operational probe is implemented in this release' }
+      function Out-AdapterVerdict($r, [string]$desc, [string]$name) {
+        switch ($r.State) {
+          'NOT_CONFIGURED' { Out-Verdict 'SKIP' 'NOT_CONFIGURED' ($desc + ': integration ' + $name + ' is not configured') }
+          'UNVERIFIED'     { Out-Verdict 'SKIP' 'UNVERIFIED' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'ERROR'          { Out-Verdict 'ERROR' 'ERROR' ($desc + ': integration ' + $name + ' ' + $r.Reason) }
+          'FAIL'           { Out-Verdict 'FAIL' 'CORRELATED_TRANSFER' ($desc + ': ' + $r.Detail) }
+          'PASS'           { Out-Verdict 'PASS' 'CORRELATED_EVENT' ($desc + ': ' + $r.Detail) }
+        }
+      }
+      $r = Get-AdapterResult 'BAS_CLP_ADAPTER_DEFENDER'
+      Out-AdapterVerdict $r 'network control evidence' 'defender'
     cleanup: ""
 
   - name: "Clipboard 7.4 — Failed versus blocked classification (T1048.003)"
@@ -1212,12 +1432,6 @@ steps:
       }
       function Get-PolicyValue([string]$path, [string]$name) {
         try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
-      }
-      function Get-AdapterState([string]$flag) {
-        # An integration counts only when it is explicitly configured. Configured is not operational:
-        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
-        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
-        return 'UNVERIFIED'
       }
       Out-Verdict 'SKIP' 'CANNOT_VERIFY' 'no transfer was attempted, so failed and blocked cannot be classified; DNS failure is not a block' 
     cleanup: ""

@@ -72,8 +72,8 @@ Describe 'Clipboard scenario: structure and safety' {
         $hits.Count | Should -Be 1
         $hits[0].Name | Should -Match '^Clipboard 3\.1'
     }
-    It 'emits only the agreed verdict words, and PASS or FAIL only from the history and sync enforcement steps' {
-        $passFail = @(Get-ClpSteps | Where-Object { $_.Command -match "Out-Verdict 'PASS'|Out-Verdict 'FAIL'" })
+    It 'emits only the agreed verdict words, and PASS or FAIL only from the history and sync enforcement steps or the adapter' {
+        $passFail = @(Get-ClpSteps | Where-Object { $_.Command -match "Out-Verdict 'PASS'|Out-Verdict 'FAIL'" -and $_.Command -notmatch 'function Out-AdapterVerdict' })
         ($passFail.Name | Sort-Object) | ForEach-Object { $_ -replace '^(Clipboard \d\.\d).*', '$1' } | Should -Be @('Clipboard 4.1', 'Clipboard 4.2')
     }
 }
