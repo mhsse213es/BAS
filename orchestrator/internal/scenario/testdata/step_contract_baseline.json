@@ -1054,6 +1054,11 @@
     "detection": 0,
     "telemetry": 0
   },
+  "resdev-codesign-cert-sim.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
   "resdev-lookalike-domain-sim.yaml": {
     "cleanup": 0,
     "detection": 0,

@@ -10422,6 +10422,15 @@
     "status": "self_cleaning_declared"
   },
   {
+    "scenario": "resdev-codesign-cert-sim.yaml",
+    "index": 0,
+    "technique_id": "T1588.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
     "scenario": "resdev-lookalike-domain-sim.yaml",
     "index": 0,
     "technique_id": "T1583.001",
