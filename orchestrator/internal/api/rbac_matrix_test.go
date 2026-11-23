@@ -562,6 +562,7 @@ var routeMatrix = []routeCase{
 	{http.MethodPost, "/api/tamper-events/{id}/acknowledge", tierPermission, auth.CanAcknowledgeTamperEvent},
 	{http.MethodPost, "/api/tamper-events/acknowledge-all", tierPermission, auth.CanAcknowledgeAllTamperEvents},
 	{http.MethodGet, "/api/audit-logs", tierPermission, auth.CanViewAuditLogs},
+	{http.MethodGet, "/api/audit-logs/retention", tierPermission, auth.CanViewAuditLogs},
 	{http.MethodGet, "/api/ticketing/configs", tierPermission, auth.CanListTicketingConfigs},
 	{http.MethodPost, "/api/ticketing/configs", tierPermission, auth.CanCreateTicketingConfig},
 	{http.MethodPut, "/api/ticketing/configs/{id}", tierPermission, auth.CanUpdateTicketingConfig},
