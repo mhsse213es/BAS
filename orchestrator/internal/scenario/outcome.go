@@ -214,6 +214,8 @@ func classifySkipReason(detail string) string {
 		return models.SkipReasonCircuitOpen
 	case strings.Contains(lower, "telemetry-only probe"):
 		return models.SkipReasonTelemetryOnly
+	case strings.Contains(lower, "not assessed"):
+		return models.SkipReasonNotAssessed
 	}
 	return ""
 }
