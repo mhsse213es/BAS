@@ -84,6 +84,25 @@ func (i *TeamsInjector) Send(ctx context.Context, text string) (map[string]any, 
 	return postWebhookJSON(ctx, "teams", i.webhookURL, map[string]any{"text": text})
 }
 
+// googleChatMaxBytes is Google Chat's documented maximum message size (32,000 bytes, not characters).
+const googleChatMaxBytes = 32000
+
+// GoogleChatInjector posts to a Google Chat space through its incoming webhook URL (the URL carries the
+// space, key and secret token). Google also limits a space to one request per second, shared by every
+// webhook in it, so a plan should not fire several google_chat steps at the same instant.
+type GoogleChatInjector struct{ webhookURL string }
+
+func NewGoogleChatInjector(webhookURL string) *GoogleChatInjector {
+	return &GoogleChatInjector{webhookURL: webhookURL}
+}
+
+func (i *GoogleChatInjector) Send(ctx context.Context, text string) (map[string]any, error) {
+	if len(text) > googleChatMaxBytes {
+		return nil, fmt.Errorf("google_chat message is %d bytes, over Google Chat's %d byte limit", len(text), googleChatMaxBytes)
+	}
+	return postWebhookJSON(ctx, "google_chat", i.webhookURL, map[string]any{"text": text})
+}
+
 func postWebhookJSON(ctx context.Context, channel, url string, payload map[string]any) (map[string]any, error) {
 	if url == "" {
 		return nil, fmt.Errorf("%s webhook not configured", channel)

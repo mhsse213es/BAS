@@ -84,6 +84,12 @@ func (j *jiraConnector) CreateTicket(ctx context.Context, f TicketFinding, rt Re
 		"priority":    map[string]string{"name": jiraPriorityName(f.Severity)},
 		"labels":      []string{"BAS", "ATT&CK", f.TechniqueID},
 	}
+	return j.createIssue(ctx, fields, rt)
+}
+
+// createIssue posts the issue, trying the record type's preferred issue type first and then falling back
+// through common types and the project's own list. It is shared by finding tickets and exercise tickets.
+func (j *jiraConnector) createIssue(ctx context.Context, fields map[string]any, rt RecordType) (TicketRef, error) {
 	payload := map[string]any{"fields": fields}
 
 	// Build a cascade of issue type names to try. Different Jira project
@@ -407,4 +413,21 @@ func (j *jiraConnector) doRequest(ctx context.Context, method, path string, body
 		return nil, fmt.Errorf("jira %s %s: HTTP %d: %s", method, path, resp.StatusCode, data)
 	}
 	return data, nil
+}
+
+// Notify opens an exercise issue: a labelled summary, a body that says it is a drill, and the BAS-EXERCISE
+// label, with no ATT&CK technique label. It uses the same issue-type fallback as finding tickets.
+func (j *jiraConnector) Notify(ctx context.Context, subject, body string, rt RecordType) (TicketRef, error) {
+	title, err := exerciseSubject(subject, 255)
+	if err != nil {
+		return TicketRef{}, err
+	}
+	fields := map[string]any{
+		"project":     map[string]string{"key": j.projectKey},
+		"summary":     title,
+		"description": exerciseDescription(body),
+		"issuetype":   map[string]string{"name": issueTypeForRecord(rt)},
+		"labels":      []string{ExerciseLabel},
+	}
+	return j.createIssue(ctx, fields, rt)
 }

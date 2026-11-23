@@ -106,6 +106,20 @@ func (e *Executor) RegisterBuiltins(smtp *SMTPInjector, sms *SMSInjector, slack 
 	e.registry.Register(StepTypeWaitForWebhook, StepHandlerFunc(e.handleWaitForWebhook))
 }
 
+// TicketNotifier opens one exercise ticket in a configured ITSM connector and reports what was created.
+// ticketing.Manager implements it; the exercise package depends only on this interface.
+type TicketNotifier interface {
+	NotifyStep(ctx context.Context, connectorID, subject, body, recordType string) (map[string]any, error)
+}
+
+// RegisterChannelBuiltins wires the Google Chat and ticket steps. It is separate from RegisterBuiltins so that
+// function's signature, which many callers use, stays stable. Either argument may be nil: the step then fails
+// with "not configured" instead of pretending to send.
+func (e *Executor) RegisterChannelBuiltins(gchat *GoogleChatInjector, tickets TicketNotifier) {
+	e.registry.Register(StepTypeGoogleChat, StepHandlerFunc(e.handleGoogleChat(gchat)))
+	e.registry.Register(StepTypeTicket, StepHandlerFunc(e.handleTicket(tickets)))
+}
+
 // RegisterBuiltinTriggers wires the event-driven trigger functions.
 func (e *Executor) RegisterBuiltinTriggers() {
 	e.triggers.Register(StepTypeWaitForAgent, e.triggerWaitForAgent)
@@ -408,6 +422,60 @@ func (e *Executor) handleSlack(slack *SlackInjector) func(context.Context, *Exec
 			_ = e.store.SetStepResult(bctx, ex.ID, ps.ID, result)
 			_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepCompleted, "")
 			_, _ = e.evidence.Append(bctx, ex.ID, se.ID, "slack_sent", "system", "slack_injector", result)
+			_ = e.store.RecordEvent(bctx, ex.ID, ps.ID, "step_completed", "system", result)
+		}()
+		return nil
+	}
+}
+
+func (e *Executor) handleGoogleChat(gchat *GoogleChatInjector) func(context.Context, *Execution, *PlanStep, *StepExecution) error {
+	return func(ctx context.Context, ex *Execution, ps *PlanStep, se *StepExecution) error {
+		if gchat == nil {
+			return e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed, "Google Chat not configured")
+		}
+		cfg := ps.Config.GoogleChat
+		if cfg == nil {
+			return e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed, "missing google_chat config")
+		}
+		go func() {
+			bctx := context.Background()
+			result, err := gchat.Send(bctx, cfg.Text)
+			if err != nil {
+				_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepFailed, err.Error())
+				return
+			}
+			_ = e.store.SetStepResult(bctx, ex.ID, ps.ID, result)
+			_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepCompleted, "")
+			_, _ = e.evidence.Append(bctx, ex.ID, se.ID, "google_chat_sent", "system", "google_chat_injector", result)
+			_ = e.store.RecordEvent(bctx, ex.ID, ps.ID, "step_completed", "system", result)
+		}()
+		return nil
+	}
+}
+
+func (e *Executor) handleTicket(tickets TicketNotifier) func(context.Context, *Execution, *PlanStep, *StepExecution) error {
+	return func(ctx context.Context, ex *Execution, ps *PlanStep, se *StepExecution) error {
+		if tickets == nil {
+			return e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed, "ticketing not configured")
+		}
+		cfg := ps.Config.Ticket
+		if cfg == nil {
+			return e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed, "missing ticket config")
+		}
+		// A blank ticket in a real ITSM is noise someone has to clean up; refuse it up front.
+		if strings.TrimSpace(cfg.Subject) == "" {
+			return e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed, "ticket step needs a subject")
+		}
+		go func() {
+			bctx := context.Background()
+			result, err := tickets.NotifyStep(bctx, cfg.ConnectorID, cfg.Subject, cfg.Body, cfg.RecordType)
+			if err != nil {
+				_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepFailed, err.Error())
+				return
+			}
+			_ = e.store.SetStepResult(bctx, ex.ID, ps.ID, result)
+			_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepCompleted, "")
+			_, _ = e.evidence.Append(bctx, ex.ID, se.ID, "ticket_created", "system", "ticket_injector", result)
 			_ = e.store.RecordEvent(bctx, ex.ID, ps.ID, "step_completed", "system", result)
 		}()
 		return nil

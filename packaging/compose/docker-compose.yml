@@ -257,6 +257,7 @@ services:
       SMS_GATEWAY_FROM:  ${SMS_GATEWAY_FROM:-}
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
       TEAMS_WEBHOOK_URL: ${TEAMS_WEBHOOK_URL:-}
+      GOOGLE_CHAT_WEBHOOK_URL: ${GOOGLE_CHAT_WEBHOOK_URL:-}
       # ── Air-gapped threat-intel bundle (optional — signed ti-bundle.json) ────
       TI_BUNDLE_DIR:     ${TI_BUNDLE_DIR:-/intel-bundles}
       # ── SharpHound AD collector (optional — see volumes above) ──────────────

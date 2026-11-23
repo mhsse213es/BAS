@@ -20,6 +20,10 @@ const (
 	StepTypeNotify    StepType = "notify"
 	StepTypeSlack     StepType = "slack"
 	StepTypeTeams     StepType = "teams"
+	// google_chat posts to a Google Chat space through its incoming webhook; ticket opens a clearly
+	// labelled exercise ticket in the configured ServiceNow or Jira connector.
+	StepTypeGoogleChat StepType = "google_chat"
+	StepTypeTicket     StepType = "ticket"
 	// Event-based waits — step enters StepWaiting and the trigger registry
 	// checks the condition on every executor tick.
 	StepTypeWaitForAgent     StepType = "wait_for_agent"     // waits until a BAS run completes
@@ -97,6 +101,10 @@ type StepConfig struct {
 	Slack *SlackStepConfig `json:"slack,omitempty"`
 	// teams
 	Teams *TeamsStepConfig `json:"teams,omitempty"`
+	// google_chat
+	GoogleChat *GoogleChatStepConfig `json:"google_chat,omitempty"`
+	// ticket
+	Ticket *TicketStepConfig `json:"ticket,omitempty"`
 	// wait_for_agent
 	WaitForAgent *WaitForAgentConfig `json:"wait_for_agent,omitempty"`
 	// wait_for_detection
@@ -128,6 +136,19 @@ type SlackStepConfig struct {
 
 type TeamsStepConfig struct {
 	Text string `json:"text"`
+}
+
+type GoogleChatStepConfig struct {
+	Text string `json:"text"`
+}
+
+// TicketStepConfig opens one exercise ticket. ConnectorID is the id of a configured ticketing connector
+// (ServiceNow or Jira); RecordType is optional and falls back to "incident".
+type TicketStepConfig struct {
+	ConnectorID string `json:"connector_id"`
+	Subject     string `json:"subject"`
+	Body        string `json:"body,omitempty"`
+	RecordType  string `json:"record_type,omitempty"`
 }
 
 type AgentTaskConfig struct {
