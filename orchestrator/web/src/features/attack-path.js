@@ -1,6 +1,7 @@
 import { state } from '../core/state.js';
 import { on } from '../core/actions.js';
 import { apicall, apicallOk } from '../core/api.js';
+import { failureOf, failureHtml } from '../core/load-state.js';
 import { x } from '../core/escape.js';
 import { debCommand } from './deb-command.js';
 import { ago, fmtDate, showToast } from '../core/util.js';
@@ -44,6 +45,8 @@ function apLoad(quiet) {
     apicall('/api/attackpath/correlation').catch(function() { return null; })
   ]).then(function(res) {
     var d = res[0], corr = res[1];
+    var fail = failureOf(d);
+    if (fail) { attackPathUnavailable(fail); return; }
     // Restore in-flight job state from server after a page reload.
     var saved = _apLoadJobId();
     if (saved && saved.jobId && !_apCurrentJobId) {
@@ -103,6 +106,8 @@ export function setExecRange(id) { EXEC_DAYS = id; renderRangeSeg(EXEC_DAYS); lo
 
 export function loadExecDashboard() {
   var days = EXEC_DAYS;
+  var ev = document.getElementById('dash-view-executive');
+  if (ev) ev.classList.remove('is-unavailable');
   renderRangeSeg(days);
   Promise.all([
     apicall('/api/dashboard/current'),
@@ -110,6 +115,8 @@ export function loadExecDashboard() {
     apicall('/api/predict/risk'),
     apicall('/api/findings').catch(function() { return []; })
   ]).then(function(res) {
+    var fail = failureOf(res[0]) || failureOf(res[1]) || failureOf(res[2]);
+    if (fail) { execUnavailable(fail); return; }
     var cur = res[0] || {};
     var hero = heroValues(cur);
     setHeroStat('hs-exec-risk', hero.risk);
@@ -117,7 +124,16 @@ export function loadExecDashboard() {
     setHeroStat('hs-exec-detect', hero.detection);
     setHeroStat('hs-exec-fleet', cur.assetCount != null ? cur.assetCount : '—');
     renderExecAll({ current: cur, trends: res[1], predict: res[2], findings: Array.isArray(res[3]) ? res[3] : null, days: days });
-  }).catch(function(e) { showToast(e.message, 'err'); });
+    renderExecAll({ current: cur, trends: res[1], predict: res[2], findings: Array.isArray(res[3]) ? res[3] : [], days: days });
+  }).catch(function(e) { execUnavailable({ kind: 'error' }); showToast(e.message, 'err'); });
+}
+// Failed load: banner with Retry and "—" counters; the cards that would show zeros are hidden until a reload succeeds.
+function execUnavailable(fail) {
+  ['hs-exec-risk', 'hs-exec-exposure', 'hs-exec-detect', 'hs-exec-fleet'].forEach(function(id) { setHeroStat(id, '—'); });
+  var k = document.getElementById('ed-kpi-row');
+  if (k) k.innerHTML = failureHtml('the executive dashboard', fail, 'loadExecDashboard');
+  var v = document.getElementById('dash-view-executive');
+  if (v) v.classList.add('is-unavailable');
 }
 
 var REC_SCENARIO = null;
@@ -132,7 +148,11 @@ export function loadRecommendations() {
   renderRecControls();
   renderRecLoading();
   apicall('/api/recommend/simulations?limit=' + encodeURIComponent(recLimit()))
-    .then(function(data) { renderRecommendations(data); })
+    .then(function(data) {
+      var fail = failureOf(data) || (data && data.techniques !== undefined && !Array.isArray(data.techniques) ? { kind: 'error' } : null);
+      if (fail) { renderRecError(fail); return; }
+      renderRecommendations(data);
+    })
     .catch(function(e) { renderRecError(e.message); });
 }
 
@@ -921,6 +941,8 @@ export function loadAgents() {
   if (q) url += '&q=' + encodeURIComponent(q);
   if (AGENT_FILTER !== 'all') url += '&bucket=' + encodeURIComponent(AGENT_FILTER);
   return apicall(url).then(function(page) {
+    var fail = failureOf(page) || (page && !Array.isArray(page.items) ? { kind: 'error' } : null);
+    if (fail) { agentsUnavailable(fail); return; }
     state.agents = (page && page.items) || [];
     state.agentsNextCursor = (page && page.next_cursor) || '';
     state.agentsHasMore = !!(page && page.has_more);
@@ -929,7 +951,15 @@ export function loadAgents() {
     renderAgentHero(); renderAgentInsights(); renderAgentToolbar(); renderAgentRows(); renderAgentGroupTree();
     renderLegacyMigrationPanel();
     loadFleetTrayState();
-  }).catch(function(e) { showToast(e.message, 'err'); });
+  }).catch(function(e) { agentsUnavailable({ kind: 'error' }); showToast(e.message, 'err'); });
+}
+// Failed load: an error with Retry and "—" counters, never "0 agents" or an empty fleet.
+function agentsUnavailable(fail) {
+  ['hs-agents-total', 'hs-agents-online', 'hs-agents-degraded', 'hs-agents-offline', 'hs-agents-retired'].forEach(function(id) { setHeroStat(id, '—'); });
+  var ins = document.getElementById('agent-insights');
+  if (ins) ins.innerHTML = '';
+  var mount = document.getElementById('agent-table-mount');
+  if (mount) mount.innerHTML = failureHtml('agents', fail, 'loadAgents');
 }
 // The fleet-wide tray-icon default labels the System Tree button and decides each agent's Action-menu wording.
 // A failed read leaves the last known value; it never blocks the agent list.
@@ -969,6 +999,7 @@ function renderLegacyMigrationPanel() {
   var el = document.getElementById('legacy-migration-panel');
   if (!el) return;
   apicall('/api/agents/legacy-migration-status').then(function(status) {
+    if (failureOf(status)) { el.innerHTML = ''; return; }
     el.innerHTML = migrationPanelHtml(status, function(t) { return new Date(t).toLocaleString(); });
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
@@ -981,6 +1012,7 @@ export function loadMoreAgents() {
   if (q) url += '&q=' + encodeURIComponent(q);
   if (AGENT_FILTER !== 'all') url += '&bucket=' + encodeURIComponent(AGENT_FILTER);
   return apicall(url).then(function(page) {
+    if (failureOf(page) || (page && !Array.isArray(page.items))) { showToast('Could not load more agents', 'err'); return; }
     state.agents = state.agents.concat((page && page.items) || []);
     state.agentsNextCursor = (page && page.next_cursor) || '';
     state.agentsHasMore = !!(page && page.has_more);
@@ -1514,6 +1546,8 @@ export function loadCatalogs() {
 
 export function loadScenarios() {
   apicall('/api/scenarios').then(function(data) {
+    var fail = failureOf(data) || (data && !Array.isArray(data) ? { kind: 'error' } : null);
+    if (fail) { scenariosUnavailable(fail); return; }
     state.scenarios = (data || []).map(function(s) {
       return {
         id:                 s.id                 || '',
@@ -1552,7 +1586,12 @@ export function loadScenarios() {
     // rendered first, it's stuck showing the raw ID until something
     // re-renders it. Re-render now that scenarios is actually populated.
     if (SCHED.schedules.length) renderScheduledAssessmentsList();
-  }).catch(function(e) { showToast(e.message, 'err'); });
+  }).catch(function(e) { scenariosUnavailable({ kind: 'error' }); showToast(e.message, 'err'); });
+}
+// Failed load: an error with Retry in the card grid instead of an empty library or a TypeError.
+function scenariosUnavailable(fail) {
+  var grid = document.getElementById('sc-tile-grid');
+  if (grid) grid.innerHTML = failureHtml('scenarios', fail, 'loadScenarios');
 }
 
 // Approvable: the latest version is a DRAFT/VALIDATED intel or custom one and
@@ -2091,4 +2130,10 @@ function submitPhishingForm() {
     .catch(function(err) {
       showToast('Phishing run failed: ' + (err && err.message ? err.message : String(err)), 'err');
     });
+}
+
+// Failed load: an error with Retry instead of "No attack-path data collected yet".
+function attackPathUnavailable(fail) {
+  var body = document.getElementById('ap-body');
+  if (body) body.innerHTML = failureHtml('attack-path data', fail, 'loadAttackPath');
 }

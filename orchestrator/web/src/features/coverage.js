@@ -2,6 +2,7 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
+import { failureOf, failureHtml } from '../core/load-state.js';
 import { showToast } from '../core/util.js';
 import { kpi, grid, card, hbars, pill, chip, empty, bar, kv, icon } from '../core/kit.js';
 import { ring } from './runs-drawer.js';
@@ -40,7 +41,13 @@ export function loadCoverageAnalytics() {
     state._covAnalytics = d.byTechnique || [];
     populateCoverageFilters(d);
     renderCoverageAnalytics(d);
-  });
+  }, function() { covAnalyticsUnavailable({ kind: 'error' }); });
+}
+// Failed load: an error with Retry instead of "No completed runs yet" / "Loading analytics…".
+function covAnalyticsUnavailable(fail) {
+  var root = document.getElementById('ca-root');
+  if (root) root.innerHTML = failureHtml('coverage analytics', fail, 'loadCoverageAnalytics');
+  ['priv-root', 'cov-weakest', 'cov-gaps'].forEach(function(id) { var el = document.getElementById(id); if (el) el.innerHTML = ''; });
 }
 
 // Populate scenario + agent dropdowns once (preserves selection).
@@ -205,7 +212,15 @@ export function loadUnifiedTechniques() {
         Object.keys(tacSet).sort().map(function(t) { return '<option value="' + x(t) + '">' + x(t) + '</option>'; }).join('');
     }
     renderUTL();
-  });
+  }, function() { utlUnavailable({ kind: 'error' }); });
+}
+// Failed load: an error with Retry instead of an empty technique library.
+function utlUnavailable(fail) {
+  _utlData = [];
+  var sum = document.getElementById('utl-summary');
+  if (sum) sum.textContent = '';
+  var body = document.getElementById('utl-body');
+  if (body) body.innerHTML = '<tr><td colspan="9">' + failureHtml('the technique library', fail, 'loadUnifiedTechniques') + '</td></tr>';
 }
 
 export function setUTLFilter(dim, val) {
@@ -301,9 +316,16 @@ export function recalcCoverage() {
 export function loadThreatExposure() {
   return apicall('/api/threats/exposure?limit=50').catch(function() { _covFailed++; return null; }).then(function(d) {
     renderThreatExposure(d || []);
-  });
+  }, function() { threatExposureUnavailable({ kind: 'error' }); });
 }
 
+// Failed load: an error with Retry instead of "No active threats tracked yet".
+function threatExposureUnavailable(fail) {
+  var body = document.getElementById('lte-body');
+  var live = document.getElementById('cov-livecov');
+  if (body) body.innerHTML = card('Tracked threats', failureHtml('threat exposure', fail, 'loadThreatExposure'));
+  if (live) live.innerHTML = card('Live Threat Coverage', failureHtml('threat exposure', fail, 'loadThreatExposure'));
+}
 function renderThreatExposure(threats) {
   var body = document.getElementById('lte-body');
   var live = document.getElementById('cov-livecov');

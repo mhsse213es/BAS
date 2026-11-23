@@ -1,6 +1,7 @@
 import { apicall, apicallOk } from '../core/api.js';
 import { openConfirmDiffModal } from './compliance.js';
 import { x } from '../core/escape.js';
+import { failureOf } from '../core/load-state.js';
 import { on } from '../core/actions.js';
 import { fmtDate, showToast } from '../core/util.js';
 import { card, grid, hbars, pill, empty, kv, icon, searchBox } from '../core/kit.js';
@@ -64,6 +65,12 @@ function loadRuns() {
   apicallOk('/api/scenarios/runs').then(function(runs) {
     var sel = document.getElementById('vf-run');
     if (!sel) return;
+    // A failed request is not "no runs": say so in the selector instead of throwing on .map.
+    if (failureOf(runs) || (runs && !Array.isArray(runs))) {
+      sel.innerHTML = '<option value="">Could not load runs — reload to retry</option>';
+      showToast('Could not load scenario runs', 'err');
+      return;
+    }
     runs = Array.isArray(runs) ? runs : [];
     VF.runs = runs;
     var cur = VF.runId;

@@ -2,6 +2,7 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
+import { failureOf } from '../core/load-state.js';
 import { showToast } from '../core/util.js';
 import { _diffRow, _diffSecretRow, openConfirmDiffModal } from './compliance.js';
 import { _ticketingConfigs, loadTicketingConfigs } from './findings.js';
@@ -13,8 +14,8 @@ import { setIntItsm, setIntEpp, loadIntTaxii } from './int-view.js';
 // ── Integrations tab ────────────────────────────────────────────────────────
 export function loadIntegrations() {
   loadIntTaxii();
-  loadTicketingConfigs(function(list) {
-    renderConnectorList(list);
+  loadTicketingConfigs(function(list, fail) {
+    renderConnectorList(list, fail);
   });
   apicall('/api/ticketing/revalidation').then(function(r) {
     var cnt = r.pendingRevalidation || 0;
@@ -32,9 +33,9 @@ export function loadIntegrations() {
 
 var PROVIDER_LABELS = { servicenow: 'ServiceNow', jira: 'Jira', webhook: 'Webhook' };
 
-function renderConnectorList(list) {
+function renderConnectorList(list, fail) {
   setItsmConnectors(list || []);
-  setIntItsm(list || []);
+  setIntItsm(list || [], fail);
 }
 
 var TICKET_CONNECTOR_LOADED = null; // the record being edited (null for Add), for the save confirmation diff
@@ -316,14 +317,16 @@ var _responseConnectors = null;
 
 export function loadResponseConnectors(cb) {
   apicall('/api/actions/configs').then(function(list) {
+    var fail = failureOf(list) || (list && !Array.isArray(list) ? { kind: 'error' } : null);
+    if (fail) { _responseConnectors = []; if (cb) cb([], fail); return; }
     _responseConnectors = list || [];
     if (cb) cb(_responseConnectors);
-  }).catch(function() { _responseConnectors = []; if (cb) cb([]); });
+  }).catch(function() { _responseConnectors = []; if (cb) cb([], { kind: 'error' }); });
 }
 
-export function renderResponseConnectorList(list) {
+export function renderResponseConnectorList(list, fail) {
   setEppConnectors(list || []);
-  setIntEpp(list || []);
+  setIntEpp(list || [], fail);
 }
 
 export function renderResponseConnectorFields() {

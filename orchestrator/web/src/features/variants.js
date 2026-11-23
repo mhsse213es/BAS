@@ -2,6 +2,7 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
+import { failureOf, failureHtml } from '../core/load-state.js';
 import { showToast } from '../core/util.js';
 import { renderGroupCheckboxList } from './adversaries.js';
 import { resolveGroupTargetAgents } from './attack-path.js';
@@ -87,6 +88,9 @@ export function loadVariantStats() {
   return apicall('/api/variants/stats').then(function(s) {
     var el = document.getElementById('vex-stats');
     if (!el) return;
+    var fail = failureOf(s);
+    // A failed request is not "0 variants executed".
+    if (fail) { el.innerHTML = failureHtml('variant statistics', fail, 'loadVariantStats'); return; }
     var artTech = s.artTechniqueCount || 0;
     var artAtomic = s.artAtomicCount || 0;
     var perFamily = s.variantsPerFamily || 56;

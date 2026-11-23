@@ -28,12 +28,23 @@ export function findingSevBadge(sev, exp) {
   var ex = exp === 'detected_only' ? ' <span class="tiny muted">· Detected only</span>' : '';
   return '<span class="sbadge g1-s-e02ce1a7"' + cssVars(['g1-v-97993078', col], ['g1-v-7d75dfc9', col]) + '>' + x(sev) + '</span>' + ex;
 }
+var SLA_EMPTY_HTML = null; // the static 'No SLA data yet' card, restored after a failure message replaced it
 export function loadSLAReport() {
   loadReportsHero();
   apicall('/api/sla/report').then(function(rep) {
-    state._slaReport = rep;
     var emptyEl = document.getElementById('sla-rpt-empty');
     var body = document.getElementById('sla-rpt-body');
+    var fail = failureOf(rep) || (rep && !rep.overall ? { kind: 'error' } : null);
+    if (SLA_EMPTY_HTML === null) SLA_EMPTY_HTML = emptyEl.innerHTML;
+    if (fail) {
+      // A failed request is not "no SLA data yet".
+      emptyEl.innerHTML = failureHtml('the SLA report', fail, 'loadSLAReport');
+      setDisplay(emptyEl, '');
+      setDisplay(body, 'none');
+      return;
+    }
+    if (SLA_EMPTY_HTML !== null) emptyEl.innerHTML = SLA_EMPTY_HTML;
+    state._slaReport = rep;
     if (!rep.overall || rep.overall.totalEpisodes === 0) {
       setDisplay(emptyEl, '');
       setDisplay(body, 'none');
@@ -353,12 +364,16 @@ export function loadRemediations() {
     renderRemTiles(); renderRemToolbar(); renderRemList();
     var ta = document.getElementById('rem-ticket-actions');
     if (ta) setDisplay(ta, state._rems.length && (ROLE === 'admin' || ROLE === 'analyst') ? 'flex' : 'none');
-  }).catch(function(e) {
-    document.getElementById('rem-list').innerHTML = card('', '<div class="empty g1-s-be6df18e">Failed to load remediations: ' + x(e.message || 'unknown error') +
-      '<div class="rem-retry"><button type="button" class="btn btn-outline btn-sm"' + on('click', 'loadRemediations') + '>Try again</button></div></div>');
-    ['rem-tiles', 'rem-toolbar'].forEach(function(id) { var el = document.getElementById(id); if (el) el.innerHTML = ''; });
-    setHeroStat('rem-hs-open', '—'); setHeroStat('rem-hs-critical', '—');
-  });
+  }).catch(function() { remUnavailable({ kind: 'error' }); });
+}
+// Failed load: an error with Retry and "—" counters, never "No endpoints" / zero fixes.
+function remUnavailable(fail) {
+  setHeroStat('rem-hs-open', '—');
+  setHeroStat('rem-hs-critical', '—');
+  var tiles = document.getElementById('rem-tiles');
+  if (tiles) tiles.innerHTML = '';
+  var list = document.getElementById('rem-list');
+  if (list) list.innerHTML = failureHtml('remediations', fail, 'loadRemediations');
 }
 // Three tiles under the banner, same as the design demo: open fixes, findings they close, critical fixes.
 function renderRemTiles() {
