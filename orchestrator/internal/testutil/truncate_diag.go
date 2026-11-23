@@ -2,12 +2,14 @@ package testutil
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -54,27 +56,48 @@ func truncateNow(pool *pgxpool.Pool, names []string) error {
 	}()
 	timer := time.NewTimer(truncateWaitLimit)
 	defer timer.Stop()
+	// Two timers can fire for a blocked TRUNCATE: this client-side one, and the server's lock_timeout (set to the same
+	// bound in testdb.go). Which one wins depends on scheduling, so both lead to the same handling below.
 	select {
 	case err := <-done:
+		if isLockTimeout(err) {
+			return blockedTruncateError(pool, list, truncatePID, nil)
+		}
 		if err != nil {
 			return fmt.Errorf("testutil: truncate %s: %v\n%s", list, err, sessionReport(pool))
 		}
 		return nil
 	case <-timer.C:
-		// Capture who is blocking before anything is terminated.
-		report := sessionReport(pool)
-		ended, termErr := terminateOtherSessions(pool, truncatePID)
+		return blockedTruncateError(pool, list, truncatePID, done)
+	}
+}
+
+// isLockTimeout reports whether err is the server abandoning a statement because it waited too long for a lock
+// (SQLSTATE 55P03).
+func isLockTimeout(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "55P03"
+}
+
+// blockedTruncateError names the sessions blocking a TRUNCATE, terminates them so later tests are not stuck behind the
+// same leak, and returns the error that makes the leak visible. done is the still-running statement's result channel, or
+// nil when the statement has already failed.
+func blockedTruncateError(pool *pgxpool.Pool, list string, truncatePID uint32, done <-chan error) error {
+	// Capture who is blocking before anything is terminated.
+	report := sessionReport(pool)
+	ended, termErr := terminateOtherSessions(pool, truncatePID)
+	if done != nil {
 		select {
 		case <-done:
 		case <-time.After(10 * time.Second):
 		}
-		detail := fmt.Sprintf("%d blocking session(s) were terminated", ended)
-		if termErr != nil {
-			detail = "terminating the blocking sessions failed: " + termErr.Error()
-		}
-		return fmt.Errorf("testutil: truncate %s waited more than %s for a lock; %s\n%s",
-			list, truncateWaitLimit, detail, report)
 	}
+	detail := fmt.Sprintf("%d blocking session(s) were terminated", ended)
+	if termErr != nil {
+		detail = "terminating the blocking sessions failed: " + termErr.Error()
+	}
+	return fmt.Errorf("testutil: truncate %s waited more than %s for a lock; %s\n%s",
+		list, truncateWaitLimit, detail, report)
 }
 
 // terminateOtherSessions ends every session on the test database except the given one and this one. It returns how many
