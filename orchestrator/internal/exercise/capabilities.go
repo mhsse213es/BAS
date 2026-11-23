@@ -130,6 +130,12 @@ func (e *Executor) triggerWaitForTicket(ctx context.Context, ex *Execution, ps *
 	return true, payload, nil
 }
 
+// recordCancelledSend notes that an abort interrupted a send. Anything already sent is real, so the partial
+// result is kept in the event log; it is not written as a completed step and not counted as evidence of a send.
+func (e *Executor) recordCancelledSend(ex *Execution, ps *PlanStep, partial map[string]any) {
+	_ = e.store.RecordEvent(context.Background(), ex.ID, ps.ID, "send_cancelled", "system", partial)
+}
+
 // Cleanup states recorded in a ticket step's result, so a later pass never closes the same ticket twice.
 const (
 	cleanupDone    = "done"

@@ -369,9 +369,15 @@ func (e *Executor) handleSendEmail(smtp *SMTPInjector) func(context.Context, *Ex
 			return nil
 		}
 		go func() {
-			bctx := context.Background()
-			result, err := smtp.Send(bctx, se.ID, ex.ID, cfg, ex.Targets)
+			sctx, done := e.beginSend(ex.ID, ps.ID)
+			defer done()
+			bctx := context.Background() // database writes outlive an abort
+			result, err := smtp.Send(sctx, se.ID, ex.ID, cfg, ex.Targets)
 			if err != nil {
+				if sctx.Err() != nil {
+					e.recordCancelledSend(ex, ps, result)
+					return // aborted: AbortExecution already marked this step cancelled
+				}
 				_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepFailed, err.Error())
 				return
 			}
@@ -394,9 +400,15 @@ func (e *Executor) handleSendSMS(sms *SMSInjector) func(context.Context, *Execut
 			return e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed, "missing sms config")
 		}
 		go func() {
-			bctx := context.Background()
-			result, err := sms.Send(bctx, cfg.To, cfg.Body)
+			sctx, done := e.beginSend(ex.ID, ps.ID)
+			defer done()
+			bctx := context.Background() // database writes outlive an abort
+			result, err := sms.Send(sctx, cfg.To, cfg.Body)
 			if err != nil {
+				if sctx.Err() != nil {
+					e.recordCancelledSend(ex, ps, result)
+					return // aborted: AbortExecution already marked this step cancelled
+				}
 				_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepFailed, err.Error())
 				return
 			}
@@ -419,9 +431,15 @@ func (e *Executor) handleSlack(slack *SlackInjector) func(context.Context, *Exec
 			return e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed, "missing slack config")
 		}
 		go func() {
-			bctx := context.Background()
-			result, err := slack.Send(bctx, cfg.Text)
+			sctx, done := e.beginSend(ex.ID, ps.ID)
+			defer done()
+			bctx := context.Background() // database writes outlive an abort
+			result, err := slack.Send(sctx, cfg.Text)
 			if err != nil {
+				if sctx.Err() != nil {
+					e.recordCancelledSend(ex, ps, result)
+					return // aborted: AbortExecution already marked this step cancelled
+				}
 				_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepFailed, err.Error())
 				return
 			}
@@ -515,9 +533,15 @@ func (e *Executor) handleTeams(teams *TeamsInjector) func(context.Context, *Exec
 			return e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed, "missing teams config")
 		}
 		go func() {
-			bctx := context.Background()
-			result, err := teams.Send(bctx, cfg.Text)
+			sctx, done := e.beginSend(ex.ID, ps.ID)
+			defer done()
+			bctx := context.Background() // database writes outlive an abort
+			result, err := teams.Send(sctx, cfg.Text)
 			if err != nil {
+				if sctx.Err() != nil {
+					e.recordCancelledSend(ex, ps, result)
+					return // aborted: AbortExecution already marked this step cancelled
+				}
 				_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepFailed, err.Error())
 				return
 			}

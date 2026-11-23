@@ -33,7 +33,11 @@ func (i *SMSInjector) Send(ctx context.Context, to []string, body string) (map[s
 	}
 	sent, failed := 0, 0
 	var errs []string
+	var interrupted string
 	for _, num := range to {
+		if ctx.Err() != nil {
+			break // aborted: do not start the next message
+		}
 		payload, _ := json.Marshal(map[string]string{"to": num, "from": i.cfg.From, "body": body})
 		req, _ := http.NewRequestWithContext(ctx, http.MethodPost, i.cfg.URL, bytes.NewReader(payload))
 		req.Header.Set("Content-Type", "application/json")
@@ -42,6 +46,11 @@ func (i *SMSInjector) Send(ctx context.Context, to []string, body string) (map[s
 		}
 		resp, err := injectorHTTPClient.Do(req)
 		if err != nil {
+			if ctx.Err() != nil {
+				// Cancelled mid-request: whether it was delivered is unknown, so it is neither sent nor failed.
+				interrupted = num
+				break
+			}
 			failed++
 			errs = append(errs, num+": "+err.Error())
 			continue
@@ -57,6 +66,14 @@ func (i *SMSInjector) Send(ctx context.Context, to []string, body string) (map[s
 	res := map[string]any{"channel": "sms", "sent": sent, "failed": failed}
 	if len(errs) > 0 {
 		res["errors"] = errs
+	}
+	if err := ctx.Err(); err != nil {
+		// Aborted part-way. What already went out is real and stays in the result; the caller sees the error.
+		res["cancelled"] = true
+		if interrupted != "" {
+			res["interrupted"] = interrupted
+		}
+		return res, err
 	}
 	return res, nil
 }

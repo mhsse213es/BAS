@@ -75,8 +75,16 @@ Waits until a ticket opened by an earlier ticket step is picked up, and records 
 
 ### Aborting
 
-Aborting cancels a Google Chat or ticket send that is still in flight (the request is cancelled and the step is marked
-cancelled). Slack, Teams, SMS and email sends already running are not yet cancellable.
+Aborting cancels a send that is still in flight for every sending channel (Google Chat, Slack, Teams, SMS, tickets and
+email): the request is cancelled and the step is marked cancelled, not failed or completed.
+
+- **SMS and email send to a list.** They stop before the next recipient. What already went out is real, and it is kept in
+  the execution's event log as `send_cancelled` with the partial counts; it is not written as a completed send. A message
+  being sent at the instant of the abort is reported as `interrupted` (SMS), not as sent or failed, because whether it
+  arrived is unknown.
+- **Email cannot interrupt a message already in delivery** (Go's SMTP client has no cancellation), so cancellation there
+  is per message.
+- Running BAS agent steps are not touched by an abort, as before.
 
 Not verified: these have been tested against fake ServiceNow and Jira servers only, never a live instance. A real
 instance may need a different record type or required field than the defaults.

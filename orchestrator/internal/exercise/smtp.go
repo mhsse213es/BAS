@@ -53,6 +53,16 @@ func (i *SMTPInjector) Send(ctx context.Context, stepExecID, execID string, cfg 
 			if addr == "" {
 				continue
 			}
+			if cerr := ctx.Err(); cerr != nil {
+				// Aborted: stop before the next recipient. A message already being delivered cannot be
+				// interrupted (net/smtp has no context), so cancellation is per message. Nothing attempted
+				// here counts as failed.
+				partial := map[string]any{"sent": sent, "failed": failed, "cancelled": true}
+				if len(errs) > 0 {
+					partial["errors"] = errs
+				}
+				return partial, cerr
+			}
 			body, err := tracker.GenerateLinks(ctx, i.store, execID, stepExecID, cfg.BodyHTML, tracker.LinkConfig{
 				TrackOpens:  cfg.TrackOpens,
 				TrackClicks: cfg.TrackClicks,
