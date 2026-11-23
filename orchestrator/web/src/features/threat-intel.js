@@ -1,5 +1,5 @@
 import { apicall, apicallOk } from '../core/api.js';
-import { failureOf } from '../core/load-state.js';
+import { failureOf, failureHtml } from '../core/load-state.js';
 import { setIntTaxii } from './int-view.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
@@ -21,6 +21,8 @@ export function loadThreatIntelConfig(name) {
   var panel = document.getElementById('ti-' + name + '-config-panel');
   if (!panel || ROLE !== 'admin') { if (panel) panel.innerHTML = ''; return; }
   apicall('/api/threat-intel/' + name + '/config').then(function(cfg) {
+    var cfail = failureOf(cfg);
+    if (cfail) { panel.innerHTML = failureHtml(TI_CONNECTOR_LABELS[name] + ' settings', cfail, null); return; }
     TI_CONNECTOR_LOADED[name] = { baseUrl: cfg.baseUrl || '', enabled: !!cfg.enabled, insecureTls: !!cfg.insecureTls, configured: !!cfg.configured };
     var urlField = name === 'otx' ? '' :
       '<div class="field"><label for="ti-' + name + '-url">Server URL</label><input id="ti-' + name + '-url" type="text" placeholder="https://' + (name === 'misp' ? 'misp' : 'opencti') + '.example.local" value="' + x(cfg.baseUrl || '') + '" class="inp-sm u-flex1"></div>';
@@ -100,7 +102,7 @@ export function saveConnectorConfig(name) {
 }
 
 function doSaveConnectorConfig(name, payload) {
-  apicall('/api/threat-intel/' + name + '/config', {
+  apicallOk('/api/threat-intel/' + name + '/config', {
     method: 'PUT',
     body: JSON.stringify(payload)
   }).then(function() {
@@ -118,7 +120,7 @@ export function removeConnectorConfig(name) {
   var rows = _diffRow('Base URL', TI_CONNECTOR_LOADED[name] ? TI_CONNECTOR_LOADED[name].baseUrl : '', '(removed)') +
     '<div class="tiny muted g1-s-d21775d3">This deletes the stored API key too. ' + TI_CONNECTOR_LABELS[name] + ' will stop syncing immediately.</div>';
   openConfirmDiffModal('Remove ' + TI_CONNECTOR_LABELS[name] + ' Config', rows, function() {
-    apicall('/api/threat-intel/' + name + '/config', { method: 'DELETE' }).then(function(res) {
+    apicallOk('/api/threat-intel/' + name + '/config', { method: 'DELETE' }).then(function(res) {
       if (res && res.warning) showToast(res.warning, 'err');
       else showToast(TI_CONNECTOR_LABELS[name] + ' config removed', 'ok');
       loadThreatIntelConfig(name);
@@ -311,6 +313,14 @@ export function loadConnectorStatus() {
   if (!wrap) return;
   setDisplay(wrap, '');
   apicall('/api/connector/status').then(function(s) {
+    // A refused request must not read as "nothing configured / never synced".
+    var sfail = failureOf(s);
+    if (sfail) {
+      var ins = document.getElementById('intel-insights');
+      if (ins) ins.innerHTML = failureHtml('connector status', sfail, 'loadConnectorStatus');
+      ['cs-misp-status', 'cs-opencti-status', 'cs-otx', 'cs-bundle', 'cs-last-sync', 'cs-created', 'cs-next', 'cs-status'].forEach(function(id) { var e = document.getElementById(id); if (e) { e.textContent = 'Unavailable'; e.style.color = 'var(--muted)'; } });
+      return;
+    }
     var bySource = s.bySource || {};
     renderIntelInsights(s);
     var retained = s.retained || {};
@@ -333,7 +343,7 @@ export function loadConnectorStatus() {
 export function triggerConnectorSync() {
   var btn = document.getElementById('connector-sync-btn');
   if (btn) btn.disabled = true;
-  apicall('/api/connector/sync', { method: 'POST' })
+  apicallOk('/api/connector/sync', { method: 'POST' })
     .then(function() {
       showToast('Threat-intel sync queued', 'ok');
       setTimeout(function() {
@@ -355,6 +365,13 @@ export function loadARTContentStatus() {
   var btn = document.getElementById('art-check-btn');
   if (btn) btn.disabled = true;
   apicall('/api/art/content/status').then(function(d) {
+    var afail = failureOf(d);
+    if (afail) {
+      var ains = document.getElementById('art-insights');
+      if (ains) ains.innerHTML = failureHtml('ART content status', afail, 'loadARTContentStatus');
+      var ast = document.getElementById('cs-art-status'); if (ast) ast.textContent = 'Unavailable';
+      return;
+    }
     renderArtInsights(d);
     var statusEl = document.getElementById('cs-art-status');
     if (d.seeded) {
@@ -570,10 +587,14 @@ export function loadSimCoverage() {
   });
 }
 export function reseedART() {
-  if (!confirm('Reseed ART content from the server content pack?\n\nThis re-imports atomics + payload metadata into Postgres and hot-reloads the engine. Existing runs are unaffected.')) return;
+  openConfirmDiffModal('Reseed ART content',
+    '<p class="int-sure">Re-import atomics and payload metadata from the server content pack into Postgres and hot-reload the engine. Existing runs are unaffected.</p>',
+    doReseedART, { sub: 'Review before you continue.', confirmLabel: 'Reseed from pack' });
+}
+function doReseedART() {
   var btn = document.getElementById('art-reseed-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Reseeding…'; }
-  apicall('/api/art/content/reseed', { method: 'POST' })
+  apicallOk('/api/art/content/reseed', { method: 'POST' })
     .then(function(d) {
       showToast('Reseeded: ' + d.techniqueCount + ' techniques, ' + d.payloadCount + ' payloads', 'ok');
       loadARTContentStatus();

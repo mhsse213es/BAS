@@ -7,7 +7,7 @@ import { ago, fmtDate, showToast } from '../core/util.js';
 import { setHeroStat } from './shell-ui.js';
 import { _apOnCollected, _apOnJobUpdate, _apOnProgress, _onRevalidationStarted, _onSIEMCorrelationComplete, renderScenarios, requestAgentsLiveRefresh, showSettingsSection, showThreatPriorityDetail } from './attack-path.js';
 import { loadEndpointPostureWidget, loadKEVWidget, loadReadinessTrends } from './campaigns.js';
-import { loadComplianceScores, refreshDashboardCampaigns } from './compliance.js';
+import { loadComplianceScores, refreshDashboardCampaigns, askText } from './compliance.js';
 import { openTechnique } from './coverage.js';
 import { onRunEvent } from './live-run.js';
 import { loadDashboardITSM, openFinding } from './findings.js';
@@ -828,15 +828,15 @@ export function toggleUserActive(id, active) {
 }
 
 export function doResetPassword(id, username) {
-  var pw = prompt('Set temporary password for ' + username + ' (min 8 characters):');
-  if (!pw) return;
-  if (pw.length < 8) { showToast('Password must be at least 8 characters', 'err'); return; }
-  apicall('/api/users/' + encodeURIComponent(id) + '/reset-password', { method: 'POST', body: JSON.stringify({ newPassword: pw }) })
-  .then(function(res) {
-    if (res.error) throw new Error(res.error);
-    showToast('Password reset for ' + username, 'ok'); loadUsers();
-  })
-  .catch(function(e) { showToast(e.message, 'err'); });
+  // An in-page dialog with a masked box (the browser prompt showed the password in clear).
+  askText('Reset password', 'Temporary password for ' + username + ' (at least 8 characters)', '', 'Reset password', function(pw) {
+    apicall('/api/users/' + encodeURIComponent(id) + '/reset-password', { method: 'POST', body: JSON.stringify({ newPassword: pw }) })
+    .then(function(res) {
+      if (res.error) throw new Error(res.error);
+      showToast('Password reset for ' + username, 'ok'); loadUsers();
+    })
+    .catch(function(e) { showToast(e.message, 'err'); });
+  }, { password: true, minLength: 8, sub: 'Share it with the user securely.' });
 }
 
 // gaugeSVG — 270° arc gauge for a 0–100 value. Colour reflects the band.

@@ -1,7 +1,7 @@
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
-import { failureOf } from '../core/load-state.js';
+import { failureOf, failureHtml } from '../core/load-state.js';
 import { ago, showToast } from '../core/util.js';
 import { apColor, apClosePanels } from './attack-path.js';
 import { freshness as apAgeChip } from './ap-model.js';
@@ -24,6 +24,8 @@ export function loadOpenAEVConfig() {
   if (!configPanel) return;
   if (ROLE === 'admin') {
     apicall('/api/openaev/config').then(function(cfg) {
+      var cfail = failureOf(cfg);
+      if (cfail) { configPanel.innerHTML = failureHtml('OpenAEV settings', cfail, null); return; }
       OAEV_CONFIG_LOADED = { baseUrl: cfg.baseUrl || '', enabled: !!cfg.enabled, configured: !!cfg.configured };
       configPanel.innerHTML =
         '<div class="kpi-row">' +
@@ -86,7 +88,7 @@ export function removeOpenAEVConfig() {
   var rows = _diffRow('Base URL', OAEV_CONFIG_LOADED.baseUrl, '(removed)') +
     '<div class="tiny muted" style="margin-top:0.4rem">This deletes the stored bearer token too. OpenAEV will stop syncing immediately.</div>';
   openConfirmDiffModal('Remove OpenAEV Config', rows, function() {
-    apicall('/api/openaev/config', { method: 'DELETE' }).then(function() {
+    exCall('/api/openaev/config', { method: 'DELETE' }).then(function() {
       showToast('OpenAEV config removed', 'ok');
       loadOpenAEVConfig();
     }).catch(function(e) { showToast('Remove failed: ' + (e.message || 'error'), 'err'); });
@@ -158,7 +160,7 @@ export function saveOpenAEVConfig() {
 }
 
 function doSaveOpenAEVConfig(payload) {
-  apicall('/api/openaev/config', {
+  exCall('/api/openaev/config', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -169,7 +171,7 @@ function doSaveOpenAEVConfig(payload) {
 }
 
 export function syncOpenAEVNow() {
-  apicall('/api/openaev/sync', { method: 'POST' }).then(function() {
+  exCall('/api/openaev/sync', { method: 'POST' }).then(function() {
     showToast('OpenAEV sync started', 'ok');
     loadOpenAEVConfig();
   }).catch(function(e) { showToast('Sync failed: ' + (e.message || 'error'), 'err'); });

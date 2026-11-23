@@ -1,4 +1,5 @@
 import { apicall } from '../core/api.js';
+import { failureOf, failureHtml } from '../core/load-state.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { showToast } from '../core/util.js';
@@ -49,7 +50,8 @@ export function loadLicenseInfo() {
   if (!wrap) return;
   wrap.innerHTML = '<div class="empty g1-s-be6df18e">Loading…</div>';
   apicall('/api/license').then(function(lic) {
-    if (lic.error) { wrap.innerHTML = '<div class="empty g1-s-8e56e4c3">' + x(lic.error) + '</div>'; return; }
+    var lfail = failureOf(lic) || (lic && lic.error ? { kind: 'error' } : null);
+    if (lfail) { var li = document.getElementById('license-insights'); if (li) li.innerHTML = ''; wrap.innerHTML = failureHtml('the license', lfail, 'loadLicenseInfo'); return; }
     renderLicenseInsights(lic);
     var statusColor = lic.status === 'valid' ? 'var(--success)' : lic.status === 'grace' ? 'var(--warning)' : lic.status === 'locked' ? 'var(--danger)' : 'var(--muted)';
     var statusLabel = lic.status === 'valid' ? 'Active' : lic.status === 'grace' ? 'Grace Period' : lic.status === 'locked' ? 'Locked' : 'Unknown';
@@ -117,8 +119,11 @@ var BACKUP_POLL_TIMER = null;
 export function loadBackups() {
   var wrap = document.getElementById('backup-status-card-wrap');
   apicall('/api/backups').then(function(jobs) {
-    if (jobs.error) {
-      if (wrap) wrap.innerHTML = '<div class="empty g1-s-8e56e4c3">' + x(jobs.error) + '</div>';
+    var bfail = failureOf(jobs) || (Array.isArray(jobs) ? null : { kind: 'error' });
+    if (bfail) {
+      if (wrap) wrap.innerHTML = failureHtml('backups', bfail, 'loadBackups');
+      var bt = document.getElementById('backup-jobs-body'); if (bt) bt.innerHTML = '<tr><td colspan="6" class="empty">Backup list unavailable.</td></tr>';
+      var bi = document.getElementById('backup-insights'); if (bi) bi.innerHTML = '';
       return;
     }
     renderBackupStatusCard(jobs[0] || null);
@@ -182,27 +187,29 @@ export function backupNow() {
   var btn = document.getElementById('backup-now-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Requesting…'; }
   apicall('/api/backups', { method: 'POST' }).then(function(job) {
-    if (job.error) { alert('Backup request failed: ' + job.error); if (btn) { btn.disabled = false; btn.textContent = 'Backup Now'; } return; }
+    if (!job || job.error || !job.id) { showToast('Backup request failed: ' + ((job && job.error) || 'unexpected response'), 'err'); resetBackupBtn(btn); return; }
+    showToast('Backup requested', 'ok');
     loadBackups();
     pollBackupJob(job.id, btn);
   }).catch(function(e) {
-    alert('Backup request failed: ' + e.message);
-    if (btn) { btn.disabled = false; btn.textContent = 'Backup Now'; }
+    showToast('Backup request failed: ' + e.message, 'err');
+    resetBackupBtn(btn);
   });
 }
+function resetBackupBtn(btn) { if (btn) { btn.disabled = false; btn.textContent = 'Backup Now'; } }
 
 function pollBackupJob(id, btn) {
   if (BACKUP_POLL_TIMER) clearInterval(BACKUP_POLL_TIMER);
   BACKUP_POLL_TIMER = setInterval(function() {
     apicall('/api/backups/' + id).then(function(job) {
-      if (job.error) { clearInterval(BACKUP_POLL_TIMER); return; }
+      if (job.error) { clearInterval(BACKUP_POLL_TIMER); resetBackupBtn(btn); showToast('Lost track of the backup: ' + job.error + '. Refresh to see its state.', 'err'); loadBackups(); return; }
       renderBackupStatusCard(job);
       if (job.status !== 'requested' && job.status !== 'running') {
         clearInterval(BACKUP_POLL_TIMER);
         loadBackups();
         if (btn) { btn.disabled = false; btn.textContent = 'Backup Now'; }
       }
-    }).catch(function() { clearInterval(BACKUP_POLL_TIMER); });
+    }).catch(function() { clearInterval(BACKUP_POLL_TIMER); resetBackupBtn(btn); loadBackups(); });
   }, 4000);
 }
 
@@ -210,14 +217,14 @@ export function prepareRestore(id) {
   apicall('/api/backups/' + id + '/restore-marker', { method: 'POST' }).then(function(res) {
     var wrap = document.getElementById('restore-command-wrap');
     if (!wrap) return;
-    if (res.error) { wrap.innerHTML = '<div class="empty g1-s-9b78712f">' + x(res.error) + '</div>'; return; }
+    if (!res || res.error || !res.restoreCommand) { wrap.innerHTML = ''; showToast('Could not prepare the restore: ' + ((res && res.error) || 'unexpected response'), 'err'); return; }
     wrap.innerHTML =
       '<div class="conn-cfg-card g1-s-7b0aa428">' +
         '<div class="g1-s-21b099fc">Restore must be run on the host</div>' +
         '<div class="g1-s-1236f559">This console cannot and will not run this for you. An administrator with root access to the server must run the command below and type <b>RESTORE</b> to confirm.</div>' +
         '<code class="g1-display-block g1-s-dca1d235">' + x(res.restoreCommand) + '</code>' +
       '</div>';
-  }).catch(function(e) { alert('Failed to prepare restore: ' + e.message); });
+  }).catch(function(e) { showToast('Could not prepare the restore: ' + e.message, 'err'); });
 }
 
 export function auditPage(dir) {
@@ -232,6 +239,17 @@ function fetchAuditPage() {
   if (action) qs += '&action=' + encodeURIComponent(action);
   if (actor)  qs += '&actor='  + encodeURIComponent(actor);
   apicall('/api/audit-logs' + qs).then(function(d) {
+    // A refused request is a failed load, not "no entries match".
+    var afail = failureOf(d) || (d && Array.isArray(d.entries) ? null : { kind: 'error' });
+    if (afail) {
+      var fb = document.getElementById('audit-body');
+      if (fb) fb.innerHTML = '<tr><td colspan="6">' + failureHtml('audit logs', afail, 'loadAuditLogs') + '</td></tr>';
+      var ai = document.getElementById('audit-insights'); if (ai) ai.innerHTML = '';
+      var fr = document.getElementById('audit-range-label'); if (fr) fr.textContent = '';
+      var fp = document.getElementById('audit-prev-btn'), fn = document.getElementById('audit-next-btn');
+      if (fp) fp.disabled = true; if (fn) fn.disabled = true;
+      return;
+    }
     var entries = d.entries || [];
     AUDIT_TOTAL = entries.length; // approximate
     renderAuditInsights(entries, AUDIT_ACTION_LABELS);
@@ -307,7 +325,9 @@ export function exportAuditLogs() {
     (action ? '&action=' + encodeURIComponent(action) : '') +
     (actor  ? '&actor='  + encodeURIComponent(actor)  : '')
   ).then(function(d) {
-    var rows = (d.entries || []);
+    // Never hand back an empty CSV for a request the server refused.
+    if (failureOf(d) || !d || !Array.isArray(d.entries)) { showToast('Export failed: ' + ((d && d.error) || 'the server refused the request'), 'err'); return; }
+    var rows = d.entries;
     var csv = 'Time,User,Action,Resource,Detail,IP,Outcome\n' + rows.map(function(e) {
       var det = '';
       try { det = JSON.stringify(e.detail); } catch(_err) {}
@@ -318,5 +338,6 @@ export function exportAuditLogs() {
     a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
     a.download = buildReportFilename('Audit_Logs', actor || 'all', 'csv');
     a.click();
+    showToast(rows.length >= 500 ? 'Exported the 500 most recent matching entries. Narrow the filters for the rest.' : 'Exported ' + rows.length + ' entr' + (rows.length === 1 ? 'y' : 'ies'), rows.length >= 500 ? 'warn' : 'ok');
   }).catch(function(e) { showToast('Export failed: ' + e.message, 'err'); });
 }

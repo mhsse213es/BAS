@@ -1,0 +1,13 @@
+import { boot } from './setlib.mjs';
+const b = await boot(); const { page, state } = b; await b.go('art');
+state.fail['POST /api/art/content/reseed'] = 'pack missing';
+await page.locator('#art-reseed-btn').click(); await page.waitForTimeout(300);
+console.log('RESEED confirm ->', (await page.locator('#confirm-diff-overlay').innerText()).replace(/\s+/g, ' ').slice(0, 130));
+await page.locator('#confirm-diff-submit-btn').click(); await page.waitForTimeout(700); console.log('  refused ->', await b.toast(), '| button', await page.locator('#art-reseed-btn').innerText());
+delete state.fail['POST /api/art/content/reseed'];
+await page.locator('#art-reseed-btn').click(); await page.waitForTimeout(300); await page.locator('#confirm-diff-submit-btn').click(); await page.waitForTimeout(900); console.log('  ok ->', await b.toast());
+await b.go('backup');
+state.fail['POST /api/backups/b1/restore-marker'] = 'marker failed';
+await page.locator('#backup-jobs-body tr', { hasText: 'manual' }).first().locator('button', { hasText: 'Prepare Restore' }).click(); await page.waitForTimeout(500);
+console.log('RESTORE refused ->', await b.toast(), '| panel', JSON.stringify((await page.locator('#restore-command-wrap').innerText()).slice(0, 40)));
+console.log('errors', JSON.stringify(b.errs), '| native', JSON.stringify(state.dialogs)); await b.close();

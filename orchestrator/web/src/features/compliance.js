@@ -1,5 +1,6 @@
 import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
+import { failureOf } from '../core/load-state.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { showToast } from '../core/util.js';
@@ -93,6 +94,15 @@ export function loadCalderaStatus() {
   if (btn) btn.disabled = true;
 
   apicall('/api/caldera/status').then(function(d) {
+    // A refused status request is "could not check", not "Caldera is unreachable".
+    var cfail = failureOf(d);
+    if (cfail) {
+      document.getElementById('cs-caldera-status').innerHTML = '<span class="u-warning">' + (cfail.kind === 'forbidden' ? 'No permission to check' : 'Could not check status') + '</span>';
+      var ins = document.getElementById('caldera-insights'); if (ins) ins.innerHTML = '';
+      ['cs-caldera-url', 'cs-caldera-version', 'cs-caldera-abilities', 'cs-caldera-latency'].forEach(function(id) { var e = document.getElementById(id); if (e) e.textContent = '—'; });
+      var ce = document.getElementById('cs-caldera-error'); if (ce) { ce.textContent = (d && d.error) || 'The server refused the request.'; setDisplay(ce, ''); }
+      return;
+    }
     var dot;
     if (d.reachable) {
       dot = '<span class="g1-display-inline-block g1-s-a3bc72af"></span><span class="u-success">Connected</span>';
@@ -197,11 +207,14 @@ export function openConfirmDiffModal(title, diffHtml, onConfirm, opts) {
 // reopens the dialog with a message instead of silently doing nothing.
 export function askText(title, label, initial, confirmLabel, cb, opts) {
   opts = opts || {};
+  // opts.password: a masked box whose value is used as typed (never trimmed); opts.minLength: shortest accepted answer.
   var body = '<label class="ask-lab" for="ask-input">' + x(label) + '</label>' +
-    '<input type="text" id="ask-input" class="ask-input" autocomplete="off" maxlength="120" value="' + x(initial || '') + '"' + on('keydown', 'askEnter') + '>' +
+    '<input type="' + (opts.password ? 'password' : 'text') + '" id="ask-input" class="ask-input" autocomplete="' + (opts.password ? 'new-password' : 'off') + '" maxlength="' + (opts.password ? 128 : 120) + '" value="' + x(initial || '') + '"' + on('keydown', 'askEnter') + '>' +
     (opts.hint ? '<div class="tiny muted ask-hint">' + x(opts.hint) + '</div>' : '') + '<div class="ask-err tiny" id="ask-err" hidden></div>';
   openConfirmDiffModal(title, body, function() {
-    var v = String((document.getElementById('ask-input') || {}).value || '').trim();
+    var raw = String((document.getElementById('ask-input') || {}).value || '');
+    var v = opts.password ? raw : raw.trim();
+    if (v && opts.minLength && v.length < opts.minLength) { askText(title, label, '', confirmLabel, cb, opts); var le = document.getElementById('ask-err'); if (le) { le.textContent = 'Use at least ' + opts.minLength + ' characters.'; le.hidden = false; } return; }
     if (!v && !opts.allowEmpty) { askText(title, label, initial, confirmLabel, cb, opts); var e = document.getElementById('ask-err'); if (e) { e.textContent = 'Enter a value to continue.'; e.hidden = false; } return; }
     cb(v);
   }, { sub: opts.sub || ' ', confirmLabel: confirmLabel || 'Save' });
