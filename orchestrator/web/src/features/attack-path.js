@@ -1,6 +1,6 @@
 import { state } from '../core/state.js';
 import { on } from '../core/actions.js';
-import { apicall } from '../core/api.js';
+import { apicall, apicallOk } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { debCommand } from './deb-command.js';
 import { ago, fmtDate, showToast } from '../core/util.js';
@@ -8,7 +8,7 @@ import { _templates, _adversaries, renderTemplateGrid, syncAdversaryVisibility }
 import { _agtDetailId, downloadAuditPack, downloadBoardScorecard, downloadFullReportCSV, downloadFullReportJSON, downloadFullReportPDF, downloadNavigatorLayer, loadAgtAttackPath, openAgentDetail, openFullReport, safeScan } from './agent-drawer.js';
 import { openAllowReinstallModal, openReinstateAgentModal, openRemoveAgentModal, openRevokeAgentModal, openStopAgentModal, openUninstallAgentModal } from './agent-actions.js';
 import { loadAuditLogs, loadBackups, loadLicenseInfo } from './audit-logs.js';
-import { loadCalderaStatus } from './compliance.js';
+import { loadCalderaStatus, openConfirmDiffModal } from './compliance.js';
 import { syncDisplayPrefControls } from './display-prefs.js';
 import { loadUsers } from './evidence.js';
 import { loadOpenAEVConfig, renderAttackPath } from './openaev.js';
@@ -33,11 +33,14 @@ import { recLimit, renderRecControls, renderRecError, renderRecLoading, setRecLi
 
 
 // ── Attack Path Validation ─────────────────────────────────────────────────
-export function loadAttackPath() {
+export function loadAttackPath() { apLoad(false); }
+// apLoad(quiet): quiet keeps the current cards on screen while the refresh runs (after a save or a finished
+// collection), so the page does not collapse to "Loading…" and jump.
+function apLoad(quiet) {
   var body = document.getElementById('ap-body');
-  if (body) body.innerHTML = '<div class="empty" style="padding:2rem">Loading…</div>';
+  if (body && !quiet) body.innerHTML = '<div class="empty" style="padding:2rem">Loading…</div>';
   Promise.all([
-    apicall('/api/attackpath/summary'),
+    apicallOk('/api/attackpath/summary'),
     apicall('/api/attackpath/correlation').catch(function() { return null; })
   ]).then(function(res) {
     var d = res[0], corr = res[1];
@@ -67,7 +70,11 @@ export function loadAttackPath() {
       }).catch(function() { _apClearJobId(); });
     }
     renderAttackPath(d, corr);
-  }).catch(function(e) { showToast(e.message, 'err'); });
+  }).catch(function(e) {
+    if (body && !quiet) body.innerHTML = '<section class="rk-card"><div class="empty">Could not load attack-path data: ' + x(e.message || 'error') +
+      '<div class="ap-retry"><button class="btn btn-outline btn-sm" data-on-click="loadAttackPath">Try again</button></div></div></section>';
+    else showToast('Could not refresh attack-path data: ' + (e.message || 'error'), 'err');
+  });
 }
 export function apColor(score) {
   return score >= 80 ? 'var(--success)' : score >= 60 ? 'var(--warning)' : score >= 40 ? '#f0883e' : 'var(--danger)';
@@ -158,6 +165,7 @@ export function copyRecommendedScenario() {
 
 var _apCollectAgentId = null; // agentId currently being collected (for WS matching)
 var _apCurrentJobId   = null; // current job ID for WS event matching
+var _apJobActive      = false; // a dispatched collection has not reached a final state yet
 var apActiveJobs      = {};   // agentId → {jobId,status} for agent-table badge
 
 // Persist just the current job ID across page reloads so we can restore state from the server.
@@ -176,7 +184,16 @@ function _apSavePending(agentId, agentLabel, targets, shEnabled, sharpHoundDeliv
 function _apClearPending() { _apClearJobId(); }
 function _apLoadPending() { return null; }
 
+// One work panel at a time: opening one closes the others so they never stack and push the results off screen.
+function apClosePanels(except) {
+  ['ap-collect', 'ap-assets', 'ap-schedule', 'ap-history-panel'].forEach(function(id) {
+    if (id !== except) setDisplay(document.getElementById(id), 'none');
+  });
+}
+export { apClosePanels };
+
 export function apCollectClose() {
+  _apJobActive = false;
   setDisplay(document.getElementById('ap-collect'), 'none');
   _apCollectAgentId = null;
   _apCurrentJobId = null;
@@ -186,13 +203,16 @@ export function apCollectClose() {
   setDisplay(document.getElementById('ap-progress'), 'none');
   setDisplay(document.getElementById('ap-done-actions'), 'none');
 }
-export function apCollectViewResults() { loadAttackPath(); apCollectClose(); }
+export function apCollectViewResults() { apLoad(true); apCollectClose(); }
 export function apAssetsClose() { setDisplay(document.getElementById('ap-assets'), 'none'); }
 export function apScheduleClose() { setDisplay(document.getElementById('ap-schedule'), 'none'); }
 
 export function openAPCollect() {
   var sel = document.getElementById('ap-agent');
   var panel = document.getElementById('ap-collect');
+  apClosePanels('ap-collect');
+  // A collection is still running: bring its progress back instead of resetting to an empty form.
+  if (_apJobActive && _apCurrentJobId) { setDisplay(panel, ''); return; }
   // reset to configure mode
   setDisplay(document.getElementById('ap-form'), '');
   setDisplay(document.getElementById('ap-progress'), 'none');
@@ -234,7 +254,7 @@ export function apDiscoverSubnet() {
   var btn = document.getElementById('ap-discover-btn');
   btn.disabled = true;
   btn.textContent = 'Discovering…';
-  apicall('/api/attackpath/subnet/' + encodeURIComponent(agentId)).then(function(r) {
+  apicallOk('/api/attackpath/subnet/' + encodeURIComponent(agentId)).then(function(r) {
     btn.disabled = false;
     btn.innerHTML = '&#128270; Discover Subnet';
     if (!r.targets || !r.targets.length) {
@@ -253,16 +273,10 @@ export function apDiscoverSubnet() {
 
 // Renders a timeline step. state: 'done' | 'active' | 'pending' | 'warn'
 function _apStep(stepState, title, detail) {
-  var icon = stepState === 'done' ? '<span class="u-success">&#10003;</span>'
-    : stepState === 'active' ? '<span style="animation:spin 1s linear infinite;display:inline-block">&#9696;</span>'
-    : stepState === 'warn' ? '<span class="u-warning">&#9888;</span>'
-    : '<span class="u-muted">&#9675;</span>';
-  var titleColor = stepState === 'pending' ? 'var(--muted)' : 'var(--text)';
-  return '<div style="display:flex;gap:0.7rem;align-items:flex-start;padding:0.55rem 0;border-bottom:1px solid var(--border)">' +
-    '<div style="width:1.2rem;text-align:center;flex-shrink:0;margin-top:0.05rem;font-size:0.9rem">' + icon + '</div>' +
-    '<div><div style="font-size:0.82rem;font-weight:600;color:' + titleColor + '">' + title + '</div>' +
-    (detail ? '<div class="tiny muted" style="margin-top:0.2rem">' + detail + '</div>' : '') +
-    '</div></div>';
+  var icon = stepState === 'done' ? '\u2713' : stepState === 'active' ? '<span class="ap-spin">&#9696;</span>'
+    : stepState === 'warn' ? '&#9888;' : stepState === 'fail' ? '\u2715' : stepState === 'skip' ? '\u2013' : '&#9675;';
+  return '<div class="ap-step ap-step-' + stepState + '"><span class="ap-step-i">' + icon + '</span>' +
+    '<div><div class="ap-step-t">' + title + '</div>' + (detail ? '<div class="ap-step-d">' + detail + '</div>' : '') + '</div></div>';
 }
 
 function _apTimestamp() {
@@ -273,11 +287,17 @@ export function dispatchAPCollect() {
   var agentId = document.getElementById('ap-agent').value;
   if (!agentId) { showToast('Select an agent', 'err'); return; }
   var targets = document.getElementById('ap-targets').value.split('\n').map(function(t) { return t.trim(); }).filter(Boolean);
+  if (!targets.length) {
+    showToast('Add at least one target host, or use Discover Subnet. The agent only probes the hosts you list.', 'err');
+    document.getElementById('ap-targets').focus();
+    return;
+  }
   var agentLabel = document.getElementById('ap-agent').options[document.getElementById('ap-agent').selectedIndex].text;
   var payload = { agentId: agentId, targets: targets, segment: document.getElementById('ap-segment').value.trim(), runSharpHound: document.getElementById('ap-sharphound').checked };
   var shEnabled = payload.runSharpHound;
 
-  apicall('/api/attackpath/jobs', { method: 'POST', body: JSON.stringify(payload) }).then(function(r) {
+  apicallOk('/api/attackpath/jobs', { method: 'POST', body: JSON.stringify(payload) }).then(function(r) {
+    _apJobActive = true;
     _apCollectAgentId = agentId;
     _apCurrentJobId = r.job && r.job.id;
     if (_apCurrentJobId) _apSaveJobId(_apCurrentJobId, agentId);
@@ -315,7 +335,7 @@ export function dispatchAPCollect() {
 // Retry a failed or timed-out job by creating a new one from the same payload.
 function _apRetryJob(jobId) {
   if (!jobId) return;
-  apicall('/api/attackpath/jobs/' + jobId + '/retry', { method: 'POST' }).then(function(r) {
+  apicallOk('/api/attackpath/jobs/' + jobId + '/retry', { method: 'POST' }).then(function(r) {
     _apCurrentJobId = r.id;
     if (r.id) _apSaveJobId(r.id, _apCollectAgentId);
     showToast('Retry job created — ' + r.id.slice(0,8), 'ok');
@@ -353,20 +373,24 @@ function _apRenderJobState(job) {
     + (pctBar ? '<br>' + pctBar : '');
 
   var isTerminal = (s === 'completed' || s === 'failed' || s === 'timed_out' || s === 'delivery_failed' || s === 'cancelled');
+  _apJobActive = !isTerminal;
 
   // Cancel button: visible while job is active (dispatched or running), hidden once terminal.
   var cancelEl = document.getElementById('ap-cancel-action');
   if (cancelEl) setDisplay(cancelEl, (!isTerminal && s !== 'queued') ? '' : 'none');
 
-  // Step states by job status
-  var dispatchState = (s === 'queued') ? 'active' : 'done';
-  var ackState = s === 'queued' ? 'pending' : s === 'dispatched' ? 'active' : 'done';
-  var probeState = (s === 'queued' || s === 'dispatched') ? 'pending' : (s === 'running') ? 'active' : 'done';
-  var uploadState = (s === 'running' && prog && prog.stage === 'uploading') ? 'active' : (s === 'completed') ? 'done' : 'pending';
-  var graphState  = s === 'completed' ? 'done' : 'pending';
-
-  if (s === 'failed' || s === 'timed_out' || s === 'delivery_failed' || s === 'cancelled') {
-    ackState = probeState = uploadState = graphState = 'warn';
+  // Step states by job status: dispatch, ack, execute, upload, graph.
+  var failedEnd = (s === 'failed' || s === 'timed_out' || s === 'delivery_failed' || s === 'cancelled');
+  var st;
+  if (s === 'completed') st = ['done', 'done', 'done', 'done', 'done'];
+  else if (s === 'queued') st = ['active', 'pending', 'pending', 'pending', 'pending'];
+  else if (s === 'dispatched') st = ['done', 'active', 'pending', 'pending', 'pending'];
+  else if (prog && prog.stage === 'uploading') st = ['done', 'done', 'done', 'active', 'pending'];
+  else st = ['done', 'done', 'active', 'pending', 'pending'];
+  if (failedEnd) {
+    // The step that was in progress is the one that stopped; everything after it never ran.
+    var at = s === 'delivery_failed' ? 1 : (prog && prog.stage === 'uploading') ? 3 : 2;
+    st = st.map(function(v, i) { return i < at ? 'done' : i === at ? (s === 'cancelled' ? 'warn' : 'fail') : 'skip'; });
   }
 
   var failReasonMap = {
@@ -380,25 +404,24 @@ function _apRenderJobState(job) {
     permission_denied: 'Permission denied on the agent.'
   };
   var errorDisplay = failReasonMap[job.error] || (job.error ? x(job.error) : '');
+  var banner = {
+    queued: ['info', 'Queued', 'Waiting for the agent to connect.'],
+    dispatched: ['info', 'Command delivered', 'Waiting for the agent to acknowledge it.'],
+    running: ['info', stageLabel || 'Running', 'The agent is collecting. This panel updates by itself.'],
+    completed: ['ok', 'Collection complete', 'The attack-path graph has been rebuilt from this collection.'],
+    failed: ['bad', 'Collection failed', errorDisplay || 'The collection stopped before it finished.'],
+    timed_out: ['bad', 'Collection timed out', errorDisplay || 'The agent did not finish in time.'],
+    delivery_failed: ['bad', 'Command not delivered', errorDisplay || 'The agent did not acknowledge the command.'],
+    cancelled: ['warn', 'Collection cancelled', errorDisplay || 'Cancelled by operator.']
+  }[s] || ['info', String(s || 'Unknown'), ''];
 
-  var statusLabel = {
-    queued: 'Queued — waiting for agent to connect',
-    dispatched: 'Command delivered — waiting for agent ACK…',
-    running: stageLabel ? stageLabel : 'Execution in progress…',
-    completed: 'Done',
-    failed: 'Failed — ' + errorDisplay,
-    timed_out: 'Timed out — ' + errorDisplay,
-    delivery_failed: 'Delivery failed — ' + errorDisplay,
-    cancelled: 'Cancelled — ' + (errorDisplay || 'by operator')
-  }[s] || s;
-
-  tl.innerHTML =
-    _apStep(dispatchState, 'Job dispatched — ' + job.id.slice(0,8),
+  tl.innerHTML = '<div class="exd-note tone-' + banner[0] + ' ap-banner"><b>' + x(banner[1]) + '</b><p>' + banner[2] + '</p></div>' +
+    _apStep(st[0], 'Job dispatched — ' + job.id.slice(0,8),
       job.targetCount > 0 ? job.targetCount + ' target' + (job.targetCount === 1 ? '' : 's') + ' queued' : '') +
-    _apStep(ackState, statusLabel, '') +
-    _apStep(probeState, 'Executing on agent', progDetail) +
-    _apStep(uploadState, 'Uploading results…', '') +
-    _apStep(graphState, 'Graph built &amp; analysis complete',
+    _apStep(st[1], 'Agent acknowledged', '') +
+    _apStep(st[2], 'Executing on agent', st[2] === 'active' ? progDetail : '') +
+    _apStep(st[3], 'Uploading results', '') +
+    _apStep(st[4], 'Graph built &amp; analysis complete',
       job.metrics ? job.metrics.nodeCount + ' nodes · ' + job.metrics.edgeCount + ' edges' : '');
 
   if (isTerminal) {
@@ -414,10 +437,14 @@ function _apRenderJobState(job) {
 
 export function _apCancelJob() {
   if (!_apCurrentJobId) return;
-  if (!confirm('Cancel this collection? The agent will complete any in-progress probe but no results will be stored.')) return;
-  apicall('/api/attackpath/jobs/' + _apCurrentJobId + '/cancel', {method:'POST'})
-    .then(function(r) { if (r && r.job) _apRenderJobState(r.job); })
-    .catch(function(e) { showToast('Cancel failed: ' + e.message, 'err'); });
+  var jobId = _apCurrentJobId;
+  openConfirmDiffModal('Cancel this collection?',
+    '<p class="exd-desc">The agent will finish any probe already in progress, but no results will be stored and the current graph stays as it is.</p>',
+    function() {
+      apicallOk('/api/attackpath/jobs/' + jobId + '/cancel', { method: 'POST' })
+        .then(function(r) { if (r && r.job) _apRenderJobState(r.job); showToast('Collection cancelled', 'ok'); })
+        .catch(function(e) { showToast('Cancel failed: ' + e.message, 'err'); });
+    }, { sub: 'This stops the collection now.', confirmLabel: 'Cancel collection' });
 }
 
 // Called from the WS onmessage handler for job lifecycle changes.
@@ -451,11 +478,13 @@ export function _apOnJobUpdate(msg) {
   }
   _apRenderJobState(job);
   if (job.status === 'completed') {
-    loadAttackPath();
+    apLoad(true);
     _apClearJobId();
     var da = document.getElementById('ap-done-actions');
     if (da) { setDisplay(da, 'flex'); var rb = document.getElementById('ap-retry-btn'); if (rb) setDisplay(rb, 'none'); }
     showToast('Attack-path collection complete — graph updated.', 'ok');
+  } else if (job.status === 'failed') {
+    showToast('Attack-path collection failed' + (job.error ? ': ' + job.error : '.'), 'err');
   } else if (job.status === 'timed_out') {
     showToast('Attack-path job timed out — agent did not complete in time.', 'warn');
   } else if (job.status === 'delivery_failed') {
@@ -503,7 +532,7 @@ export function _apOnCollected(msg) {
 
   var doneDiv2 = document.getElementById('ap-done-actions');
   if (doneDiv2) { setDisplay(doneDiv2, 'flex'); var rb = document.getElementById('ap-retry-btn'); if (rb) setDisplay(rb, 'none'); }
-  loadAttackPath();
+  apLoad(true);
   showToast(label + ': ' + nodes + ' nodes collected — attack path updated.', 'ok');
 }
 
@@ -537,12 +566,15 @@ export function _onRevalidationStarted(msg) {
 var AP_ASSETS = [];
 var AP_INPUT_STYLE = 'width:100%;padding:0.35rem 0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:5px;font-size:0.78rem';
 export function openAPAssets() {
+  apClosePanels('ap-assets');
   setDisplay(document.getElementById('ap-assets'), '');
   document.getElementById('ap-assets-body').innerHTML = '<tr><td colspan="5" class="empty">Loading…</td></tr>';
-  apicall('/api/attackpath/assets').then(function(d) {
+  apicallOk('/api/attackpath/assets').then(function(d) {
     AP_ASSETS = (d && d.assets) || [];
     renderAPAssets();
-  }).catch(function(e) { showToast(e.message, 'err'); });
+  }).catch(function(e) {
+    document.getElementById('ap-assets-body').innerHTML = '<tr><td colspan="7" class="empty">Could not load hosts: ' + x(e.message || 'error') + '</td></tr>';
+  });
 }
 var AP_CRIT_TIERS = ['', 'low', 'medium', 'high', 'critical'];
 function renderAPAssets() {
@@ -566,7 +598,7 @@ function renderAPAssets() {
         '<label style="margin-right:0.4rem"><input type="checkbox" id="apt-if-' + i + '"' + (a.internetFacing ? ' checked' : '') + '> Internet</label>' +
         '<label style="margin-right:0.4rem"><input type="checkbox" id="apt-ie-' + i + '"' + (a.identityExposed ? ' checked' : '') + '> Identity</label>' +
         '<label style="margin-right:0.4rem"><input type="checkbox" id="apt-prod-' + i + '"' + (a.production ? ' checked' : '') + '> Prod</label>' +
-        '<input id="apt-cs-' + i + '" value="' + x((a.complianceScope || []).join(', ')) + '" placeholder="compliance scope, comma-sep" style="' + AP_INPUT_STYLE + ';margin-top:0.2rem;display:block;width:160px">' +
+        '<input id="apt-cs-' + i + '" value="' + x((a.complianceScope || []).join(', ')) + '" placeholder="PCI-DSS, HIPAA" style="' + AP_INPUT_STYLE + ';margin-top:0.2rem;display:block;width:160px">' +
       '</td>' +
       '<td><button class="btn btn-outline btn-sm"' + on('click', 'saveAPAsset', i) + '>Save</button></td>' +
     '</tr>';
@@ -587,13 +619,13 @@ export function saveAPAsset(i) {
     production: document.getElementById('apt-prod-' + i).checked,
     complianceScope: cs
   };
-  apicall('/api/attackpath/assets', { method: 'POST', body: JSON.stringify(payload) }).then(function() {
+  apicallOk('/api/attackpath/assets', { method: 'POST', body: JSON.stringify(payload) }).then(function() {
     a.crownJewel = payload.crownJewel; a.segment = payload.segment; a.highValue = payload.highValue;
     a.criticalityTier = payload.criticalityTier; a.internetFacing = payload.internetFacing;
     a.identityExposed = payload.identityExposed; a.production = payload.production; a.complianceScope = payload.complianceScope;
     showToast('Saved ' + (a.label || a.hostKey), 'ok');
-    loadAttackPath();
-  }).catch(function(e) { showToast(e.message, 'err'); });
+    apLoad(true);
+  }).catch(function(e) { showToast('Save failed: ' + e.message, 'err'); });
 }
 
 export function openAPAbout() {
@@ -608,9 +640,10 @@ export function closeAPAbout() {
 
 export function openAPSchedule() {
   var panel = document.getElementById('ap-schedule');
+  apClosePanels('ap-schedule');
   setDisplay(panel, '');
   document.getElementById('ap-sched-last').textContent = '';
-  apicall('/api/attackpath/schedule').then(function(s) {
+  apicallOk('/api/attackpath/schedule').then(function(s) {
     document.getElementById('ap-sched-enabled').checked = !!s.enabled;
     document.getElementById('ap-sched-interval').value = s.intervalMinutes || 1440;
     document.getElementById('ap-sched-targets').value = (s.targets || []).join('\n');
@@ -618,7 +651,7 @@ export function openAPSchedule() {
     document.getElementById('ap-sched-sharphound').checked = !!s.runSharpHound;
     document.getElementById('ap-sched-last').textContent =
       s.lastRunAt ? 'Last run: ' + new Date(s.lastRunAt).toLocaleString() : 'Never run';
-  }).catch(function(e) { showToast(e.message, 'err'); });
+  }).catch(function(e) { showToast('Could not load the schedule: ' + e.message, 'err'); });
 }
 export function saveAPSchedule() {
   var interval = parseInt(document.getElementById('ap-sched-interval').value, 10);
@@ -630,10 +663,10 @@ export function saveAPSchedule() {
     segment: document.getElementById('ap-sched-segment').value.trim(),
     runSharpHound: document.getElementById('ap-sched-sharphound').checked
   };
-  apicall('/api/attackpath/schedule', { method: 'POST', body: JSON.stringify(payload) }).then(function(r) {
+  apicallOk('/api/attackpath/schedule', { method: 'POST', body: JSON.stringify(payload) }).then(function(r) {
     setDisplay(document.getElementById('ap-schedule'), 'none');
     showToast(r.enabled ? 'Scheduled collection enabled (every ' + r.intervalMinutes + ' min)' : 'Scheduled collection disabled', 'ok');
-  }).catch(function(e) { showToast(e.message, 'err'); });
+  }).catch(function(e) { showToast('Save failed: ' + e.message, 'err'); });
 }
 
 

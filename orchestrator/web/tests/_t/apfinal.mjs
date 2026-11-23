@@ -1,0 +1,20 @@
+import { boot, SUMMARY } from './aplib.mjs';
+const T = 'C:/Users/Administrator/AppData/Local/Temp/';
+let b = await boot(); await b.go(); const p = b.page;
+await p.locator('#ap-score-toggle').click(); await p.waitForTimeout(400);
+console.log('breakdown open:', await b.vis('#ap-score-breakdown'), '| btn:', await p.locator('#ap-score-toggle').innerText());
+await p.screenshot({ path: T + 'ap-f-breakdown.png', clip: { x: 240, y: 300, width: 1200, height: 520 } });
+await p.locator('#ap-score-toggle').click(); await p.waitForTimeout(300); console.log('closed again:', !(await b.vis('#ap-score-breakdown')), '|', await p.locator('#ap-score-toggle').innerText());
+await p.setViewportSize({ width: 420, height: 900 }); await p.waitForTimeout(500);
+await p.screenshot({ path: T + 'ap-f-mobile.png' });
+await p.locator('#ap-collect-btn').click(); await p.waitForTimeout(500);
+await p.screenshot({ path: T + 'ap-f-mobile-panel.png' });
+console.log('h-scroll on phone:', await p.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1));
+await b.close();
+// stale graph + no domain path + undetermined
+b = await boot({ summary: { agentMeta: [{ agentId: 'a-3', hostname: 'DC-PRI-01', collectedAt: new Date(Date.now() - 9 * 86400000).toISOString(), edgeCount: 40 }] } }); await b.go();
+console.log('STALE chip:', await b.page.locator('#ap-meta-freshness').innerText(), '| age:', await b.page.locator('#ap-meta-age').innerText());
+await b.close();
+b = await boot(); b.state.summary.summary.domainCompromise = false; b.state.summary.summary.domainCompromiseStatus = 'not-observed'; b.state.summary.summary.shortestDomainAdminPath = []; b.state.summary.summary.crownJewels = []; b.state.summary.summary.chokePoints = []; b.state.summary.summary.segmentationViolations = []; b.state.corr = { gaps: [] };
+await b.go(); await b.page.screenshot({ path: T + 'ap-f-quiet.png', fullPage: true, clip: { x: 240, y: 360, width: 1200, height: 1300 } });
+console.log('QUIET errors', JSON.stringify(b.errs)); await b.close();

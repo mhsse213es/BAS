@@ -11,3 +11,12 @@ export function apicall(path, opts) {
     return r.json();
   });
 }
+
+// apicallOk: apicall hands a server error back as a plain { error } body instead of throwing, which makes a failed
+// load read as an empty page and a refused action read as a success. This raises it instead.
+export function apicallOk(path, opts) {
+  return apicall(path, opts).then(function(r) {
+    if (r && !Array.isArray(r) && typeof r === 'object' && typeof r.error === 'string' && r.error) throw new Error(r.error);
+    return r;
+  });
+}
