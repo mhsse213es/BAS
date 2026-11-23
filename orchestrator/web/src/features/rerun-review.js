@@ -59,7 +59,7 @@ export function openRerunReview(run) {
   rows.push(['Mode', x(MODE_LABELS[run.mode] || run.mode || 'Posture')]);
   if (run.maxPrivilege) rows.push(['Privilege ceiling', x(run.maxPrivilege.charAt(0).toUpperCase() + run.maxPrivilege.slice(1))]);
   if (subset.field) {
-    rows.push(['Techniques', subset.ids.length + ' — ' + subset.ids.slice(0, 6).join(', ') + (subset.ids.length > 6 ? ', …' : '')]);
+    rows.push(['Techniques', x(subset.ids.length + ' — ' + subset.ids.slice(0, 6).join(', ') + (subset.ids.length > 6 ? ', …' : ''))]);
   } else if (!subset.exact && (fw === 'caldera' || fw === 'steps')) {
     // Only reachable for a run dispatched before dispatch_subset existed --
     // its exact ability/step subset was never recoverable from results alone.
