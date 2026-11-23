@@ -293,6 +293,10 @@ const SkipReasonMissingContent = "missing-content"
 // executable command at all.
 const SkipReasonPlatformUnavailable = "platform-unavailable"
 
+// SkipReasonNotAssessed marks a check that cannot give a verdict until an organizational baseline is configured
+// (for example an administrator allowlist). It is not a platform failure and not a pass.
+const SkipReasonNotAssessed = "not-assessed"
+
 // SkipReasonPrerequisiteMissing marks a SimulationResult synthesized
 // server-side because a curated technique's required environmental fact
 // (e.g. domain_joined) did not match the target agent's known value. Do not
