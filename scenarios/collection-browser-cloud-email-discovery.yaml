@@ -100,9 +100,9 @@ steps:
       $env:RCLONE_S3_ENDPOINT = $env:BAS_S3_ENDPOINT
       $env:RCLONE_S3_ACCESS_KEY_ID = $env:BAS_S3_ACCESS_KEY
       $env:RCLONE_S3_SECRET_ACCESS_KEY = $env:BAS_S3_SECRET_KEY
-      $out = & rclone lsf -R (':s3:' + $env:BAS_S3_BUCKET) 2>&1
+      $out = @(& rclone lsf -R (':s3:' + $env:BAS_S3_BUCKET))
       if ($LASTEXITCODE -ne 0) { Write-Output "ERROR: object listing failed (rclone exit $LASTEXITCODE) | source=rclone lsf -R" ; exit 0 }
-      $count = @($out | Where-Object { $_ -and -not $_.EndsWith('/') }).Count
+      $count = @($out | Where-Object { $_ -is [string] -and $_ -and -not $_.EndsWith('/') }).Count
       Write-Output "PASS: cloud object discovery recorded | observed=objects listed=$count; object names not recorded | expected=listing evidence, not a detection result | source=rclone lsf -R against the local S3 endpoint. No object content was read."
     cleanup: ""
   - name: "Surveyed Data 12 — Mailbox Discovery, local IMAP (T1114)"
