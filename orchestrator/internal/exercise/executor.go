@@ -475,7 +475,9 @@ func (e *Executor) handleTicket(tickets TicketNotifier) func(context.Context, *E
 			}
 			_ = e.store.SetStepResult(bctx, ex.ID, ps.ID, result)
 			_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepCompleted, "")
-			_, _ = e.evidence.Append(bctx, ex.ID, se.ID, "ticket_created", "system", "ticket_injector", result)
+			// "ticket_injected", not "ticket_created": the score reads ticket_created as the defenders raising a
+			// ticket, and a ticket the exercise opens itself is not that signal.
+			_, _ = e.evidence.Append(bctx, ex.ID, se.ID, "ticket_injected", "system", "ticket_injector", result)
 			_ = e.store.RecordEvent(bctx, ex.ID, ps.ID, "step_completed", "system", result)
 		}()
 		return nil
