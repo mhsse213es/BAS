@@ -1564,3 +1564,5 @@ tr.ai-sel { background: var(--accent-dim); }
 .agt-tab-fail { padding: 28px 18px; text-align: center; display: flex; flex-direction: column; gap: 8px; align-items: center; }
 /* Results are opened from inside the agent drawer (Scenarios tab); they must sit above it, below the confirm dialog. */
 #results-overlay { z-index: 105; }
+/* Respond is launched from inside the finding drawer (which is #results-overlay), so it must sit above it. */
+#respond-overlay { z-index: 107; }

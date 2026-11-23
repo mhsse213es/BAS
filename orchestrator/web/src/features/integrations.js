@@ -607,8 +607,14 @@ export function submitRespondAction() {
   }
 
   var label = RESPOND_ACTION_LABELS[action] || action;
-  if (!confirm(label + '\n\nHost: ' + hostname + '\nReason: ' + reason + '\n\nProceed?')) return;
+  // An in-page confirmation (not the browser's): this runs a response action on a live host.
+  openConfirmDiffModal(label,
+    '<div class="int-sure"><div><span class="muted">Host</span> <b>' + x(hostname) + '</b></div><div><span class="muted">Reason</span> ' + x(reason) + '</div></div>',
+    function() { runRespondAction(action, hostname, parameters, connectorId, reason, ticketRef, label); },
+    { sub: 'This acts on the host straight away.', confirmLabel: label, danger: true });
+}
 
+function runRespondAction(action, hostname, parameters, connectorId, reason, ticketRef, label) {
   var btn = document.getElementById('respond-submit-btn');
   btn.disabled = true;
   apicall('/api/actions/run', {
