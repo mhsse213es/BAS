@@ -871,8 +871,8 @@
   },
   "endpoint-mastery/em-06-defense-evasion.yaml": {
     "cleanup": 0,
-    "detection": 1,
-    "telemetry": 1
+    "detection": 0,
+    "telemetry": 0
   },
   "endpoint-mastery/em-07-ransomware-readiness.yaml": {
     "cleanup": 0,
@@ -881,8 +881,8 @@
   },
   "endpoint-mastery/em-08-exploit-mitigation.yaml": {
     "cleanup": 0,
-    "detection": 2,
-    "telemetry": 2
+    "detection": 0,
+    "telemetry": 0
   },
   "endpoint-mastery/em-09-browser-attack.yaml": {
     "cleanup": 0,
@@ -1040,6 +1040,21 @@
     "telemetry": 0
   },
   "rbcd-configure-exposure-audit.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "recon-code-repo-footprint-sim.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "recon-dns-enumeration-sim.yaml": {
+    "cleanup": 0,
+    "detection": 0,
+    "telemetry": 0
+  },
+  "resdev-lookalike-domain-sim.yaml": {
     "cleanup": 0,
     "detection": 0,
     "telemetry": 0

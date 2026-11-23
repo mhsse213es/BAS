@@ -10404,6 +10404,33 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "recon-code-repo-footprint-sim.yaml",
+    "index": 0,
+    "technique_id": "T1593.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
+    "scenario": "recon-dns-enumeration-sim.yaml",
+    "index": 0,
+    "technique_id": "T1596.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "resdev-lookalike-domain-sim.yaml",
+    "index": 0,
+    "technique_id": "T1583.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "undo_declared_in_yaml"
+  },
+  {
     "scenario": "rhysida-kill-chain.yaml",
     "index": 0,
     "technique_id": "T1078",

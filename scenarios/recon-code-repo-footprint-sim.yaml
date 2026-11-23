@@ -1,0 +1,59 @@
+id: recon-code-repo-footprint-sim
+product_line: killchain
+name: Reconnaissance -- Code Repository Footprint Simulation (T1593.003)
+description: >
+  Simulates an operator searching a locally cloned copy of a public code repository for
+  identifiers that suggest internal infrastructure (hostnames, internal domain suffixes).
+  The clone is a synthetic fixture created by the scenario; no network request is made.
+
+  SAFETY: local files only. The fixture contains only .invalid and .lab names. Nothing is
+  fetched from any remote, and no credentials are searched for or used. Cleanup removes the
+  fixture.
+
+  Grounded in MITRE ATT&CK T1593.003 (Search Open Technical Databases: Code Repositories).
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - recon
+  - t1593
+mitre_phases:
+  - reconnaissance
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+steps:
+  - name: "Recon -- Code Repository Footprint (T1593.003)"
+    technique_id: T1593.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: lab-only
+    production_safe: true
+    risk: low
+    blast_radius: "Creates and reads a synthetic fixture folder under %TEMP%. No network access."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11 for the fixture files"
+      - "Sysmon EID 1 for the search process"
+    detection:
+      - "EDR: bulk read of source files by a non-development process"
+    last_reviewed: "2026-11-23"
+    command: |
+      $ErrorActionPreference = 'Stop'
+      $root = Join-Path $env:TEMP 'bas_recon_repo_fixture'
+      New-Item -ItemType Directory -Force -Path $root | Out-Null
+      # Synthetic fixture: .invalid and .lab names only; no real hosts or credentials.
+      Set-Content -LiteralPath (Join-Path $root 'config.example.yaml') -Value "ledger_host: ledger.bas-fixture.invalid`nreporting_domain: reports.corp.lab"
+      Set-Content -LiteralPath (Join-Path $root 'README.md') -Value "Synthetic fixture for a BAS reconnaissance step."
+      $hits = Get-ChildItem -LiteralPath $root -File -Recurse |
+        Select-String -Pattern '\.(invalid|lab)\b' |
+        Measure-Object
+      Write-Output "EXEC recon T1593.003: $($hits.Count) internal-looking identifier(s) in the fixture. [BAS-SIM-RECON-REPO]"
+    cleanup: |
+      Remove-Item -LiteralPath (Join-Path $env:TEMP 'bas_recon_repo_fixture') -Recurse -Force -ErrorAction SilentlyContinue
