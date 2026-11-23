@@ -6,7 +6,7 @@ Plan: docs/endpoint-mastery-08-implementation-plan.md. Decisions 8.1–8.7 appro
 
 ## Approved decisions applied
 1. Verdict word SKIP (not SKIPPED).
-2. OptIn DEP: FAIL unless per-process DEP is confirmed (tests 04–06, 21, 44–45 check per-process DEP/CFG/ACG).
+2. OptIn DEP: FAIL unless per-process DEP is confirmed (tests 04–06 check per-process DEP).
 3. Targets: explorer.exe, powershell.exe, svchost.exe, plus application list entries from BAS_EM08_APPS.
 4. Application list: none supplied, so tests 47–50 SKIP.
 5. 50 tests.
@@ -25,7 +25,7 @@ Plan: docs/endpoint-mastery-08-implementation-plan.md. Decisions 8.1–8.7 appro
 ## Build-host run (WIN-2IP8FNO4MAD was not used; this is the Windows 10 build workstation), read-only, run2
 - Counts: PASS 6, FAIL 39, SKIP 5, ERROR 0, NO_VERDICT 0.
 - Interpretation: default Windows policy. Most mitigations are NOTSET. FAIL here means "not configured or not effective", as the plan requires. Not a defect in the host.
-- SKIP 5: test 43 is not SKIP (it PASSes: no override). SKIPs are test 42 (Defender Exploit Protection, not verifiable), and tests 46–49 (no application list).
+- SKIP 5: EM-08-43 (Defender Exploit Protection, not verifiable on this build) and EM-08-46 to EM-08-49 (no application list). EM-08-44 PASSes because no per-process override exists.
 
 ## Open question for approval (not changed)
 - Tests 04–06 (per-process DEP) FAIL on all three 64-bit targets: override NOTSET, system NOTSET, arch x64. The approved rule ("FAIL unless per-process DEP is confirmed") applied literally. Whether 64-bit processes get NX enforcement regardless of the OptIn setting has not been verified in this run. Decide whether to keep the literal rule or treat 64-bit targets differently.
