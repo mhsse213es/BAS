@@ -13,10 +13,21 @@ description: >
   KILL CHAIN STAGES:
     1. Remote Share Enumeration — list shares on the target with net view (T1135)
     2. Remote Share Listing     — list top-level file names in the first share found, read-only (T1039)
+    3. Access Permission Check  — confirm an allowed share is readable and a protected share denies this user (T1039)
+    4. File Metadata Discovery  — read name, extension and metadata of synthetic marker files on the share (T1083)
+
+  LAB SETTINGS (all optional except the target): BAS_REMOTE_SHARE_TARGET names the one lab host.
+  BAS_REMOTE_SHARE_ALLOWED names a share expected to be readable. BAS_REMOTE_SHARE_DENIED names a
+  share expected to deny this user (default C$). BAS_REMOTE_SHARE_MARKER is the text in synthetic file
+  names (default bas-synthetic). Steps 3 and 4 skip when no target is set.
+
+  SCOPE: This is remote discovery and access, not collection. It never copies a file or builds an
+  archive; that belongs to the network share collection scenario.
 
   SAFETY: Read-only. It runs only against the target the operator sets, or against a
-  .invalid name by default. It never scans a range or a host list. Nothing is
-  copied, opened, or written. Windows only. Telemetry mode.
+  .invalid name by default. It never scans a range or a host list, harvests credentials, or moves to
+  another host. It uses the current user's permissions only. Nothing is copied, opened, or written.
+  Windows only. Telemetry mode.
 author: Audspect Research
 executable: true
 local_check: false
@@ -28,6 +39,7 @@ tags:
   - dlp
   - t1135
   - t1039
+  - t1083
   - mitre
 mitre_phases:
   - discovery
@@ -109,4 +121,92 @@ steps:
       if ($names.Count -gt 0) {
         Write-Output "FAIL: A remote share's contents were listed from a user context with no alert. Collection targeting from remote shares should be detected."
       }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 — Remote Share Access Permission Validation (T1039)
+  # ---------------------------------------------------------------------------
+  - name: "Remote Share 3 — Access Permission Validation (T1039)"
+    technique_id: T1039
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Lists the first entry of two shares on the one target the operator names: a share expected to be readable and a share expected to deny this user (C$ by default). Lists only, with the current user's own permissions. No content is read or copied."
+    telemetry:
+      - "Security EID 5140/5145 on the target: share access, success and denied"
+      - "Security EID 4625 or 5145 access-denied for the administrative share"
+    detection:
+      - "EDR/NDR: access attempt to an administrative share from a user context"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $target = if ($env:BAS_REMOTE_SHARE_TARGET) { $env:BAS_REMOTE_SHARE_TARGET } else { "bas-sim-share-$runId.invalid" }
+      if ($target -like '*.invalid') { Write-Output "SKIP: not configured; BAS_REMOTE_SHARE_TARGET is not set, so the permission check has no lab target. [BAS-SIM-RSH-S3]"; exit 0 }
+      $out = & cmd.exe /c "net view \\$target 2>&1"
+      $allowed = $env:BAS_REMOTE_SHARE_ALLOWED
+      if (-not $allowed) {
+        $line = $out | Where-Object { $_ -match '^(\S+)\s+Disk' -and $_ -notmatch '^(ADMIN|IPC|C|print)\$?\s' } | Select-Object -First 1
+        if ($line) { $allowed = ($line -split '\s+')[0] }
+      }
+      $denied = if ($env:BAS_REMOTE_SHARE_DENIED) { $env:BAS_REMOTE_SHARE_DENIED } else { 'C$' }
+      if (-not $allowed) { Write-Output "SKIP: No readable share was named or found on $target, so read access could not be checked. Set BAS_REMOTE_SHARE_ALLOWED. [BAS-SIM-RSH-S3]"; exit 0 }
+      function Test-ShareAccess([string]$Unc) {
+        try { $null = Get-ChildItem -LiteralPath $Unc -Force -ErrorAction Stop | Select-Object -First 1; return 'readable' }
+        catch [System.UnauthorizedAccessException] { return 'denied' }
+        catch { if ($_.Exception.Message -match 'denied') { return 'denied' } else { return 'error: ' + $_.Exception.GetType().Name } }
+      }
+      $ra = Test-ShareAccess "\\$target\$allowed"
+      $rd = Test-ShareAccess "\\$target\$denied"
+      Write-Output "EXEC T1039: permission check on $target; expected-readable share '$allowed' = $ra; expected-denied share '$denied' = $rd. Listing only; no content was read. Remote Stage 3. [BAS-SIM-RSH-S3]"
+      if ($ra -like 'error*' -or $rd -like 'error*') { Write-Output "ERROR: The permission check could not complete: allowed share = $ra, denied share = $rd." }
+      elseif ($ra -eq 'readable' -and $rd -eq 'denied') { Write-Output "PASS: Read access worked on '$allowed' and access was denied on '$denied', as the lab policy expects." }
+      elseif ($rd -eq 'readable') { Write-Output "FAIL: Access to '$denied' on $target succeeded for this user, where the lab policy expects access denied. Access-denied enforcement failed." }
+      else { Write-Output "FAIL: Read access to '$allowed' on $target was denied for this user, where the lab policy expects read access." }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 4 — Remote Share File Metadata Discovery (T1083)
+  # ---------------------------------------------------------------------------
+  - name: "Remote Share 4 — File Metadata Discovery (T1083)"
+    technique_id: T1083
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads file name, extension, size and modified time for up to 500 files to depth three on one lab share. Names are recorded only for files matching the synthetic marker. No content is read, copied or archived."
+    telemetry:
+      - "Security EID 5145 on the target: directory enumeration of the share"
+    detection:
+      - "DLP/EDR: recursive directory enumeration of a remote share from a user context — collection precursor"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $target = if ($env:BAS_REMOTE_SHARE_TARGET) { $env:BAS_REMOTE_SHARE_TARGET } else { "bas-sim-share-$runId.invalid" }
+      if ($target -like '*.invalid') { Write-Output "SKIP: not configured; BAS_REMOTE_SHARE_TARGET is not set, so there is no lab target to read metadata from. [BAS-SIM-RSH-S4]"; exit 0 }
+      $name = $env:BAS_REMOTE_SHARE_ALLOWED
+      if (-not $name) {
+        $out = & cmd.exe /c "net view \\$target 2>&1"
+        $line = $out | Where-Object { $_ -match '^(\S+)\s+Disk' -and $_ -notmatch '^(ADMIN|IPC|C|print)\$?\s' } | Select-Object -First 1
+        if ($line) { $name = ($line -split '\s+')[0] }
+      }
+      if (-not $name) { Write-Output "SKIP: No non-administrative share was found on $target. [BAS-SIM-RSH-S4]"; exit 0 }
+      $marker = if ($env:BAS_REMOTE_SHARE_MARKER) { $env:BAS_REMOTE_SHARE_MARKER } else { 'bas-synthetic' }
+      $root = "\\$target\$name"
+      $all = @(Get-ChildItem -LiteralPath $root -Recurse -Force -File -ErrorAction SilentlyContinue | Select-Object -First 500 | Where-Object { (($_.FullName.Substring($root.Length)) -split '\\').Count -le 4 })
+      if ($all.Count -eq 0) { Write-Output "SKIP: No file metadata was readable on $root. [BAS-SIM-RSH-S4]"; exit 0 }
+      $exts = ($all | Group-Object Extension | Sort-Object Count -Descending | Select-Object -First 8 | ForEach-Object { "$(if ($_.Name) { $_.Name } else { '(none)' })=$($_.Count)" }) -join ', '
+      $synth = @($all | Where-Object { $_.Name -like "*$marker*" })
+      $detail = ($synth | Select-Object -First 20 | ForEach-Object { "$($_.Name)|$($_.Extension)|$($_.Length)B|$($_.LastWriteTimeUtc.ToString('o'))" }) -join '; '
+      Write-Output "EXEC T1083: read metadata for $($all.Count) file(s) on $root (depth 3, first 500); extensions: $exts; synthetic marker '$marker' files: $($synth.Count). Names recorded only for marker files. No content was read or copied. Remote Stage 4. [BAS-SIM-RSH-S4]"
+      if ($synth.Count -eq 0) { Write-Output "SKIP: No synthetic marker files ('$marker') were found, so no target file was identified. Seed the lab share with synthetic files named with the marker. [BAS-SIM-RSH-S4]" }
+      else { Write-Output "FAIL: Synthetic target files were identified on a remote share by name, extension and metadata from a user context with no alert: $detail" }
     cleanup: ""
