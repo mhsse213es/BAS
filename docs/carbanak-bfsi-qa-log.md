@@ -41,3 +41,39 @@ Branch: `feat/carbanak-bfsi-expansion`. Date: 2026-11-21.
 
 - No scenario has run on a Windows host. Every result above is static (tests, signatures, ratchet).
 - The ledger service was not started against the new scenarios.
+
+## Task 6 — lab validation (Windows lab endpoint, 2026-11-21 to 2026-11-23)
+
+Ledger: `carbanak-ledger-sim` built from `03191396`, started on `127.0.0.1:8745` with the runbook config. Smoke test: session issued; audit chain intact.
+Runner: `scripts/run-carbanak-steps.ps1` (commits `a8c2af17`, `959d4238`, `fd1a185b`). It prints raw evidence; verdicts are not scored here.
+
+### Fraud-control side
+
+| Step | Control | Observed (ledger) | Fraud verdict |
+|---|---|---|---|
+| 8a | evidence | operator authenticated, approved | not scored (evidence only) |
+| 8b | prevent | rejected: `beneficiary_second_approver_missing` | PASS |
+| 8c | detect | flagged: `amount_over_limit` | PASS |
+| 8d | prevent | rejected: `maker_checker_self_approval` | PASS |
+| 8e | prevent | rejected: `approver_role_missing` | PASS |
+| 8f | verify | audit chain intact | PASS |
+| 8g | detect | 4 alerts for the run (the four 8b–8e decisions) | PASS |
+| Item 24 | detect | flagged: `amount_over_limit` (ledger clock fixed, 20:00 IST) | PASS |
+| Item 27 | detect | flagged: `outside_operating_window` (ledger clock fixed) | PASS |
+| Items 19–22 | — | SKIP: `BAS_CARBANAK_TARGET_HOST` unset (no second host) | not scored |
+| Item 26 | — | SKIP: `BAS_CARBANAK_LEDGER_REPLAY_URL` unset | not scored |
+
+### Runs that do not count
+
+- Several early chain runs printed SKIP for every step because the ledger was not listening on port 8745. Those runs tested nothing and are not evidence.
+
+### Unresolved
+
+- **Stage 8g pipeline error.** In two full-chain runs, 8g printed `An error occurred while creating the pipeline.` with no output. The same step run alone worked. The most recent full chain, after the runner was changed to keep step scripts, ran 8g cleanly. The cause is not identified. The runner now keeps each step's script in `$env:TEMP\bas_carbanak_step_<name>.ps1` so a recurrence can be run directly.
+- **Combined verdict not checked.** The runner doesn't score endpoint results. Runbook section 4 (endpoint × fraud table) must be checked in the orchestrator before any merge.
+- **Second-host items (19–22, 26)** are not validated. They need a lab host set in `BAS_CARBANAK_TARGET_HOST` and `BAS_CARBANAK_LEDGER_REPLAY_URL`.
+
+### Not verified
+
+- Endpoint results for the Stage 8 and item steps were not captured in this pass.
+- Telemetry (Sysmon, SIEM) was not checked against the Stage 8 and item expectations.
