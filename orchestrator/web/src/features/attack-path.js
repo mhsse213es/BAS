@@ -75,7 +75,7 @@ function apLoad(quiet) {
     renderAttackPath(d, corr);
   }).catch(function(e) {
     if (body && !quiet) body.innerHTML = '<section class="rk-card"><div class="empty">Could not load attack-path data: ' + x(e.message || 'error') +
-      '<div class="ap-retry"><button class="btn btn-outline btn-sm" data-on-click='loadAttackPath'>Try again</button></div></div></section>';
+      '<div class="ap-retry"><button class="btn btn-outline btn-sm" data-on-click="loadAttackPath">Try again</button></div></div></section>';
     else showToast('Could not refresh attack-path data: ' + (e.message || 'error'), 'err');
   });
 }
