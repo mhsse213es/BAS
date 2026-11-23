@@ -106,6 +106,6 @@ export function taxiiStatus(c) {
 export function taxiiRows(list, now) {
   return (Array.isArray(list) ? list : []).map(function(c) {
     var t = ts(c.lastPollAt);
-    return { name: c.name || '', url: c.serverUrl || '', status: taxiiStatus(c), last: t == null ? 'Never' : sinceAgo(t, now) };
+    return { id: c.id, name: c.name || '', url: c.serverUrl || '', status: taxiiStatus(c), last: t == null ? 'Never' : sinceAgo(t, now), error: c.lastPollStatus === 'error' ? String(c.lastError || '') : '' };
   });
 }

@@ -2430,11 +2430,18 @@
       <div id="tab-integrations" class="is-hidden">
         <div id="hero-integrations"></div>
 
+        <!-- Tickets resolved in the ITSM that still need a BAS re-run (shown only when there are some) -->
+        <div id="integrations-reval" class="int-reval is-hidden" role="status">
+          <span class="int-reval-n" id="integrations-reval-count">0</span>
+          <div class="int-reval-t"><b>Pending revalidation</b><span>Tickets resolved in the ITSM. Run BAS again to confirm the fix before closing the finding.</span></div>
+          <button type="button" class="btn btn-outline btn-sm" data-on-click="showTab" data-args="[&quot;findings&quot;]">View findings →</button>
+        </div>
+
         <!-- ITSM + EPP response connector boxes (add / sync); the connectors themselves are the cards below -->
         <div class="rk-grid g2 int-boxes">
           <section class="rk-card int-box">
             <div class="rk-hd"><h2>ITSM connectors</h2><div class="rk-hd-actions">
-              <button type="button" class="btn btn-outline btn-sm" data-on-click="triggerTicketingSync">Sync Now</button>
+              <button type="button" class="btn btn-outline btn-sm" data-on-click="triggerTicketingSync">Sync now</button>
               <button type="button" class="btn btn-primary btn-sm" data-on-click="openAddConnector">+ Add Connector</button>
             </div></div>
             <p class="int-sub muted">Configure ITSM connectors. Analysts create tickets from Findings; BAS can auto-create tickets for critical exposures based on policy.</p>
@@ -2447,7 +2454,7 @@
           </section>
           <section class="rk-card int-box">
             <div class="rk-hd"><h2>EPP response connectors</h2><div class="rk-hd-actions">
-              <button type="button" class="btn btn-outline btn-sm" data-on-click="refreshResponseConnectors">Sync Now</button>
+              <button type="button" class="btn btn-outline btn-sm" data-on-click="refreshResponseConnectors">Refresh</button>
               <button type="button" class="btn btn-primary btn-sm" data-on-click="openAddResponseConnector">+ Add Connector</button>
             </div></div>
             <p class="int-sub muted">CrowdStrike / Defender credentials for isolate, kill process and quarantine actions from the Findings tab.</p>
@@ -2460,140 +2467,105 @@
           </section>
         </div>
 
-        <!-- Add / Edit connector drawer (inline form) -->
-        <div id="connector-form-wrap" class="is-hidden g1-s-5012029f">
-          <div class="conn-cfg-card">
-            <div class="g1-display-flex g1-s-7cd1f313">
-              <div class="g1-s-95891841" id="connector-form-title">Add Connector</div>
-              <button class="btn btn-outline btn-sm" data-on-click="closeConnectorForm">✕ Cancel</button>
-            </div>
+        <!-- Add / Edit ITSM connector (dialog) -->
+        <div id="connector-form-wrap" class="overlay">
+          <div class="modal int-modal">
+            <h3 id="connector-form-title">Add Connector</h3>
+            <p class="sub2">Connect a ticketing system so findings can become tickets.</p>
             <input type="hidden" id="cf-id">
-            <div class="g1-display-grid g1-s-0b1c784a">
-              <div>
-                <div class="conn-cfg-label g1-s-9f42fc4f">Name</div>
-                <input id="cf-name" type="text" placeholder="e.g. ServiceNow Production" class="inp-sm u-w100">
+            <div class="int-form">
+              <div class="int-row2">
+                <label class="int-f"><span class="modal-lbl">Name</span>
+                  <input id="cf-name" type="text" placeholder="e.g. ServiceNow Production" class="inp-sm u-w100" autocomplete="off"></label>
+                <label class="int-f"><span class="modal-lbl">Provider</span>
+                  <select id="cf-provider" class="inp-sm u-w100" data-on-change="renderConnectorSettings">
+                    <option value="servicenow">ServiceNow</option>
+                    <option value="jira">Jira</option>
+                    <option value="webhook">Webhook</option>
+                  </select></label>
               </div>
-              <div>
-                <div class="conn-cfg-label g1-s-9f42fc4f">Provider</div>
-                <select id="cf-provider" class="inp-sm u-w100" data-on-change="renderConnectorSettings">
-                  <option value="servicenow">ServiceNow</option>
-                  <option value="jira">Jira</option>
-                  <option value="webhook">Webhook</option>
-                </select>
-              </div>
-            </div>
-            <div id="cf-settings" class="g1-s-2fc766d7"></div>
-            <div class="g1-display-grid g1-s-8861c9c7">
-              <div>
-                <div class="conn-cfg-label g1-s-9f42fc4f">Auto-Create</div>
+              <div id="cf-settings" class="int-fields"></div>
+              <div class="int-sec">Ticket automation</div>
+              <label class="int-f"><span class="modal-lbl">Auto-create</span>
                 <select id="cf-auto-create" class="inp-sm u-w100">
                   <option value="off">Off (manual only)</option>
                   <option value="critical">Critical findings</option>
                   <option value="critical_high">Critical + High</option>
                   <option value="all">All findings</option>
-                </select>
-              </div>
-              <div class="g1-display-flex g1-s-c1ebb77c">
-                <label class="conn-cfg-label g1-display-flex g1-s-b0ace2ed">
-                  <input type="checkbox" id="cf-auto-update"> Auto-update on change
-                </label>
-                <label class="conn-cfg-label g1-display-flex g1-s-b0ace2ed">
-                  <input type="checkbox" id="cf-auto-close"> Auto-close on heal
-                </label>
-              </div>
-              <div class="g1-display-flex g1-s-c1ebb77c">
-                <label class="conn-cfg-label g1-display-flex g1-s-b0ace2ed">
-                  <input type="checkbox" id="cf-enabled" checked> Enabled
-                </label>
+                </select></label>
+              <div class="int-checks">
+                <label class="int-check"><input type="checkbox" id="cf-auto-update"><span><b>Auto-update on change</b><small>Update the ticket when its finding changes.</small></span></label>
+                <label class="int-check"><input type="checkbox" id="cf-auto-close"><span><b>Auto-close on heal</b><small>Close the ticket when its finding is healed.</small></span></label>
+                <label class="int-check"><input type="checkbox" id="cf-enabled" checked><span><b>Enabled</b><small>A disabled connector creates no tickets.</small></span></label>
               </div>
             </div>
-            <div class="g1-display-flex g1-s-99b36ba4">
-              <button class="btn btn-outline btn-sm" data-on-click="testConnectorForm">Test Connection</button>
-              <button class="btn btn-primary btn-sm" data-on-click="saveConnectorForm">Save</button>
+            <div class="int-foot">
+              <div id="cf-test-result" class="int-test is-hidden" role="status"></div>
+              <div class="modal-actions">
+                <button type="button" class="btn btn-outline btn-sm" data-on-click="testConnectorForm">Test connection</button>
+                <span class="u-flex1"></span>
+                <button type="button" class="btn btn-outline btn-sm" data-on-click="closeConnectorForm">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm" id="cf-save-btn" data-on-click="saveConnectorForm">Save</button>
+              </div>
             </div>
-            <div id="cf-test-result" class="is-hidden g1-s-f96f9ce3"></div>
           </div>
         </div>
 
-        <!-- Revalidation summary -->
-        <div id="integrations-reval" class="is-hidden g1-s-5012029f">
-          <div class="conn-cfg-card g1-display-flex g1-s-f769ee49">
-            <div class="g1-s-537a55a9" id="integrations-reval-count">0</div>
-            <div>
-              <div class="g1-s-c922bb47">Pending Revalidation</div>
-              <div class="g1-s-b80a2c9b">Tickets resolved in ITSM — run BAS again to confirm prevention before closing finding.</div>
-            </div>
-            <button class="btn btn-outline btn-sm g1-s-ca6fc035" data-on-click="showTab" data-args="[&quot;findings&quot;]">View Findings →</button>
-          </div>
-        </div>
-
-        <!-- Add / Edit response connector (inline form) -->
-        <div id="response-connector-form-wrap" class="is-hidden g1-s-5012029f">
-          <div class="conn-cfg-card">
-            <div class="g1-display-flex g1-s-7cd1f313">
-              <div class="g1-s-95891841" id="response-connector-form-title">Add Connector</div>
-              <button class="btn btn-outline btn-sm" data-on-click="closeResponseConnectorForm">✕ Cancel</button>
-            </div>
+        <!-- Add / Edit EPP response connector (dialog) -->
+        <div id="response-connector-form-wrap" class="overlay">
+          <div class="modal int-modal">
+            <h3 id="response-connector-form-title">Add Connector</h3>
+            <p class="sub2">Credentials for isolate, kill process and quarantine actions from Findings.</p>
             <input type="hidden" id="rc-id">
-            <div class="g1-display-grid g1-s-0b1c784a">
-              <div>
-                <div class="conn-cfg-label g1-s-9f42fc4f">Name</div>
-                <input id="rc-name" type="text" placeholder="e.g. Prod CrowdStrike" class="inp-sm u-w100">
+            <div class="int-form">
+              <div class="int-row2">
+                <label class="int-f"><span class="modal-lbl">Name</span>
+                  <input id="rc-name" type="text" placeholder="e.g. Prod CrowdStrike" class="inp-sm u-w100" autocomplete="off"></label>
+                <label class="int-f"><span class="modal-lbl">Provider</span>
+                  <select id="rc-provider" class="inp-sm u-w100" data-on-change="renderResponseConnectorFields">
+                    <option value="crowdstrike">CrowdStrike Falcon</option>
+                    <option value="microsoft_defender">Microsoft Defender for Endpoint</option>
+                    <option value="sentinelone">SentinelOne</option>
+                  </select></label>
               </div>
-              <div>
-                <div class="conn-cfg-label g1-s-9f42fc4f">Provider</div>
-                <select id="rc-provider" class="inp-sm u-w100" data-on-change="renderResponseConnectorFields">
-                  <option value="crowdstrike">CrowdStrike Falcon</option>
-                  <option value="microsoft_defender">Microsoft Defender for Endpoint</option>
-                  <option value="sentinelone">SentinelOne</option>
-                </select>
+              <div id="rc-crowdstrike-fields" class="int-fields is-hidden">
+                <label class="int-f"><span class="modal-lbl">Base URL</span>
+                  <input id="rc-base-url" type="text" placeholder="https://api.crowdstrike.com" class="inp-sm u-w100"></label>
               </div>
-            </div>
-            <div id="rc-crowdstrike-fields" class="is-hidden g1-s-2fc766d7">
-              <div class="conn-cfg-label g1-s-9f42fc4f">Base URL</div>
-              <input id="rc-base-url" type="text" placeholder="https://api.crowdstrike.com" class="inp-sm u-w100">
-            </div>
-            <div id="rc-defender-fields" class="is-hidden g1-s-2fc766d7">
-              <div class="g1-display-grid g1-s-2d31823f">
-                <div>
-                  <div class="conn-cfg-label g1-s-9f42fc4f">Tenant ID</div>
-                  <input id="rc-tenant-id" type="text" placeholder="Entra tenant ID" class="inp-sm u-w100">
+              <div id="rc-defender-fields" class="int-fields is-hidden">
+                <div class="int-row2">
+                  <label class="int-f"><span class="modal-lbl">Tenant ID</span>
+                    <input id="rc-tenant-id" type="text" placeholder="Entra tenant ID" class="inp-sm u-w100"></label>
+                  <label class="int-f"><span class="modal-lbl">Kill process script <i>(optional)</i></span>
+                    <input id="rc-kill-script" type="text" placeholder="Audspect-KillProcess.ps1" class="inp-sm u-w100"></label>
                 </div>
-                <div>
-                  <div class="conn-cfg-label g1-s-9f42fc4f">Kill Process Script Name <span class="tiny muted">(optional)</span></div>
-                  <input id="rc-kill-script" type="text" placeholder="Audspect-KillProcess.ps1" class="inp-sm u-w100">
-                </div>
+                <div class="int-note">Kill Process requires this script to already exist in the tenant's Defender Live Response script library. Defender has no built-in kill-process action.</div>
               </div>
-              <div class="g1-s-b5ca88cc">⚠ Kill Process requires this script to already exist in the tenant's Defender Live Response script library — Defender has no built-in kill-process action.</div>
-            </div>
-            <div id="rc-sentinelone-fields" class="is-hidden g1-s-2fc766d7">
-              <div class="g1-display-grid g1-s-2d31823f">
-                <div>
-                  <div class="conn-cfg-label g1-s-9f42fc4f">Management Console URL</div>
-                  <input id="rc-s1-base-url" type="text" placeholder="https://your-company.sentinelone.net" class="inp-sm u-w100">
+              <div id="rc-sentinelone-fields" class="int-fields is-hidden">
+                <div class="int-row2">
+                  <label class="int-f"><span class="modal-lbl">Management console URL</span>
+                    <input id="rc-s1-base-url" type="text" placeholder="https://your-company.sentinelone.net" class="inp-sm u-w100"></label>
+                  <label class="int-f"><span class="modal-lbl">API token</span>
+                    <input id="rc-s1-api-token" type="password" placeholder="••••••" class="inp-sm u-w100" autocomplete="new-password"></label>
                 </div>
-                <div>
-                  <div class="conn-cfg-label g1-s-9f42fc4f">API Token</div>
-                  <input id="rc-s1-api-token" type="password" placeholder="••••••" class="inp-sm u-w100">
-                </div>
+                <div class="int-note">Kill Process is not supported for SentinelOne. Its mitigation API works on an already-identified threat ID, not an arbitrary live process ID.</div>
               </div>
-              <div class="g1-s-b5ca88cc">⚠ Kill Process is not supported for SentinelOne — its mitigation API operates on an already-identified threat ID, not an arbitrary live process ID.</div>
-            </div>
-            <div id="rc-oauth-fields" class="g1-display-grid g1-s-0b1c784a">
-              <div>
-                <div class="conn-cfg-label g1-s-9f42fc4f">Client ID</div>
-                <input id="rc-client-id" type="text" placeholder="API client ID" class="inp-sm u-w100">
+              <div id="rc-oauth-fields" class="int-row2">
+                <label class="int-f"><span class="modal-lbl">Client ID</span>
+                  <input id="rc-client-id" type="text" placeholder="API client ID" class="inp-sm u-w100" autocomplete="off"></label>
+                <label class="int-f"><span class="modal-lbl">Client secret</span>
+                  <input id="rc-client-secret" type="password" placeholder="••••••" class="inp-sm u-w100" autocomplete="new-password"></label>
               </div>
-              <div>
-                <div class="conn-cfg-label g1-s-9f42fc4f">Client Secret</div>
-                <input id="rc-client-secret" type="password" placeholder="••••••" class="inp-sm u-w100">
+              <div class="int-checks">
+                <label class="int-check"><input type="checkbox" id="rc-enabled" checked><span><b>Enabled</b><small>A disabled connector cannot run response actions.</small></span></label>
               </div>
             </div>
-            <label class="conn-cfg-label g1-display-flex g1-s-d0ecb5cf">
-              <input type="checkbox" id="rc-enabled" checked> Enabled
-            </label>
-            <div class="g1-display-flex g1-s-99b36ba4">
-              <button class="btn btn-primary btn-sm" data-on-click="saveResponseConnectorForm">Save</button>
+            <div class="int-foot">
+              <div class="modal-actions">
+                <span class="u-flex1"></span>
+                <button type="button" class="btn btn-outline btn-sm" data-on-click="closeResponseConnectorForm">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm" id="rc-save-btn" data-on-click="saveResponseConnectorForm">Save</button>
+              </div>
             </div>
           </div>
         </div>
@@ -2603,8 +2575,8 @@
         <div id="integrations-insights"></div>
 
         <section class="rk-card flush int-taxii">
-          <div class="rk-hd"><h2>TAXII Connectors</h2><div class="rk-hd-actions"><span class="muted int-taxii-note">Manage in Settings &rarr; TAXII Connectors</span></div></div>
-          <div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Endpoint</th><th>Status</th><th>Last poll</th></tr></thead><tbody id="int-taxii-body"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody></table></div>
+          <div class="rk-hd"><h2>TAXII connectors</h2><div class="rk-hd-actions"><span class="muted int-taxii-note">Threat-intel feeds, also listed in Settings</span><button type="button" class="btn btn-outline btn-sm" data-on-click="openTAXIIConnectorModal" data-args="[null]">+ Add TAXII connector</button></div></div>
+          <div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Endpoint</th><th>Status</th><th>Last poll</th><th class="int-t-acts">Actions</th></tr></thead><tbody id="int-taxii-body"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody></table></div>
         </section>
       </div>
 
@@ -3228,57 +3200,46 @@
 
 <!-- TAXII Connector Add/Edit -->
 <div id="taxii-connector-overlay" class="overlay">
-  <div class="modal g1-s-ac445731">
+  <div class="modal int-modal">
     <h3 id="taxii-connector-modal-title">Add TAXII Connector</h3>
-
-    <label class="modal-lbl">Name</label>
-    <input id="taxii-conn-name" type="text" placeholder="e.g. FS-ISAC Production"
-           class="g1-s-99573e36">
-
-    <label class="modal-lbl u-mt-06">Server URL</label>
-    <input id="taxii-conn-server-url" type="text" placeholder="https://taxii.example.org"
-           class="g1-s-99573e36">
-
-    <label class="modal-lbl u-mt-06">API Root <span class="tiny muted">(optional — auto-discovered if blank)</span></label>
-    <input id="taxii-conn-api-root" type="text"
-           class="g1-s-99573e36">
-
-    <label class="modal-lbl u-mt-06">Collection ID</label>
-    <input id="taxii-conn-collection-id" type="text"
-           class="g1-s-99573e36">
-
-    <label class="modal-lbl u-mt-06">Auth Type</label>
-    <select id="taxii-conn-auth-type" data-on-change="taxiiToggleAuthFields"
-            class="g1-s-c0ae76a6">
-      <option value="none">None</option>
-      <option value="basic">Basic (username/password)</option>
-    </select>
-
-    <div id="taxii-conn-basic-fields" class="is-hidden">
-      <label class="modal-lbl u-mt-06">Username</label>
-      <input id="taxii-conn-username" type="text"
-             class="g1-s-99573e36">
-      <label class="modal-lbl u-mt-06">Password</label>
-      <input id="taxii-conn-password" type="password" placeholder="Leave blank to keep current"
-             class="g1-s-99573e36">
+    <p class="sub2">Poll a TAXII 2.1 server (FS-ISAC, HC-ISAC, Auto-ISAC or any other) for threat intelligence.</p>
+    <div class="int-form">
+      <div class="int-row2">
+        <label class="int-f"><span class="modal-lbl">Name</span>
+          <input id="taxii-conn-name" type="text" placeholder="e.g. FS-ISAC Production" class="inp-sm u-w100" autocomplete="off"></label>
+        <label class="int-f"><span class="modal-lbl">Server URL</span>
+          <input id="taxii-conn-server-url" type="text" placeholder="https://taxii.example.org" class="inp-sm u-w100" autocomplete="off"></label>
+      </div>
+      <div class="int-row2">
+        <label class="int-f"><span class="modal-lbl">API root <i>(optional, found automatically if blank)</i></span>
+          <input id="taxii-conn-api-root" type="text" class="inp-sm u-w100" autocomplete="off"></label>
+        <label class="int-f"><span class="modal-lbl">Collection ID</span>
+          <input id="taxii-conn-collection-id" type="text" class="inp-sm u-w100" autocomplete="off"></label>
+      </div>
+      <label class="int-f"><span class="modal-lbl">Authentication</span>
+        <select id="taxii-conn-auth-type" data-on-change="taxiiToggleAuthFields" class="inp-sm u-w100">
+          <option value="none">None</option>
+          <option value="basic">Basic (username / password)</option>
+        </select></label>
+      <div id="taxii-conn-basic-fields" class="int-row2 is-hidden">
+        <label class="int-f"><span class="modal-lbl">Username</span>
+          <input id="taxii-conn-username" type="text" class="inp-sm u-w100" autocomplete="off"></label>
+        <label class="int-f"><span class="modal-lbl">Password</span>
+          <input id="taxii-conn-password" type="password" placeholder="Leave blank to keep current" class="inp-sm u-w100" autocomplete="new-password"></label>
+      </div>
+      <div class="int-checks">
+        <label class="int-check" title="Only for an on-prem TAXII server presenting a self-signed certificate. Disabling verification exposes the credentials above to interception."><input type="checkbox" id="taxii-conn-insecure-tls"><span><b>Skip TLS certificate verification</b><small>Only for a self-signed on-prem server. Exposes the credentials to interception.</small></span></label>
+        <label class="int-check"><input type="checkbox" id="taxii-conn-enabled"><span><b>Enabled</b><small>Poll this server on schedule.</small></span></label>
+      </div>
     </div>
-
-    <label class="g1-display-flex g1-s-a0be3073"
-           title="Only enable for an on-prem TAXII server presenting a self-signed certificate. Disabling verification exposes the credentials above to interception.">
-      <input type="checkbox" id="taxii-conn-insecure-tls"> Skip TLS certificate verification
-    </label>
-
-    <label class="g1-display-flex g1-s-a0be3073">
-      <input type="checkbox" id="taxii-conn-enabled"> Enabled
-    </label>
-
-    <div id="taxii-conn-test-result" class="tiny muted g1-s-acd4d170"></div>
-
-    <div class="modal-actions">
-      <button class="btn btn-outline btn-sm" data-on-click="testTAXIIConnectorForm">Test Connection</button>
-      <span class="u-flex1"></span>
-      <button class="btn btn-outline btn-sm" data-on-click="closeTAXIIConnectorModal">Cancel</button>
-      <button class="btn btn-primary btn-sm" id="taxii-conn-save-btn" data-on-click="saveTAXIIConnectorForm">Save</button>
+    <div class="int-foot">
+      <div id="taxii-conn-test-result" class="int-test" role="status"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-outline btn-sm" data-on-click="testTAXIIConnectorForm">Test connection</button>
+        <span class="u-flex1"></span>
+        <button type="button" class="btn btn-outline btn-sm" data-on-click="closeTAXIIConnectorModal">Cancel</button>
+        <button type="button" class="btn btn-primary btn-sm" id="taxii-conn-save-btn" data-on-click="saveTAXIIConnectorForm">Save</button>
+      </div>
     </div>
   </div>
 </div>

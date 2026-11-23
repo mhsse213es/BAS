@@ -1,5 +1,5 @@
 import { state } from '../core/state.js';
-import { apicall } from '../core/api.js';
+import { apicall, apicallOk } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { failureOf } from '../core/load-state.js';
@@ -8,17 +8,21 @@ import { _diffRow, _diffSecretRow, openConfirmDiffModal } from './compliance.js'
 import { _ticketingConfigs, loadTicketingConfigs } from './findings.js';
 import { displayOf, setDisplay } from '../core/inline-style.js';
 import { setEppConnectors, setItsmConnectors } from './integrations-insights.js';
-import { setIntItsm, setIntEpp, loadIntTaxii } from './int-view.js';
+import { setIntItsm, setIntEpp } from './int-view.js';
+import { loadTAXIIConnectors } from './threat-intel.js';
 
 
 // ── Integrations tab ────────────────────────────────────────────────────────
 export function loadIntegrations() {
-  loadIntTaxii();
-  loadTicketingConfigs(function(list, fail) {
-    renderConnectorList(list, fail);
+  loadTAXIIConnectors();
+  loadTicketingConfigs(function(list) {
+    renderConnectorList(list);
+  }, function(msg, fail) {
+    // A failed load is shown as a failure, never as "no connectors configured".
+    renderConnectorList([], fail || { kind: 'error' });
   });
   apicall('/api/ticketing/revalidation').then(function(r) {
-    var cnt = r.pendingRevalidation || 0;
+    var cnt = (r && r.pendingRevalidation) || 0;
     var wrap = document.getElementById('integrations-reval');
     if (!wrap) return;
     if (cnt > 0) {
@@ -38,7 +42,29 @@ function renderConnectorList(list, fail) {
   setIntItsm(list || [], fail);
 }
 
+// ── dialog helpers (the Add / Edit forms are dialogs, like every other form in the console) ──
+function dlgOpen(id, focusId) {
+  var e = document.getElementById(id);
+  if (e) e.classList.add('open');
+  if (focusId) setTimeout(function() { var f = document.getElementById(focusId); if (f && f.offsetParent) f.focus({ preventScroll: true }); }, 60);
+}
+function dlgClose(id) { var e = document.getElementById(id); if (e) e.classList.remove('open'); }
+// A save takes a moment: lock the button so a double click cannot create the connector twice.
+function setSaving(btnId, on) {
+  var b = document.getElementById(btnId);
+  if (!b) return;
+  b.disabled = !!on;
+  b.textContent = on ? 'Saving…' : 'Save';
+}
+function showTest(el, tone, text) {
+  el.className = 'int-test ' + tone;
+  el.textContent = text;
+  setDisplay(el, '');
+}
+function hideTest(el) { el.className = 'int-test'; el.textContent = ''; setDisplay(el, 'none'); }
+
 var TICKET_CONNECTOR_LOADED = null; // the record being edited (null for Add), for the save confirmation diff
+var _saving = false;
 
 export function openAddConnector() {
   TICKET_CONNECTOR_LOADED = null;
@@ -50,10 +76,10 @@ export function openAddConnector() {
   document.getElementById('cf-auto-close').checked = true;
   document.getElementById('cf-enabled').checked = true;
   document.getElementById('connector-form-title').textContent = 'Add Connector';
-  setDisplay(document.getElementById('cf-test-result'), 'none');
+  hideTest(document.getElementById('cf-test-result'));
+  setSaving('cf-save-btn', false);
   renderConnectorSettings();
-  setDisplay(document.getElementById('connector-form-wrap'), '');
-  document.getElementById('connector-form-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  dlgOpen('connector-form-wrap', 'cf-name');
 }
 
 // "+ ServiceNow" / "+ Jira" / "+ Webhook" in the ITSM box: the same Add form with the provider chosen.
@@ -65,7 +91,7 @@ export function openAddConnectorFor(provider) {
 
 export function openEditConnector(id) {
   var c = (_ticketingConfigs || []).find(function(cfg) { return cfg.id === id; });
-  if (!c) return;
+  if (!c) { showToast('Connector not found. Refresh the page and try again.', 'err'); return; }
   TICKET_CONNECTOR_LOADED = c;
   document.getElementById('cf-id').value = c.id;
   document.getElementById('cf-name').value = c.name || '';
@@ -75,14 +101,14 @@ export function openEditConnector(id) {
   document.getElementById('cf-auto-close').checked = !!c.autoClose;
   document.getElementById('cf-enabled').checked = !!c.enabled;
   document.getElementById('connector-form-title').textContent = 'Edit Connector';
-  setDisplay(document.getElementById('cf-test-result'), 'none');
+  hideTest(document.getElementById('cf-test-result'));
+  setSaving('cf-save-btn', false);
   renderConnectorSettings(c.settings || {});
-  setDisplay(document.getElementById('connector-form-wrap'), '');
-  document.getElementById('connector-form-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  dlgOpen('connector-form-wrap', 'cf-name');
 }
 
 export function closeConnectorForm() {
-  setDisplay(document.getElementById('connector-form-wrap'), 'none');
+  dlgClose('connector-form-wrap');
 }
 
 var CONNECTOR_FIELDS = {
@@ -111,40 +137,45 @@ var CONNECTOR_FIELDS = {
   ]
 };
 
+// The server returns a saved secret as "***". The form never shows it (typing would append to it): the box stays empty
+// with a "saved" placeholder, and an empty box on save means "keep the saved one" (sent back as "***").
 export function renderConnectorSettings(saved) {
   var prov = document.getElementById('cf-provider').value;
   var fields = CONNECTOR_FIELDS[prov] || [];
-  var s = saved || {};
+  // A change event hands this function the select element: only a plain settings object counts as saved values.
+  // Switching the provider back to the saved connector's own provider restores its saved values (and its kept secrets).
+  var s = saved && !saved.nodeType ? saved : (TICKET_CONNECTOR_LOADED && TICKET_CONNECTOR_LOADED.provider === prov ? (TICKET_CONNECTOR_LOADED.settings || {}) : {});
   document.getElementById('cf-settings').innerHTML = fields.map(function(f) {
     if (f.type === 'checkbox') {
-      return '<div class="g1-s-dd11a3a0">' +
-        '<label class="g1-display-flex g1-s-b0ace2ed">' +
-          '<input type="checkbox" id="cfs-' + f.key + '"' + (s[f.key] === 'yes' ? ' checked' : '') + '>' +
-          '<span class="conn-cfg-label g1-s-ab79ea2b">' + f.label + '</span>' +
-        '</label>' +
-        (f.hint ? '<div class="g1-s-239398d5">' + f.hint + '</div>' : '') +
-        '</div>';
+      return '<div class="int-checks"><label class="int-check">' +
+        '<input type="checkbox" id="cfs-' + f.key + '"' + (s[f.key] === 'yes' ? ' checked' : '') + '>' +
+        '<span><b>' + x(f.label) + '</b>' + (f.hint ? '<small>' + x(f.hint) + '</small>' : '') + '</span></label></div>';
     }
     if (f.type === 'project_picker') {
-      return '<div class="g1-s-dd11a3a0">' +
-        '<div class="conn-cfg-label g1-s-e02b1221">' + f.label + '</div>' +
-        '<div class="g1-display-flex g1-s-35646f83">' +
-          '<select id="cfs-' + f.key + '-sel" class="inp-sm is-hidden g1-s-83725d2c"' + on('change', 'connectorProjectSelectChange', f.key) + '></select>' +
-          '<input type="text" id="cfs-' + f.key + '" placeholder="' + f.placeholder + '" value="' + x(s[f.key] || '') + '" class="inp-sm u-flex1">' +
-          '<button type="button" class="btn btn-outline btn-sm g1-s-975e501c"' + on('click', 'fetchConnectorProjects') + '>↓ Fetch</button>' +
+      return '<div class="int-f"><span class="modal-lbl">' + x(f.label) + '</span>' +
+        '<div class="int-pick">' +
+          '<select id="cfs-' + f.key + '-sel" class="inp-sm is-hidden"' + on('change', 'connectorProjectSelectChange', f.key) + '></select>' +
+          '<input type="text" id="cfs-' + f.key + '" placeholder="' + x(f.placeholder) + '" value="' + x(s[f.key] || '') + '" class="inp-sm u-flex1" autocomplete="off">' +
+          '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'fetchConnectorProjects') + '>↓ Fetch</button>' +
         '</div>' +
-        '<div id="cfs-' + f.key + '-hint" class="g1-s-68ab4b84"></div>' +
+        '<div id="cfs-' + f.key + '-hint" class="int-hint"></div>' +
         '</div>';
     }
-    return '<div class="g1-s-dd11a3a0">' +
-      '<div class="conn-cfg-label g1-s-e02b1221">' + f.label + '</div>' +
-      '<input type="' + f.type + '" id="cfs-' + f.key + '" placeholder="' + f.placeholder + '" value="' + x(s[f.key] || '') + '" class="inp-sm u-w100">' +
-      '</div>';
+    var kept = f.type === 'password' && s[f.key] === '***';
+    var val = f.type === 'password' ? '' : (s[f.key] || '');
+    return '<label class="int-f"><span class="modal-lbl">' + x(f.label) + '</span>' +
+      '<input type="' + f.type + '" id="cfs-' + f.key + '" placeholder="' + x(kept ? 'Saved. Leave blank to keep it.' : f.placeholder) + '" value="' + x(val) + '" class="inp-sm u-w100"' +
+      (kept ? ' data-keep="1"' : '') + (f.type === 'password' ? ' autocomplete="new-password"' : ' autocomplete="off"') + '></label>';
   }).join('');
 }
 
 export function connectorProjectSelectChange(key, el) {
   document.getElementById('cfs-' + key).value = el.value;
+}
+
+function projectHint(text, tone) {
+  var hint = document.getElementById('cfs-project_key-hint');
+  if (hint) { hint.className = 'int-hint ' + (tone || ''); hint.textContent = text; }
 }
 
 export function fetchConnectorProjects() {
@@ -156,31 +187,24 @@ export function fetchConnectorProjects() {
     var v = _connectorFieldValue(f);
     if (v && v !== '***') settings[f.key] = v;
   });
-  var hint = document.getElementById('cfs-project_key-hint');
-  if (hint) { hint.textContent = 'Fetching projects…'; hint.style.color = 'var(--muted)'; }
+  projectHint('Fetching projects…', '');
   apicall('/api/ticketing/probe/projects', { method: 'POST', body: JSON.stringify({ provider: prov, settings: settings }) })
     .then(function(r) {
-      if (!r.ok) {
-        if (hint) { hint.textContent = r.error || 'Failed'; hint.style.color = 'var(--danger)'; }
-        return;
-      }
+      if (!r || !r.ok) { projectHint((r && r.error) || 'Could not fetch projects', 'bad'); return; }
       var projects = r.projects || [];
       var sel = document.getElementById('cfs-project_key-sel');
       var inp = document.getElementById('cfs-project_key');
       if (!sel || !inp) return;
-      if (!projects.length) {
-        if (hint) { hint.textContent = 'No projects found'; hint.style.color = 'var(--warning)'; }
-        return;
-      }
+      if (!projects.length) { projectHint('No projects found', 'warn'); return; }
       sel.innerHTML = projects.map(function(p) {
         return '<option value="' + x(p.key) + '"' + (inp.value === p.key ? ' selected' : '') + '>' + x(p.key) + ' — ' + x(p.name) + '</option>';
       }).join('');
       setDisplay(sel, 'block');
       setDisplay(inp, 'none');
-      if (!inp.value && projects.length) { sel.value = projects[0].key; }
-      if (hint) { hint.textContent = projects.length + ' project(s) found'; hint.style.color = 'var(--success)'; }
+      if (!inp.value && projects.length) { sel.value = projects[0].key; inp.value = projects[0].key; }
+      projectHint(projects.length + ' project(s) found', 'ok');
     })
-    .catch(function(e) { if (hint) { hint.textContent = e.message; hint.style.color = 'var(--danger)'; } });
+    .catch(function(e) { projectHint(e.message, 'bad'); });
 }
 
 function _connectorFieldValue(f) {
@@ -192,20 +216,26 @@ function _connectorFieldValue(f) {
   }
   var el = document.getElementById('cfs-' + f.key);
   if (!el) return '';
-  return f.type === 'checkbox' ? (el.checked ? 'yes' : '') : (el.value || '');
+  if (f.type === 'checkbox') return el.checked ? 'yes' : '';
+  // An empty secret box on an edit means "keep the saved one".
+  if (f.type === 'password' && !el.value && el.getAttribute('data-keep')) return '***';
+  return el.value || '';
 }
 
 export function saveConnectorForm() {
+  if (_saving) return;
   var id = document.getElementById('cf-id').value;
   var prov = document.getElementById('cf-provider').value;
   var fields = CONNECTOR_FIELDS[prov] || [];
+  var nameEl = document.getElementById('cf-name');
+  if (!nameEl.value.trim()) { showToast('Give the connector a name', 'err'); nameEl.focus(); return; }
   var settings = {};
   fields.forEach(function(f) {
     var v = _connectorFieldValue(f);
     if (v) settings[f.key] = v;
   });
   var body = {
-    name:       document.getElementById('cf-name').value,
+    name:       nameEl.value.trim(),
     provider:   prov,
     enabled:    document.getElementById('cf-enabled').checked,
     autoCreate: document.getElementById('cf-auto-create').value,
@@ -259,13 +289,18 @@ export function saveConnectorForm() {
   });
 }
 
+// apicall hands a refused save back as a plain { error } body: apicallOk raises it, so a refused save keeps the form
+// open with the user's edits instead of announcing "saved".
 function doSaveConnectorForm(url, method, body) {
-  apicall(url, { method: method, body: JSON.stringify(body) })
+  _saving = true;
+  setSaving('cf-save-btn', true);
+  apicallOk(url, { method: method, body: JSON.stringify(body) })
     .then(function() {
       showToast('Connector saved', 'ok');
       closeConnectorForm();
       loadIntegrations();
-    }).catch(function(e) { showToast(e.message, 'err'); });
+    }).catch(function(e) { showToast('Save failed: ' + e.message, 'err'); })
+    .finally(function() { _saving = false; setSaving('cf-save-btn', false); });
 }
 
 export function testConnectorById(id, btn) {
@@ -273,7 +308,8 @@ export function testConnectorById(id, btn) {
   if (btn) { btn.disabled = true; btn.textContent = 'Testing…'; }
   apicall('/api/ticketing/configs/' + encodeURIComponent(id) + '/test', { method: 'POST' })
     .then(function(r) {
-      showToast(r.ok ? 'Connection OK' : 'Failed: ' + (r.error || 'unknown'), r.ok ? 'ok' : 'err');
+      var ok = !!(r && r.ok);
+      showToast(ok ? 'Connection OK' : 'Failed: ' + ((r && r.error) || 'unknown'), ok ? 'ok' : 'err');
       loadIntegrations(); // refresh status badge to reflect test result
     }).catch(function(e) {
       showToast(e.message, 'err');
@@ -291,20 +327,28 @@ export function testConnectorForm() {
     if (v) settings[f.key] = v;
   });
   var res = document.getElementById('cf-test-result');
-  setDisplay(res, ''); res.style.color = 'var(--muted)'; res.textContent = 'Testing…';
+  showTest(res, '', 'Testing…');
   apicall('/api/ticketing/probe', { method: 'POST', body: JSON.stringify({ provider: prov, settings: settings }) })
     .then(function(r) {
-      res.style.color = r.ok ? 'var(--success)' : 'var(--danger)';
-      var msg = r.ok ? 'Connection successful.' : 'Failed: ' + (r.error || 'check credentials');
-      res.textContent = msg.length > 220 ? msg.slice(0, 220) + '…' : msg;
-    }).catch(function(e) { res.style.color = 'var(--danger)'; res.textContent = e.message; });
+      var ok = !!(r && r.ok);
+      var msg = ok ? 'Connection successful.' : 'Failed: ' + ((r && r.error) || 'check credentials');
+      showTest(res, ok ? 'ok' : 'bad', msg.length > 220 ? msg.slice(0, 220) + '…' : msg);
+    }).catch(function(e) { showTest(res, 'bad', e.message); });
+}
+
+// Deleting is irreversible: an in-page confirmation (not the browser's), then the result is trusted only if the server accepted it.
+function confirmDelete(title, name, note, run) {
+  openConfirmDiffModal(title,
+    '<p class="int-sure">Delete <b>' + x(name) + '</b>? ' + x(note) + '</p>',
+    run, { sub: 'This cannot be undone.', confirmLabel: 'Delete connector', danger: true });
 }
 
 export function deleteConnector(id, name) {
-  if (!confirm('Delete connector "' + name + '"? This cannot be undone.')) return;
-  apicall('/api/ticketing/configs/' + encodeURIComponent(id), { method: 'DELETE' })
-    .then(function() { showToast('Connector deleted', 'ok'); loadIntegrations(); })
-    .catch(function(e) { showToast(e.message, 'err'); });
+  confirmDelete('Delete connector', name, 'It will stop creating and updating tickets.', function() {
+    apicallOk('/api/ticketing/configs/' + encodeURIComponent(id), { method: 'DELETE' })
+      .then(function() { showToast('Connector deleted', 'ok'); loadIntegrations(); })
+      .catch(function(e) { showToast('Delete failed: ' + e.message, 'err'); });
+  });
 }
 
 // ── EPP Response Connectors ─────────────────────────────────────────────────
@@ -314,6 +358,7 @@ export function deleteConnector(id, name) {
 // renderConnectorSettings — that machinery is ticketing-specific (auto-create
 // policy, project pickers) and would be a worse fit than a small dedicated form.
 var _responseConnectors = null;
+var _rcSaving = false;
 
 export function loadResponseConnectors(cb) {
   apicall('/api/actions/configs').then(function(list) {
@@ -339,6 +384,15 @@ export function renderResponseConnectorFields() {
   setDisplay(document.getElementById('rc-oauth-fields'), (prov === 'sentinelone') ? 'none' : '');
 }
 
+// The two secret boxes follow the same rule as the ITSM form: never prefilled, an empty box on an edit keeps the saved one.
+function setRcSecrets(saved) {
+  ['rc-client-secret', 'rc-s1-api-token'].forEach(function(id) {
+    var el = document.getElementById(id);
+    el.value = '';
+    el.placeholder = saved ? 'Saved. Leave blank to keep it.' : '••••••';
+  });
+}
+
 export function openAddResponseConnector() {
   document.getElementById('rc-id').value = '';
   document.getElementById('rc-name').value = '';
@@ -347,14 +401,13 @@ export function openAddResponseConnector() {
   document.getElementById('rc-tenant-id').value = '';
   document.getElementById('rc-kill-script').value = '';
   document.getElementById('rc-client-id').value = '';
-  document.getElementById('rc-client-secret').value = '';
   document.getElementById('rc-s1-base-url').value = '';
-  document.getElementById('rc-s1-api-token').value = '';
+  setRcSecrets(false);
   document.getElementById('rc-enabled').checked = true;
   document.getElementById('response-connector-form-title').textContent = 'Add Connector';
+  setSaving('rc-save-btn', false);
   renderResponseConnectorFields();
-  setDisplay(document.getElementById('response-connector-form-wrap'), '');
-  document.getElementById('response-connector-form-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  dlgOpen('response-connector-form-wrap', 'rc-name');
 }
 
 // "+ CrowdStrike" / "+ Defender" / "+ SentinelOne" in the EPP box.
@@ -364,14 +417,17 @@ export function openAddResponseConnectorFor(provider) {
   if (sel) { sel.value = provider; renderResponseConnectorFields(); }
 }
 
-// "Sync Now" on the EPP box: re-read the connector list from the server.
+// "Refresh" on the EPP box: re-read the connector list from the server.
 export function refreshResponseConnectors() {
-  loadResponseConnectors(function(list) { renderResponseConnectorList(list); showToast('Connector state refreshed', 'ok'); });
+  loadResponseConnectors(function(list, fail) {
+    renderResponseConnectorList(list, fail);
+    if (fail) showToast('Could not refresh the connector list', 'err'); else showToast('Connector list refreshed', 'ok');
+  });
 }
 
 export function openEditResponseConnector(id) {
   var c = (_responseConnectors || []).find(function(cfg) { return cfg.id === id; });
-  if (!c) return;
+  if (!c) { showToast('Connector not found. Refresh the page and try again.', 'err'); return; }
   document.getElementById('rc-id').value = c.id;
   document.getElementById('rc-name').value = c.name || '';
   document.getElementById('rc-provider').value = c.provider || 'crowdstrike';
@@ -379,46 +435,53 @@ export function openEditResponseConnector(id) {
   document.getElementById('rc-tenant-id').value = c.tenantId || '';
   document.getElementById('rc-kill-script').value = c.killProcessScriptName || '';
   document.getElementById('rc-client-id').value = c.clientId || '';
-  document.getElementById('rc-client-secret').value = '***';
   document.getElementById('rc-s1-base-url').value = c.baseUrl || '';
-  document.getElementById('rc-s1-api-token').value = '***';
+  setRcSecrets(true);
   document.getElementById('rc-enabled').checked = !!c.enabled;
   document.getElementById('response-connector-form-title').textContent = 'Edit Connector';
+  setSaving('rc-save-btn', false);
   renderResponseConnectorFields();
-  setDisplay(document.getElementById('response-connector-form-wrap'), '');
-  document.getElementById('response-connector-form-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  dlgOpen('response-connector-form-wrap', 'rc-name');
 }
 
 export function closeResponseConnectorForm() {
-  setDisplay(document.getElementById('response-connector-form-wrap'), 'none');
+  dlgClose('response-connector-form-wrap');
 }
 
 export function saveResponseConnectorForm() {
+  if (_rcSaving) return;
   var id = document.getElementById('rc-id').value;
   var provider = document.getElementById('rc-provider').value;
   var baseUrl = (provider === 'sentinelone')
     ? document.getElementById('rc-s1-base-url').value
     : document.getElementById('rc-base-url').value;
+  var secret = document.getElementById('rc-client-secret').value;
+  var token = document.getElementById('rc-s1-api-token').value;
+  // On an edit, an empty secret box keeps the saved secret ("***" is the server's keep-it marker).
+  if (id) { if (!secret) secret = '***'; if (!token) token = '***'; }
   var body = {
-    name:                  document.getElementById('rc-name').value,
+    name:                  document.getElementById('rc-name').value.trim(),
     provider:              provider,
     enabled:               document.getElementById('rc-enabled').checked,
     baseUrl:               baseUrl,
     tenantId:              document.getElementById('rc-tenant-id').value,
     killProcessScriptName: document.getElementById('rc-kill-script').value,
     clientId:              document.getElementById('rc-client-id').value,
-    clientSecret:          document.getElementById('rc-client-secret').value,
-    apiToken:              document.getElementById('rc-s1-api-token').value
+    clientSecret:          secret,
+    apiToken:              token
   };
   if (!body.name || !body.provider) { showToast('Name and provider are required', 'err'); return; }
   var url = id ? '/api/actions/configs/' + encodeURIComponent(id) : '/api/actions/configs';
   var method = id ? 'PUT' : 'POST';
-  apicall(url, { method: method, body: JSON.stringify(body) })
+  _rcSaving = true;
+  setSaving('rc-save-btn', true);
+  apicallOk(url, { method: method, body: JSON.stringify(body) })
     .then(function() {
       showToast('Connector saved', 'ok');
       closeResponseConnectorForm();
       loadResponseConnectors(renderResponseConnectorList);
-    }).catch(function(e) { showToast(e.message, 'err'); });
+    }).catch(function(e) { showToast('Save failed: ' + e.message, 'err'); })
+    .finally(function() { _rcSaving = false; setSaving('rc-save-btn', false); });
 }
 
 export function testResponseConnectorById(id, btn) {
@@ -426,16 +489,18 @@ export function testResponseConnectorById(id, btn) {
   if (btn) { btn.disabled = true; btn.textContent = 'Testing…'; }
   apicall('/api/actions/configs/' + encodeURIComponent(id) + '/test', { method: 'POST' })
     .then(function(r) {
-      showToast(r.ok ? 'Connection OK' : 'Failed: ' + (r.error || 'unknown'), r.ok ? 'ok' : 'err');
+      var ok = !!(r && r.ok);
+      showToast(ok ? 'Connection OK' : 'Failed: ' + ((r && r.error) || 'unknown'), ok ? 'ok' : 'err');
     }).catch(function(e) { showToast(e.message, 'err'); })
     .finally(function() { if (btn) { btn.disabled = false; btn.textContent = orig; } });
 }
 
 export function deleteResponseConnector(id, name) {
-  if (!confirm('Delete connector "' + name + '"? This cannot be undone.')) return;
-  apicall('/api/actions/configs/' + encodeURIComponent(id), { method: 'DELETE' })
-    .then(function() { showToast('Connector deleted', 'ok'); loadResponseConnectors(renderResponseConnectorList); })
-    .catch(function(e) { showToast(e.message, 'err'); });
+  confirmDelete('Delete response connector', name, 'Findings can no longer run response actions through it.', function() {
+    apicallOk('/api/actions/configs/' + encodeURIComponent(id), { method: 'DELETE' })
+      .then(function() { showToast('Connector deleted', 'ok'); loadResponseConnectors(renderResponseConnectorList); })
+      .catch(function(e) { showToast('Delete failed: ' + e.message, 'err'); });
+  });
 }
 
 // ── Respond (EPP response actions from the Findings drawer) ────────────────

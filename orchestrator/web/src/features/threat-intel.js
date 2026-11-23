@@ -1,4 +1,6 @@
-import { apicall } from '../core/api.js';
+import { apicall, apicallOk } from '../core/api.js';
+import { failureOf } from '../core/load-state.js';
+import { setIntTaxii } from './int-view.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { ago, showToast } from '../core/util.js';
@@ -134,10 +136,20 @@ export function loadTAXIIConnectors() {
   if (!tbody) return;
   tbody.innerHTML = '<tr><td colspan="6" class="empty">Loading…</td></tr>';
   apicall('/api/taxii/connectors').then(function(rows) {
-    TAXII_CONNECTORS = rows || [];
+    // A refused request arrives as an { error } body: it is a failed load, never an empty list.
+    var fail = failureOf(rows) || (Array.isArray(rows) ? null : { kind: 'error' });
+    if (fail) {
+      TAXII_CONNECTORS = [];
+      tbody.innerHTML = '<tr><td colspan="6" class="empty">' + (fail.kind === 'forbidden' ? 'You do not have permission to view TAXII connectors.' : 'Could not load TAXII connectors: ' + x((rows && rows.error) || 'unexpected response')) + '</td></tr>';
+      setIntTaxii([], fail);
+      return;
+    }
+    TAXII_CONNECTORS = rows;
     renderTAXIIConnectorsList();
+    setIntTaxii(rows);
   }).catch(function(e) {
     tbody.innerHTML = '<tr><td colspan="6" class="empty">Failed to load: ' + x(e.message || 'unknown error') + '</td></tr>';
+    setIntTaxii([], { kind: 'error' });
   });
 }
 
@@ -163,7 +175,7 @@ function renderTAXIIConnectorsList() {
       '<td>' +
         '<button class="btn btn-outline btn-sm"' + on('click', 'openTAXIIConnectorModal', c.id) + '>Edit</button> ' +
         '<button class="btn btn-outline btn-sm"' + on('click', 'syncTAXIIConnectorNow', c.id) + '>Sync Now</button> ' +
-        '<button class="btn btn-outline btn-sm"' + on('click', 'deleteTAXIIConnector', c.id) + '>Delete</button>' +
+        '<button class="btn btn-outline btn-sm"' + on('click', 'deleteTAXIIConnector', c.id, c.name) + '>Delete</button>' +
       '</td>' +
     '</tr>';
   }).join('');
@@ -176,7 +188,8 @@ export function taxiiToggleAuthFields() {
 
 export function openTAXIIConnectorModal(id) {
   TAXII_EDITING_ID = id;
-  document.getElementById('taxii-conn-test-result').textContent = '';
+  taxiiResult('', '');
+  taxiiSaving(false);
   if (!id) {
     document.getElementById('taxii-connector-modal-title').textContent = 'Add TAXII Connector';
     document.getElementById('taxii-conn-save-btn').textContent = 'Save';
@@ -191,6 +204,7 @@ export function openTAXIIConnectorModal(id) {
     document.getElementById('taxii-conn-enabled').checked = false;
     taxiiToggleAuthFields();
     document.getElementById('taxii-connector-overlay').classList.add('open');
+    setTimeout(function() { var n = document.getElementById('taxii-conn-name'); if (n && n.offsetParent) n.focus({ preventScroll: true }); }, 60);
     return;
   }
   var c = TAXII_CONNECTORS.find(function(row) { return row.id === id; });
@@ -229,19 +243,28 @@ function taxiiFormPayload() {
   };
 }
 
+// The test line under the form: tone is '', 'ok' or 'bad' (classes, not inline colours).
+function taxiiResult(tone, text) {
+  var el = document.getElementById('taxii-conn-test-result');
+  if (!el) return;
+  el.className = 'int-test' + (tone ? ' ' + tone : '') + (text ? '' : ' is-empty');
+  el.textContent = text;
+}
+function taxiiSaving(on) {
+  var b = document.getElementById('taxii-conn-save-btn');
+  if (!b) return;
+  b.disabled = !!on;
+  b.textContent = on ? 'Saving…' : (TAXII_EDITING_ID ? 'Save Changes' : 'Save');
+}
+
 export function testTAXIIConnectorForm() {
-  var resultEl = document.getElementById('taxii-conn-test-result');
-  resultEl.textContent = 'Testing…';
-  resultEl.style.color = 'var(--muted)';
+  taxiiResult('', 'Testing…');
   apicall('/api/taxii/connectors/test', { method: 'POST', body: JSON.stringify(taxiiFormPayload()) })
     .then(function(res) {
-      resultEl.textContent = res.ok ? ('OK — ' + res.collectionCount + ' collection(s) visible') : ('Failed: ' + res.error);
-      resultEl.style.color = res.ok ? 'var(--success)' : 'var(--danger)';
+      var ok = !!(res && res.ok);
+      taxiiResult(ok ? 'ok' : 'bad', ok ? ('OK — ' + res.collectionCount + ' collection(s) visible') : ('Failed: ' + ((res && res.error) || 'unknown')));
     })
-    .catch(function(e) {
-      resultEl.textContent = 'Failed: ' + (e.message || 'error');
-      resultEl.style.color = 'var(--danger)';
-    });
+    .catch(function(e) { taxiiResult('bad', 'Failed: ' + (e.message || 'error')); });
 }
 
 export function saveTAXIIConnectorForm() {
@@ -249,20 +272,29 @@ export function saveTAXIIConnectorForm() {
   if (!payload.name || !payload.serverUrl) { showToast('Name and Server URL are required', 'err'); return; }
   var isEdit = !!TAXII_EDITING_ID;
   var url = isEdit ? '/api/taxii/connectors/' + encodeURIComponent(TAXII_EDITING_ID) : '/api/taxii/connectors';
-  apicall(url, { method: isEdit ? 'PUT' : 'POST', body: JSON.stringify(payload) })
+  if (_taxiiSaving) return;
+  _taxiiSaving = true;
+  taxiiSaving(true);
+  // apicallOk: a refused save keeps the dialog open with the edits instead of announcing "saved".
+  apicallOk(url, { method: isEdit ? 'PUT' : 'POST', body: JSON.stringify(payload) })
     .then(function() {
       showToast('TAXII connector saved', 'ok');
       closeTAXIIConnectorModal();
       loadTAXIIConnectors();
     })
-    .catch(function(e) { showToast('Save failed: ' + (e.message || 'error'), 'err'); });
+    .catch(function(e) { showToast('Save failed: ' + (e.message || 'error'), 'err'); })
+    .finally(function() { _taxiiSaving = false; taxiiSaving(false); });
 }
+var _taxiiSaving = false;
 
-export function deleteTAXIIConnector(id) {
-  if (!confirm('Delete this TAXII connector? This stops its polling immediately and cannot be undone.')) return;
-  apicall('/api/taxii/connectors/' + encodeURIComponent(id), { method: 'DELETE' })
-    .then(function() { showToast('Connector deleted', 'ok'); loadTAXIIConnectors(); })
-    .catch(function(e) { showToast('Delete failed: ' + (e.message || 'error'), 'err'); });
+export function deleteTAXIIConnector(id, name) {
+  openConfirmDiffModal('Delete TAXII connector',
+    '<p class="int-sure">Delete <b>' + x(name || 'this connector') + '</b>? Its polling stops immediately.</p>',
+    function() {
+      apicallOk('/api/taxii/connectors/' + encodeURIComponent(id), { method: 'DELETE' })
+        .then(function() { showToast('Connector deleted', 'ok'); loadTAXIIConnectors(); })
+        .catch(function(e) { showToast('Delete failed: ' + (e.message || 'error'), 'err'); });
+    }, { sub: 'This cannot be undone.', confirmLabel: 'Delete connector', danger: true });
 }
 
 export function syncTAXIIConnectorNow(id) {

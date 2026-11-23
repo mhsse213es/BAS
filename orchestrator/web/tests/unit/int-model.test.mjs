@@ -72,3 +72,10 @@ test('TAXII rows: status, last poll, never throws', () => {
   assert.equal(r[0].last, '1 h ago'); assert.equal(r[1].last, 'Never');
   assert.deepEqual(M.taxiiRows(null), []);
 });
+
+test('TAXII rows carry the id the row actions need, and the poll error only when the poll failed', () => {
+  const r = M.taxiiRows([{ id: 't1', name: 'a', enabled: true, lastPollStatus: 'error', lastError: 'i/o timeout' }, { id: 't2', name: 'b', enabled: true, lastPollStatus: 'ok', lastError: 'stale' }, { name: 'c' }]);
+  assert.equal(r[0].id, 't1'); assert.equal(r[0].error, 'i/o timeout');
+  assert.equal(r[1].id, 't2'); assert.equal(r[1].error, '');
+  assert.equal(r[2].id, undefined); assert.equal(r[2].error, '');
+});

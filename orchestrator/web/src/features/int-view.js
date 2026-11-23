@@ -5,7 +5,6 @@
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { failureHtml } from '../core/load-state.js';
-import { apicall } from '../core/api.js';
 import { icon, empty, pill, filterBar, searchBox } from '../core/kit.js';
 import { setHeroStat } from './shell-ui.js';
 import * as M from './int-model.js';
@@ -30,7 +29,7 @@ function cardHtml(r) {
   var ko = r.kind === 'itsm' ? 'openEditConnector' : 'openEditResponseConnector';
   var test = r.kind === 'itsm' ? 'testConnectorById' : 'testResponseConnectorById';
   var del = r.kind === 'itsm' ? 'deleteConnector' : 'deleteResponseConnector';
-  return '<div class="rk-card hov int-card"' + on('click', 'intCardOpen', r.kind, r.id) + '>' +
+  return '<div class="rk-card hov int-card' + (r.status.tone === 'muted' ? ' int-off' : '') + '"' + on('click', 'intCardOpen', r.kind, r.id) + '>' +
     '<div class="int-top"><span class="int-logo">' + icon(r.kind === 'itsm' ? 'plug' : 'shield') + '</span><span title="' + x(r.status.title) + '">' + pill(r.status.label, r.status.tone) + '</span></div>' +
     '<h2 class="int-name">' + x(r.name) + '</h2>' +
     '<div class="int-meta muted">' + x(M.cardMeta(r)) + '</div>' +
@@ -100,22 +99,31 @@ export function intCardOpen(kind, id, el, event) {
   if (btn) btn.click();
 }
 
-// ---- TAXII (read-only; add / edit / delete stay in Settings -> TAXII Connectors) ----
+// ---- TAXII: the same connectors as Settings -> TAXII Connectors. threat-intel.js loads them and hands them here; the
+// row actions are its own (edit dialog, sync, delete), so either page changes the one list. ----
 function taxiiBody() {
-  if (TAXII === null) return '<tr><td colspan="4" class="empty">Loading…</td></tr>';
-  if (TAXII === 'err') return '<tr><td colspan="4" class="empty">Could not load TAXII connectors.</td></tr>';
+  if (TAXII === null) return '<tr><td colspan="5" class="empty">Loading…</td></tr>';
+  if (TAXII && TAXII.fail) {
+    return '<tr><td colspan="5" class="empty int-taxii-fail" role="alert">' +
+      (TAXII.fail.kind === 'forbidden' ? 'You do not have permission to view TAXII connectors.' : 'Could not load TAXII connectors. This is a failed request, not an empty list.') +
+      ' <button type="button" class="btn btn-outline btn-sm"' + on('click', 'loadTAXIIConnectors') + '>Retry</button></td></tr>';
+  }
   var r = M.taxiiRows(TAXII);
-  if (!r.length) return '<tr><td colspan="4" class="empty">No TAXII connectors configured yet.</td></tr>';
+  if (!r.length) return '<tr><td colspan="5" class="empty">No TAXII connectors configured yet.</td></tr>';
   return r.map(function(t) {
-    return '<tr><td>' + x(t.name) + '</td><td class="mono muted">' + x(t.url) + '</td><td>' + pill(t.status.label, t.status.tone) + '</td><td class="muted">' + x(t.last) + '</td></tr>';
+    return '<tr><td><b>' + x(t.name) + '</b></td><td class="mono muted int-t-url">' + x(t.url) + '</td>' +
+      '<td><span title="' + x(t.error) + '">' + pill(t.status.label, t.status.tone) + '</span></td><td class="muted">' + x(t.last) + '</td>' +
+      '<td class="int-t-acts"><button type="button" class="btn btn-ghost btn-sm"' + on('click', 'syncTAXIIConnectorNow', t.id) + '>Sync now</button>' +
+      '<button type="button" class="btn btn-ghost btn-sm"' + on('click', 'openTAXIIConnectorModal', t.id) + '>Edit</button>' +
+      '<button type="button" class="btn btn-ghost btn-sm int-del"' + on('click', 'deleteTAXIIConnector', t.id, t.name) + '>Delete</button></td></tr>';
   }).join('');
 }
 export function paintTaxii() {
   var b = document.getElementById('int-taxii-body');
   if (b) b.innerHTML = taxiiBody();
 }
-export function loadIntTaxii() {
+// list: the server's array; fail: { kind, status } when the load was refused.
+export function setIntTaxii(list, fail) {
+  TAXII = fail ? { fail: fail } : (Array.isArray(list) ? list : []);
   paintTaxii();
-  apicall('/api/taxii/connectors').then(function(list) { TAXII = Array.isArray(list) ? list : []; paintTaxii(); })
-    .catch(function() { TAXII = 'err'; paintTaxii(); });
 }

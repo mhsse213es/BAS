@@ -1,0 +1,10 @@
+import { boot } from './intlib.mjs';
+const b = await boot(); const { page, state } = b; await b.go();
+await page.locator('.int-card', { hasText: 'Jira SEC board' }).locator('button', { hasText: 'Configure' }).click(); await page.waitForTimeout(400);
+await page.selectOption('#cf-provider', 'webhook'); await page.waitForTimeout(200);
+console.log('to webhook -> fields', await page.locator('#cf-settings input').count(), '| token keep', await page.locator('#cfs-api_token').count());
+await page.selectOption('#cf-provider', 'jira'); await page.waitForTimeout(200);
+console.log('back to jira -> base url', await page.inputValue('#cfs-base_url'), '| token keep', await page.locator('#cfs-api_token').getAttribute('data-keep'), '| project', await page.inputValue('#cfs-project_key'));
+await page.fill('#cf-name', 'Jira renamed'); await page.locator('#cf-save-btn').click(); await page.waitForTimeout(400); await page.locator('#confirm-diff-submit-btn').click(); await page.waitForTimeout(700);
+console.log('save ->', state.calls.filter((c) => c.startsWith('PUT /api/ticketing')).at(-1).match(/"api_token":"[^"]*"/)?.[0], '| toast', await b.toast());
+console.log('errors', JSON.stringify(b.errs)); await b.close();

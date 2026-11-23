@@ -644,13 +644,21 @@ function loadTicketCandidates() {
 
 // onErr (optional): called with the message when the connector list could not be read, so a caller can say so
 // instead of claiming no connector is configured.
+// onErr(message, failure): failure is { kind: 'forbidden' | 'error', status } when the server refused, so a page can tell a 403 from a 500.
 export function loadTicketingConfigs(cb, onErr) {
-  apicallOk('/api/ticketing/configs').then(function(list) {
-    _ticketingConfigs = Array.isArray(list) ? list : [];
+  apicall('/api/ticketing/configs').then(function(list) {
+    var fail = failureOf(list);
+    if (fail || !Array.isArray(list)) {
+      _ticketingConfigs = [];
+      var msg = (list && list.error) || 'unexpected response';
+      if (onErr) onErr(msg, fail || { kind: 'error' }); else if (cb) cb([]);
+      return;
+    }
+    _ticketingConfigs = list;
     if (cb) cb(_ticketingConfigs);
   }).catch(function(e) {
     _ticketingConfigs = [];
-    if (onErr) onErr(e.message || 'error'); else if (cb) cb([]);
+    if (onErr) onErr(e.message || 'error', { kind: 'error' }); else if (cb) cb([]);
   });
 }
 
