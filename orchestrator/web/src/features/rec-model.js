@@ -95,12 +95,39 @@ export function csvRow(t, cols) {
   return cols.map(function(c) { return c === 0 ? (t.name || '') : cellText(t, c); }).concat([t.techniqueId || '']);
 }
 
+// Tier filter: the four tiers the API returns (a missing tier is Low), with counts for the filter chips.
+export var TIERS = ['Critical', 'High', 'Medium', 'Low'];
+export function tierOf(t) { return TIERS.indexOf(t && t.tier) !== -1 ? t.tier : 'Low'; }
+export function tierCounts(rows) {
+  var out = { all: 0, Critical: 0, High: 0, Medium: 0, Low: 0, never: 0 };
+  (rows || []).forEach(function(t) { out.all++; out[tierOf(t)]++; if (t.coverageState === 'never-tested') out.never++; });
+  return out;
+}
+// filterTier: tier is 'all' or a tier name; neverOnly keeps only techniques that were never tested.
+export function filterTier(rows, tier, neverOnly) {
+  return (rows || []).filter(function(t) {
+    if (tier && tier !== 'all' && tierOf(t) !== tier) return false;
+    if (neverOnly && t.coverageState !== 'never-tested') return false;
+    return true;
+  });
+}
+// reasonList: the "Why" cell as separate short reasons (the API joins them with " · " only for display).
+export function reasonList(t) { return ((t && t.reasons) || []).map(function(r) { return String(r || '').trim(); }).filter(Boolean); }
+
+// Column help (tooltips): what each number means, from how the page note describes the ranking.
+export var COLUMN_HELP = {
+  2: 'Priority 0-100: threat priority, how overdue the technique is, and whether it is on a real path in your environment. Higher = simulate sooner.',
+  3: 'How recently this technique was simulated: Never tested, Stale (overdue) or Recent.',
+  4: 'Why attackers care: KEV = actively exploited in the wild, EPSS = exploit likelihood percentile, groups = tracked threat groups that use it.',
+  5: 'Environment risk: how much this technique matters on a real attack path through your hosts. A dash means it is not on one.',
+};
+
 export var NOTE = 'Ranked by threat priority, how overdue the technique is, and whether it traverses a real path in your environment';
 
 // scenarioSub: the caption on the "Suggested scenario" card.
 export function scenarioSub(art) {
   var c = (art || []).length;
-  return c + ' technique' + (c === 1 ? '' : 's') + ' · use "Copy scenario techniques" above';
+  return c + ' technique' + (c === 1 ? '' : 's') + ' picked from the top of the ranking. Copy them into the scenario builder.';
 }
 
 export { pageCount, rangeText, csvText } from './runs-model.js';

@@ -491,7 +491,7 @@ export function recSummary(list, scenario, noKpi) {
   ]);
   var art = scenario && scenario.artTechniques;
   if (art && art.length) {
-    h += card('Suggested scenario', '<div class="g4-chips">' + art.map(function(t) { return chip(t, 'accent'); }).join('') + '</div>', { sub: art.length + ' technique' + (art.length === 1 ? '' : 's') + ' · use "Copy scenario techniques" above' });
+    h += card('Suggested scenario', '<div class="g4-chips">' + art.map(function(t) { return chip(t, 'accent'); }).join('') + '</div>', { sub: art.length + ' technique' + (art.length === 1 ? '' : 's') });
   }
   return h;
 }

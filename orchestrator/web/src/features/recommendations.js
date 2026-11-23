@@ -15,7 +15,7 @@ import { revalidateRemediation } from './findings.js';
 
 var _rows = [];
 var _limit = M.DEFAULT_LIMIT;
-var T = { q: '', col: -1, dir: 1, page: 0, per: 10, sel: {}, hidden: {} };
+var T = { q: '', col: -1, dir: 1, page: 0, per: 10, sel: {}, hidden: {}, tier: 'all', never: false };
 // Score, Threat and Environment read best biggest-first, so the first click on them sorts descending.
 var DESC_FIRST = { 2: true, 4: true, 5: true };
 
@@ -25,14 +25,13 @@ function ico(d) { return '<svg viewBox="0 0 24 24" width="13" height="13" fill="
 function setHidden(id, h) { var e = document.getElementById(id); if (e) e.hidden = h; }
 function setText(id, t) { var e = document.getElementById(id); if (e) e.textContent = t; }
 
-// controlsHtml: Top 10 / 20 / 50 on the left, Copy scenario techniques and Refresh on the right.
+// Control row: Top 10 / 20 / 50 on the left, Refresh on the right. Copy lives on the Suggested scenario card.
 export function renderRecControls() {
   var el = document.getElementById('rec-controls');
   if (!el) return;
   el.innerHTML = '<div class="rec-controls">' +
     seg(M.LIMITS.map(function(k) { return { id: k, label: M.limitLabel(k) }; }), _limit, 'setRecLimit') +
     '<div class="rec-controls-r">' +
-      '<button type="button" class="btn btn-outline"' + on('click', 'copyRecommendedScenario') + '>' + icon('copy') + 'Copy scenario techniques</button>' +
       '<button type="button" class="btn btn-outline"' + on('click', 'loadRecommendations') + '>' + icon('refresh') + 'Refresh</button>' +
     '</div></div>';
 }
@@ -40,7 +39,7 @@ export function renderRecControls() {
 // setRecLimitState stores the chosen Top-N and repaints the control row; the caller then reloads.
 export function setRecLimitState(v) {
   _limit = M.normLimit(v);
-  T.page = 0; T.sel = {};
+  T.page = 0; T.sel = {}; T.tier = 'all'; T.never = false;
   renderRecControls();
   return _limit;
 }
@@ -51,18 +50,22 @@ function cardOpen(inner) {
 
 export function renderRecLoading() {
   var el = document.getElementById('rec-table');
-  if (el) el.innerHTML = cardOpen('<div class="rec-state muted">Loading…</div>');
+  if (el) el.innerHTML = cardOpen('<div class="rec-skel" aria-busy="true" aria-label="Loading recommendations">' + [0, 1, 2, 3, 4].map(function() { return '<div class="rec-skel-row"><i class="rec-skel-b rec-skel-n"></i><i class="rec-skel-b rec-skel-w"></i><i class="rec-skel-b rec-skel-m"></i><i class="rec-skel-b rec-skel-s"></i></div>'; }).join('') + '</div>');
+  var sg = document.getElementById('rec-suggest'); if (sg) sg.innerHTML = '';
+  var sm = document.getElementById('rec-summary'); if (sm) sm.innerHTML = '';
 }
 // fail: a failureOf() result; a plain string (an exception message) is treated as a generic error.
 export function renderRecError(fail) {
   var el = document.getElementById('rec-table');
   var f = fail && typeof fail === 'object' ? fail : { kind: 'error' };
   if (el) el.innerHTML = cardOpen(failureHtml('recommendations', f, 'loadRecommendations'));
+  var sg = document.getElementById('rec-suggest'); if (sg) sg.innerHTML = '';
+  var sm = document.getElementById('rec-summary'); if (sm) sm.innerHTML = '';
   ['rec-hs-ranked', 'rec-hs-top', 'rec-hs-never', 'rec-hs-path'].forEach(function(id) { setHeroStat(id, '—'); });
 }
 
 function skeletonHtml() {
-  return cardOpen('<div class="runs-dt">' +
+  return cardOpen('<div class="rec-tierbar" id="rec-tierbar"></div><div class="runs-dt">' +
     '<div class="dt-toolbar" id="rec-dt-toolbar">' +
       '<label class="dt-search">' + ico('<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>') + '<input type="search" id="rec-dt-q" placeholder="Filter rows…" aria-label="Filter rows"' + on('input', 'recTableQuery') + '></label>' +
       '<span class="dt-count muted" id="rec-dt-count"></span><span class="grow"></span>' +
@@ -77,12 +80,23 @@ function skeletonHtml() {
 }
 
 function visibleCols() { return M.COLUMNS.map(function(c, i) { return i; }).filter(function(i) { return !T.hidden[i]; }); }
-function currentList() { return M.sortRows(M.filterRows(_rows, T.q), T.col, T.dir); }
+function currentList() { return M.sortRows(M.filterRows(M.filterTier(_rows, T.tier, T.never), T.q), T.col, T.dir); }
+function filtering() { return !!(T.q || T.tier !== 'all' || T.never); }
 
-function cellHtml(col, t) {
+// The tier chips (with counts of the loaded rows) and the never-tested toggle.
+function paintTierBar() {
+  var el = document.getElementById('rec-tierbar');
+  if (!el) return;
+  var c = M.tierCounts(_rows);
+  var opts = [{ id: 'all', label: 'All', count: c.all }].concat(M.TIERS.map(function(t) { return { id: t, label: t, count: c[t] }; }));
+  el.innerHTML = seg(opts, T.tier, 'setRecTier') +
+    '<button type="button" class="rec-never' + (T.never ? ' on' : '') + '" aria-pressed="' + (T.never ? 'true' : 'false') + '"' + on('click', 'toggleRecNever') + '><span class="rec-never-dot"></span>Never tested <b>' + c.never + '</b></button>';
+}
+
+function cellHtml(col, t, rank) {
   switch (col) {
-    case 0: return '<td><b>' + x(t.name || t.techniqueId) + '</b><div class="mono muted rec-id">' + x(t.techniqueId) + '</div></td>';
-    case 1: return '<td>' + (t.tactic ? pill(t.tactic, 'info') : '<span class="muted">—</span>') + '</td>';
+    case 0: return '<td><div class="rec-techcell"><span class="rec-rank" title="Rank in the ranking returned by the server">' + (rank || '') + '</span><div class="rec-tech"><b>' + x(t.name || t.techniqueId) + '</b><div class="mono muted rec-id">' + x(t.techniqueId) + '</div></div></div></td>';
+    case 1: return '<td class="rec-tactic">' + (t.tactic ? x(t.tactic) : '<span class="muted">—</span>') + '</td>';
     case 2: {
       var tone = M.tierTone(t.tier);
       return '<td class="rec-scorecol"><div class="rec-score">' + bar(Number(t.score) || 0, tone) + '<span class="mono muted rec-score-n">' + x(Number(t.score) || 0) + '</span></div>' +
@@ -94,7 +108,10 @@ function cellHtml(col, t) {
       return '<td>' + (b.length ? '<div class="rec-chips">' + b.map(function(c) { return chip(c.text, c.tone); }).join('') + '</div>' : '<span class="muted">—</span>') + '</td>';
     }
     case 5: return '<td class="num">' + (Number(t.environmentRisk) ? x(Number(t.environmentRisk)) : '—') + '</td>';
-    default: return '<td class="muted rec-why">' + x((t.reasons || []).join(' · ') || '—') + '</td>';
+    default: {
+      var rs = M.reasonList(t);
+      return '<td class="rec-why">' + (rs.length ? '<ul class="rec-reasons">' + rs.map(function(r) { return '<li>' + x(r) + '</li>'; }).join('') + '</ul>' : '<span class="muted">—</span>') + '</td>';
+    }
   }
 }
 
@@ -134,15 +151,16 @@ function paintTable() {
   var onList = list.filter(function(t) { return T.sel[idx(t)]; }).length;
   document.getElementById('rec-thead').innerHTML = '<tr><th class="dt-selcol"><input type="checkbox" class="dt-cb" id="rec-sel-all" title="Select all on this table"' + on('change', 'recSelectAll') + '></th>' +
     cols.map(function(c) {
-      return '<th class="dt-th' + (c === 5 ? ' num' : '') + (T.col === c ? ' sorted' : '') + '"' + on('click', 'recSortBy', c) + '>' + x(M.COLUMNS[c]) + '<span class="dt-arrow">' + (T.col === c ? (T.dir > 0 ? '▲' : '▼') : '') + '</span></th>';
+      return '<th class="dt-th' + (c === 5 ? ' num' : '') + (T.col === c ? ' sorted' : '') + '"' + (M.COLUMN_HELP[c] ? ' title="' + x(M.COLUMN_HELP[c]) + '"' : '') + on('click', 'recSortBy', c) + '>' + x(M.COLUMNS[c]) + '<span class="dt-arrow">' + (T.col === c ? (T.dir > 0 ? '▲' : '▼') : '') + '</span></th>';
     }).join('') + '<th class="dt-th">Actions</th></tr>';
   var all = document.getElementById('rec-sel-all');
   if (all) { all.checked = list.length > 0 && onList === list.length; all.indeterminate = onList > 0 && onList < list.length; }
   tbody.innerHTML = rows.map(function(t) {
     var i = idx(t);
-    return '<tr class="dt-click" tabindex="0"' + on('click', 'recDetails', i) + on('keydown', 'recRowKeydown', i) + '><td class="dt-selcol"' + on('click', 'stopEvent') + '><input type="checkbox" class="dt-cb" aria-label="Select technique"' + (T.sel[i] ? ' checked' : '') + on('change', 'recSelectRow', i) + '></td>' +
-      cols.map(function(c) { return cellHtml(c, t); }).join('') + actionsCellHtml(i, t) + '</tr>';
+    return '<tr class="dt-click rec-t-' + M.tierOf(t).toLowerCase() + '" tabindex="0"' + on('click', 'recDetails', i) + on('keydown', 'recRowKeydown', i) + '><td class="dt-selcol"' + on('click', 'stopEvent') + '><input type="checkbox" class="dt-cb" aria-label="Select technique"' + (T.sel[i] ? ' checked' : '') + on('change', 'recSelectRow', i) + '></td>' +
+      cols.map(function(c) { return cellHtml(c, t, i + 1); }).join('') + actionsCellHtml(i, t) + '</tr>';
   }).join('');
+  paintTierBar();
   var menu = document.getElementById('rec-cols');
   if (menu) {
     menu.innerHTML = M.COLUMNS.map(function(h, i) {
@@ -163,7 +181,7 @@ function paintTable() {
   var emp = document.getElementById('rec-empty');
   if (emp) {
     emp.hidden = list.length > 0;
-    if (!list.length) emp.innerHTML = empty('search', 'No matching rows', 'Try a different search term, or clear the filter.') + '<div class="dt-empty-act"><button class="btn btn-outline btn-sm"' + on('click', 'clearRecTableQuery') + '>Clear filter</button></div>';
+    if (!list.length) emp.innerHTML = empty('search', 'No matching techniques', filtering() ? 'Nothing matches the tier, never-tested or search filter you set.' : 'Try a different search term.') + '<div class="dt-empty-act"><button class="btn btn-outline btn-sm"' + on('click', 'clearRecTableQuery') + '>Clear filters</button></div>';
   }
   setHidden('rec-table-wrap', !list.length);
   setHidden('rec-dt-foot', !list.length);
@@ -190,13 +208,27 @@ export function showRecommendations(data) {
       paintTable();
     }
   }
+  var sg = document.getElementById('rec-suggest');
+  if (sg) sg.innerHTML = list.length ? suggestHtml((data && data.suggestedScenario) || null) : '';
   var sum = document.getElementById('rec-summary');
-  if (sum) sum.innerHTML = recSummary(list, data && data.suggestedScenario, true);
+  if (sum) sum.innerHTML = recSummary(list, null, true);
+}
+
+// The suggested scenario is the page's output, so it leads the page with its own Copy button.
+function suggestHtml(sc) {
+  var art = (sc && sc.artTechniques) || [];
+  if (!art.length) return '<section class="rk-card rec-suggest rec-suggest-none"><div class="rec-suggest-l"><h2>Suggested scenario</h2><p class="muted">No simulatable ATT&amp;CK techniques in this ranking yet, so there is nothing to copy into the scenario builder.</p></div></section>';
+  return '<section class="rk-card rec-suggest"><div class="rec-suggest-l"><h2>Suggested scenario</h2>' +
+    '<p class="muted">' + x(M.scenarioSub(art)) + '</p>' +
+    '<div class="rec-suggest-chips">' + art.map(function(t) { return chip(t, 'accent'); }).join('') + '</div></div>' +
+    '<div class="rec-suggest-r"><button type="button" class="btn btn-primary"' + on('click', 'copyRecommendedScenario') + '>' + icon('copy') + 'Copy ' + art.length + ' technique' + (art.length === 1 ? '' : 's') + '</button></div></section>';
 }
 
 // ── Table controls ──
 export function recTableQuery(el) { T.q = String((el && el.value) || ''); T.page = 0; paintTable(); }
-export function clearRecTableQuery() { T.q = ''; T.page = 0; var q = document.getElementById('rec-dt-q'); if (q) q.value = ''; paintTable(); }
+export function setRecTier(id) { T.tier = M.TIERS.indexOf(id) !== -1 ? id : 'all'; T.page = 0; paintTable(); }
+export function toggleRecNever() { T.never = !T.never; T.page = 0; paintTable(); }
+export function clearRecTableQuery() { T.q = ''; T.tier = 'all'; T.never = false; T.page = 0; var q = document.getElementById('rec-dt-q'); if (q) q.value = ''; paintTable(); }
 export function setRecPer(el) { T.per = Number(el && el.value) || 10; T.page = 0; paintTable(); }
 export function recPage(d) { T.page += Number(d) || 0; paintTable(); }
 export function recSortBy(col) {

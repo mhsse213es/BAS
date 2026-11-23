@@ -49,6 +49,39 @@ test('csvRow carries the visible columns plus the technique id', () => {
 });
 
 test('scenarioSub pluralises', () => {
-  assert.match(M.scenarioSub(['T1']), /^1 technique ·/);
-  assert.match(M.scenarioSub(['T1', 'T2']), /^2 techniques ·/);
+  assert.match(M.scenarioSub(['T1']), /^1 technique picked/);
+  assert.match(M.scenarioSub(['T1', 'T2']), /^2 techniques picked/);
+});
+
+test('tierOf treats a missing or unknown tier as Low', () => {
+  assert.equal(M.tierOf({ tier: 'Critical' }), 'Critical');
+  assert.equal(M.tierOf({}), 'Low');
+  assert.equal(M.tierOf({ tier: 'Weird' }), 'Low');
+  assert.equal(M.tierOf(null), 'Low');
+});
+
+const ROWS = [
+  { techniqueId: 'T1', tier: 'Critical', coverageState: 'never-tested' },
+  { techniqueId: 'T2', tier: 'Critical', coverageState: 'recent' },
+  { techniqueId: 'T3', tier: 'High', coverageState: 'never-tested' },
+  { techniqueId: 'T4' },
+];
+
+test('tierCounts counts each tier, the never-tested ones and the total', () => {
+  assert.deepEqual(M.tierCounts(ROWS), { all: 4, Critical: 2, High: 1, Medium: 0, Low: 1, never: 2 });
+  assert.deepEqual(M.tierCounts(null), { all: 0, Critical: 0, High: 0, Medium: 0, Low: 0, never: 0 });
+});
+
+test('filterTier narrows by tier and by never-tested, and the two combine', () => {
+  const ids = (l) => l.map((t) => t.techniqueId).join(',');
+  assert.equal(ids(M.filterTier(ROWS, 'all', false)), 'T1,T2,T3,T4');
+  assert.equal(ids(M.filterTier(ROWS, 'Critical', false)), 'T1,T2');
+  assert.equal(ids(M.filterTier(ROWS, 'Critical', true)), 'T1');
+  assert.equal(ids(M.filterTier(ROWS, 'all', true)), 'T1,T3');
+  assert.equal(ids(M.filterTier(ROWS, 'Low', false)), 'T4');
+});
+
+test('reasonList trims and drops blanks', () => {
+  assert.deepEqual(M.reasonList({ reasons: [' a ', '', null, 'b'] }), ['a', 'b']);
+  assert.deepEqual(M.reasonList({}), []);
 });
