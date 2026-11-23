@@ -1,18 +1,21 @@
 Import-Module Pester
-. "$PSScriptRoot\sign-windows.ps1"
-. "$PSScriptRoot\verify-windows-signature.ps1"
-. "$PSScriptRoot\verify-release.ps1"
 
-function New-UnsignedTestExe {
-    $dir = Join-Path $env:TEMP "release-gate-test-src-$(Get-Random)"
-    New-Item -ItemType Directory -Force -Path $dir | Out-Null
-    Set-Content -Path "$dir\main.go" -Value "package main`n`nfunc main() {}`n"
-    Push-Location $dir
-    $env:GOOS = "windows"; $env:GOARCH = "amd64"
-    go build -o unsigned.exe main.go 2>&1 | Out-Null
-    $env:GOOS = ""; $env:GOARCH = ""
-    Pop-Location
-    return "$dir\unsigned.exe"
+BeforeAll {
+    . "$PSScriptRoot\sign-windows.ps1"
+    . "$PSScriptRoot\verify-windows-signature.ps1"
+    . "$PSScriptRoot\verify-release.ps1"
+
+    function New-UnsignedTestExe {
+        $dir = Join-Path $env:TEMP "release-gate-test-src-$(Get-Random)"
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        Set-Content -Path "$dir\main.go" -Value "package main`n`nfunc main() {}`n"
+        Push-Location $dir
+        $env:GOOS = "windows"; $env:GOARCH = "amd64"
+        go build -o unsigned.exe main.go 2>&1 | Out-Null
+        $env:GOOS = ""; $env:GOARCH = ""
+        Pop-Location
+        return "$dir\unsigned.exe"
+    }
 }
 
 Describe "Invoke-ReleaseVerification" {
@@ -53,13 +56,13 @@ Describe "Invoke-ReleaseVerification" {
     It "passes when all required artifacts are validly signed" {
         $result = Invoke-ReleaseVerification -WindowsArtifacts @($script:SignedFile) `
             -WindowsSigningRequired $true -AuditRecordPath $script:AuditPath
-        $result | Should Be $true
+        $result | Should -Be $true
     }
 
     It "fails when a required artifact is unsigned" {
         $result = Invoke-ReleaseVerification -WindowsArtifacts @($script:SignedFile, $script:UnsignedFile) `
             -WindowsSigningRequired $true -AuditRecordPath $script:AuditPath
-        $result | Should Be $false
+        $result | Should -Be $false
     }
 
     It "fails when ANY of multiple required artifacts is unsigned, not just when all are" {
@@ -70,7 +73,7 @@ Describe "Invoke-ReleaseVerification" {
         try {
             $result = Invoke-ReleaseVerification -WindowsArtifacts @($script:SignedFile, $secondSigned, $script:UnsignedFile) `
                 -WindowsSigningRequired $true -AuditRecordPath $script:AuditPath
-            $result | Should Be $false
+            $result | Should -Be $false
         } finally {
             Remove-Item (Split-Path $secondSigned) -Recurse -ErrorAction SilentlyContinue
         }
@@ -79,22 +82,22 @@ Describe "Invoke-ReleaseVerification" {
     It "passes with an unsigned artifact when signing is not required (dev build)" {
         $result = Invoke-ReleaseVerification -WindowsArtifacts @($script:UnsignedFile) `
             -WindowsSigningRequired $false -AuditRecordPath $script:AuditPath
-        $result | Should Be $true
+        $result | Should -Be $true
     }
 
     It "writes an audit record with per-artifact results" {
         Invoke-ReleaseVerification -WindowsArtifacts @($script:SignedFile) `
             -WindowsSigningRequired $true -AuditRecordPath $script:AuditPath | Out-Null
-        Test-Path $script:AuditPath | Should Be $true
+        Test-Path $script:AuditPath | Should -Be $true
         $audit = Get-Content $script:AuditPath -Raw | ConvertFrom-Json
-        $audit.windowsArtifacts.Count | Should Be 1
+        $audit.windowsArtifacts.Count | Should -Be 1
         # Review finding I4: an absolute build-host path (C:\Users\...) was
         # leaking into an audit record shipped inside the customer ZIP.
         # Only the filename is meaningful to a customer verifying the record.
-        $audit.windowsArtifacts[0].path | Should Be (Split-Path -Leaf $script:SignedFile)
-        $audit.windowsArtifacts[0].sha256 | Should Not BeNullOrEmpty
-        $audit.windowsArtifacts[0].signatureValid | Should Be $true
-        $audit.overallResult | Should Be $true
+        $audit.windowsArtifacts[0].path | Should -Be (Split-Path -Leaf $script:SignedFile)
+        $audit.windowsArtifacts[0].sha256 | Should -Not -BeNullOrEmpty
+        $audit.windowsArtifacts[0].signatureValid | Should -Be $true
+        $audit.overallResult | Should -Be $true
     }
 
     It "fails when RequireTimestamp is set and the artifact was signed without one" {
@@ -104,7 +107,7 @@ Describe "Invoke-ReleaseVerification" {
         # in BeforeAll, so this is a real untimestamped signature, not a mock.
         $result = Invoke-ReleaseVerification -WindowsArtifacts @($script:SignedFile) `
             -WindowsSigningRequired $true -RequireTimestamp $true -AuditRecordPath $script:AuditPath
-        $result | Should Be $false
+        $result | Should -Be $false
     }
 
     It "fails when ExpectedThumbprint does not match the signer" {
@@ -113,20 +116,20 @@ Describe "Invoke-ReleaseVerification" {
         # this build actually asked for.
         $result = Invoke-ReleaseVerification -WindowsArtifacts @($script:SignedFile) `
             -WindowsSigningRequired $true -ExpectedThumbprint ("0" * 40) -AuditRecordPath $script:AuditPath
-        $result | Should Be $false
+        $result | Should -Be $false
     }
 
     It "passes when ExpectedThumbprint matches the signer" {
         $result = Invoke-ReleaseVerification -WindowsArtifacts @($script:SignedFile) `
             -WindowsSigningRequired $true -ExpectedThumbprint $script:TestCert.Thumbprint -AuditRecordPath $script:AuditPath
-        $result | Should Be $true
+        $result | Should -Be $true
     }
 
     It "includes version and signer identity in the audit record" {
         Invoke-ReleaseVerification -WindowsArtifacts @($script:SignedFile) `
             -WindowsSigningRequired $true -Version "9.9.9-test" -AuditRecordPath $script:AuditPath | Out-Null
         $audit = Get-Content $script:AuditPath -Raw | ConvertFrom-Json
-        $audit.version | Should Be "9.9.9-test"
-        $audit.windowsArtifacts[0].signerThumbprint | Should Be $script:TestCert.Thumbprint
+        $audit.version | Should -Be "9.9.9-test"
+        $audit.windowsArtifacts[0].signerThumbprint | Should -Be $script:TestCert.Thumbprint
     }
 }

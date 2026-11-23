@@ -1,20 +1,23 @@
 Import-Module Pester
-. "$PSScriptRoot\sign-windows.ps1"
-. "$PSScriptRoot\verify-windows-signature.ps1"
 
-# See sign-windows.Tests.ps1 for why this builds a genuinely unsigned Go
-# binary instead of copying a system executable like notepad.exe (which is
-# already Microsoft-signed and would make "unsigned" test cases wrong).
-function New-UnsignedTestExe {
-    $dir = Join-Path $env:TEMP "verify-windows-test-src-$(Get-Random)"
-    New-Item -ItemType Directory -Force -Path $dir | Out-Null
-    Set-Content -Path "$dir\main.go" -Value "package main`n`nfunc main() {}`n"
-    Push-Location $dir
-    $env:GOOS = "windows"; $env:GOARCH = "amd64"
-    go build -o unsigned.exe main.go 2>&1 | Out-Null
-    $env:GOOS = ""; $env:GOARCH = ""
-    Pop-Location
-    return "$dir\unsigned.exe"
+BeforeAll {
+    . "$PSScriptRoot\sign-windows.ps1"
+    . "$PSScriptRoot\verify-windows-signature.ps1"
+
+    # See sign-windows.Tests.ps1 for why this builds a genuinely unsigned Go
+    # binary instead of copying a system executable like notepad.exe (which is
+    # already Microsoft-signed and would make "unsigned" test cases wrong).
+    function New-UnsignedTestExe {
+        $dir = Join-Path $env:TEMP "verify-windows-test-src-$(Get-Random)"
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        Set-Content -Path "$dir\main.go" -Value "package main`n`nfunc main() {}`n"
+        Push-Location $dir
+        $env:GOOS = "windows"; $env:GOARCH = "amd64"
+        go build -o unsigned.exe main.go 2>&1 | Out-Null
+        $env:GOOS = ""; $env:GOARCH = ""
+        Pop-Location
+        return "$dir\unsigned.exe"
+    }
 }
 
 Describe "Test-AuthenticodeSignature" {
@@ -70,29 +73,29 @@ Describe "Test-AuthenticodeSignature" {
 
     It "reports Valid for a correctly signed, trusted file" {
         $result = Test-AuthenticodeSignature -Path $script:SignedFile
-        $result.Valid | Should Be $true
-        $result.Status | Should Be "Valid"
+        $result.Valid | Should -Be $true
+        $result.Status | Should -Be "Valid"
     }
 
     It "reports not valid for an unsigned file" {
         $result = Test-AuthenticodeSignature -Path $script:UnsignedFile
-        $result.Valid | Should Be $false
+        $result.Valid | Should -Be $false
     }
 
     It "reports not valid for a file tampered after signing" {
         $result = Test-AuthenticodeSignature -Path $script:TamperedFile
-        $result.Valid | Should Be $false
-        $result.Status | Should Be "HashMismatch"
+        $result.Valid | Should -Be $false
+        $result.Status | Should -Be "HashMismatch"
     }
 
     It "returns the signer's thumbprint for a valid signature" {
         $result = Test-AuthenticodeSignature -Path $script:SignedFile
-        $result.SignerThumbprint | Should Be $script:TestCert.Thumbprint
+        $result.SignerThumbprint | Should -Be $script:TestCert.Thumbprint
     }
 
     It "reports MissingTimestamp when RequireTimestamp is set and the signature carries none" {
         $result = Test-AuthenticodeSignature -Path $script:SignedFile -RequireTimestamp
-        $result.Valid | Should Be $false
-        $result.Status | Should Be "MissingTimestamp"
+        $result.Valid | Should -Be $false
+        $result.Status | Should -Be "MissingTimestamp"
     }
 }

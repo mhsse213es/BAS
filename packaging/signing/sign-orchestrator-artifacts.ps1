@@ -155,7 +155,10 @@ function Update-OrchestratorAgentArtifacts {
         # The previous release's BINARIES.sha256 (Get-PreviousReleaseManifest). The regenerated manifest must still
         # carry every one of its hashes as an entry or a "#prev" line, or agents still on that release are quarantined
         # after the upgrade. Empty means there is no earlier release to carry.
-        [string]$PreviousManifest = ""
+        [string]$PreviousManifest = "",
+        # RSA key used to sign the regenerated manifest. Defaults to the trusted-host key in the orchestrator
+        # directory; tests pass a throwaway key so they never read or write the real one.
+        [string]$SigningKeyPath = "private_key.pem"
     )
 
     $artifacts = @{
@@ -318,7 +321,7 @@ function Update-OrchestratorAgentArtifacts {
 
         Push-Location $OrchestratorDir
         try {
-            $signOutput = (go run scripts/signer.go sign private_key.pem $manifestPath 2>&1 | Out-String).Trim()
+            $signOutput = (go run scripts/signer.go sign $SigningKeyPath $manifestPath 2>&1 | Out-String).Trim()
             $signExit = $LASTEXITCODE
         } finally {
             Pop-Location
@@ -330,7 +333,7 @@ function Update-OrchestratorAgentArtifacts {
 
         Push-Location $OrchestratorDir
         try {
-            $selfSignOutput = (go run scripts/signer.go sign private_key.pem $selfManifestPath 2>&1 | Out-String).Trim()
+            $selfSignOutput = (go run scripts/signer.go sign $SigningKeyPath $selfManifestPath 2>&1 | Out-String).Trim()
             $selfSignExit = $LASTEXITCODE
         } finally {
             Pop-Location

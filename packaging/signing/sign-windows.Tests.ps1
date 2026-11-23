@@ -1,24 +1,27 @@
 Import-Module Pester
-. "$PSScriptRoot\sign-windows.ps1"
 
-# New-UnsignedTestExe builds a trivial, genuinely unsigned Windows PE via the
-# Go toolchain. A copy of a system binary like notepad.exe is NOT a valid
-# fixture here: it already carries Microsoft's Authenticode signature, and
-# signtool's default `sign` (no /as) does not replace an existing primary
-# signature the way Get-AuthenticodeSignature reports it -- verified
-# empirically, the "signed" file kept reporting Microsoft as the signer.
-# Production artifacts (Go binaries) start genuinely unsigned too, so this
-# fixture matches the real target better than a system binary would.
-function New-UnsignedTestExe {
-    $dir = Join-Path $env:TEMP "sign-windows-test-src-$(Get-Random)"
-    New-Item -ItemType Directory -Force -Path $dir | Out-Null
-    Set-Content -Path "$dir\main.go" -Value "package main`n`nfunc main() {}`n"
-    Push-Location $dir
-    $env:GOOS = "windows"; $env:GOARCH = "amd64"
-    go build -o unsigned.exe main.go 2>&1 | Out-Null
-    $env:GOOS = ""; $env:GOARCH = ""
-    Pop-Location
-    return "$dir\unsigned.exe"
+BeforeAll {
+    . "$PSScriptRoot\sign-windows.ps1"
+
+    # New-UnsignedTestExe builds a trivial, genuinely unsigned Windows PE via the
+    # Go toolchain. A copy of a system binary like notepad.exe is NOT a valid
+    # fixture here: it already carries Microsoft's Authenticode signature, and
+    # signtool's default `sign` (no /as) does not replace an existing primary
+    # signature the way Get-AuthenticodeSignature reports it -- verified
+    # empirically, the "signed" file kept reporting Microsoft as the signer.
+    # Production artifacts (Go binaries) start genuinely unsigned too, so this
+    # fixture matches the real target better than a system binary would.
+    function New-UnsignedTestExe {
+        $dir = Join-Path $env:TEMP "sign-windows-test-src-$(Get-Random)"
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        Set-Content -Path "$dir\main.go" -Value "package main`n`nfunc main() {}`n"
+        Push-Location $dir
+        $env:GOOS = "windows"; $env:GOARCH = "amd64"
+        go build -o unsigned.exe main.go 2>&1 | Out-Null
+        $env:GOOS = ""; $env:GOARCH = ""
+        Pop-Location
+        return "$dir\unsigned.exe"
+    }
 }
 
 Describe "Invoke-AuthenticodeSigning" {
@@ -39,7 +42,7 @@ Describe "Invoke-AuthenticodeSigning" {
 
     It "reports NotSigned before signing (fixture sanity check)" {
         $sig = Get-AuthenticodeSignature -FilePath $script:TestFile
-        $sig.Status | Should Be "NotSigned"
+        $sig.Status | Should -Be "NotSigned"
     }
 
     It "signs the file and signtool reports success" {
@@ -47,12 +50,12 @@ Describe "Invoke-AuthenticodeSigning" {
             -CertThumbprint $script:TestCert.Thumbprint `
             -CertStoreLocation "Cert:\CurrentUser\My" `
             -TimestampUrl ""
-        $result | Should Be $true
+        $result | Should -Be $true
     }
 
     It "the signed file's signer is the test certificate" {
         $sig = Get-AuthenticodeSignature -FilePath $script:TestFile
-        $sig.SignerCertificate.Thumbprint | Should Be $script:TestCert.Thumbprint
+        $sig.SignerCertificate.Thumbprint | Should -Be $script:TestCert.Thumbprint
     }
 
     It "signs with an RFC 3161 timestamp when the timestamp server is reachable" {
@@ -80,9 +83,9 @@ Describe "Invoke-AuthenticodeSigning" {
             $result = Invoke-AuthenticodeSigning -Path $timestampedFile `
                 -CertThumbprint $script:TestCert.Thumbprint `
                 -CertStoreLocation "Cert:\CurrentUser\My"
-            $result | Should Be $true
+            $result | Should -Be $true
             $sig = Get-AuthenticodeSignature -FilePath $timestampedFile
-            $sig.TimeStamperCertificate | Should Not Be $null
+            $sig.TimeStamperCertificate | Should -Not -Be $null
         } finally {
             Remove-Item (Split-Path $timestampedFile) -Recurse -ErrorAction SilentlyContinue
         }
@@ -96,9 +99,9 @@ Describe "Invoke-AuthenticodeSigning" {
         $prevEAP = $ErrorActionPreference
         $ErrorActionPreference = "Stop"
         try {
-            { Invoke-AuthenticodeSigning -Path "$($script:TestFile)-missing.exe" -CertThumbprint $script:TestCert.Thumbprint } | Should Not Throw
+            { Invoke-AuthenticodeSigning -Path "$($script:TestFile)-missing.exe" -CertThumbprint $script:TestCert.Thumbprint } | Should -Not -Throw
             $result = Invoke-AuthenticodeSigning -Path "$($script:TestFile)-missing.exe" -CertThumbprint $script:TestCert.Thumbprint
-            $result | Should Be $false
+            $result | Should -Be $false
         } finally {
             $ErrorActionPreference = $prevEAP
         }
@@ -111,8 +114,8 @@ Describe "Invoke-AuthenticodeSigning" {
             $result = Invoke-AuthenticodeSigning -Path $unreachableFile `
                 -CertThumbprint $script:TestCert.Thumbprint `
                 -TimestampUrl "http://127.0.0.1:9"
-            $result | Should Be $false
-            $Error[0].Exception.Message | Should Match "timestamp"
+            $result | Should -Be $false
+            $Error[0].Exception.Message | Should -Match "timestamp"
         } finally {
             Remove-Item (Split-Path $unreachableFile) -Recurse -ErrorAction SilentlyContinue
         }
