@@ -64,7 +64,15 @@ foreach ($p in $StepPrefix) {
   try {
     Set-Content -LiteralPath $tmp -Value $cmd -Encoding UTF8
     Write-Output ('==== ' + $p.Trim())
-    $out = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $tmp 2>&1 | ForEach-Object { "$_" }
+    # The step's stderr is evidence, not a runner failure. Under 'Stop', a native command's stderr
+    # would end this runner, so relax the preference for the child call only.
+    $prevPref = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+      $out = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $tmp 2>&1 | ForEach-Object { "$_" }
+    } finally {
+      $ErrorActionPreference = $prevPref
+    }
     $out | ForEach-Object { Write-Output $_ }
     $results += [pscustomobject]@{ Step = $p.Trim(); Output = ($out -join "`n") }
   } finally {
