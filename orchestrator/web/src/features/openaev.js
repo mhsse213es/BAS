@@ -233,10 +233,12 @@ export function launchExercisePrompt(planId) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan_id: planId, name: p.name, targets: [], variables: values })
       }).then(function(ex) {
-        return exCall('/api/exercises/executions/' + encodeURIComponent(ex.id) + '/launch', { method: 'POST' });
-      }).then(function() {
+        return exCall('/api/exercises/executions/' + encodeURIComponent(ex.id) + '/launch', { method: 'POST' }).then(function() { return ex.id; });
+      }).then(function(newId) {
         showToast('Exercise launched', 'ok');
         loadExercisesTab();
+        // The new run sits in the Executions table, usually below the fold: show it straight away.
+        openExerciseDetail(newId);
       }).catch(function(e) { showToast('Launch failed: ' + (e.message || 'error'), 'err'); });
     }, { sub: 'The exercise starts running as soon as you launch it.', confirmLabel: 'Launch' });
   }).catch(function(e) { showToast('Failed to load exercise plan: ' + (e.message || 'error'), 'err'); });

@@ -1,0 +1,13 @@
+import { boot } from './exlib.mjs';
+const b = await boot(); const { page, T } = b;
+await b.go('exercises');
+await page.locator('.ex-plan', { hasText: 'Phishing Response' }).locator('button:has-text("Launch")').click(); await page.waitForTimeout(600);
+await page.locator('#confirm-diff-overlay .modal').screenshot({ path: T + 'ex-l-novars.png' });
+await page.locator('#confirm-diff-submit-btn').click(); await page.waitForTimeout(700);
+await page.screenshot({ path: T + 'ex-l-after.png', fullPage: true, clip: { x: 240, y: 0, width: 1200, height: 900 } });
+await page.locator('#ex-execs-box').scrollIntoViewIfNeeded();
+await page.waitForTimeout(300);
+await page.locator('#ex-execs-box').screenshot({ path: T + 'ex-l-table.png' });
+console.log('drawer opened by launch:', await b.overlays(), '/', await page.locator('#exercise-detail-title').innerText());
+await page.locator('#exercise-detail-overlay .drawer').screenshot({ path: T + 'ex-l-drawer.png' });
+console.log(JSON.stringify(b.errs)); await b.close();

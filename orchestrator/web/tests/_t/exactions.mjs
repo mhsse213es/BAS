@@ -13,7 +13,7 @@ console.log('  vars sent:', JSON.stringify(b.state.ex['exec-501'].vars));
 // empty plan
 console.log('  empty plan button disabled:', await page.locator('.ex-plan', { hasText: 'Empty plan' }).locator('button').isDisabled());
 // approve
-await page.locator('#ex-execs-box tbody tr', { hasText: 'Drill #7' }).click(); await page.waitForTimeout(800);
+await page.evaluate(() => document.getElementById('exercise-detail-overlay').classList.remove('open')); await page.locator('#ex-execs-box tbody tr', { hasText: 'Drill #7' }).click(); await page.waitForTimeout(800);
 await page.locator('#exercise-detail-overlay .drawer').screenshot({ path: T + 'ex-dr-paused2.png' });
 await page.locator('#exercise-detail-overlay button:has-text("Approve")').click(); await page.waitForTimeout(1000); await log('approve');
 // abort via drawer -> modal
