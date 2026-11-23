@@ -11,7 +11,7 @@
 
 .ap-side { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; margin-bottom: 14px; }
 .ap-side > .rk-card { margin-bottom: 0; }
-@media (max-width: 1500px) { .ap-side { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 1000px) { .ap-side { grid-template-columns: minmax(0, 1fr); } }
 
 .ap-find { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
 .ap-find:last-child { border-bottom: 0; }
@@ -28,3 +28,35 @@
 
 /* The score is already printed under the donut; the demo shows the donut alone. */
 .ap-score .donut-legend { display: none; }
+
+/* Work panels (Run Collection, Tag Assets, Schedule, History): one at a time, full width, same header. The form
+   fields keep a readable width; the header (title and close button) spans the card. */
+#ap-collect, #ap-assets, #ap-schedule, #ap-history-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); margin-bottom: 14px; }
+/* the g1-s-* inline-equivalent rules are unlayered, so overriding them needs !important */
+#ap-collect .dash-panel-body, #ap-schedule .dash-panel-body { max-width: none !important; padding: 16px; }
+#ap-form > :not(:first-child), #ap-progress > :not(:first-child), #ap-schedule .dash-panel-body > :not(:first-child) { max-width: 760px; }
+#ap-collect .btn-outline.btn-sm[data-on-click="apCollectClose"]:not(:last-child) { width: auto; }
+#ap-form input[type="text"], #ap-form input:not([type]), #ap-form textarea, #ap-form select, #ap-schedule input:not([type="checkbox"]), #ap-schedule textarea { padding: 9px 11px !important; border-radius: 10px !important; }
+#ap-form textarea:focus, #ap-form input:focus, #ap-form select:focus, #ap-schedule input:focus, #ap-schedule textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+#ap-assets table input:not([type="checkbox"]), #ap-assets table select { padding: 6px 9px !important; border-radius: 8px !important; }
+.ap-retry { margin-top: 12px; }
+.tbl-wrap .g4-edge i { white-space: nowrap; }
+
+/* Collection progress: a status banner, then the steps; the failing step is red, the ones after it never ran. */
+.ap-banner { margin-bottom: 8px; }
+.ap-step { display: flex; gap: 12px; align-items: flex-start; padding: 9px 0; border-bottom: 1px solid var(--border); }
+.ap-step:last-child { border-bottom: 0; }
+.ap-step-i { flex: 0 0 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; background: var(--hover); color: var(--muted); border: 1px solid var(--border); }
+.ap-step-t { font-size: 13px; font-weight: 600; color: var(--text); }
+.ap-step-d { margin-top: 2px; font-size: 12px; color: var(--muted); }
+.ap-step-pending .ap-step-t, .ap-step-skip .ap-step-t { color: var(--muted); font-weight: 500; }
+.ap-step-skip { opacity: .55; }
+.ap-step-done .ap-step-i { background: var(--success-dim, rgba(34,197,94,.14)); color: var(--success); border-color: transparent; }
+.ap-step-active .ap-step-i { background: var(--info-dim, rgba(59,130,246,.16)); color: var(--info-text); border-color: transparent; }
+.ap-step-warn .ap-step-i { background: var(--warning-dim, rgba(245,158,11,.16)); color: var(--warning); border-color: transparent; }
+.ap-step-fail .ap-step-i { background: var(--danger-dim); color: var(--danger-text); border-color: transparent; }
+.ap-spin { display: inline-block; animation: spin 1s linear infinite; }
+#ap-done-actions { margin-top: 14px; gap: 8px; }
+#ap-done-actions .btn, #ap-cancel-action .btn { width: auto; }
+#ap-form .btn, #ap-schedule .btn, #ap-assets .btn, #ap-history-panel .btn, #ap-collect .btn { width: auto; flex: 0 0 auto; }
+#ap-form .g1-display-flex, #ap-schedule .g1-display-flex { align-items: center; }

@@ -1,0 +1,11 @@
+import { boot } from './rmlib.mjs';
+const b = await boot(); const { page, T } = b; await b.go();
+console.log('errors', JSON.stringify(b.errs));
+console.log('height', await page.evaluate(() => document.documentElement.scrollHeight));
+console.log('hero:', (await page.locator('#hero-remediation').innerText()).replace(/\s+/g, ' ').slice(0, 300));
+console.log('intro btns visible:', await b.vis('#rem-ticket-actions'));
+await page.screenshot({ path: T + 'rm-0.png' });
+await page.evaluate(() => window.scrollTo(0, 700)); await page.waitForTimeout(300); await page.screenshot({ path: T + 'rm-1.png' });
+await page.locator('[data-on-click="setRemView"]', { hasText: 'By technique' }).click(); await page.waitForTimeout(500);
+await page.evaluate(() => window.scrollTo(0, 0)); await page.screenshot({ path: T + 'rm-2.png', fullPage: true });
+await b.close();

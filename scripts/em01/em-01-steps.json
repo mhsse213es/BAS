@@ -1,0 +1,491 @@
+{
+ "scenario": "em-01-control-validation",
+ "source_file": "em-01-control-validation.yaml",
+ "source_sha256": "a65bf7e1baf6c7a780bdec67fd1055c435108830b3b6f786d48f3a73111110be",
+ "exported_at": "2026-11-20T11:58:36+00:00",
+ "steps": [
+  {
+   "index": 0,
+   "name": "EDR/AV real-time protection enforcing (Defender or 3rd-party AV)",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'SilentlyContinue'\n$rtp = $null\ntry { $rtp = (Get-MpComputerStatus).RealTimeProtectionEnabled } catch {}\nif ($rtp -eq $true) { Write-Output \"PASS: Microsoft Defender real-time protection is ENABLED and enforcing. [BAS-SIM]\"; return }\n# Fall back to any registered 3rd-party AV reporting \"enabled\" via SecurityCenter2 (Windows-verified registration).\n$av = Get-CimInstance -Namespace 'root/SecurityCenter2' -ClassName AntiVirusProduct -ErrorAction SilentlyContinue\n# Defender itself is excluded here: its state was already judged above, and it must not stand in for a 3rd-party engine.\nforeach ($p in $av) { if (($p.productState -band 0x1000) -ne 0 -and $p.displayName -notmatch 'Defender') { Write-Output \"PASS: 3rd-party AV '$($p.displayName)' reports real-time protection ENABLED. [BAS-SIM]\"; return } }\n# Trellix on-access driver (mfehidk) attached, with its services running. This is presence only: it does NOT\n# prove on-access protection is enabled or working. Trellix's on-access state is not readable locally.\n$tFilter = $null\n$fl = (& fltmc filters 2>$null) -join \"`n\"\nif ($fl -match '(?m)^\\s*mfehidk\\s+([1-9]\\d*)\\s') { $tFilter = $matches[1] }\n$tSvc = @(Get-Service masvc,mfemms -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Running' }).Count -eq 2\n$trellixOnAccess = ($null -ne $tFilter) -and $tSvc\nif ($trellixOnAccess) { Write-Output \"SKIP: NOT_ASSESSED - Trellix on-access driver (mfehidk, $tFilter instance(s)) is attached and its services are running, but Trellix on-access protection cannot be verified locally (Trellix does not expose its on-access state to this check). Confirm in ePO. Not scored; not a PASS.\"; return }\nif ($rtp -eq $false) { Write-Output \"FAIL: Defender real-time protection is DISABLED and no verified real-time engine is present - endpoint is unprotected against on-access threats.\"; return }\nWrite-Output \"FAIL: No active real-time AV/EDR protection detected on this endpoint.\"\n"
+  },
+  {
+   "index": 1,
+   "name": "Antivirus signature freshness (definitions not stale)",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'SilentlyContinue'\n$age = $null\ntry { $age = (Get-MpComputerStatus).AntivirusSignatureAge } catch {}\nif ($age -eq $null) { Write-Output \"SKIP: signature age unavailable — Defender not the active AV (check 3rd-party AV console).\"; return }\nif ($age -le 3) { Write-Output \"PASS: AV signatures are $age day(s) old — within freshness window. [BAS-SIM]\" }\nelse { Write-Output \"FAIL: AV signatures are $age days old — stale definitions miss recent threats. Force an update.\" }\n"
+  },
+  {
+   "index": 2,
+   "name": "Defender Tamper Protection enabled",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'SilentlyContinue'\n$tp = $null\ntry { $tp = (Get-MpComputerStatus).IsTamperProtected } catch {}\nif ($tp -eq $null) { Write-Output \"SKIP: Tamper Protection state unavailable — not a Defender-managed endpoint.\"; return }\n# Approved exception: BAS_EM01_APPROVED_EXCEPTIONS = 'TamperProtection:<ref>' (comma-separated). Approved = reported, not scored.\n$exc = @{}\nforeach ($pair in ([string]$env:BAS_EM01_APPROVED_EXCEPTIONS -split ',')) { $t = $pair.Trim(); if ($t -match '^([A-Za-z]+):(\\S+)$') { $exc[$matches[1]] = $matches[2] } }\nif ($tp -eq $true) { Write-Output \"PASS: Defender Tamper Protection is ENABLED — AV settings are locked against attacker tampering. [BAS-SIM]\" }\nelse {\nif ($exc.ContainsKey('TamperProtection')) { Write-Output \"SKIP: APPROVED EXCEPTION $($exc['TamperProtection']): Defender Tamper Protection is not available on this build (no management service; observed IsTamperProtected=False). Compensating control: Trellix Self Protection enabled. Not scored.\" }\nelse { Write-Output \"FAIL: Tamper Protection is OFF - an attacker with admin can silently disable the AV before attacking, and no approved exception covers it.\" }\n}\n"
+  },
+  {
+   "index": 3,
+   "name": "Host firewall enabled on all profiles (Domain/Private/Public)",
+   "technique_id": "T1562.004",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'SilentlyContinue'\n$profiles = Get-NetFirewallProfile -ErrorAction SilentlyContinue\nif (-not $profiles) { Write-Output \"SKIP: Windows Firewall service not queryable (3rd-party firewall may be in use).\"; return }\n$off = $profiles | Where-Object { -not $_.Enabled } | Select-Object -ExpandProperty Name\nif (-not $off) { Write-Output \"PASS: Host firewall is ENABLED on all profiles (Domain/Private/Public). [BAS-SIM]\" }\nelse { Write-Output \"FAIL: Host firewall is DISABLED on profile(s): $($off -join ', ') — lateral movement and C2 face no host-level filtering.\" }\n"
+  },
+  {
+   "index": 4,
+   "name": "Attack Surface Reduction (ASR) rules configured",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'SilentlyContinue'\n$pref = Get-MpPreference -ErrorAction SilentlyContinue\nif (-not $pref) { Write-Output \"SKIP: ASR state unavailable — Defender not the active engine.\"; return }\n# Filter nulls: @($null) has Count 1 and would report a phantom rule on a host with no ASR configuration.\n$ids = @($pref.AttackSurfaceReductionRules_Ids | Where-Object { $_ })\n$acts = @($pref.AttackSurfaceReductionRules_Actions)\n$blocking = 0; for ($i=0; $i -lt $acts.Count; $i++) { if ($acts[$i] -eq 1) { $blocking++ } }\nif ($ids.Count -eq 0) { Write-Output \"FAIL: No ASR rules configured — Office/script/LOLBin abuse has no surface-reduction control.\"; return }\nif ($blocking -gt 0) { Write-Output \"PASS: $blocking of $($ids.Count) ASR rule(s) in Block mode. [BAS-SIM]\" }\nelse { Write-Output \"FAIL: $($ids.Count) ASR rule(s) present but NONE in Block mode (audit-only) — they observe but do not stop attacks.\" }\n"
+  },
+  {
+   "index": 5,
+   "name": "Application control present (AppLocker or WDAC)",
+   "technique_id": "T1059.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'SilentlyContinue'\n# Effective coverage, not presence: a rule collection enforces only when its\n# EnforcementMode is Enabled. AuditOnly observes and NotConfigured covers nothing.\n$modes = @{}\ntry {\n  $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop\n  foreach ($rc in @($pol.RuleCollections)) { $modes[[string]$rc.RuleCollectionType] = [string]$rc.EnforcementMode }\n} catch {}\n$types = 'Exe','Script','Dll','Msi','Appx'\nforeach ($t in $types) { if (-not $modes.ContainsKey($t)) { $modes[$t] = 'NotConfigured' } }\n$detail = ($types | ForEach-Object { \"$_=$($modes[$_])\" }) -join ' '\nWrite-Output \"APPCTL_COVERAGE: $detail\"\n# CodeIntegrityPolicyEnforcementStatus: 0 = off, 1 = audit only (observes, does not block), 2 = enforced.\n$wdacStatus = 0\ntry { $ci = Get-CimInstance -ClassName Win32_DeviceGuard -Namespace 'root\\Microsoft\\Windows\\DeviceGuard' -ErrorAction Stop; $wdacStatus = [int]$ci.CodeIntegrityPolicyEnforcementStatus } catch {}\nif ($modes['Exe'] -eq 'Enabled' -and $modes['Script'] -eq 'Enabled') {\n  Write-Output \"PASS: AppLocker enforces executables and scripts ($detail). Coverage is limited to the collections listed. [BAS-SIM]\"\n} elseif ($wdacStatus -eq 2) {\n  Write-Output \"PASS: WDAC code-integrity policy is ENFORCED (CodeIntegrityPolicyEnforcementStatus=2); AppLocker does not cover executables and scripts ($detail). Policy scope is not evaluated by this check. [BAS-SIM]\"\n} else {\n  Write-Output \"FAIL: AppLocker does not enforce both executables and scripts ($detail). Audit-only or unconfigured collections observe or cover nothing. [BAS-SIM]\"\n}\n"
+  },
+  {
+   "index": 6,
+   "name": "BitLocker drive encryption on the system volume",
+   "technique_id": "T1486",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n# Baseline gate (Audspect decision). 'required' = the selected baseline requires BitLocker; 'none' = it does not.\n$req = ([string]$env:BAS_EM01_ENCRYPTION_BASELINE).Trim().ToLowerInvariant()\nif ($req -eq '') { $req = 'none' }\nif ($req -notin @('none', 'required')) { Write-Output \"ERROR: BAS_EM01_ENCRYPTION_BASELINE must be 'none' or 'required' (got '$req').\"; return }\nfunction Write-Gate([string]$msg) {\n  if ($req -eq 'required') { Write-Output \"FAIL: Baseline requires BitLocker and it is not in force: $msg (baseline=required).\" }\n  else { Write-Output \"SKIP: NOT_ASSESSED - baseline does not require BitLocker ($msg; baseline=none). Policy-dependent; not scored.\" }\n}\nif (-not (Get-Command Get-BitLockerVolume -ErrorAction SilentlyContinue)) { Write-Gate \"BitLocker feature is not installed on this endpoint\"; return }\ntry { $vol = Get-BitLockerVolume -MountPoint $env:SystemDrive } catch { Write-Output \"ERROR: Get-BitLockerVolume failed: $($_.Exception.Message)\"; return }\nif ($vol.ProtectionStatus -eq 'On' -or $vol.VolumeStatus -eq 'FullyEncrypted') { Write-Output \"PASS: BitLocker is ON for system drive $env:SystemDrive (status=$($vol.VolumeStatus)). [BAS-SIM]\" }\nelse { Write-Gate \"system drive $env:SystemDrive is NOT encrypted (protection=$($vol.ProtectionStatus), VolumeStatus=$($vol.VolumeStatus))\" }\n"
+  },
+  {
+   "index": 7,
+   "name": "Defender behavior monitoring enabled",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\nif (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output \"SKIP: Microsoft Defender (WinDefend) is not installed; third-party engine in use.\"; return }\ntry { $s = Get-MpComputerStatus } catch { Write-Output \"ERROR: Get-MpComputerStatus failed: $($_.Exception.Message)\"; return }\n# Trellix on-access driver (mfehidk) attached, with its services running. This is presence only: it does NOT\n# prove on-access protection is enabled or working. Trellix's on-access state is not readable locally.\n$tFilter = $null\n$fl = (& fltmc filters 2>$null) -join \"`n\"\nif ($fl -match '(?m)^\\s*mfehidk\\s+([1-9]\\d*)\\s') { $tFilter = $matches[1] }\n$tSvc = @(Get-Service masvc,mfemms -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Running' }).Count -eq 2\n$trellixOnAccess = ($null -ne $tFilter) -and $tSvc\n$passive = ([string]$s.AMRunningMode) -match 'Passive'\n$engines = @()\nif ($passive) {\n  try {\n    $av = @(Get-CimInstance -Namespace 'root/SecurityCenter2' -ClassName AntiVirusProduct -ErrorAction Stop)\n    foreach ($p in $av) { if ($p.displayName -notmatch 'Defender' -and (($p.productState -band 0x1000) -ne 0)) { $engines += $p.displayName } }\n  } catch {}\n}\nif ([bool]$s.BehaviorMonitorEnabled) { Write-Output \"PASS: Defender behavior monitoring is ENABLED (observed BehaviorMonitorEnabled=True).\" }\nelseif ($trellixOnAccess -and -not [bool]$s.RealTimeProtectionEnabled) { Write-Output \"SKIP: NOT_ASSESSED - Defender behavior monitoring is off (observed BehaviorMonitorEnabled=False) and real-time protection is off; Trellix on-access driver (mfehidk) is attached, but Trellix behaviour coverage cannot be verified locally. Confirm in ePO. Not scored.\" }\nelseif ($passive -and $engines.Count -gt 0) { Write-Output \"SKIP: Defender passive by design (observed AMRunningMode=$($s.AMRunningMode)); third-party engine enforcing: $($engines -join ', '). Not scored.\" }\nelse { Write-Output \"FAIL: Defender behavior monitoring is DISABLED (observed BehaviorMonitorEnabled=False); process-behaviour detection is off.\" }\n"
+  },
+  {
+   "index": 8,
+   "name": "Defender on-access scanning of downloads and attachments enabled",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\nif (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output \"SKIP: Microsoft Defender (WinDefend) is not installed; third-party engine in use.\"; return }\ntry { $s = Get-MpComputerStatus } catch { Write-Output \"ERROR: Get-MpComputerStatus failed: $($_.Exception.Message)\"; return }\n# Approved exceptions: BAS_EM01_APPROVED_EXCEPTIONS = 'DisableIOAVProtection:<ref>' (comma-separated). Approved = reported, not scored.\n$exc = @{}\nforeach ($pair in ([string]$env:BAS_EM01_APPROVED_EXCEPTIONS -split ',')) { $t = $pair.Trim(); if ($t -match '^([A-Za-z]+):(\\S+)$') { $exc[$matches[1]] = $matches[2] } }\n# Trellix on-access driver (mfehidk) attached, with its services running. This is presence only: it does NOT\n# prove on-access protection is enabled or working. Trellix's on-access state is not readable locally.\n$tFilter = $null\n$fl = (& fltmc filters 2>$null) -join \"`n\"\nif ($fl -match '(?m)^\\s*mfehidk\\s+([1-9]\\d*)\\s') { $tFilter = $matches[1] }\n$tSvc = @(Get-Service masvc,mfemms -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Running' }).Count -eq 2\n$trellixOnAccess = ($null -ne $tFilter) -and $tSvc\n$passive = ([string]$s.AMRunningMode) -match 'Passive'\n$engines = @()\nif ($passive) {\n  try {\n    $av = @(Get-CimInstance -Namespace 'root/SecurityCenter2' -ClassName AntiVirusProduct -ErrorAction Stop)\n    foreach ($p in $av) { if ($p.displayName -notmatch 'Defender' -and (($p.productState -band 0x1000) -ne 0)) { $engines += $p.displayName } }\n  } catch {}\n}\nif ([bool]$s.IoavProtectionEnabled) { Write-Output \"PASS: Defender on-access scanning of downloads and attachments is ENABLED (observed IoavProtectionEnabled=True).\" }\nelseif ($trellixOnAccess) { Write-Output \"SKIP: NOT_ASSESSED - Trellix on-access driver (mfehidk, $tFilter instance(s)) is attached and its services are running, but Trellix on-access protection cannot be verified locally (Trellix does not expose its on-access state to this check). Confirm in ePO. Not scored; not a PASS.\" }\nelseif ($passive -and $engines.Count -gt 0) { Write-Output \"SKIP: Defender passive by design (observed AMRunningMode=$($s.AMRunningMode)); third-party engine enforcing: $($engines -join ', '). Not scored.\" }\nelseif ($exc.ContainsKey('DisableIOAVProtection')) { Write-Output \"SKIP: APPROVED EXCEPTION $($exc['DisableIOAVProtection']): on-access scanning is disabled under an approved exception (observed IoavProtectionEnabled=False); not scored.\" }\nelse { Write-Output \"FAIL: Defender on-access scanning of downloads and attachments is DISABLED (observed IoavProtectionEnabled=False) and no approved exception covers it.\" }\n"
+  },
+  {
+   "index": 9,
+   "name": "Defender running in active mode (not passive without a replacement)",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\nif (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output \"SKIP: Microsoft Defender (WinDefend) is not installed; running-mode check not applicable.\"; return }\ntry { $s = Get-MpComputerStatus } catch { Write-Output \"ERROR: Get-MpComputerStatus failed: $($_.Exception.Message)\"; return }\n$mode = [string]$s.AMRunningMode\nif ($mode -notmatch 'Passive') { Write-Output \"PASS: Defender is the active engine (observed AMRunningMode=$mode).\"; return }\n$others = @()\ntry {\n  $av = @(Get-CimInstance -Namespace 'root/SecurityCenter2' -ClassName AntiVirusProduct -ErrorAction Stop)\n  foreach ($p in $av) { if ($p.displayName -notmatch 'Defender' -and (($p.productState -band 0x1000) -ne 0)) { $others += $p.displayName } }\n} catch {}\nif ($others.Count -gt 0) { Write-Output \"PASS: Defender is passive by design (observed AMRunningMode=$mode) and an active third-party AV is enforcing: $($others -join ', ').\" }\nelse { Write-Output \"FAIL: Defender is PASSIVE (observed AMRunningMode=$mode) and no active third-party AV was found; nothing is enforcing on-access protection.\" }\n"
+  },
+  {
+   "index": 10,
+   "name": "Defender AMSI script scanning enabled",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\nif (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output \"SKIP: Microsoft Defender (WinDefend) is not installed; script scanning check not applicable.\"; return }\ntry { $p = Get-MpPreference } catch { Write-Output \"ERROR: Get-MpPreference failed: $($_.Exception.Message)\"; return }\nif (-not [bool]$p.DisableScriptScanning) { Write-Output \"PASS: Defender script scanning is enabled (observed DisableScriptScanning=False).\" }\nelse { Write-Output \"FAIL: Defender script scanning is DISABLED (observed DisableScriptScanning=True); malicious script content is not inspected by AMSI.\" }\n"
+  },
+  {
+   "index": 11,
+   "name": "Cloud-delivered protection set to Advanced",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\nif (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output \"SKIP: Microsoft Defender (WinDefend) is not installed; cloud protection check not applicable.\"; return }\ntry { $p = Get-MpPreference } catch { Write-Output \"ERROR: Get-MpPreference failed: $($_.Exception.Message)\"; return }\n$v = [int]$p.MAPSReporting\nif ($v -eq 2) { Write-Output \"PASS: Cloud-delivered protection is ADVANCED (observed MAPSReporting=2).\" }\nelse { Write-Output \"FAIL: Cloud-delivered protection is not Advanced (observed MAPSReporting=$v; 0=off, 1=basic, 2=advanced). New threats are caught later.\" }\n"
+  },
+  {
+   "index": 12,
+   "name": "Potentially unwanted application (PUA) protection in block mode",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\nif (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output \"SKIP: Microsoft Defender (WinDefend) is not installed; PUA check not applicable.\"; return }\ntry { $p = Get-MpPreference } catch { Write-Output \"ERROR: Get-MpPreference failed: $($_.Exception.Message)\"; return }\n$v = [int]$p.PUAProtection\nif ($v -eq 1) { Write-Output \"PASS: PUA protection is in BLOCK mode (observed PUAProtection=1).\" }\nelse { Write-Output \"FAIL: PUA protection is not in block mode (observed PUAProtection=$v; 0=off, 1=block, 2=audit).\" }\n"
+  },
+  {
+   "index": 13,
+   "name": "Network protection in block mode",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\nif (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output \"SKIP: Microsoft Defender (WinDefend) is not installed; network protection check not applicable.\"; return }\ntry { $p = Get-MpPreference } catch { Write-Output \"ERROR: Get-MpPreference failed: $($_.Exception.Message)\"; return }\n$v = [int]$p.EnableNetworkProtection\nif ($v -eq 1) { Write-Output \"PASS: Network protection is in BLOCK mode (observed EnableNetworkProtection=1).\" }\nelse { Write-Output \"FAIL: Network protection is not in block mode (observed EnableNetworkProtection=$v; 0=off, 1=block, 2=audit).\" }\n"
+  },
+  {
+   "index": 14,
+   "name": "Controlled folder access in block mode",
+   "technique_id": "T1486",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\nif (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output \"SKIP: Microsoft Defender (WinDefend) is not installed; controlled folder access check not applicable.\"; return }\ntry { $p = Get-MpPreference } catch { Write-Output \"ERROR: Get-MpPreference failed: $($_.Exception.Message)\"; return }\n$v = [int]$p.EnableControlledFolderAccess\nif ($v -eq 1) { Write-Output \"PASS: Controlled folder access is in BLOCK mode (observed EnableControlledFolderAccess=1).\" }\nelse { Write-Output \"FAIL: Controlled folder access is not fully enforcing (observed EnableControlledFolderAccess=$v; 0=off, 1=block, 2=audit, 3/4=partial). Ransomware can write to protected folders.\" }\n"
+  },
+  {
+   "index": 15,
+   "name": "Network Inspection signature freshness (not older than 3 days)",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\nif (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output \"SKIP: Microsoft Defender (WinDefend) is not installed; NIS check not applicable.\"; return }\ntry { $s = Get-MpComputerStatus } catch { Write-Output \"ERROR: Get-MpComputerStatus failed: $($_.Exception.Message)\"; return }\nif (-not [bool]$s.NISEnabled) { Write-Output \"SKIP: Network Inspection System is disabled on this endpoint; NIS signature freshness is not applicable.\"; return }\n$age = [int]$s.NISSignatureAge\nif ($age -ge 65535) { Write-Output \"ERROR: NIS is enabled but its signature age is not reported (NISSignatureAge=$age).\"; return }\nif ($age -le 3) { Write-Output \"PASS: NIS signatures are $age day(s) old (observed NISSignatureAge=$age).\" }\nelse { Write-Output \"FAIL: NIS signatures are $age days old (observed NISSignatureAge=$age); network inspection is working from stale definitions.\" }\n"
+  },
+  {
+   "index": 16,
+   "name": "Antivirus definitions updated within configured window (Audspect default 24 hours)",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\nif (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output \"SKIP: Microsoft Defender (WinDefend) is not installed; definition timestamp check not applicable.\"; return }\ntry { $s = Get-MpComputerStatus } catch { Write-Output \"ERROR: Get-MpComputerStatus failed: $($_.Exception.Message)\"; return }\n$t = $s.AntivirusSignatureLastUpdated\nif ($null -eq $t) { Write-Output \"ERROR: AntivirusSignatureLastUpdated is not reported.\"; return }\n# Audspect recommended default, not a Microsoft or CIS requirement. Override with BAS_EM01_AV_DEF_HOURS (whole hours, >= 1).\n$thr = 24; $src = 'Audspect recommended default'\n$raw = [string]$env:BAS_EM01_AV_DEF_HOURS\nif ($raw.Trim() -ne '') { $n = 0; if (-not [int]::TryParse($raw.Trim(), [ref]$n) -or $n -lt 1) { Write-Output \"ERROR: BAS_EM01_AV_DEF_HOURS must be a positive whole number of hours (got '$raw').\"; return }; $thr = $n; $src = 'organization override BAS_EM01_AV_DEF_HOURS' }\n$h = [math]::Round(((Get-Date) - [datetime]$t).TotalHours, 1)\n$tt = \"threshold=$thr hours ($src)\"\nif ($h -le $thr) { Write-Output \"PASS: AV definitions were last updated $h hour(s) ago (observed $t; $tt).\"; return }\n# Stale. Decide endpoint failure vs environment by probing the update source (TCP 443). Override host: BAS_EM01_DEF_UPDATE_HOST.\n$updHost = ([string]$env:BAS_EM01_DEF_UPDATE_HOST).Trim()\nif ($updHost -eq '') { $updHost = 'definitionupdates.microsoft.com' }\n$reach = $false; $why = ''\ntry {\n  $c = New-Object System.Net.Sockets.TcpClient\n  $ar = $c.BeginConnect($updHost, 443, $null, $null)\n  if ($ar.AsyncWaitHandle.WaitOne(5000)) { $c.EndConnect($ar); $reach = [bool]$c.Connected } else { $why = 'TCP connect timed out after 5 s' }\n  $c.Close()\n} catch { $why = $_.Exception.Message }\nif ($reach) { Write-Output \"FAIL: AV definitions were last updated $h hour(s) ago (observed $t; $tt) while the update source $($updHost):443 is reachable from this endpoint; the endpoint is not taking updates.\" }\nelse { Write-Output \"SKIP: NOT_ASSESSED - definitions are $h hour(s) old (observed $t; $tt) but the update source $($updHost):443 is unreachable from this host ($why). Environmental: staleness cannot be attributed to the endpoint. Not scored.\" }\n"
+  },
+  {
+   "index": 17,
+   "name": "Scheduled antivirus scan configured",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\nif (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output \"SKIP: Microsoft Defender (WinDefend) is not installed; scheduled scan check not applicable.\"; return }\ntry { $p = Get-MpPreference } catch { Write-Output \"ERROR: Get-MpPreference failed: $($_.Exception.Message)\"; return }\n$d = [int]$p.ScanScheduleDay\nif ($d -ne 8) { Write-Output \"PASS: A scheduled AV scan is configured (observed ScanScheduleDay=$d; 8=never).\" }\nelse { Write-Output \"FAIL: No scheduled AV scan is configured (observed ScanScheduleDay=8, 'never'); dormant malware is only found by manual scans.\" }\n"
+  },
+  {
+   "index": 18,
+   "name": "Defender not disabled by policy or preference",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n$regVal = (Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows Defender' -Name DisableAntiSpyware -ErrorAction SilentlyContinue).DisableAntiSpyware\n$prefVal = $false\ntry { $p = Get-MpPreference; $prefVal = [bool]$p.DisableAntiSpyware } catch { Write-Output \"ERROR: Get-MpPreference failed: $($_.Exception.Message)\"; return }\nif ([int]$regVal -eq 1 -or $prefVal) { Write-Output \"FAIL: Defender is DISABLED by configuration (policy DisableAntiSpyware=$regVal, preference DisableAntiSpyware=$prefVal).\" }\nelse { Write-Output \"PASS: No disable-antispyware flag is set (policy value=$regVal, preference DisableAntiSpyware=$prefVal).\" }\n"
+  },
+  {
+   "index": 19,
+   "name": "No Defender protection disable flags in configuration",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\nif (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output \"SKIP: Microsoft Defender (WinDefend) is not installed; configuration flag check not applicable.\"; return }\ntry { $p = Get-MpPreference } catch { Write-Output \"ERROR: Get-MpPreference failed: $($_.Exception.Message)\"; return }\n# Approved exceptions: BAS_EM01_APPROVED_EXCEPTIONS = '<FlagName>:<ref>' (comma-separated). Approved = reported, not scored.\n$exc = @{}\nforeach ($pair in ([string]$env:BAS_EM01_APPROVED_EXCEPTIONS -split ',')) { $t = $pair.Trim(); if ($t -match '^([A-Za-z]+):(\\S+)$') { $exc[$matches[1]] = $matches[2] } }\n$flags = [ordered]@{\n  DisableRealtimeMonitoring        = [bool]$p.DisableRealtimeMonitoring\n  DisableBehaviorMonitoring        = [bool]$p.DisableBehaviorMonitoring\n  DisableIOAVProtection            = [bool]$p.DisableIOAVProtection\n  DisableIntrusionPreventionSystem = [bool]$p.DisableIntrusionPreventionSystem\n}\n$on = @($flags.GetEnumerator() | Where-Object { $_.Value } | ForEach-Object { $_.Key })\n$unapproved = @($on | Where-Object { -not $exc.ContainsKey($_) })\n$approved = @($on | Where-Object { $exc.ContainsKey($_) } | ForEach-Object { \"$_ (ref $($exc[$_]))\" })\nif ($unapproved.Count -gt 0) { Write-Output \"FAIL: The Defender configuration disables protection through: $($unapproved -join ', ') (set to True) and no approved exception covers them.$(if ($approved.Count) { ' Approved exceptions: ' + ($approved -join ', ') + '.' })\" }\nelseif ($approved.Count -gt 0) { Write-Output \"SKIP: APPROVED EXCEPTION: $($approved -join ', ') disabled under an approved exception; not scored. Exception must be reviewed.\" }\nelse { Write-Output \"PASS: No protection disable flag is set in the Defender configuration (all four flags False).\" }\n"
+  },
+  {
+   "index": 20,
+   "name": "No broad Defender exclusions (roots, system folders, Temp, LOLBins, extensions)",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\nif (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output \"SKIP: Microsoft Defender (WinDefend) is not installed; exclusion review not applicable.\"; return }\ntry { $p = Get-MpPreference } catch { Write-Output \"ERROR: Get-MpPreference failed: $($_.Exception.Message)\"; return }\n$paths = @($p.ExclusionPath | Where-Object { $_ })\n$procs = @($p.ExclusionProcess | Where-Object { $_ })\n$exts  = @($p.ExclusionExtension | Where-Object { $_ })\n$broad = @()\nforeach ($x in $paths) {\n  if ($x -match '^[A-Za-z]:\\\\?$' -or $x -match '^[A-Za-z]:\\\\(Windows|Users|Program Files|Program Files \\(x86\\)|ProgramData)\\\\?$' -or $x -match '^[A-Za-z]:\\\\Users\\\\Public' -or $x -match '\\\\Temp\\\\?$' -or $x -match '\\*') { $broad += \"path:$x\" }\n}\n$lolbins = @('powershell.exe','pwsh.exe','cmd.exe','wscript.exe','cscript.exe','mshta.exe','rundll32.exe','regsvr32.exe','wmic.exe','msbuild.exe','certutil.exe','bitsadmin.exe','installutil.exe')\nforeach ($x in $procs) { if ($lolbins -contains (Split-Path -Leaf $x).ToLower() -or $x -match '\\*') { $broad += \"process:$x\" } }\nforeach ($x in $exts) { $broad += \"extension:$x\" }\nif ($broad.Count -gt 0) { Write-Output \"FAIL: Broad Defender exclusions present: $($broad -join '; ').\" }\nelse { Write-Output \"PASS: No broad Defender exclusions (reviewed paths=$($paths.Count), processes=$($procs.Count), extensions=$($exts.Count); none covers a drive root, system or user root, Temp, a wildcard, a LOLBin or an extension).\" }\n"
+  },
+  {
+   "index": 21,
+   "name": "Firewall default inbound action is Block on all profiles",
+   "technique_id": "T1562.004",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\ntry { $pr = @(Get-NetFirewallProfile -PolicyStore ActiveStore) } catch { Write-Output \"ERROR: Get-NetFirewallProfile failed: $($_.Exception.Message)\"; return }\n$obs = ($pr | ForEach-Object { \"$($_.Name)=$($_.DefaultInboundAction)\" }) -join ' '\n$bad = @($pr | Where-Object { [string]$_.DefaultInboundAction -ne 'Block' } | ForEach-Object { $_.Name })\nif ($bad.Count -eq 0) { Write-Output \"PASS: Default inbound action is Block on all profiles (observed $obs).\" }\nelse { Write-Output \"FAIL: Default inbound action is not Block on: $($bad -join ', ') (observed $obs).\" }\n"
+  },
+  {
+   "index": 22,
+   "name": "Firewall outbound policy validated against the selected baseline",
+   "technique_id": "T1562.004",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n# Override: BAS_EM01_OUTBOUND_BASELINE = 'block' when the selected security baseline requires outbound Deny.\n# Unset or 'none': no outbound baseline is configured, so the result is NOT_ASSESSED (SKIP, informational).\n$req = [string]$env:BAS_EM01_OUTBOUND_BASELINE\nif ([string]::IsNullOrWhiteSpace($req)) { $req = 'none' }\n$req = $req.Trim().ToLower()\nif ($req -notin @('none', 'block')) { Write-Output \"ERROR: BAS_EM01_OUTBOUND_BASELINE must be 'none' or 'block' (got '$req').\"; return }\ntry { $pr = @(Get-NetFirewallProfile -PolicyStore ActiveStore) } catch { Write-Output \"ERROR: Get-NetFirewallProfile failed: $($_.Exception.Message)\"; return }\n$obs = ($pr | ForEach-Object { \"$($_.Name)=$($_.DefaultOutboundAction)\" }) -join ' '\nif ($req -eq 'none') { Write-Output \"SKIP: NOT_ASSESSED - no outbound baseline is configured (BAS_EM01_OUTBOUND_BASELINE unset). Observed outbound default: $obs. Informational; not scored.\"; return }\n$open = @($pr | Where-Object { [string]$_.DefaultOutboundAction -ne 'Block' } | ForEach-Object { $_.Name })\nif ($open.Count -eq 0) { Write-Output \"PASS: The configured baseline requires outbound Deny and it is in force on all profiles (observed $obs; baseline=block).\" }\nelse { Write-Output \"FAIL: The configured baseline requires outbound Deny; it is violated on: $($open -join ', ') (observed $obs; baseline=block).\" }\n"
+  },
+  {
+   "index": 23,
+   "name": "Windows Defender Firewall service (mpssvc) running",
+   "technique_id": "T1562.004",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n$svc = Get-Service -Name mpssvc -ErrorAction SilentlyContinue\nif (-not $svc) { Write-Output \"FAIL: Windows Defender Firewall service (mpssvc) is not present on this endpoint.\"; return }\nif ([string]$svc.Status -eq 'Running') { Write-Output \"PASS: Windows Defender Firewall service is Running (StartType=$($svc.StartType)).\" }\nelse { Write-Output \"FAIL: Windows Defender Firewall service is $($svc.Status) (StartType=$($svc.StartType)); no firewall rule is enforced.\" }\n"
+  },
+  {
+   "index": 24,
+   "name": "No effective allow-all inbound firewall rule",
+   "technique_id": "T1562.004",
+   "timeout_sec": 120,
+   "command": "$ErrorActionPreference = 'Stop'\ntry {\n  # Packaged (UWP) app rules carry a Package SID on the application filter; they are scoped, not host-wide.\n  $appAny  = @(Get-NetFirewallApplicationFilter -All | Where-Object { [string]$_.Program -eq 'Any' -and [string]::IsNullOrEmpty([string]$_.Package) } | ForEach-Object { $_.InstanceID })\n  $portAny = @(Get-NetFirewallPortFilter -All | Where-Object { [string]$_.LocalPort -eq 'Any' -and [string]$_.Protocol -eq 'Any' } | ForEach-Object { $_.InstanceID })\n  $inbound = @(Get-NetFirewallRule -Direction Inbound -Enabled True -Action Allow)\n} catch { Write-Output \"ERROR: firewall rule enumeration failed: $($_.Exception.Message)\"; return }\n$hits = @($inbound | Where-Object { ($appAny -contains $_.InstanceID) -and ($portAny -contains $_.InstanceID) } | ForEach-Object { $_.DisplayName })\nif ($hits.Count -eq 0) { Write-Output \"PASS: No enabled inbound allow rule applies to any program on any port (inbound allow rules reviewed: $($inbound.Count)).\" }\nelse { Write-Output \"FAIL: Enabled inbound allow rule(s) apply to any program on any port: $($hits -join '; ').\" }\n"
+  },
+  {
+   "index": 25,
+   "name": "Remote Desktop not allowed inbound on the Public profile",
+   "technique_id": "T1021.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\ntry { $rules = @(Get-NetFirewallRule -Name 'RemoteDesktop-*' -ErrorAction Stop) } catch { Write-Output \"ERROR: Remote Desktop rule query failed: $($_.Exception.Message)\"; return }\n$live = @($rules | Where-Object { [string]$_.Enabled -eq 'True' -and [string]$_.Direction -eq 'Inbound' -and [string]$_.Action -eq 'Allow' })\nif ($live.Count -eq 0) { Write-Output \"PASS: No enabled Remote Desktop inbound allow rule exists; RDP is not reachable through the host firewall.\"; return }\n$pub = @($live | Where-Object { [string]$_.Profile -match 'Public|Any' } | ForEach-Object { $_.Name })\nif ($pub.Count -gt 0) { Write-Output \"FAIL: Remote Desktop inbound is allowed on the Public profile or all profiles: $($pub -join ', ').\" }\nelse { Write-Output \"PASS: Remote Desktop inbound is allowed only on Domain or Private profiles (enabled rules=$($live.Count)).\" }\n"
+  },
+  {
+   "index": 26,
+   "name": "Firewall logs blocked inbound connections on all profiles",
+   "technique_id": "T1562.004",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\ntry { $pr = @(Get-NetFirewallProfile -PolicyStore ActiveStore) } catch { Write-Output \"ERROR: Get-NetFirewallProfile failed: $($_.Exception.Message)\"; return }\n$off = @($pr | Where-Object { -not [bool]$_.LogBlocked } | ForEach-Object { $_.Name })\nif ($off.Count -eq 0) { Write-Output \"PASS: Blocked-connection logging is ON on all profiles (LogBlocked=True).\" }\nelse { Write-Output \"FAIL: Blocked-connection logging is OFF on: $($off -join ', '); dropped traffic leaves no host-level evidence.\" }\n"
+  },
+  {
+   "index": 27,
+   "name": "Firewall log size meets configured threshold (Audspect default 16 MB)",
+   "technique_id": "T1562.004",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\ntry { $pr = @(Get-NetFirewallProfile -PolicyStore ActiveStore) } catch { Write-Output \"ERROR: Get-NetFirewallProfile failed: $($_.Exception.Message)\"; return }\n# Audspect recommended default, not a Microsoft or CIS requirement. Override with BAS_EM01_FW_LOG_MB (whole MB, >= 1).\n$thr = 16; $src = 'Audspect recommended default'\n$raw = [string]$env:BAS_EM01_FW_LOG_MB\nif ($raw.Trim() -ne '') { $n = 0; if (-not [int]::TryParse($raw.Trim(), [ref]$n) -or $n -lt 1) { Write-Output \"ERROR: BAS_EM01_FW_LOG_MB must be a positive whole number of MB (got '$raw').\"; return }; $thr = $n; $src = 'organization override BAS_EM01_FW_LOG_MB' }\n$obs = ($pr | ForEach-Object { \"$($_.Name)=$([math]::Round([int]$_.LogMaxSizeKilobytes / 1024, 1))MB\" }) -join ' '\n$small = @($pr | Where-Object { [int]$_.LogMaxSizeKilobytes -lt ($thr * 1024) } | ForEach-Object { $_.Name })\n$tt = \"threshold=$thr MB ($src)\"\nif ($small.Count -eq 0) { Write-Output \"PASS: Firewall log size meets the threshold on all profiles (observed $obs; $tt).\" }\nelse { Write-Output \"FAIL: Firewall log size is below the threshold on: $($small -join ', ') (observed $obs; $tt).\" }\n"
+  },
+  {
+   "index": 28,
+   "name": "ASR: Block credential stealing from LSASS",
+   "technique_id": "T1003.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n$ruleId = '9E6C4E1F-7D60-472F-BA1A-A39EF669E4B2'; $ruleName = 'Block credential stealing from LSASS'\nif (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output \"SKIP: Microsoft Defender (WinDefend) is not installed; ASR check not applicable.\"; return }\ntry { $p = Get-MpPreference } catch { Write-Output \"ERROR: Get-MpPreference failed: $($_.Exception.Message)\"; return }\n$ids = @($p.AttackSurfaceReductionRules_Ids); $acts = @($p.AttackSurfaceReductionRules_Actions)\n$idx = -1; for ($i = 0; $i -lt $ids.Count; $i++) { if ([string]$ids[$i] -ieq $ruleId) { $idx = $i; break } }\nif ($idx -lt 0) { Write-Output \"FAIL: ASR rule '$ruleName' is not configured (observed: absent).\"; return }\n$act = [int]$acts[$idx]\nif ($act -eq 1) { Write-Output \"PASS: ASR rule '$ruleName' is in BLOCK mode (observed action=1).\" }\nelse { Write-Output \"FAIL: ASR rule '$ruleName' is not in block mode (observed action=$act; 0=disabled, 2=audit, 6=warn).\" }\n"
+  },
+  {
+   "index": 29,
+   "name": "ASR: Use advanced protection against ransomware",
+   "technique_id": "T1486",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n$ruleId = 'C1DB55AB-C21A-4637-BB3F-A12568109D35'; $ruleName = 'Use advanced protection against ransomware'\nif (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output \"SKIP: Microsoft Defender (WinDefend) is not installed; ASR check not applicable.\"; return }\ntry { $p = Get-MpPreference } catch { Write-Output \"ERROR: Get-MpPreference failed: $($_.Exception.Message)\"; return }\n$ids = @($p.AttackSurfaceReductionRules_Ids); $acts = @($p.AttackSurfaceReductionRules_Actions)\n$idx = -1; for ($i = 0; $i -lt $ids.Count; $i++) { if ([string]$ids[$i] -ieq $ruleId) { $idx = $i; break } }\nif ($idx -lt 0) { Write-Output \"FAIL: ASR rule '$ruleName' is not configured (observed: absent).\"; return }\n$act = [int]$acts[$idx]\nif ($act -eq 1) { Write-Output \"PASS: ASR rule '$ruleName' is in BLOCK mode (observed action=1).\" }\nelse { Write-Output \"FAIL: ASR rule '$ruleName' is not in block mode (observed action=$act; 0=disabled, 2=audit, 6=warn).\" }\n"
+  },
+  {
+   "index": 30,
+   "name": "ASR: Block all Office applications from creating child processes",
+   "technique_id": "T1204.002",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n$ruleId = 'D4F940AB-401B-4EFC-AADC-AD5F3C50688A'; $ruleName = 'Block all Office applications from creating child processes'\nif (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output \"SKIP: Microsoft Defender (WinDefend) is not installed; ASR check not applicable.\"; return }\ntry { $p = Get-MpPreference } catch { Write-Output \"ERROR: Get-MpPreference failed: $($_.Exception.Message)\"; return }\n$ids = @($p.AttackSurfaceReductionRules_Ids); $acts = @($p.AttackSurfaceReductionRules_Actions)\n$idx = -1; for ($i = 0; $i -lt $ids.Count; $i++) { if ([string]$ids[$i] -ieq $ruleId) { $idx = $i; break } }\nif ($idx -lt 0) { Write-Output \"FAIL: ASR rule '$ruleName' is not configured (observed: absent).\"; return }\n$act = [int]$acts[$idx]\nif ($act -eq 1) { Write-Output \"PASS: ASR rule '$ruleName' is in BLOCK mode (observed action=1).\" }\nelse { Write-Output \"FAIL: ASR rule '$ruleName' is not in block mode (observed action=$act; 0=disabled, 2=audit, 6=warn).\" }\n"
+  },
+  {
+   "index": 31,
+   "name": "ASR: Block Office applications from creating executable content",
+   "technique_id": "T1566.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n$ruleId = '3B576869-A4EC-4529-8536-B80A7769E899'; $ruleName = 'Block Office applications from creating executable content'\nif (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output \"SKIP: Microsoft Defender (WinDefend) is not installed; ASR check not applicable.\"; return }\ntry { $p = Get-MpPreference } catch { Write-Output \"ERROR: Get-MpPreference failed: $($_.Exception.Message)\"; return }\n$ids = @($p.AttackSurfaceReductionRules_Ids); $acts = @($p.AttackSurfaceReductionRules_Actions)\n$idx = -1; for ($i = 0; $i -lt $ids.Count; $i++) { if ([string]$ids[$i] -ieq $ruleId) { $idx = $i; break } }\nif ($idx -lt 0) { Write-Output \"FAIL: ASR rule '$ruleName' is not configured (observed: absent).\"; return }\n$act = [int]$acts[$idx]\nif ($act -eq 1) { Write-Output \"PASS: ASR rule '$ruleName' is in BLOCK mode (observed action=1).\" }\nelse { Write-Output \"FAIL: ASR rule '$ruleName' is not in block mode (observed action=$act; 0=disabled, 2=audit, 6=warn).\" }\n"
+  },
+  {
+   "index": 32,
+   "name": "ASR: Block Office applications from injecting code into other processes",
+   "technique_id": "T1055",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n$ruleId = '75668C1F-73B5-4CF0-BB93-3ECF5CB7CC84'; $ruleName = 'Block Office applications from injecting code into other processes'\nif (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output \"SKIP: Microsoft Defender (WinDefend) is not installed; ASR check not applicable.\"; return }\ntry { $p = Get-MpPreference } catch { Write-Output \"ERROR: Get-MpPreference failed: $($_.Exception.Message)\"; return }\n$ids = @($p.AttackSurfaceReductionRules_Ids); $acts = @($p.AttackSurfaceReductionRules_Actions)\n$idx = -1; for ($i = 0; $i -lt $ids.Count; $i++) { if ([string]$ids[$i] -ieq $ruleId) { $idx = $i; break } }\nif ($idx -lt 0) { Write-Output \"FAIL: ASR rule '$ruleName' is not configured (observed: absent).\"; return }\n$act = [int]$acts[$idx]\nif ($act -eq 1) { Write-Output \"PASS: ASR rule '$ruleName' is in BLOCK mode (observed action=1).\" }\nelse { Write-Output \"FAIL: ASR rule '$ruleName' is not in block mode (observed action=$act; 0=disabled, 2=audit, 6=warn).\" }\n"
+  },
+  {
+   "index": 33,
+   "name": "ASR: Block execution of potentially obfuscated scripts",
+   "technique_id": "T1027",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n$ruleId = '5BEB7EFE-FD9A-4556-801D-275E5FFC04CC'; $ruleName = 'Block execution of potentially obfuscated scripts'\nif (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output \"SKIP: Microsoft Defender (WinDefend) is not installed; ASR check not applicable.\"; return }\ntry { $p = Get-MpPreference } catch { Write-Output \"ERROR: Get-MpPreference failed: $($_.Exception.Message)\"; return }\n$ids = @($p.AttackSurfaceReductionRules_Ids); $acts = @($p.AttackSurfaceReductionRules_Actions)\n$idx = -1; for ($i = 0; $i -lt $ids.Count; $i++) { if ([string]$ids[$i] -ieq $ruleId) { $idx = $i; break } }\nif ($idx -lt 0) { Write-Output \"FAIL: ASR rule '$ruleName' is not configured (observed: absent).\"; return }\n$act = [int]$acts[$idx]\nif ($act -eq 1) { Write-Output \"PASS: ASR rule '$ruleName' is in BLOCK mode (observed action=1).\" }\nelse { Write-Output \"FAIL: ASR rule '$ruleName' is not in block mode (observed action=$act; 0=disabled, 2=audit, 6=warn).\" }\n"
+  },
+  {
+   "index": 34,
+   "name": "ASR: Block JavaScript or VBScript from launching downloaded executables",
+   "technique_id": "T1059.005",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n$ruleId = 'D3E037E1-3EB8-44C8-A917-57927947596D'; $ruleName = 'Block JavaScript or VBScript from launching downloaded executable content'\nif (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output \"SKIP: Microsoft Defender (WinDefend) is not installed; ASR check not applicable.\"; return }\ntry { $p = Get-MpPreference } catch { Write-Output \"ERROR: Get-MpPreference failed: $($_.Exception.Message)\"; return }\n$ids = @($p.AttackSurfaceReductionRules_Ids); $acts = @($p.AttackSurfaceReductionRules_Actions)\n$idx = -1; for ($i = 0; $i -lt $ids.Count; $i++) { if ([string]$ids[$i] -ieq $ruleId) { $idx = $i; break } }\nif ($idx -lt 0) { Write-Output \"FAIL: ASR rule '$ruleName' is not configured (observed: absent).\"; return }\n$act = [int]$acts[$idx]\nif ($act -eq 1) { Write-Output \"PASS: ASR rule '$ruleName' is in BLOCK mode (observed action=1).\" }\nelse { Write-Output \"FAIL: ASR rule '$ruleName' is not in block mode (observed action=$act; 0=disabled, 2=audit, 6=warn).\" }\n"
+  },
+  {
+   "index": 35,
+   "name": "ASR: Block process creations from PSExec and WMI commands",
+   "technique_id": "T1569.002",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n$ruleId = 'D1E49AAC-8F56-4280-B9BA-993A6D77406C'; $ruleName = 'Block process creations originating from PSExec and WMI commands'\nif (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output \"SKIP: Microsoft Defender (WinDefend) is not installed; ASR check not applicable.\"; return }\ntry { $p = Get-MpPreference } catch { Write-Output \"ERROR: Get-MpPreference failed: $($_.Exception.Message)\"; return }\n$ids = @($p.AttackSurfaceReductionRules_Ids); $acts = @($p.AttackSurfaceReductionRules_Actions)\n$idx = -1; for ($i = 0; $i -lt $ids.Count; $i++) { if ([string]$ids[$i] -ieq $ruleId) { $idx = $i; break } }\nif ($idx -lt 0) { Write-Output \"FAIL: ASR rule '$ruleName' is not configured (observed: absent).\"; return }\n$act = [int]$acts[$idx]\nif ($act -eq 1) { Write-Output \"PASS: ASR rule '$ruleName' is in BLOCK mode (observed action=1).\" }\nelse { Write-Output \"FAIL: ASR rule '$ruleName' is not in block mode (observed action=$act; 0=disabled, 2=audit, 6=warn).\" }\n"
+  },
+  {
+   "index": 36,
+   "name": "ASR: Block persistence through WMI event subscription",
+   "technique_id": "T1546.003",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n$ruleId = 'E6DB77E5-3DF2-4CF1-B95A-636979351E5B'; $ruleName = 'Block persistence through WMI event subscription'\nif (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output \"SKIP: Microsoft Defender (WinDefend) is not installed; ASR check not applicable.\"; return }\ntry { $p = Get-MpPreference } catch { Write-Output \"ERROR: Get-MpPreference failed: $($_.Exception.Message)\"; return }\n$ids = @($p.AttackSurfaceReductionRules_Ids); $acts = @($p.AttackSurfaceReductionRules_Actions)\n$idx = -1; for ($i = 0; $i -lt $ids.Count; $i++) { if ([string]$ids[$i] -ieq $ruleId) { $idx = $i; break } }\nif ($idx -lt 0) { Write-Output \"FAIL: ASR rule '$ruleName' is not configured (observed: absent).\"; return }\n$act = [int]$acts[$idx]\nif ($act -eq 1) { Write-Output \"PASS: ASR rule '$ruleName' is in BLOCK mode (observed action=1).\" }\nelse { Write-Output \"FAIL: ASR rule '$ruleName' is not in block mode (observed action=$act; 0=disabled, 2=audit, 6=warn).\" }\n"
+  },
+  {
+   "index": 37,
+   "name": "ASR: Block abuse of exploited vulnerable signed drivers",
+   "technique_id": "T1068",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n$ruleId = '56A863A9-875E-4185-98A7-B882C64B5CE5'; $ruleName = 'Block abuse of exploited vulnerable signed drivers'\nif (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output \"SKIP: Microsoft Defender (WinDefend) is not installed; ASR check not applicable.\"; return }\ntry { $p = Get-MpPreference } catch { Write-Output \"ERROR: Get-MpPreference failed: $($_.Exception.Message)\"; return }\n$ids = @($p.AttackSurfaceReductionRules_Ids); $acts = @($p.AttackSurfaceReductionRules_Actions)\n$idx = -1; for ($i = 0; $i -lt $ids.Count; $i++) { if ([string]$ids[$i] -ieq $ruleId) { $idx = $i; break } }\nif ($idx -lt 0) { Write-Output \"FAIL: ASR rule '$ruleName' is not configured (observed: absent).\"; return }\n$act = [int]$acts[$idx]\nif ($act -eq 1) { Write-Output \"PASS: ASR rule '$ruleName' is in BLOCK mode (observed action=1).\" }\nelse { Write-Output \"FAIL: ASR rule '$ruleName' is not in block mode (observed action=$act; 0=disabled, 2=audit, 6=warn).\" }\n"
+  },
+  {
+   "index": 38,
+   "name": "ASR exclusions absent",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\nif (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output \"SKIP: Microsoft Defender (WinDefend) is not installed; ASR exclusion check not applicable.\"; return }\ntry { $p = Get-MpPreference } catch { Write-Output \"ERROR: Get-MpPreference failed: $($_.Exception.Message)\"; return }\n$ex = @($p.AttackSurfaceReductionOnlyExclusions | Where-Object { $_ })\nif ($ex.Count -eq 0) { Write-Output \"PASS: No ASR-only exclusions are configured.\" }\nelse { Write-Output \"FAIL: $($ex.Count) ASR-only exclusion(s) configured: $($ex -join '; ').\" }\n"
+  },
+  {
+   "index": 39,
+   "name": "AppLocker Windows Installer (MSI) collection enforced",
+   "technique_id": "T1218.007",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\ntry { $pol = Get-AppLockerPolicy -Effective } catch { Write-Output \"ERROR: Get-AppLockerPolicy failed: $($_.Exception.Message)\"; return }\n$m = @{}; foreach ($rc in @($pol.RuleCollections)) { $m[[string]$rc.RuleCollectionType] = [string]$rc.EnforcementMode }\n$v = 'NotConfigured'; if ($m.ContainsKey('Msi')) { $v = $m['Msi'] }\nif ($v -eq 'Enabled') { Write-Output \"PASS: AppLocker enforces the Windows Installer (MSI) collection (observed EnforcementMode=Enabled).\" }\nelse { Write-Output \"FAIL: AppLocker MSI collection is not enforced (observed $v; Enabled required). Unapproved installers can run.\" }\n"
+  },
+  {
+   "index": 40,
+   "name": "AppLocker packaged app (Appx) collection enforced",
+   "technique_id": "T1059",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\ntry { $pol = Get-AppLockerPolicy -Effective } catch { Write-Output \"ERROR: Get-AppLockerPolicy failed: $($_.Exception.Message)\"; return }\n$m = @{}; foreach ($rc in @($pol.RuleCollections)) { $m[[string]$rc.RuleCollectionType] = [string]$rc.EnforcementMode }\n$v = 'NotConfigured'; if ($m.ContainsKey('Appx')) { $v = $m['Appx'] }\nif ($v -eq 'Enabled') { Write-Output \"PASS: AppLocker enforces the packaged app (Appx) collection (observed EnforcementMode=Enabled).\" }\nelse { Write-Output \"FAIL: AppLocker packaged app (Appx) collection is not enforced (observed $v; Enabled required).\" }\n"
+  },
+  {
+   "index": 41,
+   "name": "AppLocker enforcement service (AppIDSvc) running while enforcing",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\ntry { $pol = Get-AppLockerPolicy -Effective } catch { Write-Output \"ERROR: Get-AppLockerPolicy failed: $($_.Exception.Message)\"; return }\n$enf = @($pol.RuleCollections | Where-Object { [string]$_.EnforcementMode -eq 'Enabled' } | ForEach-Object { [string]$_.RuleCollectionType })\nif ($enf.Count -eq 0) { Write-Output \"SKIP: No AppLocker collection is enforcing; AppIDSvc dependency not applicable.\"; return }\n$svc = Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue\nif (-not $svc) { Write-Output \"FAIL: AppIDSvc is missing while AppLocker collections are enforced ($($enf -join ', ')); AppLocker is not applied.\"; return }\nif ([string]$svc.Status -eq 'Running') { Write-Output \"PASS: AppIDSvc is Running; AppLocker enforcement is applied (enforced collections: $($enf -join ', ')).\" }\nelse { Write-Output \"FAIL: AppIDSvc is $($svc.Status) while AppLocker collections are enforced ($($enf -join ', ')); AppLocker rules are not applied.\" }\n"
+  },
+  {
+   "index": 42,
+   "name": "WDAC kernel code-integrity policy enforced (not audit)",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\ntry { $dg = Get-CimInstance -ClassName Win32_DeviceGuard -Namespace 'root\\Microsoft\\Windows\\DeviceGuard' -ErrorAction Stop } catch { Write-Output \"ERROR: Win32_DeviceGuard query failed: $($_.Exception.Message)\"; return }\nif ($null -eq $dg) { Write-Output \"ERROR: Win32_DeviceGuard returned no data.\"; return }\n$st = [int]$dg.CodeIntegrityPolicyEnforcementStatus\nif ($st -eq 2) { Write-Output \"PASS: Kernel-mode WDAC code-integrity policy is ENFORCED (observed CodeIntegrityPolicyEnforcementStatus=2). Policy scope is not evaluated by this check.\" }\nelseif ($st -eq 1) { Write-Output \"FAIL: Kernel-mode WDAC policy is in AUDIT mode (observed status=1); unsigned drivers are logged but not blocked.\" }\nelse { Write-Output \"SKIP: No kernel-mode WDAC code-integrity policy is deployed (observed status=0); AppLocker is the application control for this endpoint.\" }\n"
+  },
+  {
+   "index": 43,
+   "name": "WDAC user-mode code-integrity policy enforced (not audit)",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\ntry { $dg = Get-CimInstance -ClassName Win32_DeviceGuard -Namespace 'root\\Microsoft\\Windows\\DeviceGuard' -ErrorAction Stop } catch { Write-Output \"ERROR: Win32_DeviceGuard query failed: $($_.Exception.Message)\"; return }\nif ($null -eq $dg) { Write-Output \"ERROR: Win32_DeviceGuard returned no data.\"; return }\n$st = [int]$dg.UsermodeCodeIntegrityPolicyEnforcementStatus\nif ($st -eq 2) { Write-Output \"PASS: User-mode WDAC policy is ENFORCED (observed UsermodeCodeIntegrityPolicyEnforcementStatus=2). Policy scope is not evaluated by this check.\" }\nelseif ($st -eq 1) { Write-Output \"FAIL: User-mode WDAC policy is in AUDIT mode (observed status=1); untrusted executables are logged but not blocked.\" }\nelse { Write-Output \"SKIP: No user-mode WDAC policy is deployed (observed status=0).\" }\n"
+  },
+  {
+   "index": 44,
+   "name": "BitLocker system volume fully encrypted",
+   "technique_id": "T1486",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n# Baseline gate (Audspect decision). 'required' = the selected baseline requires BitLocker; 'none' = it does not.\n$req = ([string]$env:BAS_EM01_ENCRYPTION_BASELINE).Trim().ToLowerInvariant()\nif ($req -eq '') { $req = 'none' }\nif ($req -notin @('none', 'required')) { Write-Output \"ERROR: BAS_EM01_ENCRYPTION_BASELINE must be 'none' or 'required' (got '$req').\"; return }\nfunction Write-Gate([string]$msg) {\n  if ($req -eq 'required') { Write-Output \"FAIL: Baseline requires BitLocker and it is not in force: $msg (baseline=required).\" }\n  else { Write-Output \"SKIP: NOT_ASSESSED - baseline does not require BitLocker ($msg; baseline=none). Policy-dependent; not scored.\" }\n}\nif (-not (Get-Command Get-BitLockerVolume -ErrorAction SilentlyContinue)) { Write-Gate \"BitLocker feature is not installed on this endpoint\"; return }\ntry { $vol = Get-BitLockerVolume -MountPoint $env:SystemDrive } catch { Write-Output \"ERROR: Get-BitLockerVolume failed: $($_.Exception.Message)\"; return }\nif ([string]$vol.VolumeStatus -eq 'FullyEncrypted') { Write-Output \"PASS: System volume $env:SystemDrive is FullyEncrypted (observed VolumeStatus=FullyEncrypted).\" }\nelse { Write-Gate \"system volume $env:SystemDrive is not fully encrypted (observed VolumeStatus=$($vol.VolumeStatus))\" }\n"
+  },
+  {
+   "index": 45,
+   "name": "BitLocker system volume uses XTS-AES",
+   "technique_id": "T1486",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n# Baseline gate (Audspect decision). 'required' = the selected baseline requires BitLocker; 'none' = it does not.\n$req = ([string]$env:BAS_EM01_ENCRYPTION_BASELINE).Trim().ToLowerInvariant()\nif ($req -eq '') { $req = 'none' }\nif ($req -notin @('none', 'required')) { Write-Output \"ERROR: BAS_EM01_ENCRYPTION_BASELINE must be 'none' or 'required' (got '$req').\"; return }\nfunction Write-Gate([string]$msg) {\n  if ($req -eq 'required') { Write-Output \"FAIL: Baseline requires BitLocker and it is not in force: $msg (baseline=required).\" }\n  else { Write-Output \"SKIP: NOT_ASSESSED - baseline does not require BitLocker ($msg; baseline=none). Policy-dependent; not scored.\" }\n}\nif (-not (Get-Command Get-BitLockerVolume -ErrorAction SilentlyContinue)) { Write-Gate \"BitLocker feature is not installed on this endpoint\"; return }\ntry { $vol = Get-BitLockerVolume -MountPoint $env:SystemDrive } catch { Write-Output \"ERROR: Get-BitLockerVolume failed: $($_.Exception.Message)\"; return }\n$m = [string]$vol.EncryptionMethod\nif ($m -like 'XtsAes*') { Write-Output \"PASS: System volume uses $m (XTS-AES).\" }\nelseif ([string]::IsNullOrEmpty($m) -or $m -eq 'None') { Write-Gate \"system volume has no encryption method applied (observed EncryptionMethod=$m)\" }\nelse { Write-Gate \"system volume uses legacy $m; XTS-AES is required\" }\n"
+  },
+  {
+   "index": 46,
+   "name": "BitLocker recovery password protector present on system volume",
+   "technique_id": "T1486",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n# Baseline gate (Audspect decision). 'required' = the selected baseline requires BitLocker; 'none' = it does not.\n$req = ([string]$env:BAS_EM01_ENCRYPTION_BASELINE).Trim().ToLowerInvariant()\nif ($req -eq '') { $req = 'none' }\nif ($req -notin @('none', 'required')) { Write-Output \"ERROR: BAS_EM01_ENCRYPTION_BASELINE must be 'none' or 'required' (got '$req').\"; return }\nfunction Write-Gate([string]$msg) {\n  if ($req -eq 'required') { Write-Output \"FAIL: Baseline requires BitLocker and it is not in force: $msg (baseline=required).\" }\n  else { Write-Output \"SKIP: NOT_ASSESSED - baseline does not require BitLocker ($msg; baseline=none). Policy-dependent; not scored.\" }\n}\nif (-not (Get-Command Get-BitLockerVolume -ErrorAction SilentlyContinue)) { Write-Gate \"BitLocker feature is not installed on this endpoint\"; return }\ntry { $vol = Get-BitLockerVolume -MountPoint $env:SystemDrive } catch { Write-Output \"ERROR: Get-BitLockerVolume failed: $($_.Exception.Message)\"; return }\n$rp = @($vol.KeyProtector | Where-Object { [string]$_.KeyProtectorType -eq 'RecoveryPassword' })\nif ($rp.Count -gt 0) { Write-Output \"PASS: $($rp.Count) recovery password protector(s) present on $env:SystemDrive. Escrow to AD or Entra is verified in the directory, not on the endpoint.\" }\nelse { Write-Gate \"no recovery password protector on $env:SystemDrive (protectors=$(@($vol.KeyProtector | ForEach-Object { [string]$_.KeyProtectorType }) -join ','))\" }\n"
+  },
+  {
+   "index": 47,
+   "name": "All fixed data volumes fully encrypted with BitLocker",
+   "technique_id": "T1486",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n# Baseline gate (Audspect decision). 'required' = the selected baseline requires BitLocker; 'none' = it does not.\n$req = ([string]$env:BAS_EM01_ENCRYPTION_BASELINE).Trim().ToLowerInvariant()\nif ($req -eq '') { $req = 'none' }\nif ($req -notin @('none', 'required')) { Write-Output \"ERROR: BAS_EM01_ENCRYPTION_BASELINE must be 'none' or 'required' (got '$req').\"; return }\nfunction Write-Gate([string]$msg) {\n  if ($req -eq 'required') { Write-Output \"FAIL: Baseline requires BitLocker and it is not in force: $msg (baseline=required).\" }\n  else { Write-Output \"SKIP: NOT_ASSESSED - baseline does not require BitLocker ($msg; baseline=none). Policy-dependent; not scored.\" }\n}\nif (-not (Get-Command Get-BitLockerVolume -ErrorAction SilentlyContinue)) { Write-Gate \"BitLocker feature is not installed on this endpoint\"; return }\ntry { $vol = Get-BitLockerVolume -MountPoint $env:SystemDrive } catch { Write-Output \"ERROR: Get-BitLockerVolume failed: $($_.Exception.Message)\"; return }\ntry { $all = @(Get-BitLockerVolume) } catch { Write-Output \"ERROR: Get-BitLockerVolume failed: $($_.Exception.Message)\"; return }\n$data = @($all | Where-Object { [string]$_.VolumeType -eq 'FixedData' })\nif ($data.Count -eq 0) { Write-Output \"PASS: No fixed data volumes are present; only the system volume holds data-at-rest on this endpoint.\"; return }\n$bad = @($data | Where-Object { [string]$_.VolumeStatus -ne 'FullyEncrypted' } | ForEach-Object { \"$($_.MountPoint)=$($_.VolumeStatus)\" })\nif ($bad.Count -eq 0) { Write-Output \"PASS: All $($data.Count) fixed data volume(s) are FullyEncrypted.\" }\nelse { Write-Gate \"fixed data volume(s) not fully encrypted: $($bad -join ', ')\" }\n"
+  },
+  {
+   "index": 48,
+   "name": "TPM present and ready",
+   "technique_id": "T1486",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n# TPM is a BitLocker prerequisite, so it follows the same baseline gate (BAS_EM01_ENCRYPTION_BASELINE).\n$req = ([string]$env:BAS_EM01_ENCRYPTION_BASELINE).Trim().ToLowerInvariant()\nif ($req -eq '') { $req = 'none' }\nif ($req -notin @('none', 'required')) { Write-Output \"ERROR: BAS_EM01_ENCRYPTION_BASELINE must be 'none' or 'required' (got '$req').\"; return }\nfunction Write-Gate([string]$msg) {\n  if ($req -eq 'required') { Write-Output \"FAIL: Baseline requires a TPM and it is not in force: $msg (baseline=required).\" }\n  else { Write-Output \"SKIP: NOT_ASSESSED - baseline does not require a TPM ($msg; baseline=none). Policy-dependent; not scored.\" }\n}\nif (-not (Get-Command Get-Tpm -ErrorAction SilentlyContinue)) { Write-Gate \"Get-Tpm is not available on this endpoint\"; return }\ntry { $t = Get-Tpm } catch { Write-Output \"ERROR: Get-Tpm failed: $($_.Exception.Message)\"; return }\nif ([bool]$t.TpmPresent -and [bool]$t.TpmReady) { Write-Output \"PASS: TPM is present and ready (TpmPresent=True, TpmReady=True).\" }\nelse { Write-Gate \"TPM is not present or not ready (TpmPresent=$($t.TpmPresent), TpmReady=$($t.TpmReady)); BitLocker cannot bind keys to hardware\" }\n"
+  },
+  {
+   "index": 49,
+   "name": "Windows Security Center service (wscsvc) running",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n$svc = Get-Service -Name wscsvc -ErrorAction SilentlyContinue\nif (-not $svc) { Write-Output \"SKIP: Windows Security Center service is not present on this SKU.\"; return }\nif ([string]$svc.Status -eq 'Running') { Write-Output \"PASS: Windows Security Center service is Running (StartType=$($svc.StartType)).\" }\nelse { Write-Output \"FAIL: Windows Security Center service is $($svc.Status); AV health is not reported to the console.\" }\n"
+  },
+  {
+   "index": 50,
+   "name": "Security Center reports an enabled antivirus provider",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\ntry { $av = @(Get-CimInstance -Namespace 'root/SecurityCenter2' -ClassName AntiVirusProduct -ErrorAction Stop) } catch { Write-Output \"SKIP: SecurityCenter2 AntiVirusProduct is not available on this SKU or configuration ($($_.Exception.Message)).\"; return }\nif ($av.Count -eq 0) { Write-Output \"FAIL: Security Center registers no antivirus product.\"; return }\n$en = @($av | Where-Object { ($_.productState -band 0x1000) -ne 0 } | ForEach-Object { $_.displayName })\nif ($en.Count -eq 0) { Write-Output \"FAIL: Security Center registers AV product(s) but none report enabled: $((@($av | ForEach-Object { $_.displayName })) -join ', ').\"; return }\n# Registration alone is not protection: real-time protection must be ON.\n$rtp = $null\ntry { $rtp = (Get-MpComputerStatus).RealTimeProtectionEnabled } catch {}\nif ($rtp -eq $true) { Write-Output \"PASS: Security Center reports an enabled AV provider ($($en -join ', ')) and Defender real-time protection is ON.\" }\nelseif ($rtp -eq $false) { Write-Output \"FAIL: Security Center reports an enabled AV provider ($($en -join ', ')), but Defender real-time protection is OFF - registration alone is not protection.\" }\nelse { Write-Output \"SKIP: NOT_ASSESSED - Security Center reports an enabled AV provider ($($en -join ', ')), but real-time protection cannot be read locally (Defender not present). Not scored; not a PASS.\" }\n"
+  },
+  {
+   "index": 51,
+   "name": "Security Center reports antivirus definitions up to date",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\ntry { $av = @(Get-CimInstance -Namespace 'root/SecurityCenter2' -ClassName AntiVirusProduct -ErrorAction Stop) } catch { Write-Output \"SKIP: SecurityCenter2 AntiVirusProduct is not available on this SKU or configuration ($($_.Exception.Message)).\"; return }\n$enabled = @($av | Where-Object { ($_.productState -band 0x1000) -ne 0 })\nif ($enabled.Count -eq 0) { Write-Output \"SKIP: No enabled AV provider is registered; definition state not applicable.\"; return }\n$stale = @($enabled | Where-Object { ($_.productState -band 0x0010) -ne 0 } | ForEach-Object { $_.displayName })\nif ($stale.Count -eq 0) { Write-Output \"PASS: Security Center reports definitions up to date for: $(@($enabled | ForEach-Object { $_.displayName }) -join ', ').\" }\nelse { Write-Output \"FAIL: Security Center reports out-of-date definitions for: $($stale -join ', ').\" }\n"
+  },
+  {
+   "index": 52,
+   "name": "Microsoft Defender Antivirus service (WinDefend) running",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n$svc = Get-Service -Name WinDefend -ErrorAction SilentlyContinue\nif (-not $svc) { Write-Output \"SKIP: Microsoft Defender Antivirus service is not installed; third-party engine in use.\"; return }\nif ([string]$svc.Status -eq 'Running') { Write-Output \"PASS: WinDefend is Running (StartType=$($svc.StartType)).\" }\nelse { Write-Output \"FAIL: WinDefend is $($svc.Status) (StartType=$($svc.StartType)); the AV engine is not protecting this endpoint.\" }\n"
+  },
+  {
+   "index": 53,
+   "name": "Microsoft Defender for Endpoint sensor (Sense) running",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n$svc = Get-Service -Name Sense -ErrorAction SilentlyContinue\nif (-not $svc) { Write-Output \"SKIP: MDE sensor (Sense) is not installed; the endpoint is not onboarded to Defender for Endpoint on this host (verify in the EDR console).\"; return }\nif ([string]$svc.Status -eq 'Running') { Write-Output \"PASS: MDE sensor (Sense) is Running (StartType=$($svc.StartType)).\"; return }\n# Sense ships with Windows but is only expected to run once the endpoint is onboarded. Presence alone is not an expectation.\n$ob = (Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows Advanced Threat Protection' -Name OnboardingState -ErrorAction SilentlyContinue).OnboardingState\n$onboarded = ($null -ne $ob -and [int]$ob -eq 1)\n$expected = $onboarded -or ([string]$svc.StartType -eq 'Automatic')\nif (-not $expected) { $shown = 'absent'; if ($null -ne $ob) { $shown = $ob }; Write-Output \"SKIP: MDE sensor (Sense) is present but not onboarded (OnboardingState=$shown, StartType=$($svc.StartType)); no EDR telemetry is expected here. Verify onboarding in the EDR console.\"; return }\nWrite-Output \"FAIL: MDE sensor (Sense) is $($svc.Status) although the endpoint is onboarded or set to start automatically (StartType=$($svc.StartType), OnboardingState=$ob); EDR telemetry is not being produced.\"\n"
+  },
+  {
+   "index": 54,
+   "name": "Defender Network Inspection service (WdNisSvc) running when NIS is enabled",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\nif (-not (Get-Service -Name WinDefend -ErrorAction SilentlyContinue)) { Write-Output \"SKIP: Microsoft Defender is not installed; NIS service check not applicable.\"; return }\ntry { $s = Get-MpComputerStatus } catch { Write-Output \"ERROR: Get-MpComputerStatus failed: $($_.Exception.Message)\"; return }\nif (-not [bool]$s.NISEnabled) { Write-Output \"SKIP: Network Inspection System is disabled on this endpoint; WdNisSvc is not required.\"; return }\n$svc = Get-Service -Name WdNisSvc -ErrorAction SilentlyContinue\nif (-not $svc) { Write-Output \"FAIL: NIS is enabled but the WdNisSvc service is missing.\"; return }\nif ([string]$svc.Status -eq 'Running') { Write-Output \"PASS: WdNisSvc is Running while NIS is enabled.\" }\nelse { Write-Output \"FAIL: NIS is enabled but WdNisSvc is $($svc.Status); network inspection is not running.\" }\n"
+  },
+  {
+   "index": 55,
+   "name": "Windows Event Log service running",
+   "technique_id": "T1562.002",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n$svc = Get-Service -Name EventLog -ErrorAction SilentlyContinue\nif (-not $svc) { Write-Output \"FAIL: Windows Event Log service (EventLog) is not present.\"; return }\nif ([string]$svc.Status -eq 'Running') { Write-Output \"PASS: Windows Event Log service is Running.\" }\nelse { Write-Output \"FAIL: Windows Event Log service is $($svc.Status); no security events are recorded.\" }\n"
+  },
+  {
+   "index": 56,
+   "name": "Sysmon service running when deployed",
+   "technique_id": "T1562.002",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n$svc = Get-Service -Name Sysmon64 -ErrorAction SilentlyContinue\nif (-not $svc) { $svc = Get-Service -Name Sysmon -ErrorAction SilentlyContinue }\nif (-not $svc) { Write-Output \"SKIP: Sysmon is not deployed on this endpoint (optional telemetry source).\"; return }\nif ([string]$svc.Status -eq 'Running') { Write-Output \"PASS: Sysmon service ($($svc.Name)) is Running.\" }\nelse { Write-Output \"FAIL: Sysmon service ($($svc.Name)) is $($svc.Status); process and network telemetry is missing.\" }\n"
+  },
+  {
+   "index": 57,
+   "name": "Security event log size meets configured threshold (Audspect default 192 MB)",
+   "technique_id": "T1562.002",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\ntry { $l = Get-WinEvent -ListLog Security -ErrorAction Stop } catch { Write-Output \"ERROR: Get-WinEvent -ListLog Security failed: $($_.Exception.Message)\"; return }\n$mb = [math]::Round($l.MaximumSizeInBytes / 1MB, 1)\n# Audspect recommended default, not a Microsoft or CIS requirement. Override with BAS_EM01_SECLOG_MB (whole MB, >= 1).\n$thr = 192; $src = 'Audspect recommended default'\n$raw = [string]$env:BAS_EM01_SECLOG_MB\nif ($raw.Trim() -ne '') { $n = 0; if (-not [int]::TryParse($raw.Trim(), [ref]$n) -or $n -lt 1) { Write-Output \"ERROR: BAS_EM01_SECLOG_MB must be a positive whole number of MB (got '$raw').\"; return }; $thr = $n; $src = 'organization override BAS_EM01_SECLOG_MB' }\n$tt = \"threshold=$thr MB ($src)\"\nif ($l.MaximumSizeInBytes -ge ($thr * 1MB)) { Write-Output \"PASS: Security log maximum size is $mb MB, meets the threshold (observed $mb MB; $tt).\" }\nelse { Write-Output \"FAIL: Security log maximum size is $mb MB, below the threshold (observed $mb MB; $tt); evidence rolls over quickly under process-creation volume.\" }\n"
+  },
+  {
+   "index": 58,
+   "name": "UAC enabled with non-silent administrator elevation",
+   "technique_id": "T1548.002",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n$pol = Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System' -ErrorAction Stop\nif ($null -eq $pol.EnableLUA -or $null -eq $pol.ConsentPromptBehaviorAdmin) { Write-Output \"ERROR: UAC values EnableLUA or ConsentPromptBehaviorAdmin are not present; state cannot be determined.\"; return }\n$lua = [int]$pol.EnableLUA; $cons = [int]$pol.ConsentPromptBehaviorAdmin\nif ($lua -ne 1) { Write-Output \"FAIL: UAC is DISABLED (observed EnableLUA=$lua); every process runs with the full token of an admin.\" }\nelseif ($cons -eq 0) { Write-Output \"FAIL: Admin elevation is silent (observed ConsentPromptBehaviorAdmin=0); elevation happens without consent.\" }\nelse { Write-Output \"PASS: UAC is enabled and admin elevation prompts (observed EnableLUA=1, ConsentPromptBehaviorAdmin=$cons).\" }\n"
+  },
+  {
+   "index": 59,
+   "name": "SMBv1 server protocol disabled",
+   "technique_id": "T1210",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\nif (-not (Get-Command Get-SmbServerConfiguration -ErrorAction SilentlyContinue)) { Write-Output \"SKIP: SMB server cmdlets are not available on this endpoint.\"; return }\ntry { $c = Get-SmbServerConfiguration } catch { Write-Output \"ERROR: Get-SmbServerConfiguration failed: $($_.Exception.Message)\"; return }\nif (-not [bool]$c.EnableSMB1Protocol) { Write-Output \"PASS: SMBv1 server protocol is disabled (observed EnableSMB1Protocol=False).\" }\nelse { Write-Output \"FAIL: SMBv1 server protocol is ENABLED (observed EnableSMB1Protocol=True); legacy SMB exploits are reachable.\" }\n"
+  },
+  {
+   "index": 60,
+   "name": "LSA protection (RunAsPPL) enabled",
+   "technique_id": "T1003.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n$v = (Get-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Lsa' -Name RunAsPPL -ErrorAction SilentlyContinue).RunAsPPL\nif ($null -ne $v -and ([int]$v -eq 1 -or [int]$v -eq 2)) { Write-Output \"PASS: LSA protection is enabled (observed RunAsPPL=$v).\" }\nelse { $shown = 'absent'; if ($null -ne $v) { $shown = $v }; Write-Output \"FAIL: LSA protection is not enabled (observed RunAsPPL=$shown); LSASS memory can be read by credential-dumping tools.\" }\n"
+  },
+  {
+   "index": 61,
+   "name": "PowerShell script block logging enabled",
+   "technique_id": "T1059.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n$v = (Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\PowerShell\\ScriptBlockLogging' -Name EnableScriptBlockLogging -ErrorAction SilentlyContinue).EnableScriptBlockLogging\nif ([int]$v -eq 1) { Write-Output \"PASS: PowerShell script block logging is enabled (observed EnableScriptBlockLogging=1).\" }\nelse { $shown = 'absent'; if ($null -ne $v) { $shown = $v }; Write-Output \"FAIL: PowerShell script block logging is not enabled (observed EnableScriptBlockLogging=$shown); script content is not recorded.\" }\n"
+  },
+  {
+   "index": 62,
+   "name": "Process creation auditing enabled (Success)",
+   "technique_id": "T1562.002",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\ntry { $rows = @(auditpol /get /subcategory:\"{0CCE922B-69AE-11D9-BED3-505054503030}\" /r | Where-Object { $_ -match ',' } | ConvertFrom-Csv) } catch { Write-Output \"ERROR: auditpol query failed: $($_.Exception.Message)\"; return }\nif ($rows.Count -eq 0) { Write-Output \"ERROR: auditpol returned no Process Creation row.\"; return }\n$set = [string]$rows[0].'Inclusion Setting'\nif ($set -match 'Success') { Write-Output \"PASS: Process Creation auditing includes Success (observed '$set').\" }\nelse { Write-Output \"FAIL: Process Creation auditing does not include Success (observed '$set'); Event 4688 is not written.\" }\n"
+  },
+  {
+   "index": 63,
+   "name": "Command line included in process creation events",
+   "technique_id": "T1562.002",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n$v = (Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System\\Audit' -Name ProcessCreationIncludeCmdLine_Enabled -ErrorAction SilentlyContinue).ProcessCreationIncludeCmdLine_Enabled\nif ([int]$v -eq 1) { Write-Output \"PASS: Process creation events include the command line (observed ProcessCreationIncludeCmdLine_Enabled=1).\" }\nelse { $shown = 'absent'; if ($null -ne $v) { $shown = $v }; Write-Output \"FAIL: Command-line capture for process creation is not enabled (observed $shown); 4688 events lack command lines.\" }\n"
+  },
+  {
+   "index": 64,
+   "name": "LLMNR disabled by policy",
+   "technique_id": "T1557.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n$v = (Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\DNSClient' -Name EnableMulticast -ErrorAction SilentlyContinue).EnableMulticast\nif ($null -ne $v -and [int]$v -eq 0) { Write-Output \"PASS: LLMNR is disabled by policy (observed EnableMulticast=0).\" }\nelse { $shown = 'not set'; if ($null -ne $v) { $shown = $v }; Write-Output \"FAIL: LLMNR is not disabled by policy (observed EnableMulticast=$shown); LLMNR poisoning can capture credentials.\" }\n"
+  },
+  {
+   "index": 65,
+   "name": "Secure Boot enabled",
+   "technique_id": "T1542",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\ntry { $sb = [bool](Confirm-SecureBootUEFI) } catch {\n  if ($_.Exception.Message -match 'not supported') { Write-Output \"SKIP: Secure Boot is not applicable (legacy BIOS or platform does not support the query).\"; return }\n  Write-Output \"ERROR: Confirm-SecureBootUEFI failed: $($_.Exception.Message)\"; return }\nif ($sb) { Write-Output \"PASS: Secure Boot is enabled (Confirm-SecureBootUEFI=True).\" }\nelse { Write-Output \"FAIL: Secure Boot is disabled (Confirm-SecureBootUEFI=False); unsigned boot components are not blocked.\" }\n"
+  },
+  {
+   "index": 66,
+   "name": "Virtualization-based security running",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\ntry { $dg = Get-CimInstance -ClassName Win32_DeviceGuard -Namespace 'root\\Microsoft\\Windows\\DeviceGuard' -ErrorAction Stop } catch { Write-Output \"ERROR: Win32_DeviceGuard query failed: $($_.Exception.Message)\"; return }\nif ($null -eq $dg) { Write-Output \"ERROR: Win32_DeviceGuard returned no data.\"; return }\nif (-not (@($dg.AvailableSecurityProperties) -contains 1)) { Write-Output \"SKIP: Hypervisor support is not available on this hardware; VBS is not applicable.\"; return }\n$st = [int]$dg.VirtualizationBasedSecurityStatus\nif ($st -eq 2) { Write-Output \"PASS: Virtualization-based security is running (observed VirtualizationBasedSecurityStatus=2).\" }\nelse { Write-Output \"FAIL: Virtualization-based security is not running (observed status=$st); credential isolation is unavailable.\" }\n"
+  },
+  {
+   "index": 67,
+   "name": "Memory integrity (HVCI) running",
+   "technique_id": "T1562.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\ntry { $dg = Get-CimInstance -ClassName Win32_DeviceGuard -Namespace 'root\\Microsoft\\Windows\\DeviceGuard' -ErrorAction Stop } catch { Write-Output \"ERROR: Win32_DeviceGuard query failed: $($_.Exception.Message)\"; return }\nif ($null -eq $dg) { Write-Output \"ERROR: Win32_DeviceGuard returned no data.\"; return }\nif (-not (@($dg.AvailableSecurityProperties) -contains 1)) { Write-Output \"SKIP: Hypervisor support is not available on this hardware; memory integrity is not applicable.\"; return }\n$run = @($dg.SecurityServicesRunning)\n$sbPrereq = (@($dg.AvailableSecurityProperties) -contains 2)\nif ($run -contains 2) { Write-Output \"PASS: Memory integrity (HVCI) is running (SecurityServicesRunning includes 2).\" }\nelse { Write-Output \"FAIL: Memory integrity (HVCI) is not running (observed SecurityServicesRunning=$($run -join ','); prerequisite Secure Boot available=$sbPrereq); kernel code is not verified.\" }\n"
+  },
+  {
+   "index": 68,
+   "name": "RDP requires Network Level Authentication when enabled",
+   "technique_id": "T1021.001",
+   "timeout_sec": 30,
+   "command": "$ErrorActionPreference = 'Stop'\n$deny = (Get-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server' -Name fDenyTSConnections -ErrorAction SilentlyContinue).fDenyTSConnections\nif ([int]$deny -eq 1) { Write-Output \"PASS: RDP is disabled (fDenyTSConnections=1); NLA is not applicable.\"; return }\n$nla = (Get-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp' -Name UserAuthentication -ErrorAction SilentlyContinue).UserAuthentication\nif ([int]$nla -eq 1) { Write-Output \"PASS: RDP is enabled and requires Network Level Authentication (observed UserAuthentication=1).\" }\nelse { $shown = 'absent'; if ($null -ne $nla) { $shown = $nla }; Write-Output \"FAIL: RDP is enabled without Network Level Authentication (observed UserAuthentication=$shown).\" }\n"
+  }
+ ]
+}

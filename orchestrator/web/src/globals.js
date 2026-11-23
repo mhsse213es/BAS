@@ -30,11 +30,11 @@ import { refreshEmailTab, egAskLaunch, egAskCancel, egCancelCampaignClick, egLau
 import { _toggleEMExtraScenario, _toggleEMPreviewRow, _toggleVexPreviewRow, _toggleVexPreviewSection, cancelEMSweep, closeEMSweepModal, closeEMSweepModalOnBackdrop, closeEMSweepProgress, closeEMSweepProgressOnBackdrop, closeSweepPreview, closeSweepPreviewOnBackdrop, emGroupSelChange, emRunLayer, emSweepDispatch, openEMSweepProgress, openEMSweepReport, setEMExtraSearchFromInput, setEMSweepTargetMode, setVexPreviewSearchFromInput, setVexPreviewTacticFromSelect, startSweepFromPreview, stopEMSweep, stopEMSweepCurrent } from './features/endpoint-mastery.js';
 import { closeCreateUser, closeCreateUserOnBackdrop, closeDownloadOptions, closeEditUser, closeEditUserOnBackdrop, closeEvidence, closeEvidenceOnBackdrop, confirmRun, copyRaw, doResetPassword, downloadCampaignCSV, downloadCampaignReport, downloadEMSweepReport, downloadRunCSV, downloadRunReport, downloadSweepReport, exportRunJSON, openCampaignReport, openCmdk, openCreateUser, openDashRun, openEditUser, openEvidence, openFindingFromDashboard, openRunReport, pauseRun, resumeRun, stopRun, submitCreateUser, submitEditUser, toggleUserActive } from './features/evidence.js';
 import { openKevDetail, openControlDetail } from './features/dash-rich.js';
-import { bulkPushSelectedFindings, loadFindings, loadSLAReport, openFinding, openFindingsWithStatus, openRemediation, pushFindingToITSM, quickTriageFinding, remBulkTicket, remSingleTicket, revalidateRemediation, exportFindings, fndGo, fndTech, setFindingSearch, setFindingSev, setFindingStatus, setFindingTab, setRemFilter, setRemView, toggleRemEndpoint, setRemSearch, toggleAllFindingChecksFromChecked, toggleFindingCheck } from './features/findings.js';
+import { bulkPushSelectedFindings, loadFindings, loadSLAReport, openFinding, openFindingsWithStatus, openRemediation, pushFindingToITSM, quickTriageFinding, loadRemediations, remBulkTicket, remSingleTicket, remEpTicket, revalidateRemediation, exportFindings, fndGo, fndTech, setFindingSearch, setFindingSev, setFindingStatus, setFindingTab, setRemFilter, setRemView, toggleRemEndpoint, setRemSearch, toggleAllFindingChecksFromChecked, toggleFindingCheck } from './features/findings.js';
 import { closeInitiativeAttachDrawer, closeInitiativeAttachDrawerOnBackdrop, closeInitiativeCreateDrawer, closeInitiativeCreateDrawerOnBackdrop, closeInitiativeDrawer, closeInitiativeDrawerOnBackdrop, initiativeArchiveAction, initiativeAttachSelect, initiativeCloseAction, initiativeDeleteFromMenu, initiativeDetachJob, initiativeDetachConfirm, initiativeDetachCancel, initiativeCloseConfirm, initiativeCloseCancel, initiativeRenderAttachList, initiativeSetFilter, initiativeSearch, initiativeClearFilters, initiativeCardKeydown, loadInitiatives, openInitiativeAttachDrawer, openInitiativeCreateDrawer, openInitiativeDrawer, submitInitiativeAttach, submitInitiativeCreate } from './features/initiatives.js';
 import { openAddConnectorFor, openAddResponseConnectorFor, refreshResponseConnectors, closeConnectorForm, closeRespondModal, closeResponseConnectorForm, connectorProjectSelectChange, deleteConnector, deleteResponseConnector, fetchConnectorProjects, openAddConnector, openAddResponseConnector, openEditConnector, openEditResponseConnector, openRespondModal, renderConnectorSettings, renderRespondFields, renderResponseConnectorFields, saveConnectorForm, saveResponseConnectorForm, submitRespondAction, testConnectorById, testConnectorForm, testResponseConnectorById } from './features/integrations.js';
 import { openContentImport, closeContentImport, closeContentImportOnBackdrop, ciKindChange, submitContentImport, approveImportDraft, rejectImportDraft } from './features/content-import.js';
-import { clearIOCFilters, closeIOCAddModal, closeIOCAddOnBackdrop, closeIOCDrawer, closeIOCDrawerOnBackdrop, closeIOCImportOnBackdrop, openIOCAddModal, setIOCType, submitIOCAdd, closeIOCImportModal, closeResults, closeResultsOnBackdrop, loadIOCRegistry, loadIOCRegistryOnEnter, openIOCDetail, openIOCImportModal, setRunIOCSearchFromInput, setRunIOCTypeFilter, submitIOCImport, toggleIOCSuppressed, toggleRunIOCRow } from './features/iocs.js';
+import { closeIOCSuppress, closeIOCSuppressOnBackdrop, copyIOCValue, iocAddTypeTouched, iocAddValueInput, iocRowKeydown, iocSearchLive, iocShowMore, iocSupPreset, submitIOCSuppress, clearIOCFilters, closeIOCAddModal, closeIOCAddOnBackdrop, closeIOCDrawer, closeIOCDrawerOnBackdrop, closeIOCImportOnBackdrop, openIOCAddModal, setIOCType, submitIOCAdd, closeIOCImportModal, closeResults, closeResultsOnBackdrop, loadIOCRegistry, loadIOCRegistryOnEnter, openIOCDetail, openIOCImportModal, setRunIOCSearchFromInput, setRunIOCTypeFilter, submitIOCImport, toggleIOCSuppressed, toggleRunIOCRow } from './features/iocs.js';
 import { closeRunLive, closeRunLiveOnBackdrop, closeSweepDrilldown, closeSweepDrilldownOnBackdrop, openRunPanelAction, openRunScenarioAction, openSweepDrilldown, openSweepReport, toggleLiveStepAction } from './features/live-run.js';
 import { openTechniqueCatalog, closeTechniqueCatalog, closeTechniqueCatalogOnBackdrop, techniqueSearch, openTechniqueDetail, techniqueBack } from './features/scn-techniques.js';
 import { abortExecution, abortExecutionStop, approveExStep, closeExerciseDetail, closeExerciseDetailOnBackdrop, closeOpenAEVDetail, closeOpenAEVDetailOnBackdrop, createPlanFromOpenAEV, launchExercisePrompt, openExerciseDetail, openOpenAEVDetail, removeOpenAEVConfig, saveOpenAEVConfig, syncOpenAEVNow, testOpenAEVConfig, toggleAPHistory, toggleAPScore } from './features/openaev.js';
@@ -552,6 +552,8 @@ export const ACTIONS = {
   quickTriageFinding,
   remBulkTicket,
   remSingleTicket,
+  remEpTicket,
+  loadRemediations,
   removeConnectorConfig,
   removeOpenAEVConfig,
   removeStep,
@@ -812,6 +814,7 @@ export const ACTIONS = {
   toggleEvidence,
   toggleFindingCheck,
   toggleIOCSuppressed,
+  closeIOCSuppress, closeIOCSuppressOnBackdrop, copyIOCValue, iocAddTypeTouched, iocAddValueInput, iocRowKeydown, iocSearchLive, iocShowMore, iocSupPreset, submitIOCSuppress,
   toggleLiveStepAction,
   toggleRowMenuById,
   toggleRunIOCRow,

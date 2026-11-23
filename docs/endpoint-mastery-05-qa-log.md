@@ -92,3 +92,10 @@ Configuration findings (FAIL):
 
 - Startup redirect and calc.exe: awaiting owner approval to restore the standard Startup location and remove the file.
 - PR #23 open; not merged. Merge after owner review of the findings above.
+
+## Final server run (out10) and remediation — WIN-2IP8FNO4MAD, 2026-11-21 00:25 -08:00
+
+- Source sha256 63179fb2416295b70c517ed558922ac9fd806fb1d8f7147562fea319b4f2e1ca.
+- Counts: PASS 36, FAIL 15, ERROR 0, NO_VERDICT 1 (step 30, intermittent runner error; not a result).
+- Startup redirect remediated (owner approved): User Shell Folders and Shell Folders Startup values restored to the standard location; atomictest\calc.exe removed. Steps 12 and 51 now PASS. Registry exports kept in C:\em05\rollback. The atomictest folder was left in place by owner decision.
+- Remaining FAILs are configuration findings for owner decision: Run/RunOnce, Startup and IFEO writes not detected (Sysmon does not cover them); task creation not audited (4698); registry auditing off; task-store Write grant for Authenticated Users; BootExecute differs from the default; autorun not disabled for all drives; Sysmon Run-key coverage.

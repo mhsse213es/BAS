@@ -83,3 +83,4 @@
 .exd-field input { padding: 8px 10px; }
 .ex-wrap td.mono { white-space: nowrap; }
 .ex-plan-new { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); transition: box-shadow .3s, border-color .3s; }
+.exd-note.tone-ok { border-left-color: var(--success); } .exd-note.tone-ok b { color: var(--success); }

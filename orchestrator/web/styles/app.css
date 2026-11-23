@@ -917,6 +917,7 @@ button:not([class]) { color:var(--text); }
 #toast.show { display: block; }
 #toast.ok  { border-left: 3px solid var(--success); }
 #toast.err { border-left: 3px solid var(--danger); }
+#toast.warn { border-left: 3px solid var(--warning); }
 
 .empty { text-align: center; padding: 3rem 1rem; color: var(--muted); font-size: 0.82rem; }
 

@@ -2,7 +2,7 @@ import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { ago, showToast } from '../core/util.js';
-import { apColor } from './attack-path.js';
+import { apColor, apClosePanels } from './attack-path.js';
 import { freshness as apAgeChip } from './ap-model.js';
 import { apRichBody } from './rich-g4.js';
 import { setExRows, setExError, setExPlans, setExPlansError, execDetailHtml, scenarioDetailHtml, launchFormHtml, focusNewPlanNext } from './ex-view.js';
@@ -347,7 +347,7 @@ function _apUpdateMetaBar(d) {
   var ts = m.collectedAt ? new Date(m.collectedAt) : null;
   var tsStr = ts ? ts.toLocaleString('en-GB', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
   var ageMs = ts ? Date.now() - ts.getTime() : 0;
-  var ageStr = ageMs > 0 ? ago(ts.toISOString()) : '—';
+  var ageStr = ageMs > 0 ? (ageMs >= 48 * 3600000 ? Math.floor(ageMs / 86400000) + 'd ago' : ago(ts.toISOString())) : '—';
   document.getElementById('ap-meta-ts').textContent = tsStr;
   document.getElementById('ap-meta-agent').textContent = m.hostname || m.agentId || '—';
   document.getElementById('ap-meta-edges').textContent = m.edgeCount != null ? m.edgeCount : '—';
@@ -371,6 +371,7 @@ export function toggleAPScore() {
 export function toggleAPHistory() {
   var p = document.getElementById('ap-history-panel');
   if (displayOf(p) === 'none' || !displayOf(p)) {
+    apClosePanels('ap-history-panel');
     setDisplay(p, '');
     loadAPHistory();
   } else {
@@ -382,7 +383,7 @@ function loadAPHistory() {
   var tb = document.getElementById('ap-history-body');
   if (!tb) return;
   tb.innerHTML = '<tr><td colspan="7" class="empty">Loading…</td></tr>';
-  apicall('/api/attackpath/history?limit=20').then(function(rows) {
+  exCall('/api/attackpath/history?limit=20').then(function(rows) {
     if (!rows || !rows.length) {
       tb.innerHTML = '<tr><td colspan="7" class="empty">No collection history yet.</td></tr>';
       return;
@@ -391,7 +392,7 @@ function loadAPHistory() {
       var ts = r.collectedAt ? new Date(r.collectedAt).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '—';
       var statusBadge = r.status === 'completed'
         ? '<span class="u-success">&#10003; Completed</span>'
-        : '<span class="u-danger">&#10005; ' + x(r.status) + (r.errorMsg ? ': ' + x(r.errorMsg.slice(0,40)) : '') + '</span>';
+        : '<span class="u-danger"' + (r.errorMsg ? ' title="' + x(r.errorMsg) + '"' : '') + '>&#10005; ' + x(r.status) + (r.errorMsg ? ': ' + x(r.errorMsg.length > 60 ? r.errorMsg.slice(0, 60) + '…' : r.errorMsg) : '') + '</span>';
       return '<tr>' +
         '<td style="font-family:var(--font-mono);font-size:0.76rem">' + ts + '</td>' +
         '<td>' + x(r.hostname || r.agentId) + '</td>' +

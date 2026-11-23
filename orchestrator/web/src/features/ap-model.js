@@ -31,7 +31,8 @@ const TONES = { bad: 1, warn: 1, info: 1, ok: 1, muted: 1 };
 // items: [{ key, tone, text }]
 export function findingRowsHtml(items) {
   return (items || []).map(function(i) {
-    const ic = i.key === 'ad' ? HELP : icon(FIND_ICON[i.key] || 'check');
+    // a good result (tone ok) gets a check, not the warning triangle its category normally uses
+    const ic = i.key === 'ad' ? HELP : icon(i.tone === 'ok' ? 'check' : (FIND_ICON[i.key] || 'check'));
     return '<div class="ap-find"><span class="ap-ico tone-' + (TONES[i.tone] ? i.tone : 'muted') + '">' + ic + '</span><span>' + x(i.text) + '</span></div>';
   }).join('');
 }
