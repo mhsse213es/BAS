@@ -29,7 +29,7 @@ Every key is optional. A missing key makes only its own check NOT_ASSESSED.
 | `admin_allowlist` | array of strings | one or more SIDs, each matching `S-1-...` | The only principals allowed as direct members of the local Administrators group. Matched by SID, never by display name. | Local Administrators check |
 | `min_password_length` | integer | 1 to 128 | The minimum acceptable `MinimumPasswordLength`. The observed value must be greater than or equal to this. | Minimum password length check |
 | `max_lockout_threshold` | integer | 1 to 999 | The highest acceptable `LockoutBadCount`. The observed value must be 1 up to this number. A value of 0 means accounts never lock, so it FAILs. | Lockout threshold check |
-| `max_password_age_days` | integer | 1 to 999 | The longest acceptable `MaximumPasswordAge`. The observed value must be 1 up to this number. A value of 0 means passwords never expire, so it FAILs. | Maximum password age check |
+| `max_password_age_days` | integer | 1 to 999 | The longest acceptable `MaximumPasswordAge`. The observed value must be 1 up to this number. A value of 0 means passwords never expire, so it FAILs. A negative observed value is reported as unexpected and FAILs. | Maximum password age check |
 
 Use SIDs for `admin_allowlist`. Find a SID with:
 
