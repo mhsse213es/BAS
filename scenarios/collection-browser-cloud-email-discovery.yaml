@@ -11,12 +11,13 @@ description: >
   execution or query failure.
 
   COVERAGE: T1217 browser discovery; T1539 synthetic cookie-store access; T1619 local sync-folder
-  discovery only (full cloud object discovery not claimed); T1114 local mail-store discovery and a
+  discovery and a synthetic sync-folder access with no sync client running (full cloud object discovery not claimed); T1114 local mail-store discovery and a
   synthetic mailbox access only (email collection not claimed).
 
   SAFETY: No profile database, cookie, password, token, mailbox or cloud file is opened or read.
-  Probes use synthetic files written to a BAS temp folder and deleted. No synthetic file is placed in a
-  synced folder, because it would be uploaded. Nothing is copied, decrypted or sent. Windows only.
+  Probes use synthetic files written to a BAS temp folder and deleted. The synced-folder probe is opt-in
+  (BAS_SYNC_PROBE=1), runs only when no sync client is running, and writes only a dedicated subfolder it
+  deletes at once. Nothing is copied, decrypted or sent. Windows only.
 author: Audspect Research
 executable: true
 local_check: false
@@ -155,7 +156,7 @@ steps:
       if (-not (Test-Path -LiteralPath $eventsFile)) { Write-Output "SKIP: not configured; BAS_EDR_EVENTS_FILE does not exist | source=$eventsFile"; exit 0 }
       if (-not (Test-Path -LiteralPath $state)) { Write-Output "ERROR: probe record file missing; run the probe step first | source=$state"; exit 0 }
       $rec = @(Read-Probes) | Where-Object { $_.probe -eq $probeName } | Select-Object -First 1
-      if (-not $rec) { Write-Output "ERROR: no probe record for $probeName | source=$state"; exit 0 }
+      if (-not $rec) { Write-Output "ERROR: no probe record for browser-cookie-store | source=$state"; exit 0 }
       try {
         $events = @(Get-Content -LiteralPath $eventsFile | Where-Object { $_.Trim() } | ForEach-Object { $_ | ConvertFrom-Json -ErrorAction Stop })
       } catch { Write-Output "ERROR: event file is not readable JSON lines | source=$eventsFile"; exit 0 }
@@ -215,11 +216,11 @@ steps:
     production_safe: true
     risk: low
     reversible: true
-    blast_radius: "Not run. A probe file inside a synced folder would be uploaded to cloud storage, so the step records UNVERIFIED instead."
+    blast_radius: "Opt-in (BAS_SYNC_PROBE=1). Runs only when no sync client process is running. Creates a synthetic file in a dedicated subfolder of a sync root, reads it, and deletes the subfolder at once. Otherwise reports UNVERIFIED."
     telemetry:
-      - "none"
+      - "Sysmon EID 11: create and delete of a BAS-probe folder under the sync root"
     detection:
-      - "Sync-folder access detection is not exercised by this scenario"
+      - "Sync-folder access is scored separately in the next step"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $state = Join-Path $env:TEMP 'bas-discovery-probes.json'
@@ -248,7 +249,72 @@ steps:
         Remove-Item -LiteralPath $dir -Recurse -Force
         return $path
       }
-      Write-Output "SKIP: unverified; no synthetic probe was placed in a synced folder because a probe file there would be uploaded to cloud storage, so sync-folder access detection is not exercised | observed=not run | expected=access event for a synthetic file in a sync folder | source=policy"
+      if ($env:BAS_SYNC_PROBE -ne '1') { Write-Output 'SKIP: unverified; the sync-folder probe is opt-in (set BAS_SYNC_PROBE=1 on a test host only) | observed=not run | expected=access event for a synthetic file in a sync folder | source=policy'; exit 0 }
+      $roots = @($env:OneDrive, $env:OneDriveCommercial, (Join-Path $env:USERPROFILE 'Dropbox'), (Join-Path $env:USERPROFILE 'Google Drive')) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
+      if (-not $roots) { Write-Output 'SKIP: unverified; no sync folder is present on this host | observed=none | expected=sync folder | source=environment variables and Test-Path'; exit 0 }
+      $running = @(Get-Process -Name OneDrive, Dropbox, GoogleDriveFS -ErrorAction SilentlyContinue | ForEach-Object { $_.ProcessName } | Sort-Object -Unique)
+      if ($running.Count -gt 0) { Write-Output "SKIP: unverified; a sync client is running ($($running -join ', ')), so a probe file could be uploaded | observed=not run | expected=no running sync client | source=Get-Process"; exit 0 }
+      $dir = Join-Path $roots[0] ('BAS-probe-' + [guid]::NewGuid().ToString('N'))
+      try {
+        New-Item -ItemType Directory -Path $dir | Out-Null
+        $path = Join-Path $dir 'synthetic.docx'
+        [IO.File]::WriteAllText($path, 'SYNTHETIC BAS SYNC PROBE. NOT USER DATA.')
+        Add-ProbeRecord 'cloud-sync-folder' $path
+        $fs = [IO.File]::Open($path, 'Open', 'Read', 'ReadWrite')
+        try { $buf = New-Object byte[] 16; [void]$fs.Read($buf, 0, 16) } finally { $fs.Dispose() }
+        Write-Output "PASS: synthetic sync-folder probe ran | observed=pid=$PID path=$path | expected=probe executed; detection is scored in the correlation step | source=synthetic file in a dedicated subfolder of the sync root, no sync client running"
+      } catch { Write-Output "ERROR: synthetic sync-folder probe failed: $($_.Exception.Message)" }
+      finally { Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue }
+    cleanup: ""
+  - name: "Surveyed Data 5b — Sync-Folder Detection Correlation (T1619)"
+    check_id: correlate-cloud-sync-folder
+    technique_id: T1619
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads an exported EDR/DLP event file and matches the sync-probe process id, file name and timestamp. Writes nothing to the host."
+    telemetry:
+      - "none; reads the exported event file only"
+    detection:
+      - "Scores the detection control: PASS detected, FAIL missed, SKIP not configured or unverified"
+    command: |
+      $state = Join-Path $env:TEMP 'bas-discovery-probes.json'
+      function Read-Probes {
+        if (-not (Test-Path -LiteralPath $state)) { return @() }
+        $raw = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $state -Raw)
+        return @($raw)
+      }
+
+      $probeName = 'cloud-sync-folder'
+      $eventsFile = $env:BAS_EDR_EVENTS_FILE
+      if (-not $eventsFile) { Write-Output 'SKIP: not configured; set BAS_EDR_EVENTS_FILE to an exported JSON-lines EDR/DLP event file (fields: timestamp, process_id, file_path) | source=BAS_EDR_EVENTS_FILE'; exit 0 }
+      if (-not (Test-Path -LiteralPath $eventsFile)) { Write-Output "SKIP: not configured; BAS_EDR_EVENTS_FILE does not exist | source=$eventsFile"; exit 0 }
+      if (-not (Test-Path -LiteralPath $state)) { Write-Output "ERROR: probe record file missing; run the probe step first | source=$state"; exit 0 }
+      $rec = @(Read-Probes) | Where-Object { $_.probe -eq $probeName } | Select-Object -First 1
+      if (-not $rec) { Write-Output "SKIP: unverified; the sync-folder probe did not run, so there is nothing to correlate | observed=no probe record | expected=correlated event | source=$state"; exit 0 }
+      try {
+        $events = @(Get-Content -LiteralPath $eventsFile | Where-Object { $_.Trim() } | ForEach-Object { $_ | ConvertFrom-Json -ErrorAction Stop })
+      } catch { Write-Output "ERROR: event file is not readable JSON lines | source=$eventsFile"; exit 0 }
+      if ($events.Count -gt 0 -and -not ($events[0].PSObject.Properties['timestamp'] -and $events[0].PSObject.Properties['process_id'] -and $events[0].PSObject.Properties['file_path'])) {
+        Write-Output "ERROR: event schema mismatch; expected timestamp, process_id, file_path | source=$eventsFile"; exit 0
+      }
+      $t0 = [datetimeoffset]::Parse($rec.utc).UtcDateTime
+      $leaf = Split-Path $rec.path -Leaf
+      $hits = @($events | Where-Object {
+        $ts = [datetimeoffset]::Parse($_.timestamp).UtcDateTime
+        ([int]$_.process_id -eq [int]$rec.pid) -and ("$($_.file_path)" -like "*$leaf") -and ($ts -ge $t0.AddSeconds(-5)) -and ($ts -le $t0.AddSeconds(60))
+      })
+      $newest = $null
+      if ($events.Count -gt 0) { $newest = ($events | ForEach-Object { [datetimeoffset]::Parse($_.timestamp).UtcDateTime } | Measure-Object -Maximum).Maximum }
+      $obs = "probe pid=$($rec.pid) file=$leaf utc=$($rec.utc) correlated events=$($hits.Count) newest export event=$newest"
+      if ($hits.Count -gt 0) { Write-Output "PASS: access to the synthetic $probeName probe was detected and correlated to its process and timestamp | observed=$obs | expected=correlated event | source=$eventsFile" }
+      elseif ($newest -and $newest -ge $t0.AddSeconds(60)) { Write-Output "FAIL: access to the synthetic $probeName probe was not detected; the export is newer than the probe and holds no event for its process | observed=$obs | expected=correlated event | source=$eventsFile" }
+      else { Write-Output "SKIP: unverified; the export is older than the probe or empty, so absence of an event is not evidence | observed=$obs | expected=correlated event | source=$eventsFile" }
     cleanup: ""
   - name: "Surveyed Data 6 — Local Mail-Store Discovery (T1114, local discovery only)"
     check_id: discovery-mail-stores
@@ -357,7 +423,7 @@ steps:
       if (-not (Test-Path -LiteralPath $eventsFile)) { Write-Output "SKIP: not configured; BAS_EDR_EVENTS_FILE does not exist | source=$eventsFile"; exit 0 }
       if (-not (Test-Path -LiteralPath $state)) { Write-Output "ERROR: probe record file missing; run the probe step first | source=$state"; exit 0 }
       $rec = @(Read-Probes) | Where-Object { $_.probe -eq $probeName } | Select-Object -First 1
-      if (-not $rec) { Write-Output "ERROR: no probe record for $probeName | source=$state"; exit 0 }
+      if (-not $rec) { Write-Output "ERROR: no probe record for mailbox-pst-store | source=$state"; exit 0 }
       try {
         $events = @(Get-Content -LiteralPath $eventsFile | Where-Object { $_.Trim() } | ForEach-Object { $_ | ConvertFrom-Json -ErrorAction Stop })
       } catch { Write-Output "ERROR: event file is not readable JSON lines | source=$eventsFile"; exit 0 }

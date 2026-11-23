@@ -4295,7 +4295,7 @@
   {
     "scenario": "collection-browser-cloud-email-discovery.yaml",
     "index": 5,
-    "technique_id": "T1114",
+    "technique_id": "T1619",
     "action_key": "",
     "framework": "custom",
     "class": "destructive",
@@ -4331,6 +4331,15 @@
   {
     "scenario": "collection-browser-cloud-email-discovery.yaml",
     "index": 9,
+    "technique_id": "T1114",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "collection-browser-cloud-email-discovery.yaml",
+    "index": 10,
     "technique_id": "T1217",
     "action_key": "",
     "framework": "custom",
