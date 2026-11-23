@@ -156,16 +156,16 @@ export function _renderConnectorCard(prefix, enabled, stat, rawCountElId, retain
   if (!enabled && retained) {
     // Config removed but the source's actors are still in the console: say so, and show what it still holds.
     statusEl.textContent = '◌ Config removed · data kept';
-    statusEl.style.color = '#d29922';
+    statusEl.style.color = 'var(--warning-text, var(--warning))';
   } else if (!enabled) {
     statusEl.textContent = '✗ Not configured';
     statusEl.style.color = 'var(--muted)';
   } else if (stat && stat.error) {
     statusEl.textContent = '⚠ Error';
-    statusEl.style.color = '#f85149';
+    statusEl.style.color = 'var(--danger-text, var(--danger))';
   } else {
     statusEl.textContent = '✓ Connected';
-    statusEl.style.color = '#5cead8';
+    statusEl.style.color = 'var(--success-text, var(--success))';
   }
   if (!enabled && retained) {
     // Raw counts are not kept after removal; actors and the last successful sync are.

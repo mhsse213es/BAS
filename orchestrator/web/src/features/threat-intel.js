@@ -333,7 +333,7 @@ export function loadConnectorStatus() {
     document.getElementById('cs-next').textContent = s.nextSyncAt ? new Date(s.nextSyncAt).toLocaleString() : '—';
     var statusEl = document.getElementById('cs-status');
     statusEl.textContent = s.lastSyncStatus || 'never';
-    statusEl.style.color = s.lastSyncStatus === 'ok' ? '#5cead8' : s.lastSyncStatus === 'error' ? '#f85149' : 'var(--muted)';
+    statusEl.style.color = s.lastSyncStatus === 'ok' ? 'var(--success-text, var(--success))' : s.lastSyncStatus === 'error' ? 'var(--danger-text, var(--danger))' : 'var(--muted)';
     var errEl = document.getElementById('cs-error');
     if (s.lastError) { errEl.textContent = s.lastError; setDisplay(errEl, ''); }
     else { setDisplay(errEl, 'none'); }

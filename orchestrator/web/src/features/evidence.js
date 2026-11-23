@@ -783,13 +783,18 @@ export function submitCreateUser() {
   var role     = document.getElementById('cu-role').value;
   document.getElementById('cu-err').textContent = '';
   if (!username || !password) { document.getElementById('cu-err').textContent = 'Username and password are required.'; return; }
+  if (password.length < 8) { document.getElementById('cu-err').textContent = 'Password must be at least 8 characters.'; return; }
+  if (_creatingUser) return;
+  _creatingUser = true;
   apicall('/api/users', { method: 'POST', body: JSON.stringify({ username: username, password: password, role: role }) })
   .then(function(res) {
     if (res.error) throw new Error(res.error);
     closeCreateUser(); showToast('User ' + username + ' created', 'ok'); loadUsers();
   })
-  .catch(function(e) { document.getElementById('cu-err').textContent = e.message; });
+  .catch(function(e) { document.getElementById('cu-err').textContent = e.message; })
+  .finally(function() { _creatingUser = false; });
 }
+var _creatingUser = false;
 
 export function openFindingFromDashboard(id) {
   showTab('findings');

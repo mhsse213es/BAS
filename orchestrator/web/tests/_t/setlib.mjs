@@ -45,7 +45,7 @@ export async function boot(opts = {}) {
   const state = Object.assign({ fail: {}, status: {}, calls: [], dialogs: [], delay: {}, prompts: [] }, seed(), opts.data || {});
   const errs = []; page.on('pageerror', (e) => errs.push(e.message.slice(0, 160)));
   page.on('dialog', async (d) => { state.dialogs.push(d.type() + ': ' + d.message().slice(0, 90)); if (d.type() === 'prompt') await d.accept(state.promptAnswer == null ? 'Temp#Passw0rd' : state.promptAnswer); else await d.accept(); });
-  await page.addInitScript((t) => { localStorage.setItem('bas_role', t[0]); localStorage.setItem('audspect_theme', t[1]); }, [opts.role || 'admin', opts.theme || 'dark']);
+  await page.addInitScript((t) => { localStorage.setItem('bas_role', t[0]); localStorage.setItem('audspect_theme', t[1]); localStorage.setItem('bas_user_id', 'u1'); }, [opts.role || 'admin', opts.theme || 'dark']);
   const json = (r, body, status = 200) => r.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
   let seq = 100;
   const MINE = ['/api/users', '/api/caldera/status', '/api/connector/', '/api/threat-intel/', '/api/openaev/', '/api/taxii/', '/api/art/content', '/api/audit-logs', '/api/license', '/api/backups'];

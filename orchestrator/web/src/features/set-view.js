@@ -55,7 +55,11 @@ function cellHtml(col, u) {
   }
 }
 
+function isMe(u) { var me = ''; try { me = localStorage.getItem('bas_user_id') || ''; } catch (e) {} return !!me && u.id === me; }
+
 function actionsHtml(u) {
+  // The server refuses an account changing its own role or deactivating itself, so those two are not offered on your own row.
+  if (isMe(u)) return '<td class="num set-acts"><span class="muted set-you">This is you</span><button class="btn btn-outline btn-sm"' + on('click', 'doResetPassword', u.id, u.username) + '>Reset PW</button></td>';
   return '<td class="num set-acts"><button class="btn btn-outline btn-sm"' + on('click', 'openEditUser', u.id, u.username, u.role) + '>Edit</button>' +
     '<button class="btn btn-outline btn-sm"' + on('click', 'doResetPassword', u.id, u.username) + '>Reset PW</button>' +
     '<button class="btn btn-outline-' + (u.isActive ? 'red' : 'green') + ' btn-sm"' + on('click', 'toggleUserActive', u.id, !u.isActive) + '>' + (u.isActive ? 'Disable' : 'Enable') + '</button></td>';

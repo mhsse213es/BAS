@@ -142,3 +142,5 @@ body.compact .rk-card.flush { padding: 0; }
 body.compact .rk-kpi { padding: 10px 14px; }
 body.compact .nav-item { padding-top: 6px; padding-bottom: 6px; min-height: 32px; }
 body.compact .sc-card { padding: 11px 12px 10px; gap: 7px; }
+
+.set-you { font-size: 12px; margin-right: 8px; }

@@ -62,8 +62,8 @@ export function loadOpenAEVConfig() {
     // sync counts, not threat-actor extraction).
     var statusEl = document.getElementById('cs-openaev-status');
     if (statusEl) {
-      if (s.lastSyncStatus === 'error') { statusEl.textContent = '⚠ Error'; statusEl.style.color = '#f85149'; }
-      else if (s.lastSyncStatus === 'ok') { statusEl.textContent = '✓ Connected'; statusEl.style.color = '#5cead8'; }
+      if (s.lastSyncStatus === 'error') { statusEl.textContent = '⚠ Error'; statusEl.style.color = 'var(--danger-text, var(--danger))'; }
+      else if (s.lastSyncStatus === 'ok') { statusEl.textContent = '✓ Connected'; statusEl.style.color = 'var(--success-text, var(--success))'; }
       else { statusEl.textContent = '— Not synced yet'; statusEl.style.color = 'var(--muted)'; }
     }
     var scenariosEl = document.getElementById('cs-openaev-scenarios');
