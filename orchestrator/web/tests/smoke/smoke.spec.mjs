@@ -347,3 +347,48 @@ test('threat intel category: separate from All, with the skipped-actors note', a
   await page.locator('#sc-cats .sc-cat-item', { hasText: 'All Scenarios' }).click();
   await expect(page.locator('.sc-skip-note')).toHaveCount(0);
 });
+
+// The throughput/quality tiles and the per-source reliability columns render from the one factory-health response.
+test('factory health: KPI tiles and source reliability render, no-data stays NO DATA', async ({ page }) => {
+  await boot(page);
+  const m = (value) => ({ state: 'measured', value });
+  const none = (reason) => ({ state: 'no_data', reason });
+  const report = {
+    windowSince: new Date(Date.now() - 30 * 86400000).toISOString(),
+    threatsProcessed: m(12), publishedContent: m(5), medianThreatToContentTcv: none('no sample'),
+    p95ThreatToContentTcv: none('no sample'), staticValidationPassRate: m(1), duplicateGenerationRate: m(0.1),
+    sourceToTechniqueCoverage: m(0.8),
+    threatsIngestedPerDay: m(0.4), threatsMapped: m(9), candidatesGeneratedPerDay: m(1.5), candidatesValidated: m(6),
+    candidatesRejected: m(3), rejectedByReason: { relevance: 2, unsupported_platform: 1 }, publishedPerDay: m(0.2),
+    executionValidationPassRate: m(0.75), executionValidationErrors: m(2), handsOffRate: m(0.4),
+    stageAutomationRate: none('no lifecycle events on content published in the window'), reuseRate: m(0.667),
+    contentFreshness: { total: 5, under30Days: 3, days31To90: 1, days91To365: 1, over365Days: 0 },
+    pipeline: {
+      funnel: { candidate: 2, validated: 1, published: 5, rejected: 3 }, dataQuality: { staleSources: [], staleValidations: 0 },
+      ingestion: { unresolvedCandidates: 1, sources: [
+        { sourceInstanceId: 'misp-1', displayName: 'MISP', lastSuccessAt: new Date().toISOString(), failuresInWindow: 0,
+          reliability: { syncsInWindow: 4, syncSuccessRate: m(0.75), observations: 10, resolvedObservations: 8, resolutionRate: m(0.8),
+            threatsContributed: 4, threatsWithPublishedContent: 1, usefulnessRate: m(0.25) } },
+        { sourceInstanceId: 'idle-1', displayName: 'Idle feed', lastSuccessAt: new Date().toISOString(), failuresInWindow: 0,
+          reliability: { syncSuccessRate: none('no syncs in the window'), resolutionRate: none('x'), usefulnessRate: none('y') } },
+      ] },
+    },
+    trends: { threatsProcessedByDay: [], tcvByDay: [] },
+  };
+  await page.route('**/api/analytics/factory-health', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(report) }));
+  await openTab(page, 'factory-health');
+  const kpis = page.locator('#factory-health-kpis');
+  await expect(kpis).toContainText('0.4 / day');
+  await expect(kpis).toContainText('75%');
+  await expect(kpis).toContainText('2 errors not counted');
+  await expect(kpis).toContainText('2 relevance');
+  await expect(kpis).toContainText('3 under 30d');
+  // the stage-automation metric has no data: it must say so with the server's reason, not show 0%
+  await expect(kpis.locator('.fh-tile', { hasText: 'Stage automation' })).toContainText('NO DATA');
+  await expect(kpis.locator('.fh-tile', { hasText: 'Stage automation' })).toContainText('no lifecycle events');
+  const rows = page.locator('#fh-body tr');
+  await expect(rows.nth(0)).toContainText('75%');
+  await expect(rows.nth(0)).toContainText('25%');
+  await expect(rows.nth(1).locator('td.num').nth(1)).toHaveText('—'); // an idle source is a dash, not 0%
+  if (process.env.FH_SHOT) await page.screenshot({ path: process.env.FH_SHOT, fullPage: true }); // opt-in, for eyeballing
+});

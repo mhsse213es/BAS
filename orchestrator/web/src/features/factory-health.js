@@ -23,6 +23,7 @@ export function loadFactoryHealth() {
     }
     renderFactoryHealthHero(r);
     renderFactoryHealthTiles(r);
+    renderFactoryHealthKpis(r);
     renderFactoryHealthIngestion(r);
     renderFactoryHealthFunnel(r);
     renderFactoryHealthTrends(r);
@@ -78,6 +79,18 @@ function renderFactoryHealthHero(r) {
   setHeroStat('fh-hs-unresolved', dash(h.unresolved));
 }
 
+// The throughput, quality and automation tiles. A metric with no data shows NO DATA with the server's reason,
+// never a zero; the values and captions come from M.kpiTiles.
+function renderFactoryHealthKpis(r) {
+  var el = document.getElementById('factory-health-kpis');
+  if (!el) return;
+  el.innerHTML = '<h4 class="sec-label">Throughput and quality</h4>' + grid(3, M.kpiTiles(r).map(function(t) {
+    if (t.value == null && t.m) return tileHtml({ label: t.label, value: 'NO DATA', caption: (t.m && t.m.reason) || 'No data yet', icon: t.icon, tone: 'muted' });
+    if (t.value == null) return tileHtml({ label: t.label, value: 'NO DATA', caption: 'Not reported by this server version', icon: t.icon, tone: 'muted' });
+    return tileHtml({ label: t.label, value: t.value, caption: t.caption, icon: t.icon, tone: t.tone });
+  }));
+}
+
 function renderFactoryHealthTiles(r) {
   var el = document.getElementById('factory-health-tiles');
   if (!el) return;
@@ -123,12 +136,21 @@ function currentList() { return M.sortSources(M.filterSources(_sources, T.q), T.
 function setHidden(id, h) { var e = document.getElementById(id); if (e) e.hidden = h; }
 function setText(id, t) { var e = document.getElementById(id); if (e) e.textContent = t; }
 
+// relTitle: hover text for a reliability cell, so the percentage always comes with what it was counted over.
+function relTitle(col, s) {
+  var r = s.rel || {};
+  if (col === 4) return r.syncsInWindow ? r.syncsInWindow + ' sync' + (r.syncsInWindow === 1 ? '' : 's') + ' in the window' : 'No syncs in the window';
+  if (col === 5) return r.observations ? r.resolvedObservations + ' of ' + r.observations + ' records landed on a known threat' : 'No records in the window';
+  return r.threatsContributed ? r.threatsWithPublishedContent + ' of ' + r.threatsContributed + ' threats have published content so far' : 'No threats from this source in the window';
+}
+
 function cellHtml(col, s) {
   switch (col) {
     case 0: return '<td><b>' + x(s.name) + '</b>' + (s.id && s.id !== s.name ? '<div class="mono muted fh-id">' + x(s.id) + '</div>' : '') + '</td>';
     case 1: return '<td>' + pill(s.state.label, s.state.tone) + '</td>';
     case 2: return '<td class="muted">' + x(s.lastSuccessAt ? fmtDate(s.lastSuccessAt) : 'never synced') + '</td>';
     case 3: return '<td class="num">' + x(s.failures) + '</td>';
+    case 4: case 5: case 6: return '<td class="num" title="' + x(relTitle(col, s)) + '">' + x(M.cellText(s, col)) + '</td>';
     default: return '<td class="muted fh-diag">' + x(s.diagnostic || '—') + '</td>';
   }
 }
@@ -146,7 +168,7 @@ function paintTable() {
   var onList = list.filter(function(s) { return T.sel[idx(s)]; }).length;
   document.getElementById('fh-thead').innerHTML = '<tr><th class="dt-selcol"><input type="checkbox" class="dt-cb" id="fh-sel-all" title="Select all on this table"' + on('change', 'fhSelectAll') + '></th>' +
     cols.map(function(c) {
-      return '<th class="dt-th' + (c === 3 ? ' num' : '') + (T.col === c ? ' sorted' : '') + '"' + on('click', 'fhSortBy', c) + '>' + x(M.COLUMNS[c]) + '<span class="dt-arrow">' + (T.col === c ? (T.dir > 0 ? '▲' : '▼') : '') + '</span></th>';
+      return '<th class="dt-th' + (M.NUM_COLS.indexOf(c) !== -1 ? ' num' : '') + (T.col === c ? ' sorted' : '') + '"' + on('click', 'fhSortBy', c) + '>' + x(M.COLUMNS[c]) + '<span class="dt-arrow">' + (T.col === c ? (T.dir > 0 ? '▲' : '▼') : '') + '</span></th>';
     }).join('') + '</tr>';
   var all = document.getElementById('fh-sel-all');
   if (all) { all.checked = list.length > 0 && onList === list.length; all.indeterminate = onList > 0 && onList < list.length; }
@@ -389,7 +411,7 @@ export function openFactorySource(i) {
   var body = document.getElementById('fh-drawer-body');
   if (body) {
     body.innerHTML = '<div class="fh-dr-state">' + pill(s.state.label, s.state.tone) + '<span class="muted">' + x(s.failures) + (s.failures === 1 ? ' failure' : ' failures') + ' in window</span></div>' +
-      kv([['Last success', s.lastSuccessAt ? fmtDate(s.lastSuccessAt) : 'never synced'], ['Failures in window', String(s.failures)], ['Last diagnostic', s.diagnostic || 'None reported']]);
+      kv([['Last success', s.lastSuccessAt ? fmtDate(s.lastSuccessAt) : 'never synced'], ['Failures in window', String(s.failures)], ['Sync success', M.cellText(s, 4) + ' — ' + relTitle(4, s)], ['Resolution', M.cellText(s, 5) + ' — ' + relTitle(5, s)], ['Usefulness', M.cellText(s, 6) + ' — ' + relTitle(6, s)], ['Last diagnostic', s.diagnostic || 'None reported']]);
   }
   var o = document.getElementById('fh-drawer-overlay');
   if (o) o.classList.add('open');
