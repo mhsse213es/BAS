@@ -5166,6 +5166,24 @@
     "status": "self_cleaning_declared"
   },
   {
+    "scenario": "collection-remote-share-discovery.yaml",
+    "index": 2,
+    "technique_id": "T1039",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "collection-remote-share-discovery.yaml",
+    "index": 3,
+    "technique_id": "T1083",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "collection-removable-media-exfil.yaml",
     "index": 0,
     "technique_id": "T1120",
