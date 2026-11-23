@@ -58,3 +58,12 @@ Run 3 (out3, 2026-11-21 01:52 -08:00). Clean: 16 verdicts, no NO_VERDICT.
 Temp-folder cleanup: one folder, `C:\Users\Administrator\AppData\Local\Temp\2\AudspectEM06_785b9105ec` (timestamp 1:49 AM), was left after the runs. It was empty when checked. It was removed manually and a re-check printed nothing. Its creation time falls between the out2 (01:33) and out3 (01:52) runs, and no recorded run explains it. Cause not identified; it did not recur in out3's check. Not a Windows or user-environment change; no data was lost.
 
 Not run: the Trellix ePO check, and the Audspect COLLECTED check (requires the Audspect query API).
+
+## Orchestrator run (run 18ea92e7d91b1477, staging orchestrator 192.168.10.78:9543): not a result for this scenario
+
+- The run executed the old 2-step EM-06 on main (Regsvr32 Squiblydoo mock and Certutil URL pattern), not the 16-step scenario in this branch. Events show stepsTotal 2. The new scenario was not imported to that orchestrator.
+- The old steps reported pass on exit code 0, so the run's "prevented" kill-chain labels come from exit codes, not from a control. That is the defect the new verdict model replaces. Not used as evidence.
+- Report flags cleanup failure from a user-level registry key already present before the run: HKCU\Software\Classes\ms-settings\shell\open. The agent lists it as pre-existing. Not changed; owner to review.
+- COLLECTED: NOT ASSESSED for the 16-step scenario. Decision: moved on to the next scenario with this left open.
+- Still open: Trellix ePO alert check for the 01:52-01:53 lab window (2026-11-21); the 16-step scenario has not been run through the orchestrator.
+- PR for EM-06 not opened.
