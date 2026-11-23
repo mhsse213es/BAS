@@ -2,20 +2,21 @@ id: collection-browser-cloud-email-discovery
 product_line: dlp
 name: Browser, Cloud and Mailbox Discovery
 description: >
-  Telemetry-safe emulation of an adversary surveying where the user keeps data
-  outside the file system: browser profiles, cloud-sync client folders, and local
-  mail stores. Each step counts what exists and lists names only. No profile
-  database, cookie, password store, mailbox, or cloud file is opened or read. This
-  is the discovery that comes before collection, and the review found it missing.
+  Discovery of where sensitive data sits outside the file system (browser profiles, cloud-sync
+  folders, local mail stores), plus synthetic access probes and a check of whether EDR/DLP telemetry
+  saw them. Discovery and detection are scored separately: finding a folder proves discovery, not
+  detection. Detection is scored only from an exported EDR/DLP event file (BAS_EDR_EVENTS_FILE).
+  Verdicts: PASS detected or evidence recorded; FAIL access confirmed missed; SKIP NOT_CONFIGURED
+  (no integration) or UNVERIFIED (integration present but no usable correlated evidence); ERROR
+  execution or query failure.
 
-  KILL CHAIN STAGES:
-    1. Browser Profile Discovery — count browser profile folders (T1217)
-    2. Cloud Client Discovery    — list cloud-sync client folders by name (T1619)
-    3. Mailbox Store Discovery   — count local mail-store files by extension (T1114)
+  COVERAGE: T1217 browser discovery; T1539 synthetic cookie-store access; T1619 local sync-folder
+  discovery only (full cloud object discovery not claimed); T1114 local mail-store discovery and a
+  synthetic mailbox access only (email collection not claimed).
 
-  SAFETY: Read-only. Profile, cookie, password and mail files are counted by path
-  and extension only. Nothing is opened, copied, decrypted, or sent. Windows only.
-  Telemetry mode.
+  SAFETY: No profile database, cookie, password, token, mailbox or cloud file is opened or read.
+  Probes use synthetic files written to a BAS temp folder and deleted. No synthetic file is placed in a
+  synced folder, because it would be uploaded. Nothing is copied, decrypted or sent. Windows only.
 author: Audspect Research
 executable: true
 local_check: false
@@ -27,6 +28,7 @@ tags:
   - email
   - dlp
   - t1217
+  - t1539
   - t1619
   - t1114
   - mitre
@@ -41,11 +43,8 @@ live_policy:
   execution_window: ""
 
 steps:
-
-  # ---------------------------------------------------------------------------
-  # Stage 1 — Browser Profile Discovery (T1217)
-  # ---------------------------------------------------------------------------
-  - name: "Surveyed Data 1 — Browser Profile Folder Discovery (T1217)"
+  - name: "Surveyed Data 1 — Browser Profile Discovery (T1217)"
+    check_id: discovery-browser-profiles
     technique_id: T1217
     framework: custom
     executor: powershell
@@ -55,32 +54,129 @@ steps:
     production_safe: true
     risk: low
     reversible: true
-    blast_radius: "Counts the profile folders for Chrome, Edge and Firefox under the current user's AppData. Only folder names are checked. No profile file is opened or read."
+    blast_radius: "Records which browser profile roots exist and the profile folder names. No profile file is opened or read."
     telemetry:
-      - "Sysmon EID 11: none (read-only)"
-      - "PowerShell EID 4104: Test-Path against browser profile paths"
+      - "Sysmon EID 11: none (directory metadata only)"
+      - "PowerShell EID 4104: Test-Path and Get-ChildItem -Directory"
     detection:
-      - "EDR: browser profile paths probed from a non-browser process — credential-theft precursor"
+      - "Discovery is evidence of discovery only; it is not a detection result"
+    command: |
+      $roots = [ordered]@{
+        Chrome  = Join-Path $env:LOCALAPPDATA 'Google\Chrome\User Data'
+        Edge    = Join-Path $env:LOCALAPPDATA 'Microsoft\Edge\User Data'
+        Firefox = Join-Path $env:APPDATA 'Mozilla\Firefox\Profiles'
+      }
+      $found = @(); $names = @()
+      foreach ($k in $roots.Keys) {
+        if (Test-Path -LiteralPath $roots[$k]) {
+          $found += $k
+          $names += @(Get-ChildItem -LiteralPath $roots[$k] -Directory | ForEach-Object { "$k/$($_.Name)" })
+        }
+      }
+      Write-Output "PASS: browser discovery recorded | observed=installed profile roots=[$($found -join ', ')] of 3 checked; profile folder names=[$($names -join ', ')] | expected=discovery evidence, not a detection result | source=Test-Path and Get-ChildItem -Directory on profile roots. No profile file was opened or read."
+    cleanup: ""
+  - name: "Surveyed Data 2 — Synthetic Cookie-Store Access Probe (T1539)"
+    check_id: probe-browser-cookie-store
+    technique_id: T1539
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Creates a synthetic file named Cookies in a BAS temp folder, opens it read-only, and deletes it. No browser database is touched."
+    telemetry:
+      - "Sysmon EID 11: create of a synthetic Cookies file under %TEMP%\bas-probe"
+      - "Sysmon EID 1: powershell.exe process id recorded"
+    detection:
+      - "EDR/DLP: read of a file named Cookies by a non-browser process, scored separately in the correlation step"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
-      $paths = @(
-        (Join-Path $env:LOCALAPPDATA 'Google\Chrome\User Data'),
-        (Join-Path $env:LOCALAPPDATA 'Microsoft\Edge\User Data'),
-        (Join-Path $env:APPDATA 'Mozilla\Firefox\Profiles')
-      )
-      $found = @($paths | Where-Object { Test-Path $_ }).Count
-      Write-Output "EXEC T1217: found $found browser profile root(s) of 3 checked. No profile file was opened. Survey Stage 1. [BAS-SIM-SRV-S1]"
-      if ($found -gt 0) {
-        Write-Output "FAIL: Browser profile locations were surveyed from a non-browser context with no alert. Probing profile stores is a precursor to credential and cookie theft."
-      } else {
-        Write-Output "PASS: No browser profile roots were present to survey."
+      $state = Join-Path $env:TEMP 'bas-discovery-probes.json'
+      function Read-Probes {
+        if (-not (Test-Path -LiteralPath $state)) { return @() }
+        $raw = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $state -Raw)
+        return @($raw)
       }
+      function Add-ProbeRecord([string]$Name, [string]$Path) {
+        $rec = [pscustomobject]@{ probe = $Name; pid = $PID; utc = (Get-Date).ToUniversalTime().ToString('o'); path = $Path }
+        $list = New-Object System.Collections.ArrayList
+        if (Test-Path -LiteralPath $state) {
+          foreach ($x in @(Read-Probes)) { if ($x.probe -ne $Name) { [void]$list.Add($x) } }
+        }
+        [void]$list.Add($rec)
+        ConvertTo-Json -InputObject @($list.ToArray()) -Depth 3 | Set-Content -LiteralPath $state -Encoding utf8
+      }
+      function Invoke-SyntheticProbe([string]$Name, [string]$FileName) {
+        $dir = Join-Path $env:TEMP ('bas-probe\' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        $path = Join-Path $dir $FileName
+        [IO.File]::WriteAllText($path, 'SYNTHETIC BAS DISCOVERY PROBE. NOT A REAL DATA STORE.')
+        Add-ProbeRecord $Name $path
+        $fs = [IO.File]::Open($path, 'Open', 'Read', 'ReadWrite')
+        try { $buf = New-Object byte[] 16; [void]$fs.Read($buf, 0, 16) } finally { $fs.Dispose() }
+        Remove-Item -LiteralPath $dir -Recurse -Force
+        return $path
+      }
+      try {
+        $p = Invoke-SyntheticProbe 'browser-cookie-store' 'Cookies'
+        Write-Output "PASS: synthetic cookie-store probe ran | observed=pid=$PID path=$p | expected=probe executed; detection is scored in the correlation step | source=synthetic file under %TEMP%/bas-probe, read-only open"
+      } catch { Write-Output "ERROR: synthetic cookie-store probe failed: $($_.Exception.Message)" }
     cleanup: ""
+  - name: "Surveyed Data 3 — Browser Cookie-Store Detection Correlation (T1539)"
+    check_id: correlate-browser-cookie-store
+    technique_id: T1539
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads an exported EDR/DLP event file and matches the probe process id, file name and timestamp. Writes nothing to the host."
+    telemetry:
+      - "none; reads the exported event file only"
+    detection:
+      - "Scores the detection control: PASS detected, FAIL missed, SKIP not configured or unverified"
+    command: |
+      $state = Join-Path $env:TEMP 'bas-discovery-probes.json'
+      function Read-Probes {
+        if (-not (Test-Path -LiteralPath $state)) { return @() }
+        $raw = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $state -Raw)
+        return @($raw)
+      }
 
-  # ---------------------------------------------------------------------------
-  # Stage 2 — Cloud Client Discovery (T1619)
-  # ---------------------------------------------------------------------------
-  - name: "Surveyed Data 2 — Cloud-Sync Client Folder Discovery (T1619)"
+      $probeName = 'browser-cookie-store'
+      $eventsFile = $env:BAS_EDR_EVENTS_FILE
+      if (-not $eventsFile) { Write-Output 'SKIP: not configured; set BAS_EDR_EVENTS_FILE to an exported JSON-lines EDR/DLP event file (fields: timestamp, process_id, file_path) | source=BAS_EDR_EVENTS_FILE'; exit 0 }
+      if (-not (Test-Path -LiteralPath $eventsFile)) { Write-Output "SKIP: not configured; BAS_EDR_EVENTS_FILE does not exist | source=$eventsFile"; exit 0 }
+      if (-not (Test-Path -LiteralPath $state)) { Write-Output "ERROR: probe record file missing; run the probe step first | source=$state"; exit 0 }
+      $rec = @(Read-Probes) | Where-Object { $_.probe -eq $probeName } | Select-Object -First 1
+      if (-not $rec) { Write-Output "ERROR: no probe record for $probeName | source=$state"; exit 0 }
+      try {
+        $events = @(Get-Content -LiteralPath $eventsFile | Where-Object { $_.Trim() } | ForEach-Object { $_ | ConvertFrom-Json -ErrorAction Stop })
+      } catch { Write-Output "ERROR: event file is not readable JSON lines | source=$eventsFile"; exit 0 }
+      if ($events.Count -gt 0 -and -not ($events[0].PSObject.Properties['timestamp'] -and $events[0].PSObject.Properties['process_id'] -and $events[0].PSObject.Properties['file_path'])) {
+        Write-Output "ERROR: event schema mismatch; expected timestamp, process_id, file_path | source=$eventsFile"; exit 0
+      }
+      $t0 = [datetimeoffset]::Parse($rec.utc).UtcDateTime
+      $leaf = Split-Path $rec.path -Leaf
+      $hits = @($events | Where-Object {
+        $ts = [datetimeoffset]::Parse($_.timestamp).UtcDateTime
+        ([int]$_.process_id -eq [int]$rec.pid) -and ("$($_.file_path)" -like "*$leaf") -and ($ts -ge $t0.AddSeconds(-5)) -and ($ts -le $t0.AddSeconds(60))
+      })
+      $newest = $null
+      if ($events.Count -gt 0) { $newest = ($events | ForEach-Object { [datetimeoffset]::Parse($_.timestamp).UtcDateTime } | Measure-Object -Maximum).Maximum }
+      $obs = "probe pid=$($rec.pid) file=$leaf utc=$($rec.utc) correlated events=$($hits.Count) newest export event=$newest"
+      if ($hits.Count -gt 0) { Write-Output "PASS: access to the synthetic $probeName probe was detected and correlated to its process and timestamp | observed=$obs | expected=correlated event | source=$eventsFile" }
+      elseif ($newest -and $newest -ge $t0.AddSeconds(60)) { Write-Output "FAIL: access to the synthetic $probeName probe was not detected; the export is newer than the probe and holds no event for its process | observed=$obs | expected=correlated event | source=$eventsFile" }
+      else { Write-Output "SKIP: unverified; the export is older than the probe or empty, so absence of an event is not evidence | observed=$obs | expected=correlated event | source=$eventsFile" }
+    cleanup: ""
+  - name: "Surveyed Data 4 — Cloud-Sync Client Discovery (T1619, local folders only)"
+    check_id: discovery-cloud-sync
     technique_id: T1619
     framework: custom
     executor: powershell
@@ -90,28 +186,72 @@ steps:
     production_safe: true
     risk: low
     reversible: true
-    blast_radius: "Checks for OneDrive, Dropbox and Google Drive sync folders under the user profile and lists their names. No cloud file is listed, opened, or synced."
+    blast_radius: "Lists sync folder names and sync client process names. Account settings and tokens are not read. This is local discovery only, not full T1619 coverage."
     telemetry:
-      - "PowerShell EID 4104: Test-Path and Get-ChildItem on sync-folder names"
+      - "PowerShell EID 4104: environment and Test-Path reads"
+      - "Sysmon EID 1: Get-Process"
     detection:
-      - "CASB/EDR: enumeration of cloud-sync folders, precursor to upload"
+      - "Local sync-folder discovery is evidence of discovery only"
+    command: |
+      $cands = [ordered]@{
+        OneDrive = $env:OneDrive
+        OneDriveCommercial = $env:OneDriveCommercial
+        Dropbox = (Join-Path $env:USERPROFILE 'Dropbox')
+        GoogleDrive = (Join-Path $env:USERPROFILE 'Google Drive')
+      }
+      $folders = @()
+      foreach ($k in $cands.Keys) { if ($cands[$k] -and (Test-Path -LiteralPath $cands[$k])) { $folders += "$k=$(Split-Path $cands[$k] -Leaf)" } }
+      $procs = @(Get-Process -Name OneDrive, Dropbox, GoogleDriveFS -ErrorAction SilentlyContinue | ForEach-Object { $_.ProcessName } | Sort-Object -Unique)
+      Write-Output "PASS: cloud-sync discovery recorded | observed=sync folder names=[$($folders -join ', ')]; sync client processes=[$($procs -join ', ')] | expected=discovery evidence, not a detection result | source=environment variables, Test-Path, Get-Process names. Account settings and tokens were not read."
+    cleanup: ""
+  - name: "Surveyed Data 5 — Synced-Folder Access Probe (T1619)"
+    check_id: probe-cloud-sync-folder
+    technique_id: T1619
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Not run. A probe file inside a synced folder would be uploaded to cloud storage, so the step records UNVERIFIED instead."
+    telemetry:
+      - "none"
+    detection:
+      - "Sync-folder access detection is not exercised by this scenario"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
-      $roots = @($env:USERPROFILE, $env:OneDrive, (Join-Path $env:USERPROFILE 'Dropbox'), (Join-Path $env:USERPROFILE 'Google Drive')) | Where-Object { $_ -and (Test-Path $_) }
-      $names = @()
-      foreach ($r in $roots) { $names += Get-ChildItem -Path $r -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'OneDrive|Dropbox|Google Drive' } | ForEach-Object { $_.Name } }
-      Write-Output "EXEC T1619: found $(@($names).Count) cloud-sync folder(s): $((@($names) -join ', ')). No cloud file was listed or opened. Survey Stage 2. [BAS-SIM-SRV-S2]"
-      if (@($names).Count -gt 0) {
-        Write-Output "FAIL: Cloud-sync folders were enumerated with no alert. Surveying sync destinations is a precursor to upload."
-      } else {
-        Write-Output "PASS: No cloud-sync folders were present."
+      $state = Join-Path $env:TEMP 'bas-discovery-probes.json'
+      function Read-Probes {
+        if (-not (Test-Path -LiteralPath $state)) { return @() }
+        $raw = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $state -Raw)
+        return @($raw)
       }
+      function Add-ProbeRecord([string]$Name, [string]$Path) {
+        $rec = [pscustomobject]@{ probe = $Name; pid = $PID; utc = (Get-Date).ToUniversalTime().ToString('o'); path = $Path }
+        $list = New-Object System.Collections.ArrayList
+        if (Test-Path -LiteralPath $state) {
+          foreach ($x in @(Read-Probes)) { if ($x.probe -ne $Name) { [void]$list.Add($x) } }
+        }
+        [void]$list.Add($rec)
+        ConvertTo-Json -InputObject @($list.ToArray()) -Depth 3 | Set-Content -LiteralPath $state -Encoding utf8
+      }
+      function Invoke-SyntheticProbe([string]$Name, [string]$FileName) {
+        $dir = Join-Path $env:TEMP ('bas-probe\' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        $path = Join-Path $dir $FileName
+        [IO.File]::WriteAllText($path, 'SYNTHETIC BAS DISCOVERY PROBE. NOT A REAL DATA STORE.')
+        Add-ProbeRecord $Name $path
+        $fs = [IO.File]::Open($path, 'Open', 'Read', 'ReadWrite')
+        try { $buf = New-Object byte[] 16; [void]$fs.Read($buf, 0, 16) } finally { $fs.Dispose() }
+        Remove-Item -LiteralPath $dir -Recurse -Force
+        return $path
+      }
+      Write-Output "SKIP: unverified; no synthetic probe was placed in a synced folder because a probe file there would be uploaded to cloud storage, so sync-folder access detection is not exercised | observed=not run | expected=access event for a synthetic file in a sync folder | source=policy"
     cleanup: ""
-
-  # ---------------------------------------------------------------------------
-  # Stage 3 — Mailbox Store Discovery (T1114)
-  # ---------------------------------------------------------------------------
-  - name: "Surveyed Data 3 — Local Mail-Store Discovery (T1114)"
+  - name: "Surveyed Data 6 — Local Mail-Store Discovery (T1114, local discovery only)"
+    check_id: discovery-mail-stores
     technique_id: T1114
     framework: custom
     executor: powershell
@@ -121,22 +261,189 @@ steps:
     production_safe: true
     risk: low
     reversible: true
-    blast_radius: "Counts .pst and .ost files under the user's AppData and Documents, to depth three and 1,000 files. Only the count is recorded. No mailbox is opened, read, or copied."
+    blast_radius: "Counts and names .pst and .ost files to depth three, scanning at most 1,000 files, and checks the Outlook profile key. No mailbox is opened. This is local discovery only, not full T1114 coverage."
     telemetry:
       - "Sysmon EID 1: powershell.exe with a recursive search for .pst/.ost"
+      - "PowerShell EID 4104"
     detection:
-      - "EDR/DLP: search for local mail stores from a non-mail process — collection precursor"
+      - "Local mail-store discovery is evidence of discovery only"
     command: |
-      $ErrorActionPreference = 'SilentlyContinue'
-      $roots = @($env:APPDATA, (Join-Path $env:USERPROFILE 'Documents')) | Where-Object { $_ -and (Test-Path $_) }
+      $roots = @($env:APPDATA, (Join-Path $env:USERPROFILE 'Documents')) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
       $stores = @()
       foreach ($r in $roots) {
-        $stores += Get-ChildItem -Path $r -File -Recurse -Depth 3 -ErrorAction SilentlyContinue | Select-Object -First 1000 | Where-Object { $_.Extension -in @('.pst','.ost') }
+        $stores += @(Get-ChildItem -LiteralPath $r -File -Recurse -Force | Select-Object -First 1000 | Where-Object {
+          $_.Extension -in @('.pst','.ost') -and ((($_.FullName.Substring($r.Length)) -split '\\').Count -le 4)
+        } | ForEach-Object { "$($_.Name) ($([math]::Round($_.Length/1MB,1)) MB)" })
       }
-      Write-Output "EXEC T1114: found $(@($stores).Count) local mail-store file(s). No mailbox was opened or read. Survey Stage 3. [BAS-SIM-SRV-S3]"
-      if (@($stores).Count -gt 0) {
-        Write-Output "FAIL: Local mail stores were located from a non-mail process with no alert. Locating mailboxes ahead of collection should be visible."
-      } else {
-        Write-Output "PASS: No local mail stores were present."
+      $outlook = Test-Path -LiteralPath 'HKCU:\Software\Microsoft\Office\16.0\Outlook'
+      Write-Output "PASS: mail-store discovery recorded | observed=mail store files=[$($stores -join ', ')]; Outlook profile key present=$outlook | expected=discovery evidence, not a detection result | source=Get-ChildItem .pst/.ost to depth 3 (first 1000 files scanned), Test-Path on the Outlook key. No mailbox was opened or read."
+    cleanup: ""
+  - name: "Surveyed Data 7 — Synthetic Mailbox Access Probe (T1114)"
+    check_id: probe-mailbox-store
+    technique_id: T1114
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Creates a synthetic .pst file in a BAS temp folder, opens it read-only, and deletes it. No real mailbox is touched."
+    telemetry:
+      - "Sysmon EID 11: create of a synthetic .pst under %TEMP%\bas-probe"
+    detection:
+      - "EDR/DLP: read of a .pst file by a non-mail process, scored separately in the correlation step"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $state = Join-Path $env:TEMP 'bas-discovery-probes.json'
+      function Read-Probes {
+        if (-not (Test-Path -LiteralPath $state)) { return @() }
+        $raw = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $state -Raw)
+        return @($raw)
       }
+      function Add-ProbeRecord([string]$Name, [string]$Path) {
+        $rec = [pscustomobject]@{ probe = $Name; pid = $PID; utc = (Get-Date).ToUniversalTime().ToString('o'); path = $Path }
+        $list = New-Object System.Collections.ArrayList
+        if (Test-Path -LiteralPath $state) {
+          foreach ($x in @(Read-Probes)) { if ($x.probe -ne $Name) { [void]$list.Add($x) } }
+        }
+        [void]$list.Add($rec)
+        ConvertTo-Json -InputObject @($list.ToArray()) -Depth 3 | Set-Content -LiteralPath $state -Encoding utf8
+      }
+      function Invoke-SyntheticProbe([string]$Name, [string]$FileName) {
+        $dir = Join-Path $env:TEMP ('bas-probe\' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        $path = Join-Path $dir $FileName
+        [IO.File]::WriteAllText($path, 'SYNTHETIC BAS DISCOVERY PROBE. NOT A REAL DATA STORE.')
+        Add-ProbeRecord $Name $path
+        $fs = [IO.File]::Open($path, 'Open', 'Read', 'ReadWrite')
+        try { $buf = New-Object byte[] 16; [void]$fs.Read($buf, 0, 16) } finally { $fs.Dispose() }
+        Remove-Item -LiteralPath $dir -Recurse -Force
+        return $path
+      }
+      try {
+        $p = Invoke-SyntheticProbe 'mailbox-pst-store' 'synthetic.pst'
+        Write-Output "PASS: synthetic mailbox probe ran | observed=pid=$PID path=$p | expected=probe executed; detection is scored in the correlation step | source=synthetic file under %TEMP%/bas-probe, read-only open"
+      } catch { Write-Output "ERROR: synthetic mailbox probe failed: $($_.Exception.Message)" }
+    cleanup: ""
+  - name: "Surveyed Data 8 — Mailbox Detection Correlation (T1114)"
+    check_id: correlate-mailbox-store
+    technique_id: T1114
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads an exported EDR/DLP event file and matches the probe process id, file name and timestamp. Writes nothing to the host."
+    telemetry:
+      - "none; reads the exported event file only"
+    detection:
+      - "Scores the detection control: PASS detected, FAIL missed, SKIP not configured or unverified"
+    command: |
+      $state = Join-Path $env:TEMP 'bas-discovery-probes.json'
+      function Read-Probes {
+        if (-not (Test-Path -LiteralPath $state)) { return @() }
+        $raw = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $state -Raw)
+        return @($raw)
+      }
+
+      $probeName = 'mailbox-pst-store'
+      $eventsFile = $env:BAS_EDR_EVENTS_FILE
+      if (-not $eventsFile) { Write-Output 'SKIP: not configured; set BAS_EDR_EVENTS_FILE to an exported JSON-lines EDR/DLP event file (fields: timestamp, process_id, file_path) | source=BAS_EDR_EVENTS_FILE'; exit 0 }
+      if (-not (Test-Path -LiteralPath $eventsFile)) { Write-Output "SKIP: not configured; BAS_EDR_EVENTS_FILE does not exist | source=$eventsFile"; exit 0 }
+      if (-not (Test-Path -LiteralPath $state)) { Write-Output "ERROR: probe record file missing; run the probe step first | source=$state"; exit 0 }
+      $rec = @(Read-Probes) | Where-Object { $_.probe -eq $probeName } | Select-Object -First 1
+      if (-not $rec) { Write-Output "ERROR: no probe record for $probeName | source=$state"; exit 0 }
+      try {
+        $events = @(Get-Content -LiteralPath $eventsFile | Where-Object { $_.Trim() } | ForEach-Object { $_ | ConvertFrom-Json -ErrorAction Stop })
+      } catch { Write-Output "ERROR: event file is not readable JSON lines | source=$eventsFile"; exit 0 }
+      if ($events.Count -gt 0 -and -not ($events[0].PSObject.Properties['timestamp'] -and $events[0].PSObject.Properties['process_id'] -and $events[0].PSObject.Properties['file_path'])) {
+        Write-Output "ERROR: event schema mismatch; expected timestamp, process_id, file_path | source=$eventsFile"; exit 0
+      }
+      $t0 = [datetimeoffset]::Parse($rec.utc).UtcDateTime
+      $leaf = Split-Path $rec.path -Leaf
+      $hits = @($events | Where-Object {
+        $ts = [datetimeoffset]::Parse($_.timestamp).UtcDateTime
+        ([int]$_.process_id -eq [int]$rec.pid) -and ("$($_.file_path)" -like "*$leaf") -and ($ts -ge $t0.AddSeconds(-5)) -and ($ts -le $t0.AddSeconds(60))
+      })
+      $newest = $null
+      if ($events.Count -gt 0) { $newest = ($events | ForEach-Object { [datetimeoffset]::Parse($_.timestamp).UtcDateTime } | Measure-Object -Maximum).Maximum }
+      $obs = "probe pid=$($rec.pid) file=$leaf utc=$($rec.utc) correlated events=$($hits.Count) newest export event=$newest"
+      if ($hits.Count -gt 0) { Write-Output "PASS: access to the synthetic $probeName probe was detected and correlated to its process and timestamp | observed=$obs | expected=correlated event | source=$eventsFile" }
+      elseif ($newest -and $newest -ge $t0.AddSeconds(60)) { Write-Output "FAIL: access to the synthetic $probeName probe was not detected; the export is newer than the probe and holds no event for its process | observed=$obs | expected=correlated event | source=$eventsFile" }
+      else { Write-Output "SKIP: unverified; the export is older than the probe or empty, so absence of an event is not evidence | observed=$obs | expected=correlated event | source=$eventsFile" }
+    cleanup: ""
+  - name: "Surveyed Data 9 — Telemetry Integration Health"
+    check_id: health-telemetry-integration
+    technique_id: T1114
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Checks that the configured EDR/DLP export exists, parses, and is fresh (newest event within 24 hours). Reads the export only."
+    telemetry:
+      - "none; reads the exported event file only"
+    detection:
+      - "Freshness decides whether correlation evidence is usable; stale exports are UNVERIFIED"
+    command: |
+      $state = Join-Path $env:TEMP 'bas-discovery-probes.json'
+      function Read-Probes {
+        if (-not (Test-Path -LiteralPath $state)) { return @() }
+        $raw = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $state -Raw)
+        return @($raw)
+      }
+
+      $eventsFile = $env:BAS_EDR_EVENTS_FILE
+      if (-not $eventsFile) { Write-Output 'SKIP: not configured; no EDR/DLP event export is set (BAS_EDR_EVENTS_FILE) | source=BAS_EDR_EVENTS_FILE'; exit 0 }
+      if (-not (Test-Path -LiteralPath $eventsFile)) { Write-Output "SKIP: not configured; BAS_EDR_EVENTS_FILE does not exist | source=$eventsFile"; exit 0 }
+      try {
+        $events = @(Get-Content -LiteralPath $eventsFile | Where-Object { $_.Trim() } | ForEach-Object { $_ | ConvertFrom-Json -ErrorAction Stop })
+        $newest = ($events | ForEach-Object { [datetimeoffset]::Parse($_.timestamp).UtcDateTime } | Measure-Object -Maximum).Maximum
+      } catch { Write-Output "ERROR: event export unreadable or wrong schema | source=$eventsFile"; exit 0 }
+      if (-not $newest) { Write-Output "SKIP: unverified; event export has no events | observed=0 events | source=$eventsFile"; exit 0 }
+      $age = [datetime]::UtcNow - $newest
+      if ($age.TotalHours -le 24) { Write-Output "PASS: integration health: export is fresh | observed=events=$($events.Count), newest=$($newest.ToString('o')), age=$([math]::Round($age.TotalHours,1))h | expected=newest event within 24h | source=$eventsFile" }
+      else { Write-Output "SKIP: unverified; event export is stale, so it cannot evidence the probes | observed=newest=$($newest.ToString('o')), age=$([math]::Round($age.TotalHours,1))h | expected=newest event within 24h | source=$eventsFile" }
+    cleanup: ""
+  - name: "Surveyed Data 10 — Evidence Completeness and Cleanup"
+    check_id: health-evidence-completeness
+    technique_id: T1217
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Confirms each probe recorded its process id, UTC timestamp and file path, then removes the probe record file. Run last."
+    telemetry:
+      - "none"
+    detection:
+      - "Incomplete evidence is an ERROR, not a pass"
+    command: |
+      $state = Join-Path $env:TEMP 'bas-discovery-probes.json'
+      function Read-Probes {
+        if (-not (Test-Path -LiteralPath $state)) { return @() }
+        $raw = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $state -Raw)
+        return @($raw)
+      }
+
+      if (-not (Test-Path -LiteralPath $state)) { Write-Output "ERROR: no probe records; the probe steps did not run | source=$state"; exit 0 }
+      $recs = @(Read-Probes)
+      $need = 'browser-cookie-store','mailbox-pst-store'
+      $missing = @($need | Where-Object { $n = $_; -not ($recs | Where-Object { $_.probe -eq $n }) })
+      $complete = @($recs | Where-Object { $_.pid -and $_.utc -and $_.path }).Count
+      if ($missing.Count -gt 0) { Write-Output "ERROR: evidence incomplete; missing probe record(s): $($missing -join ', ') | source=$state" }
+      elseif ($complete -ne $recs.Count -or $recs.Count -lt $need.Count) { Write-Output "ERROR: evidence incomplete; a probe record lacks pid, timestamp or path | source=$state" }
+      else { Write-Output "PASS: evidence complete; every probe recorded its process id, UTC timestamp and file path | observed=$($recs.Count) records | expected=2 probes with pid, timestamp and path | source=$state" }
+      Remove-Item -LiteralPath $state -Force -ErrorAction SilentlyContinue
     cleanup: ""

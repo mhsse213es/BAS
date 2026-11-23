@@ -12,3 +12,12 @@ func TestClassifySkipReason_NotAssessed(t *testing.T) {
 		t.Fatalf("got %q, want %q", got, models.SkipReasonNotAssessed)
 	}
 }
+
+func TestClassifySkipReason_NotConfiguredAndUnverified(t *testing.T) {
+	if got := classifySkipReason("not configured; set BAS_EDR_EVENTS_FILE"); got != models.SkipReasonNotConfigured {
+		t.Fatalf("not configured: got %q", got)
+	}
+	if got := classifySkipReason("unverified; export older than the probe"); got != models.SkipReasonUnverified {
+		t.Fatalf("unverified: got %q", got)
+	}
+}
