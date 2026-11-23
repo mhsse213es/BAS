@@ -161,12 +161,11 @@ func TestWriteSpecValidation(t *testing.T) {
 // ---- through the real runner, against an API that really changes ----
 
 type writableAPI struct {
-	mu          sync.Mutex
-	mode        string // "vulnerable", "fixed", "noop" (accepts the write, changes nothing), "restorefails"
-	owner       map[string]string
-	status      map[string]string
-	tokens      map[string]string
-	restoreFail bool
+	mu     sync.Mutex
+	mode   string // "vulnerable", "fixed", "noop" (accepts the write, changes nothing), "restorefails"
+	owner  map[string]string
+	status map[string]string
+	tokens map[string]string
 }
 
 func newWritableAPI(mode string) (*writableAPI, *httptest.Server) {

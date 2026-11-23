@@ -34,7 +34,8 @@ func TestEffectiveCutoff_UsesUTC(t *testing.T) {
 
 func TestBatchID_IsDeterministic(t *testing.T) {
 	c := EffectiveCutoff(fixedNow, 365)
-	if BatchID(c, 10, 20) != BatchID(c, 10, 20) {
+	first, second := BatchID(c, 10, 20), BatchID(c, 10, 20)
+	if first != second {
 		t.Fatal("the same batch must always get the same id, so a resumed purge rewrites the same archive")
 	}
 	if BatchID(c, 10, 20) == BatchID(c, 10, 21) {

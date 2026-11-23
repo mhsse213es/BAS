@@ -188,7 +188,7 @@ export function loadVariantMatrix(btn, runId, techniqueId) {
       }).join('');
 
       var html =
-        '<div id="' + containerId + '" style="margin-top:0.75rem;border:1px solid var(--border);border-radius:4px;overflow:hidden">' +
+        '<div id="' + x(containerId) + '" style="margin-top:0.75rem;border:1px solid var(--border);border-radius:4px;overflow:hidden">' +
           '<div style="background:var(--surface);padding:0.35rem 0.75rem;font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Variant Matrix — ' + x(techniqueId) + ' (' + rows.length + ' variants)</div>' +
           '<div style="overflow-x:auto">' +
             '<table style="width:100%;border-collapse:collapse;font-size:0.7rem">' +

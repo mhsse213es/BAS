@@ -4,9 +4,7 @@ import "time"
 
 type obsOpt func(*Observation)
 
-func withEventID(id string) obsOpt           { return func(o *Observation) { o.EventID = id } }
-func withEvidenceKind(k EvidenceKind) obsOpt { return func(o *Observation) { o.EvidenceKind = k } }
-
+func withEventID(id string) obsOpt { return func(o *Observation) { o.EventID = id } }
 func testKey() CorrelationKey {
 	return CorrelationKey{
 		TestExecutionID: "exec-1",

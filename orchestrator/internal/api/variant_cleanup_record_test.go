@@ -55,8 +55,7 @@ func TestRecordVariantCleanupState_FailedRevertNeedsRemediation(t *testing.T) {
 		if errText == "" {
 			t.Error("cleanup_error should say what was left behind")
 		}
-		var attack models.CheckResult
-		attack = results[1].Result
+		attack := results[1].Result
 		if attack != models.ResultBlocked {
 			t.Errorf("attack verdict changed: %v", attack)
 		}

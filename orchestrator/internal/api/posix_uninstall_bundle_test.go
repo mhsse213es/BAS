@@ -302,8 +302,6 @@ func TestServeMacUninstall_IsAnAppWithBothVerifiedAgents(t *testing.T) {
 	}
 }
 
-const uninstallOsascriptExtra = `` // the shared stand-in (macOsascriptShim) handles the confirm dialog
-
 func runMacUninstall(t *testing.T, env map[string]string, mutate func(res string)) macRun {
 	t.Helper()
 	if _, err := exec.LookPath("sh"); err != nil {

@@ -1,12 +1,12 @@
 import { x } from './core/escape.js';
 import { closeFactoryDrawerOnBackdrop, closeFactorySource, recheckFactoryHealth, setVelocityWindow, openFactorySource, fhTableQuery, clearFhTableQuery, setFhPer, fhPage, fhSortBy, toggleFhCols, fhColToggle, fhSelectRow, fhSelectAll, clearFhSelection, fhRowKeydown, exportFhCsv, exportFhSelected } from './features/factory-health.js';
 import { stopEvent } from './core/actions.js';
-import { loadSegmentation, segRefresh, segRun, segSelect } from './features/segmentation.js';
+import { loadSegmentation, segRun, segSelect } from './features/segmentation.js';
 import { apiInvSelect, apiInvImport, apiInvLoadFile, apiInvFilter, apiInvVersion, apiInvDrift, apiInvExample, apiInvPlanBinding, apiInvRefresh, apiInvSaveBinding, apiInvDeleteBinding, apiInvExampleWrite, apiInvRunBound, apiInvJob, apiInvJobsRefresh, apiInvWriteOp, apiInvWriteSync, apiInvWriteApply, apiInvWriteClear, apiInvWriteEdit, apiInvWriteRemove, apiInvSaveSchedule, apiInvSchedMode, apiInvAllJobsRefresh, apiInvAllJobsFilter, apiInvAllJobsMore, apiInvAllJob, apiInvRemoveSchedule, apiInvExampleChecks, apiInvJobsFilter, apiInvJobsMore } from './features/api-inventory.js';
 import { loadThreatPriorityActors, onThreatPrioritySearch, clearTpTableQuery, setTpPer, tpPage, tpSortBy, toggleTpCols, tpColToggle, tpSelectRow, tpSelectAll, clearTpSelection, tpRowKeydown, exportTpCsv, exportTpSelected, closeThreatPriorityDetail, closeThreatPriorityDetailOnBackdrop, tpGo } from './features/tp-view.js';
 import { toggleExpCols, setExpPer, expPage, expSortBy, expColToggle, expSelectRow, expSelectAll, clearExpSelection, expRowKeydown, exportExpCsv, exportExpSelected, clearExpTableQuery, expGo } from './features/exp-view.js';
 import { setRecLimit } from './features/attack-path.js';
-import { setCoverageActor, covSearch, covSetResult, covClearFilters, tcvTableQuery, clearTcvTableQuery, setTcvPer, tcvPage, tcvSortBy, toggleTcvCols, tcvColToggle, tcvSelectRow, tcvSelectAll, clearTcvSelection, exportTcvCsv, exportTcvSelected, openTcvTechnique, tcvSeeResults, tcvRowKeydown, loadCoverageActors } from './features/tcv-view.js';
+import { setCoverageActor, covSearch, covSetResult, covClearFilters, setTcvPer, tcvPage, tcvSortBy, toggleTcvCols, tcvColToggle, tcvSelectRow, tcvSelectAll, clearTcvSelection, exportTcvCsv, exportTcvSelected, openTcvTechnique, tcvSeeResults, tcvRowKeydown, loadCoverageActors } from './features/tcv-view.js';
 import { setRecTier, toggleRecNever, recTableQuery, clearRecTableQuery, setRecPer, recPage, recDetails, recRowKeydown, recSortBy, toggleRecCols, recColToggle, recSelectRow, recSelectAll, clearRecSelection, exportRecCsv, exportRecSelected } from './features/recommendations.js';
 import { setTblQuery, setTblClear, setTblPer, setTblPage, setTblSort, setTblCols, setTblColToggle, setTblSelectRow, setTblSelectAll, setTblClearSel, setTblExport, setTblExportSel } from './features/set-view.js';
 import { exTblQuery, exTblClear, exTblPer, exTblPage, exTblSort, exTblCols, exTblColToggle, exTblSelectRow, exTblSelectAll, exTblClearSel, exTblExport, exTblExportSel, exRowKeydown } from './features/ex-view.js';
@@ -15,7 +15,7 @@ import { clearEnrollmentTokens, copyEnrollmentToken, downloadEnrollmentTokensCsv
 import { refreshCARotation } from './features/ca-rotation.js';
 import { closeAllowReinstallModal, closeReinstateAgentModal, closeRemoveAgentModal, closeRevokeAgentModal, closeStopAgentModal, closeUninstallAgentModal, submitAllowReinstall, submitReinstateAgent, submitRemoveAgent, submitRevokeAgent, submitStopAgent, submitUninstallAgent, triggerTicketingSync } from './features/agent-actions.js';
 import { closeAgentDetail, closeAgentDetailOnBackdrop, exportCompliance, filterControls, loadAgtLogs, loadAgtLogsTelemetryMetric, loadComplianceReport, openComplianceDoc, setAgentState, showAgentTab, toggleEvidence, updateLinuxDownloadCmd } from './features/agent-drawer.js';
-import { agentGroupMenuPick } from './features/attack-path.js';
+import { agentGroupMenuPick, loadAgentGroupTree } from './features/attack-path.js';
 import { agtRetryTab } from './features/agent-drawer.js';
 import { askEnter } from './features/compliance.js';
 import { _apCancelJob, apAssetsClose, apCollectClose, apCollectViewResults, apCountTargets, apDiscoverSubnet, apScheduleClose, approveForLocalUse, approveLocalAckChanged, closeAPAbout, closeApproveLocalModal, closeExposureDetail, closeExposureDetailOnBackdrop, closeGroupPicker, copyRecommendedScenario, copyText, createAgentGroupPrompt, dispatchAPCollect, loadAgents, loadAttackPath, loadCoverageMatrix, loadExecDashboard, setExecRange, loadExposureAssets, loadMoreAgents, loadRecommendations, loadScenarios, manageUsersLink, onAgentSearchInput, openAPAbout, openAPAssets, openAPCollect, openAPSchedule, openAgentGroupMenuStop, openExposureDetail, openScenarioCategory, rowMenuAuditPack, rowMenuBoardScorecard, rowMenuDetail, rowMenuMoveGroup, rowMenuNavigator, rowMenuAllowReinstall, rowMenuReinstateAgent, rowMenuRemoveAgent, rowMenuReportCsv, rowMenuReportHtml, rowMenuReportJson, rowMenuReportPdf, rowMenuRevokeAgent, rowMenuRunSimulation, rowMenuSafeScan, rowMenuStopAgent, rowMenuTrayIcon, toggleFleetTrayIcon, toggleMinAgentVersion, revokeAgentBinary, unrevokeAgentBinary, rowMenuUninstallAgent, saveAPAsset, saveAPSchedule, scenarioCategoryKeydown, scenarioSearchClear, selectAgentGroup, selectDashPref, selectTheme, setAgentFilter, setCoverageFilter, setExposureFilter, setThreatPriorityTier, onExposureSearch, showAgentDownload, showSettingsSection, showThreatPriorityDetail, showThreatPriorityList, submitApproveLocal, submitGroupPicker, toggleRowMenuById, toggleSecret, refreshScenarioView, setScenarioView, setScenarioSort, setScenarioCatOff, clearScenarioFilters, openScenarioDrawer, closeScenarioDrawer, closeScenarioDrawerOnBackdrop, scenarioDrawerTab, scenarioCardKeydown, runScenarioCard, runScenarioFromDrawer, openScenarioRun } from './features/attack-path.js';
@@ -28,9 +28,9 @@ import { setReportType, pickReportFormat } from './features/reports.js';
 import { rptFilter, rptClear, toggleRepRuns, copyReportId, copyReportLink } from './features/rpt-view.js';
 import { dcAdd, dcEdit, dcTest, dcDelete, dcSave, dcCancel, dcProviderChanged, dcToggle, dcReload } from './features/detection-connectors.js';
 import { gapSetBackend, gapCopy, gapExport, gapDeploy, gapRetest, gapReload } from './features/detection-gaps.js';
-import { vfFileChosen, loadVerificationTab, vfVerifyNow, vfCloseDetail, vfDeleteEvidence, vfLoadQueue, vfPickResult, vfSelect, vfSetDomain, vfSubmit, vfToggleHistory, vfUploadEvidence, vfSetStatus, vfSearch, vfClearFilters, vfTableQuery, vfClearTableQuery, vfSetPer, vfPage, vfSortBy, vfToggleCols, vfColToggle, vfSelectRow, vfSelectAll, vfClearSelection, vfRowKeydown, vfExportCsv, vfExportSelected, vfDrawerBackdrop } from './features/detection-verification.js';
+import { vfFileChosen, loadVerificationTab, vfVerifyNow, vfCloseDetail, vfDeleteEvidence, vfLoadQueue, vfPickResult, vfSelect, vfSetDomain, vfSubmit, vfUploadEvidence, vfSetStatus, vfSearch, vfClearFilters, vfSetPer, vfPage, vfSortBy, vfToggleCols, vfColToggle, vfSelectRow, vfSelectAll, vfClearSelection, vfRowKeydown, vfExportCsv, vfExportSelected, vfDrawerBackdrop } from './features/detection-verification.js';
 import { dbsimToggleClientMode, dbsimRegister, dbsimIdentityCheck, dbsimDeleteTarget, dbsimViewReport, dbsimStartRun, dbsimCancelRun, dbsimToggleScenario, dbsimChooseTarget, dbsimLabConfirmInput } from './features/dbsim.js';
-import { refreshEmailTab, egAskLaunch, egAskCancel, egCancelCampaignClick, egLaunchCampaign, egRunExpectation, egToggleCampaign, egToggleRunDetail, setEmailCampaignsTab, setEmailRunsTab, openEmailScenario, openEmailCampaignDrawer, closeEmailDrawer, closeEmailDrawerOnBackdrop, setEmailTab, emailCampaignSearch, emailClearFilters, emailScenarioKeydown } from './features/email.js';
+import { refreshEmailTab, egAskLaunch, egAskCancel, egRunExpectation, egToggleCampaign, egToggleRunDetail, setEmailCampaignsTab, setEmailRunsTab, openEmailScenario, openEmailCampaignDrawer, closeEmailDrawer, closeEmailDrawerOnBackdrop, setEmailTab, emailCampaignSearch, emailClearFilters, emailScenarioKeydown } from './features/email.js';
 import { _toggleEMExtraScenario, _toggleEMPreviewRow, _toggleVexPreviewRow, _toggleVexPreviewSection, cancelEMSweep, closeEMSweepModal, closeEMSweepModalOnBackdrop, closeEMSweepProgress, closeEMSweepProgressOnBackdrop, closeSweepPreview, closeSweepPreviewOnBackdrop, emGroupSelChange, emRunLayer, emSweepDispatch, openEMSweepProgress, openEMSweepReport, setEMExtraSearchFromInput, setEMSweepTargetMode, setVexPreviewSearchFromInput, setVexPreviewTacticFromSelect, startSweepFromPreview, stopEMSweep, stopEMSweepCurrent } from './features/endpoint-mastery.js';
 import { closeCreateUser, closeCreateUserOnBackdrop, closeDownloadOptions, closeEditUser, closeEditUserOnBackdrop, closeEvidence, closeEvidenceOnBackdrop, confirmRun, copyRaw, doResetPassword, downloadCampaignCSV, downloadCampaignReport, downloadEMSweepReport, downloadRunCSV, downloadRunReport, downloadSweepReport, exportRunJSON, openCampaignReport, openCmdk, openCreateUser, openDashRun, openEditUser, openEvidence, openFindingFromDashboard, openRunReport, pauseRun, resumeRun, stopRun, submitCreateUser, submitEditUser, toggleUserActive } from './features/evidence.js';
 import { openKevDetail, openControlDetail } from './features/dash-rich.js';
@@ -53,7 +53,7 @@ import { openPageHelp, closePageHelp, pageHelpGo } from './features/page-help.js
 import { k8sSearch, k8sPickCluster, k8sSetCluster, k8sSetState, k8sClearFilters, k8sNewRun, k8sOpenRun, k8sRowKeydown, closeK8sDrawer, closeK8sDrawerOnBackdrop, k8sFilterClusterFromDrawer, k8sOpenCoverage } from './features/k8s-scenarios.js';
 import { setAgentsViewRich as setAgentsView } from './features/agents-risk-view.js';
 import { intQuery, setIntKind, intCardOpen } from './features/int-view.js';
-import { agtQuery,clearAgtQuery, setAgtPer, agtPage, agtSortBy, toggleAgtCols, agtColToggle, agtSelectRow, agtSelectAll, clearAgtSelection, exportAgtCsv, exportAgtSelected } from './features/agt-view.js';
+import { agtQuery, clearAgtQuery, setAgtPer, agtPage, agtSortBy, toggleAgtCols, agtColToggle, agtSelectRow, agtSelectAll, clearAgtSelection, exportAgtCsv, exportAgtSelected } from './features/agt-view.js';
 import { setAgentStatusSelect, setAgentOsSelect, clearAgentFilters, agentRowKeydown, showConnectionConfig } from './features/attack-path.js';
 import { _dismissLicenseGraceBanner, ackAllTamperEvents, doLogin, doRecover, hideRecovery, showRecovery, doLogoutFromMenu, goToProfileFromMenu, togglePasswordVisibility, licenseBannerDismissHoverOff, licenseBannerDismissHoverOn, openAgentDetailRiskTab, openSettingsFromMenu, setDashView, showTab, tamperAckHoverOff, tamperAckHoverOn, toggleSidebarCollapsed, toggleUserMenuFromEvent } from './features/shell.js';
 import { saveExecutionPolicyDefault } from './features/execution-policy.js';
@@ -72,8 +72,8 @@ import { setAccentColour, toggleDisplayPref } from './features/display-prefs.js'
 import { loadReports } from './features/reports.js';
 import { loadDashboard } from './features/evidence.js';
 import { loadExercisesTab } from './features/openaev.js';
-import { loadVariantStats, loadVariantCoverage } from './features/variants.js';
-import { loadCoverage, loadUnifiedTechniques, loadThreatExposure } from './features/coverage.js';
+import { loadVariantStats } from './features/variants.js';
+import { loadUnifiedTechniques, loadThreatExposure } from './features/coverage.js';
 import { loadIntegrations } from './features/integrations.js';
 import { loadComplianceCards } from './features/rpt-view.js';
 import { loadUsers } from './features/evidence.js';
@@ -85,8 +85,6 @@ export const ACTIONS = {
   loadDashboard,
   loadExercisesTab,
   loadVariantStats,
-  loadVariantCoverage,
-  loadCoverage,
   loadUnifiedTechniques,
   loadThreatExposure,
   loadIntegrations,
@@ -141,7 +139,6 @@ export const ACTIONS = {
   refreshCARotation,
   setVelocityWindow,
   apiInvSelect,
-  segRefresh,
   segRun,
   segSelect,
   apiInvImport,
@@ -286,8 +283,6 @@ export const ACTIONS = {
   covSearch,
   covSetResult,
   covClearFilters,
-  tcvTableQuery,
-  clearTcvTableQuery,
   setTcvPer,
   tcvPage,
   tcvSortBy,
@@ -365,8 +360,6 @@ export const ACTIONS = {
   downloadSweepReport,
   egAskLaunch,
   egAskCancel,
-  egCancelCampaignClick,
-  egLaunchCampaign,
   egRunExpectation,
   dbsimToggleClientMode,
   dbsimRegister,
@@ -506,6 +499,7 @@ export const ACTIONS = {
   openAgentDetailRiskTab,
   openAgentGroupMenuStop,
   agentGroupMenuPick,
+  loadAgentGroupTree,
   agtRetryTab,
   askEnter,
   openBuilder,
@@ -895,13 +889,10 @@ export const ACTIONS = {
   vfSelect,
   vfSetDomain,
   vfSubmit,
-  vfToggleHistory,
   vfUploadEvidence,
   vfSetStatus,
   vfSearch,
   vfClearFilters,
-  vfTableQuery,
-  vfClearTableQuery,
   vfSetPer,
   vfPage,
   vfSortBy,

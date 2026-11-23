@@ -379,7 +379,7 @@ func TestBuildSkipBreakdown(t *testing.T) {
 		{Result: models.ResultSkipped, SkipReason: models.SkipReasonMissingContent},
 		{Result: models.ResultSkipped, SkipReason: models.SkipReasonPlatformUnavailable},
 		{Result: models.ResultSkipped, SkipReason: models.SkipReasonCircuitOpen},
-		{Result: models.ResultSkipped, SkipReason: ""}, // unrecognized/legacy skip
+		{Result: models.ResultSkipped, SkipReason: ""},                             // unrecognized/legacy skip
 		{Result: models.ResultSkipped, SkipReason: models.SkipReasonTelemetryOnly}, // ran, but no control outcome to score
 		{Result: models.ResultPass}, // not a skip — must not be counted
 	}

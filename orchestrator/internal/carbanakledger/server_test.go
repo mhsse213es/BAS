@@ -46,7 +46,7 @@ func newTestServer(t *testing.T, at time.Time) *Server {
 	return s
 }
 
-var insideWindow = time.Date(2026, 11, 16, 4, 30, 0, 0, time.UTC) // 10:00 IST Monday
+var insideWindow = time.Date(2026, 11, 16, 4, 30, 0, 0, time.UTC)   // 10:00 IST Monday
 var outsideWindow = time.Date(2026, 11, 16, 14, 30, 0, 0, time.UTC) // 20:00 IST Monday
 
 func do(t *testing.T, s *Server, method, path, remote string, body any) map[string]any {

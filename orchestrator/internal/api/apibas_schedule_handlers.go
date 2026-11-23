@@ -149,7 +149,8 @@ func (h *Handler) SaveAPIBASSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now().UTC()
-	every, first, days := body.EveryHours, time.Time{}, ""
+	every, days := body.EveryHours, ""
+	var first time.Time
 	if body.At != "" {
 		if body.EveryHours != 0 {
 			jsonError(w, "give either every_hours or at, not both", http.StatusBadRequest)

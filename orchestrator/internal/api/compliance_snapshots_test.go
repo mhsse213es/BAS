@@ -53,7 +53,7 @@ func TestRefreshComplianceSnapshots_PersistsPerFramework(t *testing.T) {
 		).Scan(&n); err != nil {
 			t.Fatalf("query compliance_snapshots: %v", err)
 		}
-		if n != 7 {
+		if n != 8 {
 			t.Fatalf("expected one snapshot row per bundled framework, got %d", n)
 		}
 

@@ -129,7 +129,7 @@ func (p *CloudflareGatewayPolicyProvider) PolicyConfigEvidenceFor(policyRuleID s
 		if len(envelope.Errors) > 0 {
 			reason = envelope.Errors[0].Message
 		}
-		return nil, fmt.Errorf("Cloudflare Gateway rules API returned an error: %s", reason)
+		return nil, fmt.Errorf("gateway rules API (Cloudflare) returned an error: %s", reason)
 	}
 
 	now := time.Now()

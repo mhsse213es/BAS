@@ -23,7 +23,13 @@ func TestSMSInjector_StopsAtCancelAndReportsIt(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(io.Discard, r.Body)
 		if atomic.AddInt32(&calls, 1) == 1 {
-			cancel() // the operator aborts after the first message went out
+			cancel() // the operator aborts while the first message is in flight
+			// Do not answer until the client has dropped the connection. Without this the 200 can reach the client
+			// before it notices the abort, which is a legitimate "delivered" outcome but not the one under test.
+			select {
+			case <-r.Context().Done():
+			case <-time.After(5 * time.Second):
+			}
 		}
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -93,7 +99,9 @@ func TestAbort_CancelsSlackTeamsAndSMSInFlight(t *testing.T) {
 		{"teams", StepTypeTeams, StepConfig{Teams: &TeamsStepConfig{Text: "x"}},
 			func(e *Executor, u string) { e.RegisterBuiltins(nil, nil, nil, NewTeamsInjector(u)) }},
 		{"sms", StepTypeSendSMS, StepConfig{SMS: &SMSConfig{To: []string{"+1"}, Body: "x"}},
-			func(e *Executor, u string) { e.RegisterBuiltins(nil, NewSMSInjector(SMSGatewayConfig{URL: u}), nil, nil) }},
+			func(e *Executor, u string) {
+				e.RegisterBuiltins(nil, NewSMSInjector(SMSGatewayConfig{URL: u}), nil, nil)
+			}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

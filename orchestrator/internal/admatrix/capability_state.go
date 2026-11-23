@@ -257,10 +257,11 @@ var realScenarioEvidenceByID = map[string]realScenarioEvidence{
 	"adcs-esc-exposure-check": {
 		Cleanup: []string{"No cleanup required: the check only reads certificate-template configuration from the AD Configuration partition; no state change (scenarios/adcs-esc-template-exposure-audit.yaml Stage 1)."},
 		EvidenceRequirements: []string{
-			"SIEM: a certificate template enrollable by a non-tier-0 principal carries an ESC1-4-class misconfiguration (enrollee-supplied subject + authentication EKU, Any-Purpose/no EKU, enrollment-agent EKU, or a non-tier-0-writable template DACL) — AD CS template exposure IOC",
+			"SIEM: an LDAP enumeration of the Certificate Templates or Public Key Services containers from a workstation is an AD CS reconnaissance indicator",
+			"SIEM: a template that supplies the subject, carries an authentication EKU and is enrollable by Domain Users is an ESC1 indicator",
 		},
 		TelemetrySources: []string{
-			"DC: LDAP read of pKICertificateTemplate objects under CN=Certificate Templates,CN=Public Key Services,CN=Services,<Configuration NC> — not separately audited by default",
+			"DC: LDAP read of certificate template and Public Key Services objects in the Configuration partition",
 		},
 		Limitations: adcsExposureCheckLimitations,
 	},

@@ -302,12 +302,9 @@ def find_sink_position(lineno, target, op):
     only stores a line number) by re-running SINK_RE and matching on line
     + LHS text, so tracing works from the real position, not an
     approximation from the line start."""
-    for m in clf.SINK_RE.finditer(text):
-        if clf.line_of(m.start()) == lineno and m.group(1) == op:
-            lhs_start = clf.find_lhs_start(text, m.start())
-            lhs = text[lhs_start:m.start()].strip()
-            if lhs == target:
-                return m.start()
+    for pos, sink_op, lhs, _rhs, _readable in clf.iter_sinks():
+        if clf.line_of(pos) == lineno and sink_op == op and lhs == target:
+            return pos
     return None
 
 def main():

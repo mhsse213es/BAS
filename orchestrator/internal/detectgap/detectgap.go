@@ -44,12 +44,12 @@ type Attestation struct {
 
 // Technique is everything known about one technique in one run.
 type Technique struct {
-	TechniqueID  string
-	Outcomes     map[models.CheckResult]int // how many steps ended in each result
+	TechniqueID string
+	Outcomes    map[models.CheckResult]int // how many steps ended in each result
 	// TelemetryProbes counts the skipped steps that ran as telemetry-only probes. They have no prevention verdict but
 	// did produce activity, so detection can be judged on them.
 	TelemetryProbes int
-	Attestations []Attestation
+	Attestations    []Attestation
 }
 
 type Classification struct {

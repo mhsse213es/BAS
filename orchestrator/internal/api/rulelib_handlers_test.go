@@ -144,18 +144,19 @@ func TestExportRule_CarriesProvenanceAndLicenceInEveryFormat(t *testing.T) {
 // AQL is QRadar's format. Its query is generic, and the export says so rather than implying a data source.
 func TestExportRule_AQLIsQRadarsGenericQuery(t *testing.T) {
 	h := rulelibTestHandler(t)
-	for _, r := range h.rules.Search(rulelib.SearchFilter{Backend: "qradar"}) {
-		rec := httptest.NewRecorder()
-		h.ExportRule(rec, httptest.NewRequest(http.MethodGet, "/api/rules/export?id="+r.ID+"&format=aql", nil))
-		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "events") {
-			t.Fatalf("aql export of %s = %d: %s", r.ID, rec.Code, rec.Body.String())
-		}
-		if rec.Header().Get("X-Audspect-Mapping") != "generic" || rec.Header().Get("X-Audspect-Data-Source") != "" {
-			t.Errorf("a QRadar query must be labelled generic with no data source: %v", rec.Header())
-		}
-		return
+	qradar := h.rules.Search(rulelib.SearchFilter{Backend: "qradar"})
+	if len(qradar) == 0 {
+		t.Fatal("no rule has a QRadar translation")
 	}
-	t.Fatal("no rule has a QRadar translation")
+	r := qradar[0] // the first QRadar rule stands for the backend
+	rec := httptest.NewRecorder()
+	h.ExportRule(rec, httptest.NewRequest(http.MethodGet, "/api/rules/export?id="+r.ID+"&format=aql", nil))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "events") {
+		t.Fatalf("aql export of %s = %d: %s", r.ID, rec.Code, rec.Body.String())
+	}
+	if rec.Header().Get("X-Audspect-Mapping") != "generic" || rec.Header().Get("X-Audspect-Data-Source") != "" {
+		t.Errorf("a QRadar query must be labelled generic with no data source: %v", rec.Header())
+	}
 }
 
 func TestExportRule_DSLFormatReturnsCaseInsensitiveElasticQuery(t *testing.T) {

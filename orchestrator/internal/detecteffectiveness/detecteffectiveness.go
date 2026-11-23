@@ -210,20 +210,20 @@ func Compute(ctx context.Context, pool *pgxpool.Pool, scenarioID, agentID string
 				v = probeV
 			} else {
 				switch res.Result {
-			case models.ResultPass, models.ResultBlocked:
-				v = VerdictPrevented
-			case models.ResultFail:
-				if detected[res.Technique.ID] || detected[tid] {
-					v = VerdictDetectedOnly
-				} else {
-					v = VerdictMissed
-				}
-			default:
-				// Includes models.ResultVetoed: Audspect's own agent refused
-				// to attempt this step, so it's neither prevented, detected,
-				// nor missed by a customer control -- excluded from
-				// detection-effectiveness scoring (verified, B5 Task 9 audit).
-				continue
+				case models.ResultPass, models.ResultBlocked:
+					v = VerdictPrevented
+				case models.ResultFail:
+					if detected[res.Technique.ID] || detected[tid] {
+						v = VerdictDetectedOnly
+					} else {
+						v = VerdictMissed
+					}
+				default:
+					// Includes models.ResultVetoed: Audspect's own agent refused
+					// to attempt this step, so it's neither prevented, detected,
+					// nor missed by a customer control -- excluded from
+					// detection-effectiveness scoring (verified, B5 Task 9 audit).
+					continue
 				}
 			}
 

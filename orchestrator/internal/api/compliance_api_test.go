@@ -20,7 +20,7 @@ func complianceReq(path, query string) *http.Request {
 	return httptest.NewRequest(http.MethodGet, path, nil)
 }
 
-// TestListComplianceFrameworks_Success pins the 7 bundled frameworks
+// TestListComplianceFrameworks_Success pins the 8 bundled frameworks
 // (internal/compliance/mappings/*.yaml) and their sort-by-ID order.
 func TestListComplianceFrameworks_Success(t *testing.T) {
 	if testing.Short() {
@@ -40,7 +40,7 @@ func TestListComplianceFrameworks_Success(t *testing.T) {
 		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
-		wantIDs := []string{"CERT_IN", "IRDAI_CSF", "ISO_27001_2022", "NIST_CSF_2", "PCI_DSS_V4", "RBI_CSF", "SEBI_CSCRF"}
+		wantIDs := []string{"CERT_IN", "IRDAI_CSF", "ISO_27001_2022", "NIST_CSF_2", "PCI_DSS_V4", "RBI_CSF", "SEBI_CSCRF", "SWIFT_CSCF_2027"}
 		if len(out) != len(wantIDs) {
 			t.Fatalf("framework count = %d, want %d", len(out), len(wantIDs))
 		}
@@ -320,8 +320,8 @@ func TestGetComplianceDashboardScores_PerAgent_ZeroState(t *testing.T) {
 		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
-		if len(out) != 7 {
-			t.Fatalf("zero-state should still return all 7 frameworks, got %d", len(out))
+		if len(out) != 8 {
+			t.Fatalf("zero-state should still return all 8 frameworks, got %d", len(out))
 		}
 		for _, s := range out {
 			if s.FrameworkName == "" || s.ShortName == "" {
@@ -394,8 +394,8 @@ func TestGetComplianceDashboardScores_Fleet_NoAgentID(t *testing.T) {
 		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
-		if len(out) != 7 {
-			t.Fatalf("fleet view should return all 7 frameworks, got %d", len(out))
+		if len(out) != 8 {
+			t.Fatalf("fleet view should return all 8 frameworks, got %d", len(out))
 		}
 		var sebi *int
 		for _, s := range out {

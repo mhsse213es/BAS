@@ -269,10 +269,3 @@ func ListDispatchedEmailGWCampaignStagesWithTerminalRuns(ctx context.Context, po
 	}
 	return out, nil
 }
-
-// emailGWCampaignStageColumnsPrefixed exists only so the JOIN query
-// above can select s.id, s.campaign_id, ... without hand-duplicating
-// emailGWCampaignStageColumns with an "s." prefix on every column.
-func emailGWCampaignStageColumnsPrefixed() string {
-	return "id, s.campaign_id, s.ordinal, s.stage_key, s.run_id, s.status, s.blocked_reason, s.created_at, s.completed_at"
-}

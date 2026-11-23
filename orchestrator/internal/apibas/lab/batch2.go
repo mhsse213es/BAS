@@ -6,7 +6,6 @@ package lab
 
 import (
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"net/http"
 	"strings"
@@ -20,12 +19,6 @@ const b2ServiceSecret = "BAS-SVC-SECRET"
 
 // b2Verifier is the PKCE verifier the client holds; the authorize request carries its S256 challenge.
 const b2Verifier = "BAS-VERIFIER-1"
-
-// b2Challenge is the S256 challenge of b2Verifier, base64url without padding.
-func b2Challenge() string {
-	sum := sha256.Sum256([]byte(b2Verifier))
-	return base64.RawURLEncoding.EncodeToString(sum[:])
-}
 
 // fileSign is the signature for one file key (DATA-010). The fixed build requires it for the exact key.
 func fileSign(key string) string {

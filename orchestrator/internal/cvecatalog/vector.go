@@ -59,7 +59,7 @@ func validateReferences(refs []Reference) error {
 	}
 	for i, r := range refs {
 		if r.Source == "" || r.URL == "" {
-			return fmt.Errorf("References[%d] must set both Source and URL", i)
+			return fmt.Errorf("reference %d must set both Source and URL", i)
 		}
 	}
 	return nil

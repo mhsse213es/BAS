@@ -11,13 +11,13 @@ package dbsim
 // failed login or catalog read carries no marker, so those steps carry no SIEM
 // expectation.
 type Expectation struct {
-	ExpectedPrevention   string // "allow" | "deny"
-	ExpectDetection      bool
-	ExpectAudit          bool
+	ExpectedPrevention string // "allow" | "deny"
+	ExpectDetection    bool
+	ExpectAudit        bool
 	// AuditRequire lists statement texts that must each appear in a marker-tagged
 	// audit event, separated by "|". Empty = any marker event. Kept a string so
 	// Expectation stays comparable.
-	AuditRequire string
+	AuditRequire         string
 	ExpectAuditConfig    bool
 	RequireObservation   bool
 	RequirePolicyDiff    bool
@@ -87,9 +87,9 @@ var expectations = map[string]map[string]Expectation{
 			RequireObservation: true, RequirePolicyDiff: true},
 	},
 	"dbsim-db03-unauthorized-access": {
-		"read_restricted_table":   expDeny,
-		"read_customer_records":   expDeny,
-		"read_financial_records":  expDeny,
+		"read_restricted_table":  expDeny,
+		"read_customer_records":  expDeny,
+		"read_financial_records": expDeny,
 		// PostgreSQL grants pg_roles to every login: the read is allowed and the
 		// visibility of other role names is recorded, not denied.
 		"read_foreign_role_names": expAllow,

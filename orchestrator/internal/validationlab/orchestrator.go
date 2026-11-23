@@ -139,7 +139,7 @@ func (o *Orchestrator) selectEligible(ctx context.Context) ([]string, error) {
 		               WHERE t.content_version_id = cv.id AND t.relationship_kind = 'generated_for') ) )
 		    AND (SELECT COUNT(*) FROM content_validations v
 		          WHERE v.content_version_id = cv.id AND v.level = 'EXECUTION'
-		            AND ` + contentregistry.CountsAsValidationAttemptSQL + `) < $3
+		            AND `+contentregistry.CountsAsValidationAttemptSQL+`) < $3
 		    AND NOT EXISTS (SELECT 1 FROM content_validations v
 		          WHERE v.content_version_id = cv.id AND v.level = 'EXECUTION'
 		            AND v.created_at > NOW() - make_interval(secs => $4))

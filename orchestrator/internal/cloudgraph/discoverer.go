@@ -17,13 +17,6 @@ type Discoverer interface {
 	Discover(ctx context.Context) (*DiscoveredGraph, DiscoveryReport, error)
 }
 
-func (s *DiscoveryStats) report() DiscoveryReport {
-	return DiscoveryReport{
-		"items_found":           s.ItemsFound,
-		"unresolved_principals": s.UnresolvedPrincipals,
-	}
-}
-
 func (s *AWSDiscoveryStats) report() DiscoveryReport {
 	return DiscoveryReport{
 		"items_found":            s.ItemsFound,

@@ -53,10 +53,20 @@ func Current() Info {
 // (State.Blocked — StateLocked or StateInvalid), nil-safe. Stops when
 // ctx is cancelled.
 func StartMonitor(ctx context.Context, licPath string, interval time.Duration, onLock func()) {
+	startMonitor(ctx, licPath, interval, onLock)
+}
+
+// startMonitor is StartMonitor, and returns a channel that is closed once the monitor goroutine has exited (already
+// closed when no monitor was started). Tests wait on it after cancelling ctx, so the goroutine is gone before they
+// restore package state such as PublicKeyPEM that it reads on every tick.
+func startMonitor(ctx context.Context, licPath string, interval time.Duration, onLock func()) <-chan struct{} {
+	done := make(chan struct{})
 	if PublicKeyPEM == "KEYGEN_REQUIRED" {
-		return
+		close(done)
+		return done
 	}
 	go func() {
+		defer close(done)
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		wasBlocked := Current().State.Blocked()
@@ -75,6 +85,7 @@ func StartMonitor(ctx context.Context, licPath string, interval time.Duration, o
 			}
 		}
 	}()
+	return done
 }
 
 // verifiedTick runs one verify-and-evaluate cycle, collapsing every

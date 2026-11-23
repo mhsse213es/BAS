@@ -8,6 +8,14 @@ import (
 	"github.com/audspect/bas/internal/apibas/lab"
 )
 
+// unqualifiedMachine reports whether the runner refused to grade because this machine does not match any committed
+// calibration record. That is the gate working as designed, not a defect: a timing verdict is only meaningful on a
+// machine the scenario was qualified on, so the timing tests below cannot assert a verdict anywhere else. To run them on
+// a new machine (a CI runner, say), qualify it and commit a calibration record for its fingerprint.
+func unqualifiedMachine(o grade.Outcome) bool {
+	return o.Reason == grade.ReasonRequalificationRequired
+}
+
 // TestABUSE002Repeatability runs the timing scenario five times per build. Each build's verdict is
 // stated before the run: the vulnerable build is FAIL exploited, the fixed build is PASS not_exploited.
 // Every run must match its expected verdict, and all runs of a build must agree. A verdict that flips
@@ -29,6 +37,9 @@ func TestABUSE002Repeatability(t *testing.T) {
 			rep := e.run(t, scenarioByID(t, "API-BAS-ABUSE-002"), e.state)
 			t.Logf("mode=%s run=%d outcome=%s/%s reason=%q timing=%s", mode, run,
 				rep.Outcome.Result, rep.Outcome.Exploitability, rep.Outcome.Reason, rep.TimingVerdict)
+			if unqualifiedMachine(rep.Outcome) {
+				t.Skipf("this machine matches no committed calibration record for API-BAS-ABUSE-002, so no timing verdict is graded: %s", rep.TimingVerdict)
+			}
 			if rep.Outcome.Result != want[mode].Result || rep.Outcome.Exploitability != want[mode].Exploitability {
 				t.Fatalf("mode=%s run=%d outcome %s/%s, want %s/%s (timing %s, reason %q)",
 					mode, run, rep.Outcome.Result, rep.Outcome.Exploitability,

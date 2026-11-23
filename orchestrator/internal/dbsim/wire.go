@@ -183,9 +183,9 @@ var probeRegistry = map[string]ProbeRegistryEntry{
 	// DB-08: a throwaway NO-privilege account attempts ONLY a session-scoped audit change (bounded_synthetic, user decision option A: never mutation). No parameter selects a statement; no global or persistent change exists.
 	"try_disable_audit": {ID: "try_disable_audit", Class: ClassBoundedSynthetic, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}, RequiredFixture: "empty"},
 	// DB-10: a throwaway SELECT-only account attempts one INSERT, UPDATE and DELETE on the accounts fixture table; the table is fingerprinted before and after.
-	"try_write_fixture": {ID: "try_write_fixture", Class: ClassBoundedSynthetic, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}, RequiredFixture: "accounts"},
-	"audit_reload_conf": {ID: "audit_reload_conf", Class: ClassBoundedSynthetic, Engines: []string{"postgresql"}, ParamSchema: map[string]string{}, RequiredFixture: "accounts"},
-	"audit_ddl_roundtrip": {ID: "audit_ddl_roundtrip", Class: ClassBoundedSynthetic, Engines: []string{"postgresql"}, ParamSchema: map[string]string{}, RequiredFixture: "accounts"},
+	"try_write_fixture":    {ID: "try_write_fixture", Class: ClassBoundedSynthetic, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}, RequiredFixture: "accounts"},
+	"audit_reload_conf":    {ID: "audit_reload_conf", Class: ClassBoundedSynthetic, Engines: []string{"postgresql"}, ParamSchema: map[string]string{}, RequiredFixture: "accounts"},
+	"audit_ddl_roundtrip":  {ID: "audit_ddl_roundtrip", Class: ClassBoundedSynthetic, Engines: []string{"postgresql"}, ParamSchema: map[string]string{}, RequiredFixture: "accounts"},
 	"audit_role_roundtrip": {ID: "audit_role_roundtrip", Class: ClassBoundedSynthetic, Engines: []string{"postgresql"}, ParamSchema: map[string]string{}, RequiredFixture: "accounts"},
 	// DB-11: fixed read-only catalog queries about the connected account's export/backup privileges. Read-only by class, lab-only by LabOnly. No export is performed.
 	"check_export_privileges": {ID: "check_export_privileges", Class: ClassReadOnly, Engines: []string{"postgresql", "mysql"}, ParamSchema: map[string]string{}, LabOnly: true},

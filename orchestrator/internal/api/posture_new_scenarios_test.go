@@ -30,8 +30,10 @@ func TestPostureScenarios_LoadAndDeclareSteps(t *testing.T) {
 			if st.Command == "" || st.TechniqueID == "" || st.CheckID == "" {
 				t.Fatalf("%s step %q is missing command, technique or check id", id, st.Name)
 			}
-			if !strings.Contains(st.Command, "PASS:") || !strings.Contains(st.Command, "FAIL:") {
-				t.Fatalf("%s step %q does not emit a PASS and FAIL verdict", id, st.Name)
+			// A check emits PASS and a non-pass verdict. The non-pass verdict is normally FAIL, but a setting whose absence
+			// is an organizational choice and not a defect (outbound NTLM restriction) reports SKIP, which is not scored.
+			if !strings.Contains(st.Command, "PASS:") || (!strings.Contains(st.Command, "FAIL:") && !strings.Contains(st.Command, "SKIP:")) {
+				t.Fatalf("%s step %q does not emit a PASS verdict and a FAIL or SKIP verdict", id, st.Name)
 			}
 		}
 	}

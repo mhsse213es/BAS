@@ -1192,8 +1192,8 @@ func (e *Executor) computeScore(ctx context.Context, ex *Execution) *ExerciseSco
 		TicketCreated: counts["ticket_created"] > 0,
 		// Set only by a wait_for_ticket step that saw the ticket picked up; a timeout leaves it false.
 		SOCAcknowledged: counts["soc_acknowledged"] > 0,
-		MTTDSeconds:   mttd,
-		MTTRSeconds:   mttr,
+		MTTDSeconds:     mttd,
+		MTTRSeconds:     mttr,
 	}
 	if t.SOCAcknowledged {
 		t.TimeToAcknowledgeSeconds, _ = e.store.SumDurationByType(ctx, ex.ID, "ticket_injected", "soc_acknowledged")
