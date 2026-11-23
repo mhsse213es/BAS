@@ -24,6 +24,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CURRENT_JSON = REPO_ROOT / "security" / "g1" / "G1_FINAL_CLASSIFICATION.json"
+WAIVER_JSON = REPO_ROOT / "security" / "g1" / "G1_REVIEWED_REGRESSIONS.json"
 
 
 def load_json(path):
@@ -392,6 +393,77 @@ def load_classifier_module():
     return clf
 
 
+WAIVER_VERSION = 1
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def load_waivers(path):
+    """Reviewed regressions (see apply_waivers). A missing file means none. A malformed file is an error, never
+    silently ignored: a typo must not quietly turn a reviewed exception back into a failure, or the reverse."""
+    path = Path(path)
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        raise ValueError(f"{path}: not valid JSON: {e}")
+    if not isinstance(data, dict) or data.get("version") != WAIVER_VERSION or not isinstance(data.get("waivers"), list):
+        raise ValueError(f"{path}: expected an object with version {WAIVER_VERSION} and a waivers list")
+    seen = set()
+    for i, w in enumerate(data["waivers"]):
+        where = f"{path}: waiver #{i + 1}"
+        if not isinstance(w, dict):
+            raise ValueError(f"{where}: not an object")
+        for key in ("function", "target", "op", "reason", "reviewed_by", "reviewed_on"):
+            if not isinstance(w.get(key), str) or not w[key].strip():
+                raise ValueError(f"{where}: {key} must be a non-empty string")
+        if not _DATE_RE.match(w["reviewed_on"]):
+            raise ValueError(f"{where}: reviewed_on must be YYYY-MM-DD")
+        for key in ("from_tier", "to_tier"):
+            if not isinstance(w.get(key), int) or isinstance(w.get(key), bool):
+                raise ValueError(f"{where}: {key} must be an integer")
+        if w["to_tier"] <= w["from_tier"]:
+            raise ValueError(f"{where}: to_tier must be higher than from_tier (a waiver excuses a regression)")
+        ids = w.get("sink_ids")
+        if not isinstance(ids, list) or not ids or not all(isinstance(x, str) and x for x in ids):
+            raise ValueError(f"{where}: sink_ids must be a non-empty list of sink ids")
+        ident = (w["function"], w["target"], w["op"], w["from_tier"], w["to_tier"])
+        if ident in seen:
+            raise ValueError(f"{where}: duplicate of an earlier waiver for the same slot and tier change")
+        seen.add(ident)
+    return data["waivers"]
+
+
+def apply_waivers(regressions, new_sinks, waivers):
+    """Split regressions into (remaining, waived, stale_waivers).
+
+    A regression (slot, old_tier, new_tier) is waived only when a waiver names the same slot AND the same tier change,
+    and EVERY current sink in that slot at the new tier is one of the waiver's sink_ids. Sink ids are content hashes
+    of the sink's own source, so editing a waived sink, or adding another sink at that tier, makes the regression
+    count again. Limit: for a sink that only calls a builder function (`el.innerHTML = overviewHtml(a)`), the id covers
+    the call, not the builder's body; an edit inside the builder does not change it.
+
+    stale_waivers are waivers that excused nothing this run (the code was fixed or changed); reported, never failed."""
+    by_slot = _group_by_slot(new_sinks)
+    remaining, waived, used = [], [], set()
+    for reg in regressions:
+        slot, old_tier, new_tier = reg
+        current = {s["sink_id"] for s in by_slot.get(slot, []) if s["severity_tier"] == new_tier}
+        match = None
+        for i, w in enumerate(waivers):
+            if (w["function"], w["target"], w["op"]) == slot and w["from_tier"] == old_tier and w["to_tier"] == new_tier \
+                    and current and current <= set(w["sink_ids"]):
+                match = i
+                break
+        if match is None:
+            remaining.append(reg)
+        else:
+            waived.append((reg, waivers[match]))
+            used.add(match)
+    stale = [w for i, w in enumerate(waivers) if i not in used]
+    return remaining, waived, stale
+
+
 def format_slot(slot):
     function, target, op = slot
     return f"{function}():{target} {op}"
@@ -407,11 +479,21 @@ def main():
         "--current", default=str(CURRENT_JSON),
         help="Path to the current classification JSON (default: %(default)s).",
     )
+    parser.add_argument(
+        "--waivers", default=str(WAIVER_JSON),
+        help="Reviewed-regression waivers (default: %(default)s; a missing file means none).",
+    )
     args = parser.parse_args()
 
     old_sinks = load_json(args.against)
     new_sinks = load_json(args.current)
     regressions, eliminated, added = compare_slots(old_sinks, new_sinks)
+    try:
+        waivers = load_waivers(args.waivers)
+    except ValueError as e:
+        print(f"G1 regression guard: FAIL\n  waiver file problem: {e}")
+        return 1
+    regressions, waived, stale = apply_waivers(regressions, new_sinks, waivers)
 
     clf = load_classifier_module()
     escaper_errors = check_canonical_escaper(clf.text, clf)
@@ -430,6 +512,15 @@ def main():
         print(f"  {len(rhs_changes)} sink(s) with a changed RHS at the same tier (REVIEW, not failed):")
         for slot, tier, old_id, new_id in rhs_changes:
             print(f"    REVIEW severity={tier}  {format_slot(slot)}  [{old_id} -> {new_id}]")
+
+    if waived:
+        print(f"  {len(waived)} regression(s) WAIVED by a reviewed exception (not failed; shown so a reviewer sees them):")
+        for (slot, old_tier, new_tier), w in sorted(waived, key=lambda t: t[0]):
+            print(f"    WAIVED severity {old_tier} -> {new_tier}  {format_slot(slot)}  [{w['reviewed_by']}, {w['reviewed_on']}]")
+    if stale:
+        print(f"  {len(stale)} waiver(s) excused nothing this run (the code changed or was fixed; remove them):")
+        for w in stale:
+            print(f"    STALE {w['function']}():{w['target']} {w['op']}  severity {w['from_tier']} -> {w['to_tier']}")
 
     if regressions:
         ok = False
