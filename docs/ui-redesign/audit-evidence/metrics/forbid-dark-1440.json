@@ -1,0 +1,939 @@
+{
+ "set": "errauth",
+ "theme": "dark",
+ "width": 1440,
+ "tabs": [
+  {
+   "tab": "ad-coverage",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "AD Coverage",
+    "AD Coverage"
+   ],
+   "crumb": "Operations›AD Coverage",
+   "selects": 0,
+   "searches": 0,
+   "tables": 0,
+   "noName": 0,
+   "small": 0,
+   "interactive": 13,
+   "lowContrast": 3,
+   "lowEx": "All families 3.21",
+   "texts": 42,
+   "empties": [
+    "No AD capabilities reported"
+   ],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 2
+  },
+  {
+   "tab": "agents",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "Agents",
+    "Simulation agents"
+   ],
+   "crumb": "Infrastructure›Agents",
+   "selects": 3,
+   "searches": 2,
+   "tables": 1,
+   "noName": 8,
+   "small": 19,
+   "interactive": 65,
+   "lowContrast": 1,
+   "lowEx": "Deploy Agent 3.21",
+   "texts": 134,
+   "empties": [],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 2
+  },
+  {
+   "tab": "aleef",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "Aleef API discovery"
+   ],
+   "crumb": "Aleef API discovery",
+   "selects": 1,
+   "searches": 0,
+   "tables": 0,
+   "noName": 0,
+   "small": 15,
+   "interactive": 31,
+   "lowContrast": 2,
+   "lowEx": "Create engagement 3.21",
+   "texts": 39,
+   "empties": [],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 1
+  },
+  {
+   "tab": "attack-coverage",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "Technique Coverage",
+    "Technique Coverage"
+   ],
+   "crumb": "Visibility›Technique Coverage",
+   "selects": 2,
+   "searches": 1,
+   "tables": 0,
+   "noName": 0,
+   "small": 0,
+   "interactive": 4,
+   "lowContrast": 0,
+   "lowEx": "",
+   "texts": 15,
+   "empties": [
+    "No techniques to show",
+    "No ATT&CK group data is available."
+   ],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 2
+  },
+  {
+   "tab": "attackpath",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "Attack Paths",
+    "Attack Paths"
+   ],
+   "crumb": "Visibility›Attack Paths",
+   "selects": 0,
+   "searches": 0,
+   "tables": 0,
+   "noName": 0,
+   "small": 0,
+   "interactive": 7,
+   "lowContrast": 2,
+   "lowEx": "▶ Run Collection 3.21",
+   "texts": 11,
+   "empties": [
+    "No attack-path data collected yet"
+   ],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 2
+  },
+  {
+   "tab": "campaigns",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "Campaigns",
+    "Campaigns"
+   ],
+   "crumb": "Operations›Campaigns",
+   "selects": 0,
+   "searches": 0,
+   "tables": 0,
+   "noName": 0,
+   "small": 0,
+   "interactive": 2,
+   "lowContrast": 1,
+   "lowEx": "New campaign 3.21",
+   "texts": 13,
+   "empties": [
+    "Loading…"
+   ],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 1
+  },
+  {
+   "tab": "compliance",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "Compliance",
+    "Reports"
+   ],
+   "crumb": "Visibility›Reports›Compliance",
+   "selects": 2,
+   "searches": 0,
+   "tables": 0,
+   "noName": 0,
+   "small": 0,
+   "interactive": 7,
+   "lowContrast": 2,
+   "lowEx": "Generate report 3.21",
+   "texts": 14,
+   "empties": [
+    "No compliance frameworks loaded"
+   ],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 3
+  },
+  {
+   "tab": "coverage",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "Coverage",
+    "MITRE ATT&CK Coverage"
+   ],
+   "crumb": "Operations›Coverage",
+   "selects": 3,
+   "searches": 1,
+   "tables": 1,
+   "noName": 0,
+   "small": 0,
+   "interactive": 14,
+   "lowContrast": 2,
+   "lowEx": "Recalculate 3.21",
+   "texts": 59,
+   "empties": [
+    "No completed runs yet",
+    "No privilege-annotated runs yet",
+    "No active threats tracked yet",
+    "No techniques match."
+   ],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 5
+  },
+  {
+   "tab": "dashboard",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "Dashboard",
+    "Security Posture"
+   ],
+   "crumb": "Operations›Dashboard",
+   "selects": 0,
+   "searches": 0,
+   "tables": 0,
+   "noName": 0,
+   "small": 11,
+   "interactive": 22,
+   "lowContrast": 4,
+   "lowEx": "Operational 3.21",
+   "texts": 136,
+   "empties": [
+    "no runs yet",
+    "no open findings",
+    "no scored runs yet",
+    "no techniques tested yet"
+   ],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 11
+  },
+  {
+   "tab": "email",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "Email",
+    "Email"
+   ],
+   "crumb": "Operations›Email",
+   "selects": 0,
+   "searches": 1,
+   "tables": 2,
+   "noName": 0,
+   "small": 2,
+   "interactive": 37,
+   "lowContrast": 5,
+   "lowEx": "New Email Campaign 3.21",
+   "texts": 186,
+   "empties": [
+    "Failed runs",
+    "Error",
+    "No runs yet",
+    "No campaigns yet"
+   ],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 4
+  },
+  {
+   "tab": "exercises",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "Exercises",
+    "Exercises"
+   ],
+   "crumb": "Visibility›Exercises",
+   "selects": 0,
+   "searches": 0,
+   "tables": 0,
+   "noName": 0,
+   "small": 0,
+   "interactive": 0,
+   "lowContrast": 0,
+   "lowEx": "",
+   "texts": 22,
+   "empties": [
+    "No scenarios synced yet",
+    "No exercises synced yet",
+    "No exercise plans yet",
+    "No executions yet"
+   ],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 3
+  },
+  {
+   "tab": "exposure",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "Exposure Explorer",
+    "Exposure Explorer"
+   ],
+   "crumb": "Visibility›Exposure Explorer",
+   "selects": 0,
+   "searches": 0,
+   "tables": 0,
+   "noName": 0,
+   "small": 0,
+   "interactive": 1,
+   "lowContrast": 0,
+   "lowEx": "",
+   "texts": 14,
+   "empties": [
+    "Failed to load: l.filter is not a function"
+   ],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 1
+  },
+  {
+   "tab": "factory-health",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "Factory Health",
+    "Factory Health"
+   ],
+   "crumb": "Operations›Factory Health",
+   "selects": 0,
+   "searches": 0,
+   "tables": 0,
+   "noName": 0,
+   "small": 0,
+   "interactive": 1,
+   "lowContrast": 0,
+   "lowEx": "",
+   "texts": 12,
+   "empties": [],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 1
+  },
+  {
+   "tab": "findings",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "Findings",
+    "Findings"
+   ],
+   "crumb": "Visibility›Findings",
+   "selects": 0,
+   "searches": 0,
+   "tables": 1,
+   "noName": 0,
+   "small": 0,
+   "interactive": 1,
+   "lowContrast": 0,
+   "lowEx": "",
+   "texts": 11,
+   "empties": [
+    "No findings yet."
+   ],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 1
+  },
+  {
+   "tab": "initiatives",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "Initiatives",
+    "Initiatives"
+   ],
+   "crumb": "Operations›Initiatives",
+   "selects": 0,
+   "searches": 0,
+   "tables": 0,
+   "noName": 0,
+   "small": 0,
+   "interactive": 2,
+   "lowContrast": 1,
+   "lowEx": "New Initiative 3.21",
+   "texts": 13,
+   "empties": [
+    "Loading…"
+   ],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 1
+  },
+  {
+   "tab": "integrations",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "Integrations",
+    "Integrations"
+   ],
+   "crumb": "Infrastructure›Integrations",
+   "selects": 0,
+   "searches": 0,
+   "tables": 1,
+   "noName": 0,
+   "small": 0,
+   "interactive": 11,
+   "lowContrast": 3,
+   "lowEx": "Add TAXII connector 3.21",
+   "texts": 36,
+   "empties": [
+    "No connectors configured",
+    "No response connectors configured",
+    "No TAXII connectors configured yet."
+   ],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 4
+  },
+  {
+   "tab": "iocs",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "IOC Registry",
+    "IOC Registry"
+   ],
+   "crumb": "Visibility›IOC Registry",
+   "selects": 4,
+   "searches": 1,
+   "tables": 1,
+   "noName": 0,
+   "small": 1,
+   "interactive": 10,
+   "lowContrast": 2,
+   "lowEx": "Add IOC 3.21",
+   "texts": 34,
+   "empties": [
+    "No data yet",
+    "no sightings yet",
+    "Failed to load: rows2.filter is not a function"
+   ],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 2
+  },
+  {
+   "tab": "k8s-scenarios",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "Kubernetes Scenarios",
+    "Kubernetes Scenarios"
+   ],
+   "crumb": "Operations›Kubernetes Scenarios",
+   "selects": 3,
+   "searches": 1,
+   "tables": 0,
+   "noName": 0,
+   "small": 1,
+   "interactive": 12,
+   "lowContrast": 3,
+   "lowEx": "New K8s Run 3.21",
+   "texts": 42,
+   "empties": [
+    "Nothing is written"
+   ],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 1
+  },
+  {
+   "tab": "recommendations",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "Recommendations",
+    "Recommendations"
+   ],
+   "crumb": "Visibility›Recommendations",
+   "selects": 0,
+   "searches": 0,
+   "tables": 0,
+   "noName": 0,
+   "small": 0,
+   "interactive": 5,
+   "lowContrast": 1,
+   "lowEx": "Top 20 3.21",
+   "texts": 19,
+   "empties": [
+    "No recommendations yet"
+   ],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 1
+  },
+  {
+   "tab": "remediation",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "Remediation",
+    "Remediation"
+   ],
+   "crumb": "Visibility›Remediation",
+   "selects": 0,
+   "searches": 0,
+   "tables": 0,
+   "noName": 0,
+   "small": 0,
+   "interactive": 4,
+   "lowContrast": 1,
+   "lowEx": "By endpoint 3.21",
+   "texts": 24,
+   "empties": [
+    "No endpoints",
+    "No agents are registered yet."
+   ],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 2
+  },
+  {
+   "tab": "reports",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "Reports",
+    "Reports"
+   ],
+   "crumb": "Visibility›Reports",
+   "selects": 1,
+   "searches": 1,
+   "tables": 2,
+   "noName": 0,
+   "small": 0,
+   "interactive": 10,
+   "lowContrast": 1,
+   "lowEx": "Generate report 3.21",
+   "texts": 38,
+   "empties": [
+    "Could not load agents",
+    "No reports generated yet",
+    "No scheduled deliveries"
+   ],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 3
+  },
+  {
+   "tab": "runs",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "Live Runs",
+    "Live Runs"
+   ],
+   "crumb": "Operations›Live Runs",
+   "selects": 3,
+   "searches": 2,
+   "tables": 1,
+   "noName": 0,
+   "small": 1,
+   "interactive": 21,
+   "lowContrast": 1,
+   "lowEx": "New Run 3.21",
+   "texts": 28,
+   "empties": [],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 1
+  },
+  {
+   "tab": "scenarios",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "Scenarios",
+    "Scenarios"
+   ],
+   "crumb": "Operations›Scenarios",
+   "selects": 3,
+   "searches": 1,
+   "tables": 0,
+   "noName": 0,
+   "small": 0,
+   "interactive": 7,
+   "lowContrast": 1,
+   "lowEx": "New Scenario 3.21",
+   "texts": 13,
+   "empties": [],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [],
+   "failedApi": 0
+  },
+  {
+   "tab": "scheduled-assessments",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "Scheduled Assessments",
+    "Scheduled Assessments"
+   ],
+   "crumb": "Operations›Scheduled Assessments",
+   "selects": 0,
+   "searches": 0,
+   "tables": 1,
+   "noName": 0,
+   "small": 0,
+   "interactive": 2,
+   "lowContrast": 1,
+   "lowEx": "New Scheduled Assessme 3.21",
+   "texts": 13,
+   "empties": [
+    "Loading…"
+   ],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 2
+  },
+  {
+   "tab": "settings",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "Settings",
+    "Settings"
+   ],
+   "crumb": "Administration›Settings",
+   "selects": 0,
+   "searches": 0,
+   "tables": 0,
+   "noName": 0,
+   "small": 0,
+   "interactive": 12,
+   "lowContrast": 1,
+   "lowEx": "+ New user 3.21",
+   "texts": 50,
+   "empties": [
+    "No users found"
+   ],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 8
+  },
+  {
+   "tab": "sla-report",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "SLA Compliance",
+    "Reports"
+   ],
+   "crumb": "Visibility›Reports›SLA Compliance",
+   "selects": 0,
+   "searches": 0,
+   "tables": 0,
+   "noName": 0,
+   "small": 0,
+   "interactive": 5,
+   "lowContrast": 1,
+   "lowEx": "Generate report 3.21",
+   "texts": 13,
+   "empties": [
+    "No SLA data yet"
+   ],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 3
+  },
+  {
+   "tab": "threat-priority",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "Threat Prioritization",
+    "Threat Prioritization"
+   ],
+   "crumb": "Visibility›Threat Prioritization",
+   "selects": 0,
+   "searches": 0,
+   "tables": 0,
+   "noName": 0,
+   "small": 0,
+   "interactive": 1,
+   "lowContrast": 0,
+   "lowEx": "",
+   "texts": 13,
+   "empties": [
+    "Failed to load: l.filter is not a function"
+   ],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 1
+  },
+  {
+   "tab": "variants",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "Variants",
+    "Variants"
+   ],
+   "crumb": "Operations›Variants",
+   "selects": 6,
+   "searches": 1,
+   "tables": 0,
+   "noName": 0,
+   "small": 14,
+   "interactive": 25,
+   "lowContrast": 3,
+   "lowEx": "▶ Run Full Sweep 3.21",
+   "texts": 61,
+   "empties": [
+    "Failed to load techniques",
+    "No variant runs yet"
+   ],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 5
+  },
+  {
+   "tab": "verification",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 1416,
+   "vw": 1440,
+   "titles": [
+    "Verification",
+    "Detection Verification"
+   ],
+   "crumb": "Visibility›Verification",
+   "selects": 1,
+   "searches": 0,
+   "tables": 0,
+   "noName": 0,
+   "small": 0,
+   "interactive": 2,
+   "lowContrast": 1,
+   "lowEx": "Refresh 3.21",
+   "texts": 30,
+   "empties": [],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": true,
+   "errors": [
+    "console: Failed to load resource: the server responded with a status of 403 (Forbidden)"
+   ],
+   "failedApi": 1
+  },
+  {
+   "tab": "profile",
+   "overflowDoc": false,
+   "overflowPx": 0,
+   "maxRight": 0,
+   "vw": 1440,
+   "titles": [
+    "Verification",
+    "Detection Verification"
+   ],
+   "crumb": "Visibility›Verification",
+   "selects": 0,
+   "searches": 0,
+   "tables": 0,
+   "noName": 0,
+   "small": 0,
+   "interactive": 0,
+   "lowContrast": 0,
+   "lowEx": "",
+   "texts": 0,
+   "empties": [],
+   "loginVisible": false,
+   "sidebarVisible": true,
+   "paneVisible": false,
+   "errors": [],
+   "failedApi": 0
+  }
+ ]
+}
