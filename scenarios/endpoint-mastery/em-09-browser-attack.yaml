@@ -2,11 +2,17 @@
 product_line: av
 name: "Endpoint Mastery 09 — Browser Attack Simulation"
 description: >
-  ENDPOINT MASTERY — Layer 9. Analyzes boundary exposure surrounding local web browser footprints.
-  Validates directory isolation locks on session state assets, credential stores, and cookie files
-  to ensure local spy tools cannot access profile data unchallenged[cite: 4, 5].
-
-  VERDICTS: PASS = access to primary data file path locked or denied by OS/EDR. FAIL = file stream opened unblocked.
+  ENDPOINT MASTERY — Layer 9. Browser data-access exposure simulation for Chrome and Edge. Discovers
+  every local profile, then checks whether a local process can open the browser's cookie and credential
+  database files read-only. It is a DATA-ACCESS EXPOSURE check, not a credential-theft simulation: no
+  cookie, credential, key or profile content is read, parsed, decrypted, copied or exported.
+  EVIDENCE STATES (one line per profile file): ACCESS_ALLOWED, ACCESS_DENIED, NOT_FOUND, LOCKED_BY_BROWSER, ERROR.
+  VERDICTS: ACCESS_ALLOWED = FAIL (exposure). ACCESS_DENIED = PASS (the OS refused this read-only check).
+  NOT_FOUND and LOCKED_BY_BROWSER = SKIP (not assessable, reason given). ERROR = the check could not complete.
+  PASS means only that the OS denied read access for this check. It does not show that EDR detected or
+  prevented anything, and no detection is scored here.
+  SAFETY: opens are read-only with shared access and closed at once. Browser processes, profiles and
+  files are not modified, terminated or copied.
 author: Audspect Research
 executable: true
 supported_os: [windows]
@@ -21,61 +27,177 @@ live_policy:
   require_dc_reachable: false
 
 steps:
-  - name: "Google Chrome local Cookie database file access check"
+  - name: "Google Chrome profile cookie database access exposure check"
     technique_id: T1539
     framework: custom
     executor: powershell
     requires_priv: user
-    timeout_sec: 30
+    timeout_sec: 60
     fidelity: telemetry-safe
     production_safe: true
     risk: low
     reversible: true
-    blast_radius: "Attempts to open a temporary system read handle against the Chrome Default Network profile database[cite: 5]."
+    blast_radius: "Opens each discovered Chrome profile's cookie database file read-only with shared access and closes it at once. No query, copy, parse or decryption. Browser processes are not touched."
     telemetry:
-      - "PowerShell EID 4104: Path verification activity"
+      - "PowerShell EID 4104: script block for this check"
+    detection:
+      - "EDR or Defender file-access events for the browser profile, read after the step; informational only"
     command: |
-      $ErrorActionPreference = 'SilentlyContinue'
-      $target = "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Network\Cookies"
-      if (-not (Test-Path $target)) {
-        Write-Output "SKIP: Google Chrome default user profile data structures not present on this endpoint."
+      $ErrorActionPreference = 'Stop'
+      $browser = 'chrome'
+      $userData = Join-Path $env:LOCALAPPDATA 'Google\Chrome\User Data'
+      $disclaimer = 'OS read-access result only; no detection or prevention implied.'
+      function Get-EM09Profiles([string]$root) {
+        $names = @()
+        $ls = Join-Path $root 'Local State'
+        if (Test-Path -LiteralPath $ls -PathType Leaf) {
+          try {
+            $j = Get-Content -LiteralPath $ls -Raw | ConvertFrom-Json
+            if ($j.profile -and $j.profile.info_cache) { $names = @($j.profile.info_cache.PSObject.Properties.Name) }
+          } catch { $names = @() }
+        }
+        if ($names.Count -eq 0) {
+          $names = @(Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'Default' -or $_.Name -like 'Profile *' } | ForEach-Object { $_.Name })
+        }
+        return $names
+      }
+      function Test-EM09File([string]$browser, [string]$profile, [string]$path, [string]$label) {
+        $shown = "browser=$browser profile=$profile file=$label"
+        $side = @()
+        foreach ($suf in '-wal', '-shm', '-journal') {
+          if (Test-Path -LiteralPath ($path + $suf) -PathType Leaf) { $side += $suf.TrimStart('-') }
+        }
+        $sidecars = if ($side.Count) { $side -join ',' } else { 'none' }
+        $stream = $null
+        try {
+          $stream = [System.IO.File]::Open($path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete)
+          return ,@('FAIL', "state=ACCESS_ALLOWED $shown sidecars=$sidecars")
+        } catch [System.IO.FileNotFoundException] {
+          return ,@('SKIP', "state=NOT_FOUND $shown")
+        } catch [System.IO.DirectoryNotFoundException] {
+          return ,@('SKIP', "state=NOT_FOUND $shown")
+        } catch [System.UnauthorizedAccessException] {
+          return ,@('PASS', "state=ACCESS_DENIED $shown sidecars=$sidecars")
+        } catch [System.IO.IOException] {
+          return ,@('SKIP', "state=LOCKED_BY_BROWSER $shown sidecars=$sidecars")
+        } catch {
+          return ,@('ERROR', "state=ERROR $shown detail=$($_.Exception.GetType().Name) sidecars=$sidecars")
+        } finally {
+          if ($stream) { $stream.Dispose() }
+        }
+      }
+      if (-not (Test-Path -LiteralPath $userData -PathType Container)) {
+        Write-Output "SKIP: state=NOT_FOUND browser=$browser detail=user data folder absent. $disclaimer"
         return
       }
-      $unlocked = $false
-      try {
-        $stream = [System.IO.File]::Open($target, 'Open', 'Read', 'ReadWrite')
-        if ($stream) { $unlocked = $true; $stream.Close() }
-      } catch {}
-      if ($unlocked) {
-        Write-Output "FAIL: Chrome Cookie database accessible to local unprivileged processes — susceptible to automated session hijacking tools[cite: 5]."
-      } else {
-        Write-Output "PASS: Target profile files correctly isolated, active process locked, or read attempt flagged by policy. [BAS-SIM][cite: 5]"
+      $profiles = @(Get-EM09Profiles $userData)
+      if ($profiles.Count -eq 0) {
+        Write-Output "SKIP: state=NOT_FOUND browser=$browser detail=no profiles discovered. $disclaimer"
+        return
+      }
+      foreach ($p in $profiles) {
+        $pdir = Join-Path $userData $p
+        $candidates = @(
+          @{ rel = 'Network\Cookies'; label = 'Network/Cookies' },
+          @{ rel = 'Cookies'; label = 'Cookies (legacy)' }
+        )
+        $hit = $null
+        foreach ($c in $candidates) {
+          $f = Join-Path $pdir $c.rel
+          if (Test-Path -LiteralPath $f -PathType Leaf) { $hit = @{ path = $f; label = $c.label }; break }
+        }
+        if (-not $hit) {
+          Write-Output "SKIP: state=NOT_FOUND browser=$browser profile=$p file=Cookies detail=no cookie database in profile. $disclaimer"
+          continue
+        }
+        try {
+          $res = Test-EM09File $browser $p $hit.path $hit.label
+        } catch {
+          $res = @('ERROR', "state=ERROR browser=$browser profile=$p file=$($hit.label) detail=$($_.Exception.GetType().Name)")
+        }
+        Write-Output ("{0}: {1} {2}" -f $res[0], $res[1], $disclaimer)
       }
     cleanup: ""
 
-  - name: "Microsoft Edge profile database read verification"
+  - name: "Microsoft Edge profile credential database access exposure check"
     technique_id: T1555.003
     framework: custom
     executor: powershell
     requires_priv: user
-    timeout_sec: 30
+    timeout_sec: 60
     fidelity: telemetry-safe
     production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Opens each discovered Edge profile's Login Data file read-only with shared access and closes it at once. No query, copy, parse or decryption. Browser processes are not touched."
+    telemetry:
+      - "PowerShell EID 4104: script block for this check"
+    detection:
+      - "EDR or Defender file-access events for the browser profile, read after the step; informational only"
     command: |
-      $ErrorActionPreference = 'SilentlyContinue'
-      $target = "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\Login Data"
-      if (-not (Test-Path $target)) {
-        Write-Output "SKIP: Microsoft Edge default profile structures not found."
+      $ErrorActionPreference = 'Stop'
+      $browser = 'edge'
+      $userData = Join-Path $env:LOCALAPPDATA 'Microsoft\Edge\User Data'
+      $disclaimer = 'OS read-access result only; no detection or prevention implied.'
+      function Get-EM09Profiles([string]$root) {
+        $names = @()
+        $ls = Join-Path $root 'Local State'
+        if (Test-Path -LiteralPath $ls -PathType Leaf) {
+          try {
+            $j = Get-Content -LiteralPath $ls -Raw | ConvertFrom-Json
+            if ($j.profile -and $j.profile.info_cache) { $names = @($j.profile.info_cache.PSObject.Properties.Name) }
+          } catch { $names = @() }
+        }
+        if ($names.Count -eq 0) {
+          $names = @(Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'Default' -or $_.Name -like 'Profile *' } | ForEach-Object { $_.Name })
+        }
+        return $names
+      }
+      function Test-EM09File([string]$browser, [string]$profile, [string]$path, [string]$label) {
+        $shown = "browser=$browser profile=$profile file=$label"
+        $side = @()
+        foreach ($suf in '-wal', '-shm', '-journal') {
+          if (Test-Path -LiteralPath ($path + $suf) -PathType Leaf) { $side += $suf.TrimStart('-') }
+        }
+        $sidecars = if ($side.Count) { $side -join ',' } else { 'none' }
+        $stream = $null
+        try {
+          $stream = [System.IO.File]::Open($path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete)
+          return ,@('FAIL', "state=ACCESS_ALLOWED $shown sidecars=$sidecars")
+        } catch [System.IO.FileNotFoundException] {
+          return ,@('SKIP', "state=NOT_FOUND $shown")
+        } catch [System.IO.DirectoryNotFoundException] {
+          return ,@('SKIP', "state=NOT_FOUND $shown")
+        } catch [System.UnauthorizedAccessException] {
+          return ,@('PASS', "state=ACCESS_DENIED $shown sidecars=$sidecars")
+        } catch [System.IO.IOException] {
+          return ,@('SKIP', "state=LOCKED_BY_BROWSER $shown sidecars=$sidecars")
+        } catch {
+          return ,@('ERROR', "state=ERROR $shown detail=$($_.Exception.GetType().Name) sidecars=$sidecars")
+        } finally {
+          if ($stream) { $stream.Dispose() }
+        }
+      }
+      if (-not (Test-Path -LiteralPath $userData -PathType Container)) {
+        Write-Output "SKIP: state=NOT_FOUND browser=$browser detail=user data folder absent. $disclaimer"
         return
       }
-      $unlocked = $false
-      try {
-        $stream = [System.IO.File]::Open($target, 'Open', 'Read', 'ReadWrite')
-        if ($stream) { $unlocked = $true; $stream.Close() }
-      } catch {}
-      if ($unlocked) {
-        Write-Output "FAIL: Edge local credential storage database accessible to raw read streams."
-      } else {
-        Write-Output "PASS: Edge profile storage database securely isolated against casual file harvesting probes. [BAS-SIM]"
+      $profiles = @(Get-EM09Profiles $userData)
+      if ($profiles.Count -eq 0) {
+        Write-Output "SKIP: state=NOT_FOUND browser=$browser detail=no profiles discovered. $disclaimer"
+        return
+      }
+      foreach ($p in $profiles) {
+        $f = Join-Path (Join-Path $userData $p) 'Login Data'
+        if (-not (Test-Path -LiteralPath $f -PathType Leaf)) {
+          Write-Output "SKIP: state=NOT_FOUND browser=$browser profile=$p file=Login Data detail=no credential database in profile. $disclaimer"
+          continue
+        }
+        try {
+          $res = Test-EM09File $browser $p $f 'Login Data'
+        } catch {
+          $res = @('ERROR', "state=ERROR browser=$browser profile=$p file=Login Data detail=$($_.Exception.GetType().Name)")
+        }
+        Write-Output ("{0}: {1} {2}" -f $res[0], $res[1], $disclaimer)
       }
     cleanup: ""
