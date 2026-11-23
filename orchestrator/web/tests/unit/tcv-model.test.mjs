@@ -37,17 +37,47 @@ test('filterRows by search and result', () => {
 });
 
 test('cellText, tableFilter and csvRow', () => {
-  assert.equal(M.cellText(L[1], 6), 'N/A');
-  assert.equal(M.cellText(L[1], 2), 'Yes');
-  assert.equal(M.cellText(L[1], 3), 'No');
-  assert.equal(M.cellText(L[1], 1), '50%');
+  assert.equal(M.cellText(L[1], 7), 'N/A');
+  assert.equal(M.cellText(L[1], 3), 'Yes');
+  assert.equal(M.cellText(L[1], 4), 'No');
+  assert.equal(M.cellText(L[1], 2), '50%');
+  assert.equal(M.cellText({ techniqueId: 'T1', name: 'Phishing' }, 1), 'Phishing');
   assert.deepEqual(M.tableFilter(L, 'n/a').map((t) => t.techniqueId), ['T1021']);
-  assert.deepEqual(M.csvRow(L[0], [0, 1]), ['T1003', '100%']);
+  assert.deepEqual(M.csvRow(L[0], [0, 2]), ['T1003', '100%']);
 });
 
 test('sortRows: coverage, direction, N/A last, stable', () => {
-  assert.deepEqual(M.sortRows(L, 1, 1).map((t) => t.techniqueId), ['T1486', 'T1021', 'T1003']);
-  assert.deepEqual(M.sortRows(L, 1, -1).map((t) => t.techniqueId), ['T1003', 'T1021', 'T1486']);
-  assert.deepEqual(M.sortRows(L, 6, 1).map((t) => t.techniqueId), ['T1486', 'T1003', 'T1021']);
+  assert.deepEqual(M.sortRows(L, 2, 1).map((t) => t.techniqueId), ['T1486', 'T1021', 'T1003']);
+  assert.deepEqual(M.sortRows(L, 2, -1).map((t) => t.techniqueId), ['T1003', 'T1021', 'T1486']);
+  assert.deepEqual(M.sortRows(L, 7, 1).map((t) => t.techniqueId), ['T1486', 'T1003', 'T1021']);
   assert.deepEqual(M.sortRows(L, -1, 1), L);
 });
+
+test('withNames adds name and tactic from the library and leaves unknown rows alone', () => {
+  const out = M.withNames(L, { T1003: { name: 'OS Credential Dumping', tactic: 'credential-access' } });
+  assert.equal(out[0].name, 'OS Credential Dumping');
+  assert.equal(out[1].name, undefined);
+  assert.deepEqual(M.withNames(null, {}), []);
+  assert.equal(L[0].name, undefined); // the input is not modified
+});
+
+test('search matches id, name and tactic', () => {
+  const rows = M.withNames(L, { T1003: { name: 'OS Credential Dumping', tactic: 'credential-access' } });
+  assert.deepEqual(M.filterRows(rows, { q: 'credential' }).map((x) => x.techniqueId), ['T1003']);
+  assert.deepEqual(M.filterRows(rows, { q: 'T1021' }).map((x) => x.techniqueId), ['T1021']);
+});
+
+test('bands count techniques by share of applicable dimensions; none-applicable are skipped', () => {
+  assert.deepEqual(M.bands(L).map((b) => b.value), [1, 0, 1, 1]);
+  assert.deepEqual(M.bands([{ techniqueId: 'X' }]).map((b) => b.value), [0, 0, 0, 0]);
+});
+
+test('dimRows explains what is missing and only for No', () => {
+  const d = M.dimRows(L[1]);
+  assert.deepEqual(d.map((x) => x.state), ['yes', 'no', 'no', 'yes', 'na']);
+  assert.ok(d[1].todo.length > 0);
+  assert.equal(d[0].todo, '');
+  assert.equal(d[4].todo, '');
+});
+
+test('prettyTactic', () => { assert.equal(M.prettyTactic('credential-access'), 'Credential Access'); });

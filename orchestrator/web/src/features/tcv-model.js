@@ -6,8 +6,9 @@
 // so none of them is shown; "Coverage" here is the share of applicable dimensions a technique has.
 import { COV_DIMS, covHasGap } from './rich-g4.js';
 
-export var COLUMNS = ['Technique', 'Coverage'].concat(COV_DIMS.map(function(d) { return d[1]; }));
+export var COLUMNS = ['Technique', 'Name', 'Coverage'].concat(COV_DIMS.map(function(d) { return d[1]; }));
 export var RESULTS = [['gaps', 'With gaps'], ['covered', 'Fully covered']];
+export var PAGE_SIZES = [10, 25, 50, 100];
 export var ALL_ACTORS = 'All techniques';
 export var MAX_CHIPS = 12;
 
@@ -57,8 +58,9 @@ export function chipActors(actors, selected) {
 
 export function cellText(r, col) {
   if (col === 0) return r.techniqueId || '';
-  if (col === 1) { var c = rowCov(r); return c.applicable ? c.pct + '%' : 'N/A'; }
-  var v = dimVal(r, col - 2);
+  if (col === 1) return r.name || '';
+  if (col === 2) { var c = rowCov(r); return c.applicable ? c.pct + '%' : 'N/A'; }
+  var v = dimVal(r, col - 3);
   return v === null ? 'N/A' : v ? 'Yes' : 'No';
 }
 
@@ -68,7 +70,7 @@ export function filterRows(rows, f) {
   return (rows || []).filter(function(r) {
     if (f.result === 'gaps' && !covHasGap(r)) return false;
     if (f.result === 'covered' && covHasGap(r)) return false;
-    return !s || String(r.techniqueId || '').toLowerCase().indexOf(s) !== -1;
+    return !s || [r.techniqueId, r.name, r.tactic].join(' ').toLowerCase().indexOf(s) !== -1;
   });
 }
 
@@ -83,8 +85,9 @@ export function tableFilter(rows, q) {
 
 function sortKey(r, col) {
   if (col === 0) return r.techniqueId || null;
-  if (col === 1) { var c = rowCov(r); return c.applicable ? c.pct : null; }
-  var v = dimVal(r, col - 2);
+  if (col === 1) return r.name || null;
+  if (col === 2) { var c = rowCov(r); return c.applicable ? c.pct : null; }
+  var v = dimVal(r, col - 3);
   return v === null ? null : v ? 1 : 0;
 }
 
@@ -103,3 +106,46 @@ export function sortRows(rows, col, dir) {
 export function csvRow(r, cols) { return cols.map(function(c) { return cellText(r, c); }); }
 
 export { pageCount, rangeText, csvText } from './runs-model.js';
+
+// withNames: copies of the matrix rows with the technique name and tactic added from the unified library (a map
+// techniqueId -> { name, tactic }). Rows without an entry keep an empty name; nothing is invented.
+export function withNames(rows, lib) {
+  lib = lib || {};
+  return (Array.isArray(rows) ? rows : []).map(function(r) {
+    var n = lib[r.techniqueId];
+    return n ? Object.assign({}, r, { name: n.name || '', tactic: n.tactic || '' }) : r;
+  });
+}
+
+export function prettyTactic(t) {
+  return String(t || '').split(/[-_\s]+/).filter(Boolean).map(function(w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(' ');
+}
+
+// bands: how many techniques sit in each coverage band (the share of applicable dimensions they have). Techniques
+// with no applicable dimension are left out, since there is nothing to measure.
+export var BAND_DEFS = [['Complete', 'ok'], ['Mostly (70-99%)', 'info'], ['Partial (40-69%)', 'warn'], ['Low (under 40%)', 'bad']];
+export function bands(rows) {
+  var c = [0, 0, 0, 0];
+  (Array.isArray(rows) ? rows : []).forEach(function(r) {
+    var v = rowCov(r);
+    if (!v.applicable) return;
+    c[v.pct === 100 ? 0 : v.pct >= 70 ? 1 : v.pct >= 40 ? 2 : 3]++;
+  });
+  return BAND_DEFS.map(function(d, i) { return { label: d[0], tone: d[1], value: c[i] }; });
+}
+
+// DIM_HELP: what each dimension means and what to do when a technique lacks it. Coverage here is whether Audspect has
+// the content, not whether a control detected or blocked anything.
+export var DIM_HELP = {
+  simulationExists: ['Simulation', 'A scenario or atomic test in Audspect can run this technique.', 'No scenario runs this technique yet. Add or import one under Scenarios.'],
+  detectionProfileExists: ['Detection profile', 'A detection profile describes what should alert when the technique runs.', 'No detection profile expects an alert for it, so a run cannot be judged as detected or missed.'],
+  purpleExerciseExists: ['Purple exercise', 'A built-in purple-team exercise template includes this technique.', 'No exercise template covers it, so a team cannot rehearse the response.'],
+  complianceMappingExists: ['Compliance mapping', 'A scenario that runs it is mapped to a compliance control.', 'Nothing maps it to a control, so compliance reports will not show it.'],
+  responsePlaybookExists: ['Response playbook', 'A response playbook covers this technique.', 'No playbook covers it yet.'],
+};
+export function dimRows(r) {
+  return COV_DIMS.map(function(d, i) {
+    var v = dimVal(r, i), h = DIM_HELP[d[0]];
+    return { key: d[0], label: d[1], state: v === null ? 'na' : v ? 'yes' : 'no', meaning: h[1], todo: v === false ? h[2] : '' };
+  });
+}
