@@ -262,7 +262,26 @@ CA only (`ClientCAs` has a single entry) and its TLS identity is the CA certific
   offline) -> wait for `readyToPromote` -> `ca-rotation promote --yes` -> restart server (it re-issues its own certificate from the
   new CA; agents already trust it) -> agents renew their certificates from the new CA at 75% of lifetime or when re-enrolled ->
   only when every agent is verified on the new CA, `ca-rotation retire --yes`. `rollback` is available until `retire`.
-* **Still not built / not verified:** (1) the CLI does not itself refuse `promote` when `readyToPromote` is false (the CLI is
+* **Retire gate: BUILT (2026-11-23).** Each heartbeat that arrives over mTLS records the authority key id of the client
+  certificate it came on (`agents.cert_issuer_key_id`). After `promote`, `GET /api/ca-rotation/status` returns
+  `newCAKeyId`, `agentsTotal`, `agentsOnNewCA`, `agentsPendingRenewal` and `readyToRetire` (true only when every agent that can
+  still connect holds a new-CA certificate). An agent whose issuer is unknown counts as pending, never as safe; revoked and
+  uninstalling agents are not counted; zero agents is not "ready". Limits: it reflects the certificate on the agent's last
+  heartbeat, so an agent that has not heartbeated since promote stays pending; agents on the legacy non-mTLS transport never
+  report an issuer and will block `readyToRetire` until they move to mTLS. The CLI `retire` itself is still offline and does
+  not read this; the gate is the status endpoint. Tested with real rotation output (`ca_rotation_retire_test.go`); not run
+  on a live fleet, and the heartbeat write is covered through the helper, not a full mTLS handshake.
+* **CLI gates: BUILT (2026-11-23).** `ca-rotation promote` now refuses unless every agent that can still connect trusts the new
+  root, and `ca-rotation retire` refuses unless every such agent holds a new-CA certificate. Both use the same
+  `api.CARotationReadiness` query as the status endpoint, read from `DATABASE_URL`. If readiness cannot be read (no
+  `DATABASE_URL`, query error, zero agents) the step is refused, and the refusal names who is pending and the explicit
+  override `--skip-readiness-check`, which prints a warning. `start`, `abort` and `rollback` are not gated. Tests:
+  `cmd/server/ca_rotation_gate_test.go`. Not run against a real database from the command line.
+* **Dashboard: BUILT, read-only (2026-11-23).** A "CA rotation" card on the Agents tab (below enrollment tokens) shows the
+  state, how many agents are done, who is pending, and the next step in words. It does not start, promote or retire: those stay
+  on the command line because each changes how the whole fleet is trusted. `distribute` also stays API-only. Model unit-tested
+  (`ca-rotation-model.test.mjs`); not checked in a browser against a running server.
+* **Still not built / not verified (earlier list; (1), (2) and (3) are now built, see above):** (1) the CLI does not itself refuse `promote` when `readyToPromote` is false (the CLI is
   offline, the gate is the status endpoint, so it is a procedure rule); (2) there is no per-agent "certificate was issued by the new
   CA" indicator, so deciding that `retire` is safe is a manual check; retiring early locks out any agent still holding an old-CA
   certificate; (3) no dashboard page, only the API; (4) agents that are offline during distribution only receive the root when

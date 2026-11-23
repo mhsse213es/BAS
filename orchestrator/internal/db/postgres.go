@@ -1987,6 +1987,9 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS transport text NOT NULL DEFAULT 'legacy'`,
 		// trusted_root_fps: SHA-256 fingerprints of the CA roots the agent reports trusting (planned CA rotation).
 		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS trusted_root_fps jsonb`,
+		// cert_issuer_key_id: hex authority key id of the client certificate the agent last presented over mTLS.
+		// Tells which CA signed it, so CA rotation can tell when retiring the old CA is safe. Empty = unknown.
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS cert_issuer_key_id text`,
 		// superseded_at: set when an expired certificate has been used once for restricted recovery (audit F-03/F-06).
 		`ALTER TABLE agent_certificates ADD COLUMN IF NOT EXISTS superseded_at timestamptz`,
 

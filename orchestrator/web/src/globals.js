@@ -12,6 +12,7 @@ import { setTblQuery, setTblClear, setTblPer, setTblPage, setTblSort, setTblCols
 import { exTblQuery, exTblClear, exTblPer, exTblPage, exTblSort, exTblCols, exTblColToggle, exTblSelectRow, exTblSelectAll, exTblClearSel, exTblExport, exTblExportSel, exRowKeydown } from './features/ex-view.js';
 import { closeAdvDrawer, closeAdvRunModal, closeTmplRun, confirmAdversaryRun, confirmTmplRun, loadAdversariesStop, openAdvDrawer, openAdvRunModal, openTmplRun, renderAdvRunWarn, renderAdversaryLibrary, renderTmplOSCompat, setTmplFilter, setTmplTargetMode, tmplGroupChange, tmplRunModeChange, tmplSelAgentChange, toggleAdversarySection } from './features/adversaries.js';
 import { clearEnrollmentTokens, copyEnrollmentToken, downloadEnrollmentTokensCsv, generateEnrollmentTokens } from './features/enroll-tokens.js';
+import { refreshCARotation } from './features/ca-rotation.js';
 import { closeAllowReinstallModal, closeReinstateAgentModal, closeRemoveAgentModal, closeRevokeAgentModal, closeStopAgentModal, closeUninstallAgentModal, submitAllowReinstall, submitReinstateAgent, submitRemoveAgent, submitRevokeAgent, submitStopAgent, submitUninstallAgent, triggerTicketingSync } from './features/agent-actions.js';
 import { closeAgentDetail, closeAgentDetailOnBackdrop, exportCompliance, filterControls, loadAgtLogs, loadAgtLogsTelemetryMetric, loadComplianceReport, openComplianceDoc, setAgentState, showAgentTab, toggleEvidence, updateLinuxDownloadCmd } from './features/agent-drawer.js';
 import { agentGroupMenuPick } from './features/attack-path.js';
@@ -137,6 +138,7 @@ export const ACTIONS = {
   closeCovDrawerOnBackdrop,
   recalcCoverage,
   recheckFactoryHealth,
+  refreshCARotation,
   setVelocityWindow,
   apiInvSelect,
   segRefresh,

@@ -205,7 +205,7 @@ func main() {
 		if dir == "" {
 			dir = "/etc/audspect/pki"
 		}
-		os.Exit(runCARotation(os.Args[2:], dir, os.Stdout))
+		os.Exit(runCARotation(os.Args[2:], dir, os.Stdout, databaseRotationCheck(dir)))
 	}
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
