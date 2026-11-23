@@ -6480,6 +6480,564 @@
     "status": "not_required_non_destructive"
   },
   {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 7,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 8,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 9,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 10,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 11,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 12,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 13,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 14,
+    "technique_id": "T1486",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 15,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 16,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 17,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 18,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 19,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 20,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 21,
+    "technique_id": "T1562.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 22,
+    "technique_id": "T1562.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 23,
+    "technique_id": "T1562.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 24,
+    "technique_id": "T1562.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 25,
+    "technique_id": "T1021.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 26,
+    "technique_id": "T1562.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 27,
+    "technique_id": "T1562.004",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 28,
+    "technique_id": "T1003.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 29,
+    "technique_id": "T1486",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 30,
+    "technique_id": "T1204.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 31,
+    "technique_id": "T1566.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 32,
+    "technique_id": "T1055",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 33,
+    "technique_id": "T1027",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 34,
+    "technique_id": "T1059.005",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 35,
+    "technique_id": "T1569.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 36,
+    "technique_id": "T1546.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 37,
+    "technique_id": "T1068",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 38,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 39,
+    "technique_id": "T1218.007",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 40,
+    "technique_id": "T1059",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 41,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 42,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 43,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 44,
+    "technique_id": "T1486",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 45,
+    "technique_id": "T1486",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 46,
+    "technique_id": "T1486",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 47,
+    "technique_id": "T1486",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 48,
+    "technique_id": "T1486",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 49,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 50,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 51,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 52,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 53,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 54,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 55,
+    "technique_id": "T1562.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 56,
+    "technique_id": "T1562.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 57,
+    "technique_id": "T1562.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 58,
+    "technique_id": "T1548.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 59,
+    "technique_id": "T1210",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 60,
+    "technique_id": "T1003.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 61,
+    "technique_id": "T1059.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 62,
+    "technique_id": "T1562.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 63,
+    "technique_id": "T1562.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 64,
+    "technique_id": "T1557.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 65,
+    "technique_id": "T1542",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 66,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 67,
+    "technique_id": "T1562.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "endpoint-mastery/em-01-control-validation.yaml",
+    "index": 68,
+    "technique_id": "T1021.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
     "scenario": "endpoint-mastery/em-02-attack-behavioral-depth.yaml",
     "index": 0,
     "technique_id": "T1059.001",
