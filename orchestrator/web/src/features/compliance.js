@@ -214,6 +214,8 @@ export function askText(title, label, initial, confirmLabel, cb, opts) {
   openConfirmDiffModal(title, body, function() {
     var raw = String((document.getElementById('ask-input') || {}).value || '');
     var v = opts.password ? raw : raw.trim();
+    // A typed password must not linger in the (hidden) dialog's DOM after it has been read.
+    if (opts.password) { var pin = document.getElementById('ask-input'); if (pin) pin.value = ''; }
     if (v && opts.minLength && v.length < opts.minLength) { askText(title, label, '', confirmLabel, cb, opts); var le = document.getElementById('ask-err'); if (le) { le.textContent = 'Use at least ' + opts.minLength + ' characters.'; le.hidden = false; } return; }
     if (!v && !opts.allowEmpty) { askText(title, label, initial, confirmLabel, cb, opts); var e = document.getElementById('ask-err'); if (e) { e.textContent = 'Enter a value to continue.'; e.hidden = false; } return; }
     cb(v);
@@ -226,6 +228,7 @@ export function askEnter(el, event) {
 
 export function closeConfirmDiffModal() {
   document.getElementById('confirm-diff-overlay').classList.remove('open');
+  var pin = document.getElementById('ask-input'); if (pin && pin.type === 'password') pin.value = '';
   CONFIRM_DIFF_PENDING = null;
 }
 

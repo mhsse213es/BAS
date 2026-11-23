@@ -226,9 +226,10 @@ function suggestHtml(sc) {
 
 // ── Table controls ──
 export function recTableQuery(el) { T.q = String((el && el.value) || ''); T.page = 0; paintTable(); }
-export function setRecTier(id) { T.tier = M.TIERS.indexOf(id) !== -1 ? id : 'all'; T.page = 0; paintTable(); }
-export function toggleRecNever() { T.never = !T.never; T.page = 0; paintTable(); }
-export function clearRecTableQuery() { T.q = ''; T.tier = 'all'; T.never = false; T.page = 0; var q = document.getElementById('rec-dt-q'); if (q) q.value = ''; paintTable(); }
+// A filter change drops the selection: rows you can no longer see must not stay selected (or be exported as "selected").
+export function setRecTier(id) { T.tier = M.TIERS.indexOf(id) !== -1 ? id : 'all'; T.page = 0; T.sel = {}; paintTable(); }
+export function toggleRecNever() { T.never = !T.never; T.page = 0; T.sel = {}; paintTable(); }
+export function clearRecTableQuery() { T.q = ''; T.tier = 'all'; T.never = false; T.page = 0; T.sel = {}; var q = document.getElementById('rec-dt-q'); if (q) q.value = ''; paintTable(); }
 export function setRecPer(el) { T.per = Number(el && el.value) || 10; T.page = 0; paintTable(); }
 export function recPage(d) { T.page += Number(d) || 0; paintTable(); }
 export function recSortBy(col) {
