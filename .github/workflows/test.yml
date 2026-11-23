@@ -45,7 +45,6 @@ jobs:
             fi
           fi
           python3 scripts/g1-check-no-regression.py --against /tmp/g1_base.json
-          cd scripts && python3 -m unittest test_g1_merge_classification test_g1_check_no_regression test_g1_assemble_classifier_view test_g1_kit_helpers test_g1_waivers -v
 
       - name: G1d action registry check
         working-directory: .
@@ -138,6 +137,10 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+      - name: Stage web build where the G1 tests read it (orchestrator/wwwroot, as build.ps1 does)
+        run: mkdir -p ../wwwroot && cp -r dist/. ../wwwroot/
+      - name: G1 classifier, kit-helper and waiver tests (need the web build)
+        run: cd ../../scripts && python3 -m unittest test_g1_merge_classification test_g1_check_no_regression test_g1_assemble_classifier_view test_g1_kit_helpers test_g1_waivers -v
       - name: Smoke harness (bundled build)
         env:
           SMOKE_ROOT: dist

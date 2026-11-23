@@ -183,8 +183,14 @@ class TestCanonicalEscaperCheck(unittest.TestCase):
         self._assert_fails(self.GOOD + dup, "duplicate")
 
     def test_real_index_html_passes(self):
+        # The check reads the web source, not the bundle: the bundler's output is not in the
+        # shape this checker parses, and the bundle is generated from these same sources.
         real_clf = _load("g1_classifier_real", "g1-innerhtml-sink-classifier.py")
-        errors = guard.check_canonical_escaper(real_clf.text, real_clf)
+        src = REPO_ROOT / "orchestrator" / "web" / "src"
+        files = sorted(src.rglob("*.js"))
+        self.assertTrue(files, f"no web source under {src}")
+        text = chr(10).join(p.read_text(encoding="utf-8") for p in files)
+        errors = guard.check_canonical_escaper(text, real_clf)
         self.assertEqual(errors, [])
 
 
