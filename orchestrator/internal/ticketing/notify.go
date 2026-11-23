@@ -21,6 +21,54 @@ type Notifier interface {
 	Notify(ctx context.Context, subject, body string, rt RecordType) (TicketRef, error)
 }
 
+// NoteCloser is implemented by connectors that can resolve a ticket with a caller-supplied note. Exercise
+// cleanup needs it so a drill ticket is never closed with the finding path's "technique is now prevented" text.
+type NoteCloser interface {
+	CloseWithNote(ctx context.Context, ticketID, note string) error
+}
+
+// connector returns the connector and its config for an enabled connector id.
+func (m *Manager) connector(connectorID string) (Connector, *Config, error) {
+	m.mu.RLock()
+	con, conOK := m.cons[connectorID]
+	cfg, cfgOK := m.cfgs[connectorID]
+	m.mu.RUnlock()
+	if !conOK || !cfgOK {
+		return nil, nil, fmt.Errorf("ticketing: connector %q not found or disabled", connectorID)
+	}
+	return con, cfg, nil
+}
+
+// TicketStatus reads a ticket's current status ("open", "in_progress" or "resolved") from its connector.
+func (m *Manager) TicketStatus(ctx context.Context, connectorID, ticketID string) (string, error) {
+	con, cfg, err := m.connector(connectorID)
+	if err != nil {
+		return "", err
+	}
+	st, err := con.GetStatus(ctx, ticketID)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", cfg.Provider, err)
+	}
+	return st, nil
+}
+
+// CloseExerciseTicket resolves an exercise ticket with note. It refuses a connector that cannot take a custom
+// note rather than falling back to CloseTicket, whose text describes a finding.
+func (m *Manager) CloseExerciseTicket(ctx context.Context, connectorID, ticketID, note string) error {
+	con, cfg, err := m.connector(connectorID)
+	if err != nil {
+		return err
+	}
+	c, ok := con.(NoteCloser)
+	if !ok {
+		return fmt.Errorf("ticketing: the %s connector does not support closing exercise tickets", cfg.Provider)
+	}
+	if err := c.CloseWithNote(ctx, ticketID, note); err != nil {
+		return fmt.Errorf("%s: %w", cfg.Provider, err)
+	}
+	return nil
+}
+
 // exerciseSubject returns the labelled title, cut to max characters, or an error for a blank subject.
 func exerciseSubject(subject string, max int) (string, error) {
 	subject = strings.TrimSpace(subject)

@@ -260,6 +260,15 @@ func (j *jiraConnector) AddComment(ctx context.Context, ticketID, body string) e
 }
 
 func (j *jiraConnector) CloseTicket(ctx context.Context, ticketID string) error {
+	return j.closeWithComment(ctx, ticketID, "BAS revalidation confirmed this technique is now prevented. Closing automatically.")
+}
+
+// CloseWithNote resolves an exercise ticket with its own note, so a drill is never closed with finding text.
+func (j *jiraConnector) CloseWithNote(ctx context.Context, ticketID, note string) error {
+	return j.closeWithComment(ctx, ticketID, note)
+}
+
+func (j *jiraConnector) closeWithComment(ctx context.Context, ticketID, comment string) error {
 	transID, err := j.findTransition(ctx, ticketID,
 		"Done", "Resolved", "Closed", "Close Issue", "Resolve Issue")
 	if err != nil {
@@ -271,7 +280,7 @@ func (j *jiraConnector) CloseTicket(ctx context.Context, ticketID string) error 
 			"update": map[string]any{
 				"comment": []map[string]any{
 					{"add": map[string]string{
-						"body": "BAS revalidation confirmed this technique is now prevented. Closing automatically.",
+						"body": comment,
 					}},
 				},
 			},
