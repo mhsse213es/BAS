@@ -8,4 +8,4 @@
 
 **What is not covered**
 - No maximum retention is set. Audit rows are kept indefinitely. Setting a maximum would require a purge role that can delete from `audit_logs`, which weakens the append-only guarantee. That is a decision for the operator, not a default.
-- Other log-like data is pruned on a schedule and is not covered by this policy. Raw detection blobs are pruned after 30 days (`internal/detect/retention.go`). If those count as logs for CERT-In, the 30-day prune breaks the 180-day minimum and must change first.
+- Raw detection alerts are pruned after `detect.RawRetentionDays`, which is set to the 180-day minimum (`internal/detect/retention.go`). The per-step results keep matched alerts indefinitely.
