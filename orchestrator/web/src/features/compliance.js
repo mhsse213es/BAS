@@ -187,7 +187,7 @@ export function openConfirmDiffModal(title, diffHtml, onConfirm, opts) {
   var sub = document.getElementById('confirm-diff-sub');
   if (sub) sub.textContent = opts.sub || 'Review what will change before saving.';
   var btn = document.getElementById('confirm-diff-submit-btn');
-  if (btn) btn.textContent = opts.confirmLabel || 'Save';
+  if (btn) { btn.textContent = opts.confirmLabel || 'Save'; btn.classList.toggle('is-danger', !!opts.danger); }
   CONFIRM_DIFF_PENDING = onConfirm;
   document.getElementById('confirm-diff-overlay').classList.add('open');
 }

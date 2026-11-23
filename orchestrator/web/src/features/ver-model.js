@@ -49,7 +49,7 @@ export function controlRows(items) {
   });
   return Object.keys(by).sort().map(function(d) {
     var p = Math.round(by[d].det / by[d].total * 100);
-    return { label: cap(d), pct: p, tone: p >= 80 ? 'ok' : p >= 50 ? 'warn' : 'bad', text: p + '%' };
+    return { label: cap(d) + ' (' + by[d].det + '/' + by[d].total + ')', pct: p, tone: p >= 80 ? 'ok' : p >= 50 ? 'warn' : 'bad', text: p + '%' };
   });
 }
 

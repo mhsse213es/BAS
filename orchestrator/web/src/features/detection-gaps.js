@@ -1,7 +1,8 @@
-import { apicall } from '../core/api.js';
+import { apicall, apicallOk } from '../core/api.js';
+import { openConfirmDiffModal } from './compliance.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
-import { showToast } from '../core/util.js';
+import { showToast, fmtDate } from '../core/util.js';
 import { pill, empty } from '../core/kit.js';
 import { setDisplay } from '../core/inline-style.js';
 import * as G from './gap-model.js';
@@ -37,8 +38,8 @@ export function gapLoad(runId) {
   box.innerHTML = '<section class="rk-card">' + empty('refresh', 'Loading detection gaps…') + '</section>';
   var seq = ++S.seq; // a slow answer for an earlier run must not overwrite the current one
   // Deployments are secondary: if they cannot be loaded the gaps still show, without the tracking.
-  var depsReq = apicall(G.deploymentsUrl(S.runId)).catch(function() { return null; });
-  Promise.all([apicall(G.gapsUrl(S.runId, S.backend)), depsReq]).then(function(res) {
+  var depsReq = apicallOk(G.deploymentsUrl(S.runId)).catch(function() { return null; });
+  Promise.all([apicallOk(G.gapsUrl(S.runId, S.backend)), depsReq]).then(function(res) {
     var d = res[0], deps = res[1];
     if (seq !== S.seq) return;
     if (d && d.error) { box.innerHTML = '<section class="rk-card">' + empty('alert', 'Could not load detection gaps', d.error) + '</section>'; return; }
@@ -47,9 +48,10 @@ export function gapLoad(runId) {
     render();
   }).catch(function(e) {
     if (seq !== S.seq) return;
-    box.innerHTML = '<section class="rk-card">' + empty('alert', 'Could not load detection gaps', e.message) + '</section>';
+    box.innerHTML = '<section class="rk-card">' + empty('alert', 'Could not load detection gaps', e.message || 'unknown error') + '<div class="dc-retry"><button type="button" class="btn btn-outline btn-sm"' + on('click', 'gapReload') + '>Try again</button></div></section>';
   });
 }
+export function gapReload() { if (S.runId) gapLoad(S.runId); }
 
 function backendSelect() {
   var opts = '<option value="">All SIEMs</option>' + G.BACKENDS.map(function(b) {
@@ -84,7 +86,7 @@ function deploymentRow(d) {
     ? ' <button type="button" class="btn btn-sm btn-primary"' + on('click', 'gapRetest', d.id) + '>Re-test</button>' : '';
   var link = d.retestRunId ? ' <span class="tiny muted">re-test run ' + x(String(d.retestRunId).slice(0, 8)) + '</span>' : '';
   return '<div class="gap-dep"><div>' + pill(d.status, G.deploymentTone(d.status)) + ' <b>' + x(d.ruleTitle || d.ruleId) + '</b> · ' +
-    x(d.backendLabel || d.backend) + ' <span class="tiny muted">' + x(d.ruleId) + ' · ' + x(d.deployedAt || '') + (d.deployedBy ? ' · ' + x(d.deployedBy) : '') + '</span>' +
+    x(d.backendLabel || d.backend) + ' <span class="tiny muted">' + x(d.ruleId) + ' · ' + x(d.deployedAt ? fmtDate(d.deployedAt) : '') + (d.deployedBy ? ' · ' + x(d.deployedBy) : '') + '</span>' +
     retest + link + '</div><div class="tiny muted">' + x(d.detail || '') + (d.note ? ' Note: ' + x(d.note) : '') + '</div></div>';
 }
 
@@ -143,12 +145,11 @@ function render() {
 // "Deployed" until a re-test is linked and reviewed.
 export function gapDeploy(techniqueId, ruleId, backend) {
   if (!S.runId) return;
-  apicall(G.deploymentsUrl(S.runId), { method: 'POST', body: JSON.stringify({ techniqueId: techniqueId, ruleId: ruleId, backend: backend }) })
-    .then(function(r) {
-      if (r && r.error) throw new Error(r.error);
+  apicallOk(G.deploymentsUrl(S.runId), { method: 'POST', body: JSON.stringify({ techniqueId: techniqueId, ruleId: ruleId, backend: backend }) })
+    .then(function() {
       showToast('Deployment recorded. Re-test to find out whether the gap is closed.', 'ok');
       gapLoad(S.runId);
-    }).catch(function(e) { showToast(e.message, 'err'); });
+    }).catch(function(e) { showToast('Could not record the deployment: ' + (e.message || 'error'), 'err'); });
 }
 
 // Starts the re-test through the normal run endpoint (same scenario, agent and mode as the run that found the gap,
@@ -156,17 +157,30 @@ export function gapDeploy(techniqueId, ruleId, backend) {
 export function gapRetest(deploymentId) {
   var plan = G.retestPlan(S.deps.retest);
   if (!plan || !S.runId) { showToast('This run cannot be re-tested from here.', 'err'); return; }
-  for (var i = 0; i < plan.confirms.length; i++) { if (!confirm(plan.confirms[i])) return; }
+  var r = S.deps.retest || {};
+  // One in-page confirmation that says what will run, then one more for each warning a live or lab run needs.
+  var steps = ['This starts a new run of scenario ' + (r.scenarioId || '') + ' on agent ' + (r.agentId || '') + ' in ' + (plan.body.mode || 'posture') + ' mode, to find out whether the deployed rule closes the gap.'].concat(plan.confirms);
+  var ask = function(i) {
+    if (i >= steps.length) { startRetest(deploymentId, plan); return; }
+    var last = i === steps.length - 1;
+    openConfirmDiffModal(i === 0 ? 'Start the re-test?' : 'Confirm before continuing',
+      '<p class="tiny">' + x(steps[i]).replace(/[\r\n]+/g, '</p><p class="tiny">') + '</p>',
+      function() { ask(i + 1); },
+      { sub: steps.length > 1 ? 'Step ' + (i + 1) + ' of ' + steps.length : 'It runs on the agent now.', confirmLabel: last ? 'Start re-test' : 'Continue' });
+  };
+  ask(0);
+}
+
+function startRetest(deploymentId, plan) {
   var runId = S.runId;
-  apicall('/api/scenarios/' + encodeURIComponent(plan.scenarioId) + '/run', { method: 'POST', body: JSON.stringify(plan.body) })
+  apicallOk('/api/scenarios/' + encodeURIComponent(plan.scenarioId) + '/run', { method: 'POST', body: JSON.stringify(plan.body) })
     .then(function(started) {
-      if (!started || started.error || !started.runId) throw new Error((started && started.error) || 'The re-test run did not start');
-      return apicall(G.retestLinkUrl(runId, deploymentId), { method: 'POST', body: JSON.stringify({ retestRunId: started.runId }) });
-    }).then(function(linked) {
-      if (linked && linked.error) throw new Error(linked.error);
+      if (!started || !started.runId) throw new Error('The re-test run did not start');
+      return apicallOk(G.retestLinkUrl(runId, deploymentId), { method: 'POST', body: JSON.stringify({ retestRunId: started.runId }) });
+    }).then(function() {
       showToast('Re-test started. Review its verifications to find out whether the gap is closed.', 'ok');
       gapLoad(runId);
-    }).catch(function(e) { showToast(e.message, 'err'); });
+    }).catch(function(e) { showToast('Re-test did not start: ' + (e.message || 'error'), 'err'); });
 }
 
 export function gapSetBackend(elm) {
@@ -174,13 +188,18 @@ export function gapSetBackend(elm) {
   if (S.runId) gapLoad(S.runId);
 }
 
-function copyText(text) {
-  if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text);
+function legacyCopy(text) {
   return new Promise(function(resolve, reject) {
     var ta = document.createElement('textarea');
-    ta.value = text; document.body.appendChild(ta); ta.select();
+    ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
     try { document.execCommand('copy') ? resolve() : reject(new Error('copy blocked')); } catch (e) { reject(e); } finally { document.body.removeChild(ta); }
   });
+}
+// The clipboard API needs a secure page and the browser's permission; when it refuses, the older route still works.
+function copyText(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text).catch(function() { return legacyCopy(text); });
+  return legacyCopy(text);
 }
 
 // Fetches the query as text from the export endpoint (the server owns what a rule's query is) and copies it.
@@ -194,7 +213,7 @@ export function gapCopy(exportUrl) {
     return copyText(q.text).then(function() {
       showToast(q.source ? 'Query copied. It only matches if you collect: ' + q.source : 'Query copied. Generic query: adapt the field names to your schema.', 'ok');
     });
-  }).catch(function(e) { showToast(e.message, 'err'); });
+  }).catch(function(e) { showToast('Could not copy the query: ' + (e.message || 'error') + '. Select it and copy by hand.', 'err'); });
 }
 
 export function gapExport() {

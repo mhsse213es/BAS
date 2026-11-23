@@ -1,4 +1,6 @@
-import { apicall } from '../core/api.js';
+import { apicallOk } from '../core/api.js';
+import { openConfirmDiffModal } from './compliance.js';
+import { fmtDate } from '../core/util.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { showToast } from '../core/util.js';
@@ -12,7 +14,7 @@ import * as M from './dc-model.js';
 // (/api/detectverify/configs) does the work and enforces who may. Secrets are never shown back: an edit form
 // only learns that one is stored and keeps it unless a new value is typed.
 
-var S = { list: [], perms: null, loaded: false, editing: null /* saved connector, or null when adding */ };
+var S = { list: [], perms: null, loaded: false, editing: null /* saved connector, or null when adding */, open: false, tests: {} /* id -> { ok, text, at } from this session's Test clicks */, busy: {} };
 
 function el(id) { return document.getElementById(id); }
 
@@ -32,17 +34,49 @@ export function dcEnabledCount() {
   return S.list.filter(function(c) { return c.enabled; }).length;
 }
 
+export function dcReload() { dcLoad(); }
+
 function dcLoad() {
   var box = el('dc-list');
   if (!box) return;
-  apicall('/api/detectverify/configs').then(function(list) {
+  apicallOk('/api/detectverify/configs').then(function(list) {
     S.list = Array.isArray(list) ? list : [];
     S.loaded = true;
+    // First load: open the card only when there is nothing yet, so the next step is obvious. Otherwise it stays folded.
+    if (!S.seen) { S.seen = true; S.open = !S.list.length; }
+    paintFrame();
     renderList();
   }).catch(function(e) {
     S.loaded = false;
-    box.innerHTML = empty('alert', 'Could not load detection connectors', e.message);
+    S.open = true;
+    paintFrame();
+    box.innerHTML = empty('alert', 'Could not load detection connectors', e.message || 'unknown error') +
+      '<div class="dc-retry"><button type="button" class="btn btn-outline btn-sm"' + on('click', 'dcReload') + '>Try again</button></div>';
   });
+}
+
+// The fold: header summary ("1 of 2 enabled") and the Show / Hide button.
+function paintFrame() {
+  var body = el('dc-body'), sum = el('dc-sum'), tg = el('dc-toggle');
+  if (body) setDisplay(body, S.open ? '' : 'none');
+  if (tg) { tg.textContent = S.open ? 'Hide' : 'Manage'; tg.setAttribute('aria-expanded', S.open ? 'true' : 'false'); }
+  if (sum) {
+    var n = S.list.length, on_ = S.list.filter(function(c) { return c.enabled; }).length;
+    sum.textContent = !S.loaded ? '' : !n ? 'None yet' : on_ + ' of ' + n + ' enabled';
+  }
+}
+export function dcToggle() { S.open = !S.open; paintFrame(); }
+// Called when something needs a connector (Verify now with none enabled): open the card and bring it into view.
+export function dcReveal() {
+  S.open = true; paintFrame();
+  var c = el('dc-card');
+  if (c && c.scrollIntoView) c.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function testCell(c) {
+  var t = S.tests[c.id];
+  if (!t) return '<span class="tiny muted">Not tested this session</span>';
+  return '<span class="tiny ' + (t.ok ? 'dc-ok' : 'dc-bad') + '" title="' + x(t.text) + '">' + (t.ok ? 'Connected' : 'Failed: ' + x(t.text.slice(0, 70))) + ' · ' + x(t.at) + '</span>';
 }
 
 function renderList() {
@@ -50,25 +84,27 @@ function renderList() {
   if (!box) return;
   if (!S.list.length) {
     box.innerHTML = empty('layers', 'No detection connector yet',
-      'Add the SIEM or XDR your endpoints report to. Runs are then checked against it, instead of an analyst checking each one by hand.');
+      'Without one, an analyst has to attest every item by hand.');
     return;
   }
   var rows = S.list.map(function(c) {
     var p = M.providerById(c.provider);
     var mode = M.modeLabel(c);
     var tone = !c.enabled ? 'muted' : c.autoVerify ? 'ok' : 'info';
+    var busy = !!S.busy[c.id];
     return '<tr>' +
       '<td><b>' + x(c.name) + '</b></td>' +
       '<td>' + x(p ? p.label : c.provider) + '</td>' +
-      '<td class="muted">' + x(M.rowSummary(c)) + '</td>' +
+      '<td class="muted dc-target">' + x(M.rowSummary(c)) + '</td>' +
       '<td>' + pill(mode, tone) + '</td>' +
+      '<td>' + testCell(c) + '</td>' +
       '<td class="dc-actions">' +
-        '<button class="btn btn-sm btn-outline"' + on('click', 'dcTest', c.id) + '>Test</button> ' +
-        '<button class="btn btn-sm btn-outline"' + on('click', 'dcEdit', c.id) + '>Edit</button> ' +
-        '<button class="btn btn-sm btn-outline"' + on('click', 'dcDelete', c.id) + '>Delete</button>' +
+        '<button type="button" class="btn btn-sm btn-outline"' + on('click', 'dcTest', c.id) + (busy ? ' disabled' : '') + '>' + (busy ? 'Testing…' : 'Test') + '</button> ' +
+        '<button type="button" class="btn btn-sm btn-outline"' + on('click', 'dcEdit', c.id) + '>Edit</button> ' +
+        '<button type="button" class="btn btn-sm btn-outline-red"' + on('click', 'dcDelete', c.id) + '>Delete</button>' +
       '</td></tr>';
   }).join('');
-  box.innerHTML = '<div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Provider</th><th>Target</th><th>Mode</th><th></th></tr></thead>' +
+  box.innerHTML = '<div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Provider</th><th>Target</th><th>Mode</th><th>Last test</th><th></th></tr></thead>' +
     '<tbody>' + rows + '</tbody></table></div>';
 }
 
@@ -84,8 +120,8 @@ function fieldHtml(key, existing, values) {
   var stored = existing && ((key === 'clientSecret' && existing.hasClientSecret) || (key === 'apiToken' && existing.hasApiToken));
   var placeholder = meta.secret ? (stored ? 'Stored: leave blank to keep it' : '') : meta.placeholder;
   return '<div><div class="conn-cfg-label">' + x(meta.label) + '</div>' +
-    '<input id="' + id + '" type="' + (meta.secret ? 'password' : 'text') + '" class="inp-sm u-w100" autocomplete="off"' +
-    ' value="' + (meta.secret ? '' : x(values[key] || '')) + '" placeholder="' + x(placeholder) + '"></div>';
+    '<input id="' + id + '" type="' + (meta.secret ? 'password' : 'text') + '" class="inp-sm u-w100" autocomplete="' + (meta.secret ? 'new-password' : 'off') + '"' +
+    ' value="' + (meta.secret ? '' : x(values[key] || '')) + '" placeholder="' + x(placeholder) + '"' + (meta.secret ? ' data-lpignore="true"' : '') + '></div>';
 }
 
 function renderForm(provider, values) {
@@ -101,7 +137,7 @@ function renderForm(provider, values) {
   var tls = keys.indexOf('insecureTls') >= 0 ? fieldHtml('insecureTls', editing, values) : '';
   host.innerHTML = '<div class="conn-cfg-card">' +
     '<div class="dc-form-head"><b>' + (editing ? 'Edit connector' : 'Add connector') + '</b>' +
-    '<button class="btn btn-outline btn-sm"' + on('click', 'dcCancel') + '>Cancel</button></div>' +
+    '</div>' +
     '<div class="dc-grid">' +
       '<div><div class="conn-cfg-label">Provider</div><select id="dc-provider" class="inp-sm u-w100"' + (editing ? ' disabled' : '') + on('change', 'dcProviderChanged') + '>' + opts + '</select></div>' +
       '<div><div class="conn-cfg-label">Name</div><input id="dc-name" type="text" class="inp-sm u-w100" value="' + x(values.name || '') + '" placeholder="e.g. Prod Sentinel"></div>' +
@@ -115,7 +151,8 @@ function renderForm(provider, values) {
     '</div>' +
     '<label class="dc-check"><input type="checkbox" id="dc-enabled"' + (values.enabled === false ? '' : ' checked') + '> Enabled</label>' +
     '<label class="dc-check"><input type="checkbox" id="dc-auto"' + (values.autoVerify ? ' checked' : '') + '> Check every finished run automatically</label>' +
-    '<div class="dc-form-foot"><button class="btn btn-primary btn-sm"' + on('click', 'dcSave') + '>Save</button></div>' +
+    '<div class="dc-err is-hidden" id="dc-err" role="alert"></div>' +
+    '<div class="dc-form-foot"><button type="button" id="dc-save" class="btn btn-primary btn-sm"' + on('click', 'dcSave') + '>' + (editing ? 'Save changes' : 'Save connector') + '</button><button type="button" class="btn btn-outline btn-sm"' + on('click', 'dcCancel') + '>Cancel</button></div>' +
     '</div>';
   setDisplay(host, '');
 }
@@ -169,34 +206,58 @@ export function dcCancel() {
   if (host) { host.innerHTML = ''; setDisplay(host, 'none'); }
 }
 
+function dcFormError(msg) {
+  var e = el('dc-err');
+  if (!e) { showToast(msg, 'err'); return; }
+  e.textContent = msg; e.classList.remove('is-hidden');
+}
+
 export function dcSave() {
   var editing = S.editing;
   var provider = editing ? editing.provider : currentProvider();
   var values = readValues(provider);
   var problem = M.validate(provider, values, editing);
-  if (problem) { showToast(problem, 'err'); return; }
+  if (problem) { dcFormError(problem); return; }
+  var e0 = el('dc-err'); if (e0) e0.classList.add('is-hidden');
   var body = M.buildBody(provider, values, editing);
   var url = editing ? '/api/detectverify/configs/' + encodeURIComponent(editing.id) : '/api/detectverify/configs';
-  apicall(url, { method: editing ? 'PUT' : 'POST', body: JSON.stringify(body) }).then(function() {
-    showToast('Connector saved. Use Test to check the connection.', 'ok');
+  var btn = el('dc-save'); if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  apicallOk(url, { method: editing ? 'PUT' : 'POST', body: JSON.stringify(body) }).then(function() {
+    showToast((editing ? 'Connector updated' : 'Connector added') + '. Use Test to check the connection.', 'ok');
+    S.open = true;
     dcCancel();
     dcLoad();
-  }).catch(function(e) { showToast(e.message, 'err'); });
+  }).catch(function(e) {
+    if (btn) { btn.disabled = false; btn.textContent = editing ? 'Save changes' : 'Save connector'; }
+    dcFormError('Could not save: ' + (e.message || 'error'));
+  });
 }
 
+function now() { return fmtDate(new Date().toISOString()); }
+
 export function dcTest(id) {
-  showToast('Testing connection…', 'ok');
-  apicall('/api/detectverify/configs/' + encodeURIComponent(id) + '/test', { method: 'POST' }).then(function(r) {
-    showToast(r && r.ok ? 'Connection OK' : 'Connection failed: ' + ((r && r.error) || 'unknown error'), r && r.ok ? 'ok' : 'err');
-  }).catch(function(e) { showToast(e.message, 'err'); });
+  if (S.busy[id]) return;
+  S.busy[id] = true; renderList();
+  apicallOk('/api/detectverify/configs/' + encodeURIComponent(id) + '/test', { method: 'POST' }).then(function(r) {
+    var ok = !!(r && r.ok);
+    S.tests[id] = { ok: ok, text: ok ? 'Connection OK' : ((r && r.error) || 'unknown error'), at: now() };
+    showToast(ok ? 'Connection OK' : 'Connection failed: ' + S.tests[id].text, ok ? 'ok' : 'err');
+  }).catch(function(e) {
+    S.tests[id] = { ok: false, text: e.message || 'error', at: now() };
+    showToast('Connection test failed: ' + (e.message || 'error'), 'err');
+  }).then(function() { delete S.busy[id]; renderList(); });
 }
 
 export function dcDelete(id) {
   var c = S.list.filter(function(r) { return r.id === id; })[0];
   if (!c) return;
-  if (!confirm('Delete the connector "' + c.name + '"? Runs will no longer be checked against it.')) return;
-  apicall('/api/detectverify/configs/' + encodeURIComponent(id), { method: 'DELETE' }).then(function() {
-    showToast('Connector deleted', 'ok');
-    dcLoad();
-  }).catch(function(e) { showToast(e.message, 'err'); });
+  openConfirmDiffModal('Delete the connector "' + c.name + '"?',
+    '<p class="tiny">Runs will no longer be checked against it. Verifications it already recorded are kept.' + (c.autoVerify && c.enabled ? ' It is set to check every finished run automatically.' : '') + '</p>',
+    function() {
+      apicallOk('/api/detectverify/configs/' + encodeURIComponent(id), { method: 'DELETE' }).then(function() {
+        showToast('Connector deleted', 'ok');
+        delete S.tests[id];
+        dcLoad();
+      }).catch(function(e) { showToast('Could not delete: ' + (e.message || 'error'), 'err'); });
+    }, { sub: 'This removes the connector and its stored credentials.', confirmLabel: 'Delete connector', danger: true });
 }

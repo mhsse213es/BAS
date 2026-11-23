@@ -2338,28 +2338,6 @@
       <div id="tab-verification" class="is-hidden g3-page">
         <div id="hero-verification"></div>
 
-        <div class="rk-card vf-info">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>
-          <span>Attest whether off-host controls (SIEM, identity, cloud, DLP, network) actually detected each simulated technique. Attestations are immutable, evidence is SHA-256 hashed at upload, and every action is written to the audit log.</span>
-        </div>
-
-        <div class="vf-flow">
-          <div class="vf-fs"><span class="vf-fs-n">1</span><span class="vf-fs-i"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg></span><div><b>Select a run</b><div class="muted">Pick the run whose techniques you will attest</div></div></div>
-          <span class="vf-fs-arrow">&rarr;</span>
-          <div class="vf-fs"><span class="vf-fs-n">2</span><span class="vf-fs-i"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></span><div><b>Attest each technique</b><div class="muted">Detected by SIEM, identity, cloud, DLP or network?</div></div></div>
-          <span class="vf-fs-arrow">&rarr;</span>
-          <div class="vf-fs"><span class="vf-fs-n">3</span><span class="vf-fs-i"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0"/></svg></span><div><b>Upload evidence</b><div class="muted">SHA-256 hashed at upload, immutable afterwards</div></div></div>
-          <span class="vf-fs-arrow">&rarr;</span>
-          <div class="vf-fs"><span class="vf-fs-n">4</span><span class="vf-fs-i"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4M10 12h6M10 16h6"/></svg></span><div><b>Audit log</b><div class="muted">Every action is written to the audit log</div></div></div>
-        </div>
-
-        <section class="rk-card flush dc-card is-hidden" id="dc-card">
-          <div class="rk-hd"><h2>Detection connectors</h2><button type="button" class="btn btn-sm btn-primary" data-on-click="dcAdd">+ Add connector</button></div>
-          <p class="dc-sub">Connect the SIEM or XDR your endpoints report to. The server then checks each run against it automatically; otherwise an analyst has to attest every item by hand.</p>
-          <div id="dc-list"></div>
-          <div id="dc-form" class="is-hidden"></div>
-        </section>
-
         <div class="rk-card vf-run">
           <div class="vf-run-pick">
             <div class="vf-run-lbl">RUN</div>
@@ -2375,6 +2353,28 @@
         </div>
 
         <div id="gap-panel" class="gap-panel is-hidden"></div>
+
+        <section class="rk-card flush dc-card is-hidden" id="dc-card">
+          <div class="rk-hd"><h2>Detection connectors</h2><span class="muted dc-sum" id="dc-sum"></span><div class="dc-hd-acts"><button type="button" class="btn btn-sm btn-primary" data-on-click="dcAdd">+ Add connector</button><button type="button" class="btn btn-sm btn-outline" id="dc-toggle" data-on-click="dcToggle" aria-expanded="false" aria-controls="dc-body">Manage</button></div></div><div id="dc-body" class="is-hidden">
+          <p class="dc-sub">Connect the SIEM or XDR your endpoints report to. The server then checks each run against it automatically; otherwise an analyst has to attest every item by hand.</p>
+          <div id="dc-list"></div>
+          <div id="dc-form" class="is-hidden"></div>
+        </div></section>
+
+        <details class="rk-card vf-how"><summary>How verification works</summary>
+<div class="vf-info">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>
+          <span>Attest whether off-host controls (SIEM, identity, cloud, DLP, network) actually detected each simulated technique. Attestations are immutable, evidence is SHA-256 hashed at upload, and every action is written to the audit log.</span>
+        </div>
+
+        <div class="vf-flow">
+          <div class="vf-fs"><span class="vf-fs-n">1</span><span class="vf-fs-i"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg></span><div><b>Select a run</b><div class="muted">Pick the run whose techniques you will attest</div></div></div>
+          <div class="vf-fs"><span class="vf-fs-n">2</span><span class="vf-fs-i"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></span><div><b>Attest each technique</b><div class="muted">Detected by SIEM, identity, cloud, DLP or network?</div></div></div>
+          <div class="vf-fs"><span class="vf-fs-n">3</span><span class="vf-fs-i"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0"/></svg></span><div><b>Upload evidence</b><div class="muted">SHA-256 hashed at upload, immutable afterwards</div></div></div>
+          <div class="vf-fs"><span class="vf-fs-n">4</span><span class="vf-fs-i"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4M10 12h6M10 16h6"/></svg></span><div><b>Audit log</b><div class="muted">Every action is written to the audit log</div></div></div>
+        </div>
+
+        </details>
       </div>
 
       <div id="tab-reports" class="is-hidden g3-page">

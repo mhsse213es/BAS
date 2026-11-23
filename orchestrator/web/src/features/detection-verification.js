@@ -1,4 +1,5 @@
-import { apicall } from '../core/api.js';
+import { apicall, apicallOk } from '../core/api.js';
+import { openConfirmDiffModal } from './compliance.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { fmtDate, showToast } from '../core/util.js';
@@ -9,7 +10,7 @@ import { setHeroStat } from './shell-ui.js';
 import * as M from './ver-model.js';
 import { setDisplay } from '../core/inline-style.js';
 import * as DC from './dc-model.js';
-import { dcShow, dcEnabledCount } from './detection-connectors.js';
+import { dcShow, dcEnabledCount, dcReveal } from './detection-connectors.js';
 import { gapLoad } from './detection-gaps.js';
 
 
@@ -50,18 +51,32 @@ export function loadVerificationTab() {
   }).catch(function(){ VF.perms = []; });
   // The connectors card and the Verify now button depend on what the caller may do.
   permsReady.then(function() { dcShow(VF.perms); vfSyncVerifyNow(); });
-  // Populate the run selector (reuse the runs list).
-  apicall('/api/scenarios/runs').then(function(runs) {
+  loadRuns();
+}
+
+function queueError(title, msg, retryAction) {
+  return card('', empty('alert', title, msg) + '<div class="vf-retry"><button type="button" class="btn btn-outline btn-sm"' + on('click', retryAction) + '>Try again</button></div>');
+}
+
+// The run selector. A failed list is shown where the queue would be, with a retry, not as a vanishing toast.
+function loadRuns() {
+  var box = document.getElementById('vf-queue');
+  apicallOk('/api/scenarios/runs').then(function(runs) {
     var sel = document.getElementById('vf-run');
     if (!sel) return;
+    runs = Array.isArray(runs) ? runs : [];
+    VF.runs = runs;
     var cur = VF.runId;
-    var opts = '<option value="">Select a run…</option>' + (runs || []).map(function(r) {
+    sel.innerHTML = '<option value="">' + (runs.length ? 'Select a run…' : 'No runs yet') + '</option>' + runs.map(function(r) {
       var label = (r.name || r.id) + ' · ' + (r.agentId || '') + ' · ' + fmtDate(r.startedAt);
       return '<option value="' + x(r.id) + '"' + (r.id === cur ? ' selected' : '') + '>' + x(label) + '</option>';
     }).join('');
-    sel.innerHTML = opts;
     if (cur) vfLoadQueue();
-  }).catch(function(e){ showToast(e.message, 'err'); });
+    else if (box && !runs.length) box.innerHTML = card('', empty('check', 'No runs yet', 'Run a scenario first. Its off-host expectations then appear here to be verified.'));
+  }).catch(function(e) {
+    if (box && !VF.runId) box.innerHTML = queueError('Could not load runs', e.message || 'unknown error', 'loadVerificationTab');
+    else showToast('Could not refresh the run list: ' + (e.message || 'error'), 'err');
+  });
 }
 
 // Verify now is offered only to someone allowed to run it, and only once a run is picked.
@@ -72,14 +87,24 @@ function vfSyncVerifyNow() {
 
 // Asks the server to check the picked run against the enabled detection connectors. The server does it in the
 // background and attests what it finds, so the queue is reloaded once after a short wait instead of at once.
+function vfVerifyBusy(on_) {
+  var b = document.getElementById('vf-verify-now');
+  if (!b) return;
+  b.disabled = !!on_;
+  b.textContent = on_ ? 'Checking…' : 'Verify now';
+}
 export function vfVerifyNow() {
   var runId = VF.runId;
   if (!runId) { showToast('Pick a run first.', 'err'); return; }
-  if (dcEnabledCount() === 0) { showToast('No detection connector is enabled. Add one above, then try again.', 'err'); return; }
-  apicall('/api/detectverify/run/' + encodeURIComponent(runId), { method: 'POST' }).then(function(d) {
-    showToast((d && d.message) || 'Verification started.', 'ok');
-    setTimeout(function() { if (VF.runId === runId) vfLoadQueue(); }, 10000);
-  }).catch(function(e) { showToast(e.message, 'err'); });
+  if (dcEnabledCount() === 0) { showToast('No detection connector is enabled. Add or enable one under Detection connectors.', 'err'); dcReveal(); return; }
+  vfVerifyBusy(true);
+  apicallOk('/api/detectverify/run/' + encodeURIComponent(runId), { method: 'POST' }).then(function(d) {
+    showToast(((d && d.message) || 'Verification started.') + ' The list refreshes in a few seconds.', 'ok');
+    setTimeout(function() {
+      vfVerifyBusy(false);
+      if (VF.runId === runId) vfReloadQuiet();
+    }, 10000);
+  }).catch(function(e) { vfVerifyBusy(false); showToast('Could not start verification: ' + (e.message || 'error'), 'err'); });
 }
 
 // The banner numbers; with no run (or a failed load) every chip shows an em dash.
@@ -109,6 +134,8 @@ export function vfClearFilters() {
   vfPaintHost();
 }
 
+var VF_URL = function() { return '/api/scenarios/runs/' + encodeURIComponent(VF.runId) + '/verifications'; };
+
 export function vfLoadQueue() {
   var sel = document.getElementById('vf-run');
   var runId = sel ? sel.value : '';
@@ -125,12 +152,23 @@ export function vfLoadQueue() {
   if (!box) return;
   if (!VF.runId) { vfHero(null); box.innerHTML = card('', empty('check', 'Select a run', 'Pick a run above to load its pending verifications.')); return; }
   box.innerHTML = card('', empty('refresh', 'Loading…'));
-  var q = '/api/scenarios/runs/' + encodeURIComponent(VF.runId) + '/verifications';
-  apicall(q).then(function(d) {
-    if (d && d.error) { vfHero(null); box.innerHTML = card('', empty('alert', 'Could not load verifications', d.error)); return; }
+  apicallOk(VF_URL()).then(function(d) {
     VF.items = (d && d.items) || [];
     vfRenderQueue();
-  }).catch(function(e){ vfHero(null); box.innerHTML = card('', empty('alert', 'Could not load verifications', e.message)); });
+  }).catch(function(e) { vfHero(null); VF.items = []; box.innerHTML = queueError('Could not load verifications', e.message || 'unknown error', 'vfLoadQueue'); });
+}
+
+// Reloads the items and repaints the page without closing the drawer or resetting filters (after a save, an upload
+// or Verify now). A failure leaves what is on screen alone and says so.
+function vfReloadQuiet() {
+  if (!VF.runId) return Promise.resolve();
+  var runId = VF.runId;
+  return apicallOk(VF_URL()).then(function(d) {
+    if (runId !== VF.runId) return;
+    VF.items = (d && d.items) || [];
+    vfRenderQueue();
+    if (VF.selected) vfPaintFacts();
+  }).catch(function(e) { showToast('Could not refresh the list: ' + (e.message || 'error'), 'err'); });
 }
 
 var VF_COLOR = { Detected: CHART_COLORS.ok, NotDetected: CHART_COLORS.bad, NotApplicable: CHART_COLORS.muted, NeedsReview: CHART_COLORS.warn, Pending: CHART_COLORS.info };
@@ -175,7 +213,6 @@ function ico(d) { return '<svg viewBox="0 0 24 24" width="13" height="13" fill="
 function skeletonHtml() {
   return '<div class="rk-card runs-card vf-card"><div class="runs-dt">' +
     '<div class="dt-toolbar" id="vf-dt-toolbar">' +
-      '<label class="dt-search">' + ico('<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>') + '<input type="search" id="vf-dt-q" placeholder="Filter rows…" aria-label="Filter rows"' + on('input', 'vfTableQuery') + '></label>' +
       '<span class="dt-count muted" id="vf-dt-count"></span><span class="grow"></span>' +
       '<div class="dt-colwrap"><button type="button" class="btn btn-outline btn-sm"' + on('click', 'vfToggleCols') + '>' + ico('<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>') + 'Columns</button><div class="dt-cols" id="vf-cols" hidden></div></div>' +
       '<select id="vf-dt-per" class="dt-per" aria-label="Rows per page"' + on('change', 'vfSetPer') + '><option value="5">5 / page</option><option value="8">8 / page</option><option value="15">15 / page</option><option value="9999">All rows</option></select>' +
@@ -196,7 +233,7 @@ function setText(id, t) { var e = document.getElementById(id); if (e) e.textCont
 function cellHtml(col, i) {
   switch (col) {
     case 0: {
-      var wf = (i.workflowState && i.workflowState !== 'Approved' && i.workflowState !== 'Pending') ? '<div class="tiny muted">' + x(i.workflowState) + '</div>' : '';
+      var wf = i.workflowState === 'Rejected' ? '<div class="tiny muted">Rejected by reviewer</div>' : '';
       return '<td>' + pill(M.statusText(i.status), M.TONE[i.status] || 'warn') + wf + '</td>';
     }
     case 1: return '<td class="mono muted">' + x(i.techniqueId) + '</td>';
@@ -218,7 +255,6 @@ function vfPaintHost() {
     return;
   }
   host.innerHTML = skeletonHtml();
-  var q = document.getElementById('vf-dt-q'); if (q) q.value = T.q;
   var per = document.getElementById('vf-dt-per'); if (per) per.value = String(T.per);
   paintTable();
 }
@@ -243,7 +279,7 @@ function paintTable() {
   if (all) { all.checked = list.length > 0 && onList === list.length; all.indeterminate = onList > 0 && onList < list.length; }
   tbody.innerHTML = rows.map(function(i) {
     var k = idx(i);
-    return '<tr class="vf-row dt-click" tabindex="0"' + on('click', 'vfSelect', i.expectationId) + on('keydown', 'vfRowKeydown', i.expectationId) + '>' +
+    return '<tr class="vf-row dt-click' + (VF.selected === i.expectationId ? ' vf-sel' : '') + '" tabindex="0"' + on('click', 'vfSelect', i.expectationId) + on('keydown', 'vfRowKeydown', i.expectationId) + '>' +
       '<td class="dt-selcol"' + on('click', 'stopEvent') + '><input type="checkbox" class="dt-cb" aria-label="Select expectation"' + (T.sel[k] ? ' checked' : '') + on('change', 'vfSelectRow', k) + '></td>' +
       cols.map(function(c) { return cellHtml(c, i); }).join('') +
       '<td class="r"><button type="button" class="btn btn-outline btn-sm">' + (i.verificationId ? 'Review' : 'Verify') + '</button></td></tr>';
@@ -268,7 +304,7 @@ function paintTable() {
   var emp = document.getElementById('vf-empty');
   if (emp) {
     emp.hidden = list.length > 0;
-    if (!list.length) emp.innerHTML = empty('search', 'No matching rows', 'Try a different search term, or clear the filter.') + '<div class="dt-empty-act"><button class="btn btn-outline btn-sm"' + on('click', 'vfClearTableQuery') + '>Clear filter</button></div>';
+    if (!list.length) emp.innerHTML = empty('search', 'No matching rows', 'Try different filters.') + '<div class="dt-empty-act"><button class="btn btn-outline btn-sm"' + on('click', 'vfClearFilters') + '>Clear filters</button></div>';
   }
   setHidden('vf-table-wrap', !list.length);
   setHidden('vf-dt-foot', !list.length);
@@ -325,6 +361,21 @@ document.addEventListener('click', function(e) {
 
 function vfItem(expId) { for (var i=0;i<VF.items.length;i++){ if (VF.items[i].expectationId===expId) return VF.items[i]; } return null; }
 
+// What the reviewer's state means, in words: Approved is final, Needs review waits for a reviewer, Rejected was sent back.
+function vfStateNote(i) {
+  if (i.workflowState === 'NeedsReview') return 'Waiting for a reviewer' + (i.verifiedBy ? ' · submitted by ' + i.verifiedBy : '');
+  if (i.workflowState === 'Rejected') return 'Rejected by a reviewer' + (i.verifiedBy ? ' · attested by ' + i.verifiedBy : '');
+  return i.verifiedBy ? 'Attested by ' + i.verifiedBy : 'Not attested yet';
+}
+
+// The key / value block; repainted alone after an upload so the evidence count is never stale.
+function vfPaintFacts() {
+  var i = vfItem(VF.selected);
+  var host = document.getElementById('vf-facts');
+  if (!i || !host) return;
+  host.innerHTML = '<div class="vf-dr-state">' + pill(M.statusText(i.status), M.TONE[i.status] || 'warn') + '<span class="muted">' + x(vfStateNote(i)) + '</span></div>' + kv(M.drawerRows(i));
+}
+
 // The detail drawer: one expectation's facts plus the attestation form, evidence and history.
 export function vfSelect(expId) {
   VF.selected = expId;
@@ -333,52 +384,62 @@ export function vfSelect(expId) {
   if (!i || !host) return;
   var canVerify = vfCan('verification:verify');
   var canReview = vfCan('verification:review');
-  var resultBtn = function(val, label, col) {
-    return '<button type="button" id="vf-res-' + val + '"' + on('click', 'vfPickResult', val) + ' class="btn btn-outline btn-sm" style="border-color:' + col + ';color:' + col + '">' + label + '</button>';
+  var resultBtn = function(val, label, tone) {
+    return '<button type="button" id="vf-res-' + val + '"' + on('click', 'vfPickResult', val) + ' class="vf-res-btn tone-' + tone + '" aria-pressed="false">' + label + '</button>';
   };
   var evSection = i.verificationId
-    ? '<div style="margin-top:0.9rem"><div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--muted);margin-bottom:0.4rem">Evidence <span style="text-transform:none;color:var(--muted)">— SHA-256 recorded at upload</span></div>' +
-        '<div id="vf-evlist" style="margin-bottom:0.5rem"></div>' +
+    ? '<h4 class="sec-label">Evidence <span class="vf-sec-note">SHA-256 recorded at upload</span></h4>' +
+        '<div id="vf-evlist" class="vf-evlist"></div>' +
         (vfCan('verification:evidence:upload')
-          ? '<input type="file" id="vf-evfile" style="font-size:0.78rem"> <button class="btn btn-outline btn-sm"' + on('click', 'vfUploadEvidence', i.verificationId) + '>Attach</button>'
-          : '<div style="font-size:0.74rem;color:var(--muted)">You do not have permission to upload evidence.</div>') +
-        '</div>'
-    : '<div style="margin-top:0.9rem;font-size:0.74rem;color:var(--muted)">Save a verification first, then attach evidence (screenshots, exported alerts, KQL, CSV).</div>';
+          ? '<div class="vf-up"><label class="vf-file"><input type="file" id="vf-evfile"' + on('change', 'vfFileChosen') + '><span class="btn btn-outline btn-sm">Choose file</span><span class="vf-fname muted" id="vf-evname">No file chosen. Up to 25 MB.</span></label>' +
+            '<button type="button" id="vf-attach" class="btn btn-primary btn-sm" disabled' + on('click', 'vfUploadEvidence', i.verificationId) + '>Attach</button></div>'
+          : '<div class="vf-help">You do not have permission to upload evidence.</div>')
+    : '<h4 class="sec-label">Evidence</h4><div class="vf-help">Save the attestation first, then attach evidence here (screenshots, exported alerts, KQL, CSV).</div>';
   var set = function(id, t) { var e = document.getElementById(id); if (e) e.textContent = t; };
   set('vf-drawer-title', i.providerDisplay || i.provider || 'Expectation');
   set('vf-drawer-sub', (i.techniqueId || '') + ' · ' + (i.domain || ''));
   host.innerHTML =
-    '<div class="vf-dr-state">' + pill(M.statusText(i.status), M.TONE[i.status] || 'warn') + '<span class="muted">' + x(i.workflowState && i.workflowState !== 'Approved' && i.workflowState !== 'Pending' ? i.workflowState : (i.verifiedBy ? 'Attested by ' + i.verifiedBy : 'Not attested yet')) + '</span></div>' +
-    kv(M.drawerRows(i)) +
-    (i.profileName ? '<div style="font-size:0.7rem;color:var(--muted);margin:0.6rem 0">Validated against <strong>' + x(i.profileName) + '</strong> v' + (i.profileVersion||1) + ' · expectation <code>' + x(i.expectationId) + '</code></div>' : '') +
+    '<div id="vf-facts"></div>' +
+    (i.profileName ? '<div class="vf-help">Validated against <strong>' + x(i.profileName) + '</strong> v' + (i.profileVersion||1) + ' · expectation <code>' + x(i.expectationId) + '</code></div>' : '') +
     '<h4 class="sec-label">Attestation</h4>' +
     (canVerify
-      ? '<div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.7rem">' + resultBtn('Detected','Detected','var(--success)') + resultBtn('NotDetected','Not Detected','var(--danger)') + resultBtn('NotApplicable','N/A','var(--muted)') + '</div>' +
-        '<input id="vf-alert" placeholder="Linked alert / ticket ID (optional)" value="' + x(i.alertId||'') + '" style="width:100%;padding:0.45rem 0.6rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:0.8rem;margin-bottom:0.5rem">' +
-        '<textarea id="vf-note" placeholder="Analyst note — what did you check, what did you see?" style="width:100%;min-height:56px;padding:0.45rem 0.6rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:0.8rem;margin-bottom:0.5rem">' + x(i.note||'') + '</textarea>' +
+      ? '<div class="vf-lbl">Result</div>' +
+        '<div class="vf-res">' + resultBtn('Detected', 'Detected', 'ok') + resultBtn('NotDetected', 'Not detected', 'bad') + resultBtn('NotApplicable', 'Not applicable', 'muted') + '</div>' +
+        '<label class="vf-lbl" for="vf-alert">Linked alert or ticket ID <span class="vf-opt">optional</span></label>' +
+        '<input id="vf-alert" class="inp-sm u-w100" autocomplete="off" placeholder="e.g. INC-1042" value="' + x(i.alertId||'') + '">' +
+        '<label class="vf-lbl" for="vf-note">Analyst note</label>' +
+        '<textarea id="vf-note" class="vf-note" placeholder="What did you check, and what did you see?">' + x(i.note||'') + '</textarea>' +
         '<input type="hidden" id="vf-result" value="' + x(i.result||'') + '">' +
-        '<div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">' +
+        '<div class="vf-actions">' +
           (canReview
-            ? '<button class="btn btn-primary btn-sm" ' + on('click', 'vfSubmit', i.expectationId, 'Approved') + '>Approve &amp; Save</button>' +
-              '<button class="btn btn-outline btn-sm" ' + on('click', 'vfSubmit', i.expectationId, 'NeedsReview') + '>Submit for Review</button>' +
-              '<button class="btn btn-outline-red btn-sm" ' + on('click', 'vfSubmit', i.expectationId, 'Rejected') + '>Reject</button>'
-            : '<button class="btn btn-primary btn-sm" ' + on('click', 'vfSubmit', i.expectationId, 'NeedsReview') + '>Submit for Review</button>') +
-          '<span class="u-flex1"></span>' +
-          '<button class="btn btn-outline btn-sm"' + on('click', 'vfToggleHistory', i.expectationId) + '>History</button>' +
-        '</div>'
-      : '<div style="font-size:0.78rem;color:var(--muted)">You do not have permission to verify. <button class="btn btn-outline btn-sm"' + on('click', 'vfToggleHistory', i.expectationId) + '>View History</button></div>') +
+            ? '<button type="button" class="btn btn-primary btn-sm" ' + on('click', 'vfSubmit', i.expectationId, 'Approved') + '>Approve &amp; save</button>' +
+              '<button type="button" class="btn btn-outline btn-sm" ' + on('click', 'vfSubmit', i.expectationId, 'NeedsReview') + '>Submit for review</button>' +
+              '<button type="button" class="btn btn-outline-red btn-sm" ' + on('click', 'vfSubmit', i.expectationId, 'Rejected') + '>Reject</button>'
+            : '<button type="button" class="btn btn-primary btn-sm" ' + on('click', 'vfSubmit', i.expectationId, 'NeedsReview') + '>Submit for review</button>') +
+        '</div>' +
+        '<div class="vf-help">' + (canReview
+          ? '<b>Approve</b> records this result as final. <b>Submit for review</b> asks another reviewer to confirm it. <b>Reject</b> sends it back as not accepted.'
+          : 'A reviewer approves your result before it counts as final.') + ' Every attestation is kept in the history.</div>'
+      : '<div class="vf-help">You do not have permission to attest this result.</div>') +
     evSection +
-    '<div id="vf-history" style="margin-top:0.8rem"></div>';
+    '<h4 class="sec-label">History <span class="vf-sec-note">immutable</span></h4><div id="vf-history"><div class="vf-help">Loading history…</div></div>';
+  vfPaintFacts();
   if (i.result) vfPickResult(i.result);
   if (i.verificationId) vfLoadEvidence(i.verificationId);
+  vfLoadHistory(i.expectationId);
   var o = document.getElementById('vf-drawer-overlay');
   if (o) o.classList.add('open');
+  // keep the open row highlighted without repainting the table
+  Array.prototype.forEach.call(document.querySelectorAll('#vf-body tr.vf-row'), function(tr) { tr.classList.remove('vf-sel'); });
+  var rows = document.querySelectorAll('#vf-body tr.vf-row');
+  Array.prototype.forEach.call(rows, function(tr) { if (tr.getAttribute('data-args') === JSON.stringify([expId])) tr.classList.add('vf-sel'); });
 }
 
 export function vfCloseDetail() {
   VF.selected = '';
   var h = document.getElementById('vf-detail'); if (h) h.innerHTML = '';
   var o = document.getElementById('vf-drawer-overlay'); if (o) o.classList.remove('open');
+  Array.prototype.forEach.call(document.querySelectorAll('#vf-body tr.vf-sel'), function(tr) { tr.classList.remove('vf-sel'); });
 }
 export function vfDrawerBackdrop(el, event) { if (event.target === el) vfCloseDetail(); }
 
@@ -387,69 +448,96 @@ export function vfPickResult(val) {
   if (hid) hid.value = val;
   ['Detected','NotDetected','NotApplicable'].forEach(function(v) {
     var b = document.getElementById('vf-res-' + v);
-    if (b) b.style.background = v === val ? 'rgba(79,142,247,0.14)' : 'transparent';
-    if (b) b.style.fontWeight = v === val ? '700' : '';
+    if (!b) return;
+    b.classList.toggle('on', v === val);
+    b.setAttribute('aria-pressed', v === val ? 'true' : 'false');
   });
 }
 
+var vfSaving = false;
 export function vfSubmit(expId, workflowState) {
+  if (vfSaving) return;
   var result = (document.getElementById('vf-result') || {}).value || '';
-  if (!result) { showToast('Pick a result (Detected / Not Detected / N/A) first.', 'err'); return; }
+  if (!result) { showToast('Pick a result (Detected, Not detected or Not applicable) first.', 'err'); return; }
   var note = (document.getElementById('vf-note') || {}).value || '';
   var alertId = (document.getElementById('vf-alert') || {}).value || '';
-  apicall('/api/verifications', { method:'POST', body: JSON.stringify({
+  var hadEvidence = !!(vfItem(expId) || {}).verificationId;
+  vfSaving = true;
+  var btns = document.querySelectorAll('#vf-detail .vf-actions button');
+  Array.prototype.forEach.call(btns, function(b) { b.disabled = true; });
+  apicallOk('/api/verifications', { method:'POST', body: JSON.stringify({
     runId: VF.runId, expectationId: expId, result: result,
     workflowState: workflowState, note: note, alertId: alertId
-  })}).then(function(d) {
-    if (d && d.error) { showToast(d.error, 'err'); return; }
-    showToast('Verification saved.', 'ok');
-    vfLoadQueue();
-  }).catch(function(e){ showToast(e.message, 'err'); });
+  })}).then(function() {
+    vfSaving = false;
+    var verb = workflowState === 'Approved' ? 'Attestation approved and saved.' : workflowState === 'Rejected' ? 'Attestation rejected.' : 'Submitted for review.';
+    showToast(verb + (hadEvidence ? '' : ' You can attach evidence below.'), 'ok');
+    // Reload in place and reopen the same expectation, so evidence can be attached straight away.
+    return vfReloadQuiet().then(function() { if (VF.runId && vfItem(expId)) vfSelect(expId); });
+  }).catch(function(e) {
+    vfSaving = false;
+    Array.prototype.forEach.call(btns, function(b) { b.disabled = false; });
+    showToast('Could not save: ' + (e.message || 'error'), 'err');
+  });
 }
 
+export function vfFileChosen(el) {
+  var f = el && el.files && el.files[0];
+  var n = document.getElementById('vf-evname'); if (n) n.textContent = f ? f.name + ' · ' + vfBytes(f.size) : 'No file chosen. Up to 25 MB.';
+  var b = document.getElementById('vf-attach'); if (b) b.disabled = !f;
+}
+
+var vfUploading = false;
 export function vfUploadEvidence(verificationId) {
   var inp = document.getElementById('vf-evfile');
   if (!inp || !inp.files || !inp.files.length) { showToast('Choose a file first.', 'err'); return; }
+  if (vfUploading) return;
+  if (inp.files[0].size > 25 * 1024 * 1024) { showToast(inp.files[0].name + ' is ' + vfBytes(inp.files[0].size) + '. The limit is 25 MB.', 'err'); return; }
+  vfUploading = true;
+  var btn = document.getElementById('vf-attach'); if (btn) { btn.disabled = true; btn.textContent = 'Uploading…'; }
   var fd = new FormData();
   fd.append('file', inp.files[0]);
   fetch('/api/verifications/' + encodeURIComponent(verificationId) + '/evidence', {
     method:'POST', credentials:'same-origin', body: fd
-  }).then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); })
-    .then(function(res) {
-      if (!res.ok) { showToast((res.j && res.j.error) || 'Upload failed', 'err'); return; }
-      showToast('Evidence attached — SHA-256 ' + (res.j.contentHash||'').substring(0,12) + '…', 'ok');
-      inp.value = '';
-      vfLoadEvidence(verificationId);
-      // refresh counts in the queue silently
-      vfLoadQueueQuiet();
-    }).catch(function(e){ showToast(e.message, 'err'); });
-}
-
-function vfLoadQueueQuiet() {
-  if (!VF.runId) return;
-  var q = '/api/scenarios/runs/' + encodeURIComponent(VF.runId) + '/verifications';
-  apicall(q).then(function(d){ if (d && d.items) { VF.items = d.items; } }).catch(function(){});
+  }).then(function(r) {
+    // A proxy may answer an oversized upload with a non-JSON page, so the body is read as text first.
+    return r.text().then(function(t) { var j = null; try { j = JSON.parse(t); } catch (e) { j = null; } return { ok: r.ok, status: r.status, j: j }; });
+  }).then(function(res) {
+    vfUploading = false;
+    if (btn) btn.textContent = 'Attach';
+    if (!res.ok) {
+      if (btn) btn.disabled = false;
+      showToast('Upload failed: ' + ((res.j && res.j.error) || ('the server answered ' + res.status)), 'err');
+      return;
+    }
+    showToast('Evidence attached. SHA-256 ' + ((res.j && res.j.contentHash) || '').substring(0, 12) + '…', 'ok');
+    inp.value = ''; vfFileChosen(inp);
+    vfLoadEvidence(verificationId);
+    vfReloadQuiet();
+  }).catch(function(e) {
+    vfUploading = false;
+    if (btn) { btn.disabled = false; btn.textContent = 'Attach'; }
+    showToast('Upload failed: ' + (e.message || 'network error'), 'err');
+  });
 }
 
 function vfLoadEvidence(verificationId) {
   var host = document.getElementById('vf-evlist');
   if (!host) return;
-  apicall('/api/verifications/' + encodeURIComponent(verificationId) + '/evidence').then(function(d) {
+  apicallOk('/api/verifications/' + encodeURIComponent(verificationId) + '/evidence').then(function(d) {
     var list = (d && d.evidence) || [];
-    if (!list.length) { host.innerHTML = '<div style="font-size:0.74rem;color:var(--muted)">No evidence attached yet.</div>'; return; }
+    if (!list.length) { host.innerHTML = '<div class="vf-help">No evidence attached yet.</div>'; return; }
     var canDel = vfCan('verification:evidence:delete');
     host.innerHTML = list.map(function(e) {
-      return '<div style="display:flex;align-items:center;gap:0.6rem;padding:0.4rem 0.55rem;border:1px solid var(--border);border-radius:6px;margin-bottom:0.35rem;font-size:0.76rem">' +
-        '<span class="u-success">&#10003;</span>' +
-        '<a href="/api/evidence/' + encodeURIComponent(e.id) + '/download" style="color:var(--accent);text-decoration:none">' + x(e.displayFilename || e.originalFilename) + '</a>' +
-        '<span class="u-muted">' + vfBytes(e.size) + '</span>' +
-        '<span style="color:var(--muted);font-family:monospace;font-size:0.66rem" title="' + x(e.hashAlgorithm) + ': ' + x(e.contentHash) + '">' + x((e.contentHash||'').substring(0,12)) + '…</span>' +
-        '<span class="u-flex1"></span>' +
-        '<span style="color:var(--muted);font-size:0.68rem">' + x(e.uploadedBy||'') + '</span>' +
-        (canDel ? '<button class="btn btn-outline-red btn-sm"' + on('click', 'vfDeleteEvidence', e.id, verificationId) + '>Delete</button>' : '') +
+      var name = e.displayFilename || e.originalFilename;
+      return '<div class="vf-ev">' +
+        '<span class="vf-ev-ok" aria-hidden="true">&#10003;</span>' +
+        '<div class="vf-ev-main"><a href="/api/evidence/' + encodeURIComponent(e.id) + '/download" class="vf-ev-name" title="' + x(name) + '">' + x(name) + '</a>' +
+          '<div class="tiny muted">' + vfBytes(e.size) + ' · <span class="mono" title="' + x(e.hashAlgorithm) + ': ' + x(e.contentHash) + '">' + x((e.contentHash||'').substring(0,12)) + '…</span>' + (e.uploadedBy ? ' · ' + x(e.uploadedBy) : '') + '</div></div>' +
+        (canDel ? '<button type="button" class="btn btn-outline-red btn-sm"' + on('click', 'vfDeleteEvidence', e.id, verificationId, name) + '>Delete</button>' : '') +
         '</div>';
     }).join('');
-  }).catch(function(){ host.innerHTML = '<div style="font-size:0.74rem;color:var(--danger)">Failed to load evidence.</div>'; });
+  }).catch(function(e) { host.innerHTML = '<div class="vf-help vf-bad">Failed to load evidence: ' + x(e.message || 'error') + '</div>'; });
 }
 
 function vfBytes(n) {
@@ -459,36 +547,35 @@ function vfBytes(n) {
   return (n/1024/1024).toFixed(1) + ' MB';
 }
 
-export function vfDeleteEvidence(id, verificationId) {
-  if (!confirm('Soft-delete this evidence file? It is retained for audit but hidden from the report.')) return;
-  apicall('/api/evidence/' + encodeURIComponent(id), { method:'DELETE' }).then(function(d) {
-    if (d && d.error) { showToast(d.error, 'err'); return; }
-    showToast('Evidence deleted.', 'ok');
-    vfLoadEvidence(verificationId);
-    vfLoadQueueQuiet();
-  }).catch(function(e){ showToast(e.message, 'err'); });
+export function vfDeleteEvidence(id, verificationId, name) {
+  openConfirmDiffModal('Delete this evidence file?',
+    '<p class="tiny"><b>' + x(name || 'This file') + '</b> is hidden from the report and from this list. It is retained for audit, so the deletion is recorded.</p>',
+    function() {
+      apicallOk('/api/evidence/' + encodeURIComponent(id), { method:'DELETE' }).then(function() {
+        showToast('Evidence deleted.', 'ok');
+        vfLoadEvidence(verificationId);
+        vfReloadQuiet();
+      }).catch(function(e) { showToast('Could not delete: ' + (e.message || 'error'), 'err'); });
+    }, { sub: 'The file stays in the audit trail.', confirmLabel: 'Delete file', danger: true });
 }
 
-export function vfToggleHistory(expId) {
+// History loads with the drawer (it is short, and an analyst needs to see it before attesting again).
+function vfLoadHistory(expId) {
   var host = document.getElementById('vf-history');
   if (!host) return;
-  if (host.getAttribute('data-open') === expId) { host.innerHTML=''; host.removeAttribute('data-open'); return; }
-  host.setAttribute('data-open', expId);
-  host.innerHTML = '<div style="font-size:0.74rem;color:var(--muted)">Loading history…</div>';
-  apicall('/api/scenarios/runs/' + encodeURIComponent(VF.runId) + '/verifications/' + encodeURIComponent(expId) + '/history').then(function(d) {
+  apicallOk('/api/scenarios/runs/' + encodeURIComponent(VF.runId) + '/verifications/' + encodeURIComponent(expId) + '/history').then(function(d) {
+    if (VF.selected !== expId) return;
     var h = (d && d.history) || [];
-    if (!h.length) { host.innerHTML = '<div style="font-size:0.74rem;color:var(--muted)">No attestations recorded yet.</div>'; return; }
-    host.innerHTML = '<div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--muted);margin-bottom:0.4rem">Attestation history (immutable)</div>' +
-      h.map(function(r) {
-        return '<div style="display:flex;gap:0.6rem;font-size:0.74rem;padding:0.35rem 0;border-bottom:1px solid var(--border)">' +
-          '<span style="font-weight:700;color:' + vfStatusColor(r.active ? (r.workflowState==='Approved'?r.result:r.workflowState) : r.result) + '">' + x(r.result) + '</span>' +
-          '<span class="u-muted">' + x(r.workflowState) + '</span>' +
-          '<span class="u-muted">' + x(r.source) + '</span>' +
-          '<span class="u-flex1"></span>' +
-          '<span class="u-muted">' + x(r.verifiedBy||'') + '</span>' +
-          '<span class="u-muted">' + fmtDate(r.verifiedAt) + '</span>' +
-          (r.active ? '<span class="u-success">current</span>' : '<span class="u-muted">superseded</span>') +
-          '</div>';
-      }).join('');
-  }).catch(function(){ host.innerHTML = '<div style="font-size:0.74rem;color:var(--danger)">Failed to load history.</div>'; });
+    if (!h.length) { host.innerHTML = '<div class="vf-help">No attestations recorded yet.</div>'; return; }
+    host.innerHTML = h.map(function(r) {
+      return '<div class="vf-hist' + (r.active ? ' cur' : '') + '">' +
+        '<span class="vf-hist-res" style="color:' + vfStatusColor(r.active ? (r.workflowState==='Approved'?r.result:r.workflowState) : r.result) + '">' + x(M.statusText(r.result)) + '</span>' +
+        '<span class="muted">' + x(r.workflowState === 'NeedsReview' ? 'Needs review' : r.workflowState) + (r.source ? ' · ' + x(r.source) : '') + '</span>' +
+        '<span class="vf-hist-who muted">' + x(r.verifiedBy||'') + ' · ' + fmtDate(r.verifiedAt) + '</span>' +
+        '<span class="' + (r.active ? 'u-success' : 'muted') + '">' + (r.active ? 'current' : 'superseded') + '</span>' +
+        '</div>';
+    }).join('');
+  }).catch(function(e) { host.innerHTML = '<div class="vf-help vf-bad">Failed to load history: ' + x(e.message || 'error') + '</div>'; });
 }
+// Kept for the action registry; the history is always shown now.
+export function vfToggleHistory() {}

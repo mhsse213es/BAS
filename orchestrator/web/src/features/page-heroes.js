@@ -276,7 +276,7 @@ var HEROES = {
     icon: ICON.check,
     title: 'Detection Verification',
     sub: 'Confirms whether detections fired as expected for each validated step.',
-    actions: '<button type="button" class="btn btn-primary" data-on-click="vfLoadQueue">' + svg('<path d="M20 11a8 8 0 00-14-4M4 13a8 8 0 0014 4M5 3v4h4M19 21v-4h-4"/>') + 'Refresh</button>',
+    actions: '<button type="button" class="btn btn-primary" data-on-click="loadVerificationTab">' + svg('<path d="M20 11a8 8 0 00-14-4M4 13a8 8 0 0014 4M5 3v4h4M19 21v-4h-4"/>') + 'Refresh</button>',
     stats: [
       { id: 'vf-hs-checks', icon: ICON.check, value: '—', label: 'Checks' },
       { id: 'vf-hs-detected', icon: ICON.posture, value: '—', label: 'Detected' },

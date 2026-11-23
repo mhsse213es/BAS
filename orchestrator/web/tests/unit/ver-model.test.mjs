@@ -29,7 +29,7 @@ test('options are taken from the loaded items', () => {
 
 test('controlRows: detected share per domain', () => {
   const r = controlRows(I);
-  assert.deepEqual(r.map((o) => [o.label, o.pct]), [['Email', 0], ['Identity', 0], ['Siem', 50]]);
+  assert.deepEqual(r.map((o) => [o.label, o.pct]), [['Email (0/1)', 0], ['Identity (0/1)', 0], ['Siem (1/2)', 50]]);
   assert.equal(r[2].text, '50%');
   assert.equal(r[2].tone, 'warn');
 });

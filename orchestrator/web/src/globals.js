@@ -22,9 +22,9 @@ import { closeCovDrawer, closeCovDrawerOnBackdrop, loadCoverageAnalytics, openTe
 import { loadADCoverage, refreshADCoverage, setADFilter, exportADReportPDF, exportADReportJSON } from './features/ad-coverage.js';
 import { setReportType, pickReportFormat } from './features/reports.js';
 import { rptFilter, rptClear, toggleRepRuns, copyReportId, copyReportLink } from './features/rpt-view.js';
-import { dcAdd, dcEdit, dcTest, dcDelete, dcSave, dcCancel, dcProviderChanged } from './features/detection-connectors.js';
-import { gapSetBackend, gapCopy, gapExport, gapDeploy, gapRetest } from './features/detection-gaps.js';
-import { vfVerifyNow, vfCloseDetail, vfDeleteEvidence, vfLoadQueue, vfPickResult, vfSelect, vfSetDomain, vfSubmit, vfToggleHistory, vfUploadEvidence, vfSetStatus, vfSearch, vfClearFilters, vfTableQuery, vfClearTableQuery, vfSetPer, vfPage, vfSortBy, vfToggleCols, vfColToggle, vfSelectRow, vfSelectAll, vfClearSelection, vfRowKeydown, vfExportCsv, vfExportSelected, vfDrawerBackdrop } from './features/detection-verification.js';
+import { dcAdd, dcEdit, dcTest, dcDelete, dcSave, dcCancel, dcProviderChanged, dcToggle, dcReload } from './features/detection-connectors.js';
+import { gapSetBackend, gapCopy, gapExport, gapDeploy, gapRetest, gapReload } from './features/detection-gaps.js';
+import { vfFileChosen, loadVerificationTab, vfVerifyNow, vfCloseDetail, vfDeleteEvidence, vfLoadQueue, vfPickResult, vfSelect, vfSetDomain, vfSubmit, vfToggleHistory, vfUploadEvidence, vfSetStatus, vfSearch, vfClearFilters, vfTableQuery, vfClearTableQuery, vfSetPer, vfPage, vfSortBy, vfToggleCols, vfColToggle, vfSelectRow, vfSelectAll, vfClearSelection, vfRowKeydown, vfExportCsv, vfExportSelected, vfDrawerBackdrop } from './features/detection-verification.js';
 import { dbsimToggleClientMode, dbsimRegister, dbsimIdentityCheck, dbsimDeleteTarget, dbsimViewReport, dbsimStartRun, dbsimCancelRun, dbsimToggleScenario, dbsimChooseTarget, dbsimLabConfirmInput } from './features/dbsim.js';
 import { refreshEmailTab, egAskLaunch, egAskCancel, egCancelCampaignClick, egLaunchCampaign, egRunExpectation, egToggleCampaign, egToggleRunDetail, setEmailCampaignsTab, setEmailRunsTab, openEmailScenario, openEmailCampaignDrawer, closeEmailDrawer, closeEmailDrawerOnBackdrop, setEmailTab, emailCampaignSearch, emailClearFilters, emailScenarioKeydown } from './features/email.js';
 import { _toggleEMExtraScenario, _toggleEMPreviewRow, _toggleVexPreviewRow, _toggleVexPreviewSection, cancelEMSweep, closeEMSweepModal, closeEMSweepModalOnBackdrop, closeEMSweepProgress, closeEMSweepProgressOnBackdrop, closeSweepPreview, closeSweepPreviewOnBackdrop, emGroupSelChange, emRunLayer, emSweepDispatch, openEMSweepProgress, openEMSweepReport, setEMExtraSearchFromInput, setEMSweepTargetMode, setVexPreviewSearchFromInput, setVexPreviewTacticFromSelect, startSweepFromPreview, stopEMSweep, stopEMSweepCurrent } from './features/endpoint-mastery.js';
@@ -836,6 +836,8 @@ export const ACTIONS = {
   vexSelectAll,
   vexSweepGroupChange,
   dcAdd,
+  dcToggle,
+  dcReload,
   dcEdit,
   dcTest,
   dcDelete,
@@ -847,6 +849,9 @@ export const ACTIONS = {
   gapExport,
   gapDeploy,
   gapRetest,
+  gapReload,
+  vfFileChosen,
+  loadVerificationTab,
   vfVerifyNow,
   vfCloseDetail,
   vfDeleteEvidence,
