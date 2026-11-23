@@ -5,7 +5,7 @@
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { showToast } from '../core/util.js';
-import { pill, bar, empty } from '../core/kit.js';
+import { pill, bar, empty, chip } from '../core/kit.js';
 import { setHeroStat } from './shell-ui.js';
 import * as M from './ex-model.js';
 
@@ -22,6 +22,7 @@ var FILE = { scen: 'openaev-scenarios.csv', exs: 'openaev-exercises.csv', execs:
 
 function fresh() { return { rows: null, mode: '', t: { q: '', col: -1, dir: 1, page: 0, per: 8, sel: {}, hidden: {} } }; }
 var ST = { scen: fresh(), exs: fresh(), execs: fresh() };
+ST.exs.t.hidden[1] = true; // every row of the exercises table has the category "Exercise", so the column starts hidden
 var PLANS = null;
 
 function ico(d) { return '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>'; }
@@ -194,7 +195,7 @@ export function setExPlans(plans) {
     body.innerHTML = PLANS.length
       ? PLANS.map(function(p) {
         return '<div class="ex-plan"><div class="grow"><b>' + x(p.name || '') + '</b><div class="muted ex-plan-sub">' + x(M.planSub(p)) + '</div></div>' +
-          '<button class="btn btn-primary btn-sm"' + on('click', 'launchExercisePrompt', p.id) + '>Launch</button></div>';
+          (M.planSteps(p) ? '<button class="btn btn-primary btn-sm"' + on('click', 'launchExercisePrompt', p.id) + '>Launch</button>' : '<button class="btn btn-outline btn-sm" disabled title="Add steps to this plan before launching it">No steps</button>') + '</div>';
       }).join('')
       : '<div id="ex-plans-empty">' + empty('campaign', 'No exercise plans yet', 'Create one from an OpenAEV scenario.') + '</div>';
   }
@@ -260,3 +261,87 @@ document.addEventListener('click', function(e) {
   if (e.target.closest && e.target.closest('.dt-colwrap')) return;
   KINDS.forEach(function(k) { var m = el(pid(k, 'cols')); if (m && !m.hidden) m.hidden = true; });
 });
+
+// ── Execution drawer ────────────────────────────────────────────────────────────────────────────────────────────
+
+function tile(label, value, sub, tone) {
+  return '<div class="exd-tile tone-' + tone + '"><span>' + x(label) + '</span><b>' + x(value) + '</b>' + (sub ? '<small>' + x(sub) + '</small>' : '') + '</div>';
+}
+
+function scoreHtml(ex) {
+  var sc = ex.score, st = ex.status;
+  if (!sc) {
+    return '<p class="exd-quiet">' + (st === 'completed' ? 'Not yet scored.' : st === 'failed' || st === 'aborted' ? 'No score: the exercise did not complete.' : 'A score appears once the exercise completes.') + '</p>';
+  }
+  if (!sc.measurable) {
+    // Nothing was sent and nothing was detected, so there is no result to report. score.overall in this state is a
+    // misleading 60 (ExerciseScore.Measurable in internal/exercise/types.go) that would look like an excellent run.
+    var sent = (sc.human && sc.human.sent) || 0;
+    return '<div class="exd-note tone-warn"><b>Not measurable — no result to report</b><p>This exercise completed without producing anything measurable: ' + sent +
+      ' inject(s) sent, and no EDR, SIEM, or ticketing signal observed. A score is deliberately withheld rather than shown as a number that would not mean anything. Add a step that actually sends an inject (email/SMS/agent task) to get a real result. Approval and wait steps alone perform no technical action and cannot be scored.</p></div>';
+  }
+  var h = sc.human || {}, hasSent = h.sent > 0;
+  return '<div class="exd-tiles">' +
+    tile('Overall score', sc.overall != null ? Number(sc.overall).toFixed(0) : '—', 'out of 100', sc.overall != null ? M.scoreTone(sc.overall) : 'muted') +
+    // 0 clicked of 0 sent is not "0% clicked": only show a rate with a real denominator.
+    tile('Click rate', hasSent && h.click_rate != null ? (h.click_rate * 100).toFixed(0) + '%' : 'n/a', hasSent ? (h.clicked || 0) + ' of ' + h.sent + ' clicked' : 'nothing sent', hasSent && h.click_rate != null ? (h.click_rate > 0.3 ? 'bad' : 'ok') : 'muted') +
+    tile('EDR', sc.technical && sc.technical.edr_detected ? 'Detected' : 'Not detected', '', sc.technical && sc.technical.edr_detected ? 'ok' : 'bad') +
+    tile('SLA', sc.management && sc.management.sla_met ? 'Met' : sc.management ? 'Not met' : 'n/a', '', sc.management && sc.management.sla_met ? 'ok' : sc.management ? 'bad' : 'muted') + '</div>';
+}
+
+function stepHtml(id, s, i) {
+  var what = M.stepWhat(s.step_type), detail = '';
+  if (s.error) detail = '<div class="exd-err">Error: ' + x(s.error) + '</div>';
+  else if (s.result && Object.keys(s.result).length) {
+    detail = '<dl class="exd-res">' + M.resultPairs(s.result).map(function(p) { return '<dt>' + x(p[0]) + '</dt><dd>' + x(p[1]) + '</dd>'; }).join('') + '</dl>';
+  }
+  var canApprove = s.status === 'waiting' && s.step_type === 'approval';
+  return '<li class="exd-step tone-' + M.stepTone(s.status) + '"><span class="exd-n">' + (i + 1) + '</span><div class="exd-step-b">' +
+    '<div class="exd-step-h"><div><b>' + x(M.stepLabel(s.step_type)) + '</b> <span class="mono muted tiny">' + x(s.step_id) + '</span></div>' +
+    '<div class="exd-step-r">' + pill(s.status, M.stepTone(s.status)) + (canApprove ? '<button type="button" class="btn btn-primary btn-sm"' + on('click', 'approveExStep', id, s.step_id) + '>Approve</button>' : '') + '</div></div>' +
+    (what ? '<div class="exd-what">' + x(what) + '</div>' : '') + detail + '</div></li>';
+}
+
+// execDetailHtml paints the whole execution drawer body. `extra` carries the purple-team debrief and the linked
+// phishing runs, which are built by openaev.js.
+export function execDetailHtml(id, d, extra) {
+  extra = extra || {};
+  var ex = d.execution || {}, steps = d.steps || [];
+  var s = M.runSummary(ex, steps), note = M.stateNote(ex, steps), tone = M.statusTone(ex.status);
+  var started = M.startedOf(ex);
+  var h = '<div class="exd-top">' + pill((ex.status || 'unknown') + (M.isLive(ex) ? ' · live' : ''), tone) +
+    (started ? '<span class="muted tiny">Started ' + x(started) + '</span>' : '') + '</div>';
+  if (s.pct != null) h += '<div class="exd-prog">' + bar(s.pct, tone) + '<small>' + s.done + ' of ' + s.total + ' step' + (s.total === 1 ? '' : 's') + ' done</small></div>';
+  if (note) h += '<div class="exd-note tone-' + note.tone + '"><b>' + x(note.title) + '</b><p>' + x(note.text) + '</p></div>';
+  h += '<h4 class="exd-h">Result</h4>' + scoreHtml(ex);
+  if (extra.purpleHtml) h += extra.purpleHtml;
+  h += '<h4 class="exd-h">Steps</h4>' + (steps.length ? '<ol class="exd-steps">' + steps.map(function(st, i) { return stepHtml(id, st, i); }).join('') + '</ol>' : '<p class="exd-quiet">This execution has no recorded steps.</p>');
+  if (extra.phishingHtml) h += extra.phishingHtml;
+  if (M.isLive(ex)) h += '<div class="exd-foot"><button type="button" class="btn btn-outline-red btn-sm"' + on('click', 'abortExecution', id) + '>&#9632; Abort exercise</button></div>';
+  return h;
+}
+
+// Scenario drawer body (OpenAEV scenario or exercise): facts, description, the injects, and the way to a plan.
+export function scenarioDetailHtml(id, d, canCreate) {
+  var s = d.scenario || {}, det = d.detail || {}, inj = det.injects || [];
+  var h = '<div class="exd-top">' + (s.Severity ? pill(s.Severity, M.sevTone(s.Severity)) : '') + (s.Category ? chip(s.Category, 'muted') : '') +
+    '<span class="muted tiny">' + M.techCount(s) + ' technique' + (M.techCount(s) === 1 ? '' : 's') + ' · ' + (s.InjectsCount == null ? inj.length : x(s.InjectsCount)) + ' inject' + ((s.InjectsCount == null ? inj.length : s.InjectsCount) === 1 ? '' : 's') + '</span></div>';
+  h += det.description ? '<p class="exd-desc">' + x(det.description) + '</p>' : '<p class="exd-quiet">No description was synced for this scenario.</p>';
+  h += '<h4 class="exd-h">Injects</h4>';
+  h += inj.length ? '<ol class="exd-steps">' + inj.map(function(i, k) {
+    return '<li class="exd-step tone-muted"><span class="exd-n">' + (k + 1) + '</span><div class="exd-step-b"><div class="exd-step-h"><b>' + x(i.title) + '</b><div class="exd-step-r">' +
+      (i.techniqueIds || []).map(function(t) { return '<span class="mono tiny exd-tech">' + x(t) + '</span>'; }).join('') + '</div></div></div></li>';
+  }).join('') + '</ol>' : '<p class="exd-quiet">No injects were synced for this scenario.</p>';
+  if (canCreate) h += '<div class="exd-foot"><button type="button" class="btn btn-primary"' + on('click', 'createPlanFromOpenAEV', id) + '>Create exercise plan</button><p class="exd-quiet">Creates a plan you can launch from the Exercise plans list.</p></div>';
+  return h;
+}
+
+// Launch dialog body: what will run, then one field per plan variable.
+export function launchFormHtml(p) {
+  var vars = p.variables || [], steps = (p.steps || []).length;
+  return '<p class="exd-desc"><b>' + steps + '</b> step' + (steps === 1 ? '' : 's') + ' will run' + (vars.length ? '. Fill in the values this plan needs.' : '. This plan needs no input.') + '</p>' +
+    vars.map(function(v, i) {
+      return '<label class="exd-field"><span>' + x(v.name) + '</span>' + (v.description ? '<small class="muted">' + x(v.description) + '</small>' : '') +
+        '<input type="text" class="exd-var" data-var="' + x(v.name) + '" id="ex-var-' + i + '" value="' + x(v.default || '') + '" autocomplete="off"></label>';
+    }).join('');
+}

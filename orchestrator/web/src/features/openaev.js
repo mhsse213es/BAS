@@ -5,7 +5,7 @@ import { ago, showToast } from '../core/util.js';
 import { apColor } from './attack-path.js';
 import { freshness as apAgeChip } from './ap-model.js';
 import { apRichBody } from './rich-g4.js';
-import { setExRows, setExError, setExPlans, setExPlansError } from './ex-view.js';
+import { setExRows, setExError, setExPlans, setExPlansError, execDetailHtml, scenarioDetailHtml, launchFormHtml } from './ex-view.js';
 import { _diffRow, _diffSecretRow, openConfirmDiffModal } from './compliance.js';
 import { ROLE, showTab } from './shell.js';
 import { describePhishingRun } from './phishing-run-view.js';
@@ -92,9 +92,18 @@ export function removeOpenAEVConfig() {
   });
 }
 
+// exCall: apicall hands back a server error as a plain { error } body instead of throwing, which made a failed load look
+// like an empty list and a refused launch / approve / abort look like a success. Raise it instead.
+function exCall(path, opts) {
+  return apicall(path, opts).then(function(r) {
+    if (r && !Array.isArray(r) && typeof r === 'object' && typeof r.error === 'string' && r.error) throw new Error(r.error);
+    return r;
+  });
+}
+
 function loadOpenAEVScenarios(type) {
   var kind = type === 'exercise' ? 'exs' : 'scen';
-  apicall('/api/openaev/scenarios?type=' + encodeURIComponent(type || 'scenario')).then(function(list) {
+  exCall('/api/openaev/scenarios?type=' + encodeURIComponent(type || 'scenario')).then(function(list) {
     setExRows(kind, list);
   }).catch(function(e) { setExError(kind, e && e.message); });
 }
@@ -166,16 +175,9 @@ export function syncOpenAEVNow() {
 }
 
 export function openOpenAEVDetail(id) {
-  apicall('/api/openaev/scenarios/' + encodeURIComponent(id)).then(function(d) {
+  exCall('/api/openaev/scenarios/' + encodeURIComponent(id)).then(function(d) {
     document.getElementById('openaev-detail-title').textContent = d.scenario.Name;
-    var body = document.getElementById('openaev-detail-body');
-    var injectsHtml = (d.detail.injects || []).map(function(inj) {
-      return '<div class="kpi-row"><span>' + x(inj.title) + '</span><span class="tiny muted">' + x((inj.techniqueIds || []).join(', ')) + '</span></div>';
-    }).join('');
-    body.innerHTML = '<div class="tiny muted">' + x(d.detail.description || '') + '</div>' + injectsHtml;
-    if (ROLE === 'admin') {
-      body.innerHTML += '<div style="margin-top:1rem"><button class="btn btn-primary btn-sm"' + on('click', 'createPlanFromOpenAEV', id) + '>Create Exercise Plan</button></div>';
-    }
+    document.getElementById('openaev-detail-body').innerHTML = scenarioDetailHtml(id, d, ROLE === 'admin');
     document.getElementById('openaev-detail-overlay').classList.add('open');
   }).catch(function(e) { showToast('Failed to load scenario detail: ' + (e.message || 'error'), 'err'); });
 }
@@ -188,11 +190,11 @@ export function closeOpenAEVDetailOnBackdrop(el, event) { if (event.target === e
 export function loadExercisesTab() {
   loadOpenAEVScenarios('scenario');
   loadOpenAEVScenarios('exercise');
-  apicall('/api/exercises/plans').then(function(plans) {
+  exCall('/api/exercises/plans').then(function(plans) {
     setExPlans(plans);
   }).catch(function(e) { setExPlansError(e && e.message); });
 
-  apicall('/api/exercises/executions').then(function(execs) {
+  exCall('/api/exercises/executions').then(function(execs) {
     setExRows('execs', execs);
     if (!execs || !execs.length) { stopExPoll(); return; }
     // Keep the list (and any open detail drawer) live while anything is
@@ -222,24 +224,21 @@ function startExPoll() {
 function stopExPoll() { clearInterval(_exPollTimer); _exPollTimer = null; }
 
 export function launchExercisePrompt(planId) {
-  apicall('/api/exercises/plans/' + encodeURIComponent(planId)).then(function(p) {
-    var vars = p.variables || [];
-    var values = {};
-    for (var i = 0; i < vars.length; i++) {
-      var v = vars[i];
-      var ans = prompt('Value for "' + v.name + '"' + (v.description ? ' (' + v.description + ')' : '') + ':', v.default || '');
-      if (ans === null) return;
-      values[v.name] = ans;
-    }
-    apicall('/api/exercises/executions', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plan_id: planId, name: p.name, targets: [], variables: values })
-    }).then(function(ex) {
-      return apicall('/api/exercises/executions/' + encodeURIComponent(ex.id) + '/launch', { method: 'POST' });
-    }).then(function() {
-      showToast('Exercise launched', 'ok');
-      loadExercisesTab();
-    }).catch(function(e) { showToast('Launch failed: ' + (e.message || 'error'), 'err'); });
+  exCall('/api/exercises/plans/' + encodeURIComponent(planId)).then(function(p) {
+    if (!(p.steps || []).length) { showToast('This plan has no steps yet, so there is nothing to launch.', 'warn'); return; }
+    openConfirmDiffModal('Launch "' + (p.name || 'exercise') + '"?', launchFormHtml(p), function() {
+      var values = {};
+      document.querySelectorAll('#confirm-diff-body .exd-var').forEach(function(inp) { values[inp.getAttribute('data-var')] = inp.value; });
+      exCall('/api/exercises/executions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan_id: planId, name: p.name, targets: [], variables: values })
+      }).then(function(ex) {
+        return exCall('/api/exercises/executions/' + encodeURIComponent(ex.id) + '/launch', { method: 'POST' });
+      }).then(function() {
+        showToast('Exercise launched', 'ok');
+        loadExercisesTab();
+      }).catch(function(e) { showToast('Launch failed: ' + (e.message || 'error'), 'err'); });
+    }, { sub: 'The exercise starts running as soon as you launch it.', confirmLabel: 'Launch' });
   }).catch(function(e) { showToast('Failed to load exercise plan: ' + (e.message || 'error'), 'err'); });
 }
 
@@ -250,116 +249,41 @@ export function purpleDebriefHtml(p) {
   var rate = p.detectionRate == null ? 'Not yet judged'
     : Math.round(p.detectionRate) + '% (' + p.detected + ' of ' + (p.detected + p.missed) + ')';
   var rows = (p.techniques || []).map(function(t) {
-    var col = t.outcome === 'detected' ? 'var(--success)' : t.outcome === 'missed' ? 'var(--danger)' : 'var(--muted)';
-    return '<div class="kpi-row" style="justify-content:space-between;padding:0.25rem 0;border-bottom:1px solid var(--border)">' +
-      '<span>' + x(t.techniqueId) + (t.providers && t.providers.length ? ' <span class="tiny muted">' + x(t.providers.join(', ')) + '</span>' : '') + '</span>' +
-      '<span style="color:' + col + '">' + x(t.outcome) + '</span></div>';
+    var tone = t.outcome === 'detected' ? 'ok' : t.outcome === 'missed' ? 'bad' : 'muted';
+    return '<div class="exd-pt"><span><b class="mono">' + x(t.techniqueId) + '</b>' + (t.providers && t.providers.length ? ' <span class="tiny muted">' + x(t.providers.join(', ')) + '</span>' : '') + '</span>' +
+      '<span class="rk-pill tone-' + tone + '">' + x(t.outcome) + '</span></div>';
   }).join('');
-  var gaps = (p.gaps || []).length ? '<div class="tiny" style="margin-top:0.4rem;color:var(--danger)">Gaps to close: ' + p.gaps.map(x).join('; ') + '</div>' : '';
-  var none = (p.noExpectation || []).length ? '<div class="tiny muted" style="margin-top:0.4rem">No detection expectation was recorded for ' + p.noExpectation.map(x).join(', ') + ', so these were not judged either way.</div>' : '';
-  return '<div style="margin-bottom:0.75rem"><div style="font-weight:600">Purple-team debrief</div>' +
-    '<div class="tiny muted" style="margin-bottom:0.3rem">Detection rate: ' + x(rate) + '. Awaiting an approved verdict: ' + (p.unresolved || 0) + '.</div>' +
-    rows + gaps + none + '</div>';
+  var gaps = (p.gaps || []).length ? '<div class="exd-note tone-bad"><p>Gaps to close: ' + p.gaps.map(x).join('; ') + '</p></div>' : '';
+  var none = (p.noExpectation || []).length ? '<p class="exd-quiet">No detection expectation was recorded for ' + p.noExpectation.map(x).join(', ') + ', so these were not judged either way.</p>' : '';
+  return '<h4 class="exd-h">Purple-team debrief</h4><p class="exd-desc">Detection rate: ' + x(rate) + '. Awaiting an approved verdict: ' + (p.unresolved || 0) + '.</p>' +
+    '<div class="exd-pts">' + rows + '</div>' + gaps + none;
 }
+
 
 var _exDetailOpenId = null;
 export function openExerciseDetail(id) {
   _exDetailOpenId = id;
   Promise.all([
-    apicall('/api/exercises/executions/' + encodeURIComponent(id)),
-    apicall('/api/exercises/executions/' + encodeURIComponent(id) + '/phishing-runs').catch(function() { return []; }),
-    apicall('/api/exercises/executions/' + encodeURIComponent(id) + '/report.json').catch(function() { return null; })
+    exCall('/api/exercises/executions/' + encodeURIComponent(id)),
+    exCall('/api/exercises/executions/' + encodeURIComponent(id) + '/phishing-runs').catch(function() { return []; }),
+    exCall('/api/exercises/executions/' + encodeURIComponent(id) + '/report.json').catch(function() { return null; })
   ]).then(function(res) {
     var purple = res[2] && res[2].purple ? res[2].purple : null;
     var d = res[0];
     var phishing = Array.isArray(res[1]) ? res[1] : [];
-    var ex = d.execution || {}, steps = d.steps || [];
+    var ex = d.execution || {};
     document.getElementById('exercise-detail-title').textContent = ex.name || ex.plan_id || 'Execution';
-    var sc = ex.score;
-    var scoreHtml;
-    if (!sc) {
-      scoreHtml = '<div class="tiny muted" style="margin-bottom:0.75rem">Not yet scored</div>';
-    } else if (!sc.measurable) {
-      // Nothing was sent and nothing was detected, so there is no result to
-      // report. Say that plainly instead of rendering score.overall, which in
-      // this state is a misleading 60 (see ExerciseScore.Measurable in
-      // internal/exercise/types.go) that looks identical to a genuinely
-      // excellent run.
-      var sentCount = (sc.human && sc.human.sent) || 0;
-      scoreHtml =
-        '<div style="margin-bottom:0.75rem;padding:0.6rem 0.75rem;border:1px solid var(--border);border-left:3px solid var(--warning);border-radius:4px;background:var(--elevated)">' +
-          '<div style="font-size:0.8rem;font-weight:600;color:var(--warning)">Not measurable — no result to report</div>' +
-          '<div class="tiny muted" style="margin-top:0.25rem;line-height:1.6">' +
-            'This exercise completed without producing anything measurable: ' + sentCount + ' inject(s) sent, ' +
-            'and no EDR, SIEM, or ticketing signal observed. A score is deliberately withheld rather than ' +
-            'shown as a number that would not mean anything. Add a step that actually sends an inject ' +
-            '(email/SMS/agent task) to get a real result — approval and wait steps alone perform no ' +
-            'technical action and cannot be scored.' +
-          '</div>' +
-        '</div>';
-    } else {
-      var hasSent = !!(sc.human && sc.human.sent > 0);
-      scoreHtml =
-        '<div class="kpi-row" style="margin-bottom:0.75rem">' +
-        '<span class="badge">Overall ' + (sc.overall != null ? sc.overall.toFixed(0) : '—') + '</span>' +
-        // 0 clicked of 0 sent is not "0% clicked" -- that reads as "nobody fell
-        // for it" when nothing was ever sent. Only show a rate with a real
-        // denominator.
-        '<span class="badge">Click rate ' + ((hasSent && sc.human.click_rate != null) ? (sc.human.click_rate * 100).toFixed(0) + '% (' + (sc.human.clicked || 0) + '/' + sc.human.sent + ')' : '— n/a') + '</span>' +
-        '<span class="badge">EDR ' + ((sc.technical && sc.technical.edr_detected) ? 'detected' : '— not detected') + '</span>' +
-        '<span class="badge">SLA ' + ((sc.management && sc.management.sla_met) ? 'met' : '— n/a') + '</span>' +
-        '</div>';
-    }
-    // What each step type actually does, so a row of "completed" badges can't
-    // be mistaken for "something was tested". Approval/wait in particular
-    // perform no technical action at all by design.
-    var EX_STEP_WHAT = {
-      approval:   'human approval gate — pauses for a person to approve; performs no technical action',
-      wait:       'timed delay — performs no technical action',
-      send_email: 'sends an email inject to the targets',
-      send_sms:   'sends an SMS inject to the targets',
-      agent_task: 'dispatches a task to the BAS agent on the endpoint',
-      webhook:    'calls an external HTTP endpoint',
-      notify:     'sends a notification',
-      slack:      'sends a Slack message'
-    };
-    var stepsHtml = steps.map(function(s) {
-      var canApprove = s.status === 'waiting' && s.step_type === 'approval';
-      var what = EX_STEP_WHAT[s.step_type] || '';
-      // Real per-step outcome the API already returns and this drawer used to
-      // discard entirely -- the "no info, no result" gap.
-      var detail = '';
-      if (s.error) {
-        detail = '<div class="tiny" style="color:var(--danger);margin-left:0.2rem">Error: ' + x(s.error) + '</div>';
-      } else if (s.result && Object.keys(s.result).length) {
-        detail = '<div class="tiny muted" style="margin-left:0.2rem;word-break:break-word">Result: ' + x(JSON.stringify(s.result)) + '</div>';
-      } else if (s.status === 'completed' && (s.step_type === 'approval' || s.step_type === 'wait')) {
-        detail = '<div class="tiny muted" style="margin-left:0.2rem">No technical action — nothing executed on any endpoint.</div>';
-      }
-      return '<div style="padding:0.4rem 0;border-bottom:1px solid var(--border)">' +
-        '<div class="kpi-row" style="justify-content:space-between">' +
-          '<span>' + x(s.step_id) + ' <span class="tiny muted">' + x(s.step_type) + '</span></span>' +
-          '<span><span class="badge">' + x(s.status) + '</span>' +
-          (canApprove ? ' <button class="btn btn-outline btn-sm"' + on('click', 'approveExStep', id, s.step_id) + '>Approve</button>' : '') +
-          '</span>' +
-        '</div>' +
-        (what ? '<div class="tiny muted" style="margin-left:0.2rem">' + x(what) + '</div>' : '') +
-        detail +
-      '</div>';
-    }).join('');
-    var actions = (ex.status === 'running' || ex.status === 'paused') ?
-      '<button class="btn btn-outline btn-sm"' + on('click', 'abortExecution', id) + '>Abort</button>' : '';
     // Phishing runs linked to this execution, described by the same view as the library.
-    var phishingHtml = phishing.length ? '<div style="margin-bottom:0.75rem"><div class="tiny muted">Phishing runs linked to this execution</div>' +
+    var phishingHtml = phishing.length ? '<h4 class="exd-h">Phishing runs linked to this execution</h4>' +
       phishing.map(function(run) {
         var v = describePhishingRun(run);
-        var rows = (v.rows || []).map(function(r) { return '<div class="tiny">' + x(r.label) + ': ' + x(r.text) + '</div>'; }).join('');
-        return '<div style="padding:0.4rem 0;border-bottom:1px solid var(--border)"><span>' + x(v.scenarioId) + '</span> <span class="badge">' + x(v.status) + '</span>' +
+        var rows = (v.rows || []).map(function(r) { return '<div class="tiny muted">' + x(r.label) + ': ' + x(r.text) + '</div>'; }).join('');
+        return '<div class="exd-phish"><div><b>' + x(v.scenarioId) + '</b> <span class="badge">' + x(v.status) + '</span></div>' +
           (v.note ? '<div class="tiny muted">' + x(v.note) + '</div>' : '') + rows + '</div>';
-      }).join('') + '</div>' : '';
-    document.getElementById('exercise-detail-body').innerHTML = scoreHtml + purpleDebriefHtml(purple) + stepsHtml + phishingHtml + '<div style="margin-top:0.75rem">' + actions + '</div>';
+      }).join('') : '';
+    document.getElementById('exercise-detail-body').innerHTML = execDetailHtml(id, d, { purpleHtml: purpleDebriefHtml(purple), phishingHtml: phishingHtml });
     document.getElementById('exercise-detail-overlay').classList.add('open');
-  }).catch(function() {});
+  }).catch(function(e) { showToast('Could not load this execution: ' + ((e && e.message) || 'error'), 'err'); });
 }
 
 export function closeExerciseDetail() {
@@ -369,7 +293,7 @@ export function closeExerciseDetail() {
 export function closeExerciseDetailOnBackdrop(el, event) { if (event.target === el) closeExerciseDetail(); }
 
 export function approveExStep(id, stepId) {
-  apicall('/api/exercises/executions/' + encodeURIComponent(id) + '/steps/' + encodeURIComponent(stepId) + '/approve', { method: 'POST' })
+  exCall('/api/exercises/executions/' + encodeURIComponent(id) + '/steps/' + encodeURIComponent(stepId) + '/approve', { method: 'POST' })
     .then(function() { showToast('Step approved', 'ok'); openExerciseDetail(id); })
     .catch(function(e) { showToast('Approve failed: ' + (e.message || 'error'), 'err'); });
 }
@@ -377,14 +301,17 @@ export function approveExStep(id, stepId) {
 export function abortExecutionStop(id, el, event) { event.stopPropagation(); abortExecution(id); }
 
 export function abortExecution(id) {
-  if (!confirm('Abort this exercise execution?')) return;
-  apicall('/api/exercises/executions/' + encodeURIComponent(id) + '/abort', { method: 'POST' })
-    .then(function() { showToast('Execution aborted', 'ok'); openExerciseDetail(id); loadExercisesTab(); })
-    .catch(function(e) { showToast('Abort failed: ' + (e.message || 'error'), 'err'); });
+  openConfirmDiffModal('Abort this exercise?',
+    '<p class="exd-desc">Steps that have not run yet will be skipped. Anything already sent or executed is not undone.</p>',
+    function() {
+      exCall('/api/exercises/executions/' + encodeURIComponent(id) + '/abort', { method: 'POST' })
+        .then(function() { showToast('Execution aborted', 'ok'); openExerciseDetail(id); loadExercisesTab(); })
+        .catch(function(e) { showToast('Abort failed: ' + (e.message || 'error'), 'err'); });
+    }, { sub: 'This stops the exercise now.', confirmLabel: 'Abort exercise' });
 }
 
 export function createPlanFromOpenAEV(id) {
-  apicall('/api/openaev/scenarios/' + encodeURIComponent(id) + '/create-plan', { method: 'POST' })
+  exCall('/api/openaev/scenarios/' + encodeURIComponent(id) + '/create-plan', { method: 'POST' })
     .then(function() { showToast('Exercise plan created', 'ok'); closeOpenAEVDetail(); showTab('exercises'); })
     .catch(function(e) { showToast('Create failed: ' + (e.message || 'error'), 'err'); });
 }

@@ -32,3 +32,53 @@
 .ex-plan .grow { flex: 1; min-width: 0; }
 .ex-plan .btn { width: auto; flex: 0 0 auto; }
 .ex-plan-sub { font-size: 12px; }
+
+/* Drawers (execution + scenario) and the launch dialog */
+.exd-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; }
+.exd-prog { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px; margin: 0 0 14px; }
+.exd-prog small { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.exd-h { margin: 20px 0 8px; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.exd-desc { margin: 0 0 10px; font-size: 13px; line-height: 1.55; color: var(--text); }
+.exd-quiet { margin: 0 0 10px; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.exd-note { margin: 0 0 14px; padding: 10px 12px; border: 1px solid var(--border); border-left: 3px solid var(--muted); border-radius: 10px; background: var(--elevated); }
+.exd-note b { display: block; font-size: 12.5px; margin-bottom: 2px; }
+.exd-note p { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--muted); }
+.exd-note.tone-warn { border-left-color: var(--warning); } .exd-note.tone-warn b { color: var(--warning); }
+.exd-note.tone-info { border-left-color: var(--info); } .exd-note.tone-info b { color: var(--info-text); }
+.exd-note.tone-bad { border-left-color: var(--danger); } .exd-note.tone-bad b { color: var(--danger-text); }
+.exd-tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 0 0 6px; }
+.exd-tile { padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--elevated); display: flex; flex-direction: column; gap: 2px; }
+.exd-tile span { font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.exd-tile b { font-size: 20px; line-height: 1.2; }
+.exd-tile small { font-size: 11.5px; color: var(--muted); }
+.exd-tile.tone-ok b { color: var(--success); } .exd-tile.tone-warn b { color: var(--warning); } .exd-tile.tone-bad b { color: var(--danger-text); }
+.exd-steps { list-style: none; margin: 0; padding: 0; }
+.exd-step { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.exd-step:last-child { border-bottom: 0; }
+.exd-n { flex: 0 0 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11.5px; font-weight: 700; background: var(--hover); color: var(--muted); border: 1px solid var(--border); }
+.exd-step.tone-ok .exd-n { background: var(--success-dim, rgba(34,197,94,.14)); color: var(--success); border-color: transparent; }
+.exd-step.tone-info .exd-n { background: var(--info-dim, rgba(59,130,246,.16)); color: var(--info-text); border-color: transparent; }
+.exd-step.tone-warn .exd-n { background: var(--warning-dim, rgba(245,158,11,.16)); color: var(--warning); border-color: transparent; }
+.exd-step.tone-bad .exd-n { background: var(--danger-dim); color: var(--danger-text); border-color: transparent; }
+.exd-step-b { flex: 1; min-width: 0; }
+.exd-step-h { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.exd-step-r { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.exd-what { margin-top: 3px; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.exd-err { margin-top: 6px; padding: 6px 10px; font-size: 12.5px; border-radius: 8px; color: var(--danger-text); background: var(--danger-dim); }
+.exd-res { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 6px 0 0; font-size: 12.5px; }
+.exd-res dt { color: var(--muted); text-transform: capitalize; } .exd-res dd { margin: 0; word-break: break-word; font-variant-numeric: tabular-nums; }
+.exd-tech { padding: 1px 7px; border-radius: 6px; background: var(--hover); border: 1px solid var(--border); color: var(--muted); }
+.exd-pts { margin: 0 0 8px; }
+.exd-pt { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.exd-phish { padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.exd-foot { margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.exd-foot .exd-quiet { margin: 0; }
+.exd-field { display: flex; flex-direction: column; gap: 3px; margin: 0 0 12px; font-size: 13px; }
+.exd-field > span { font-weight: 600; }
+.exd-field input { width: 100%; box-sizing: border-box; }
+
+/* The shared confirm dialog must sit above any open drawer (both were z-index 100 and the drawer is later in the page) */
+#confirm-diff-overlay { z-index: 110; }
+.exd-step-r .btn { width: auto; flex: 0 0 auto; }
+.exd-field input { padding: 8px 10px; }
+.ex-wrap td.mono { white-space: nowrap; }

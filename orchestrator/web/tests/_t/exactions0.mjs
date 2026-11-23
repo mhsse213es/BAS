@@ -1,0 +1,14 @@
+import { boot } from './exlib.mjs';
+const b = await boot({ dialogAnswer: 'accept', promptValue: 'Finance Workstations' }); const { page } = b;
+await b.go('exercises');
+const rowsOf = () => page.locator('#ex-execs-box tbody tr').count();
+const log = async (label) => { console.log(label.padEnd(34), '| execs:', await rowsOf(), '| dialogs:', JSON.stringify(b.dialogs.splice(0)), '| posts:', JSON.stringify(b.reqs.splice(0).filter((r) => r.startsWith('POST'))), '| toast:', await b.toast()); };
+b.reqs.length = 0;
+await page.locator('.ex-plan', { hasText: 'Phishing Response Drill' }).locator('button:has-text("Launch")').click(); await page.waitForTimeout(1200); await log('Launch plan WITHOUT variables');
+await page.locator('.ex-plan', { hasText: 'Ransomware Tabletop' }).locator('button:has-text("Launch")').click(); await page.waitForTimeout(1200); await log('Launch plan WITH 2 variables');
+await page.locator('.ex-plan', { hasText: 'Empty plan' }).locator('button:has-text("Launch")').click(); await page.waitForTimeout(1200); await log('Launch EMPTY plan (0 steps)');
+await page.locator('#ex-execs-box tbody tr', { hasText: 'Drill #7' }).click(); await page.waitForTimeout(800);
+await page.locator('#exercise-detail-overlay button:has-text("Approve")').click(); await page.waitForTimeout(900); await log('Approve step (drawer)');
+await page.locator('#exercise-detail-overlay button:has-text("Abort")').click(); await page.waitForTimeout(900); await log('Abort (drawer)');
+console.log('errors', JSON.stringify(b.errs));
+await b.close();

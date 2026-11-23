@@ -124,3 +124,60 @@ export function csvRow(kind, r, cols) { return cols.map(function(c) { return cel
 export function rangeCounts(shown, total) { return shown + ' of ' + total + ' rows'; }
 
 export { pageCount, rangeText, csvText } from './runs-model.js';
+
+// ── Execution drawer helpers ────────────────────────────────────────────────────────────────────────────────────
+
+export var STEP_LABEL = { approval: 'Approval gate', wait: 'Wait', send_email: 'Send email', send_sms: 'Send SMS', agent_task: 'Agent task', webhook: 'Webhook', notify: 'Notification', slack: 'Slack message' };
+// What each step type really does, so a row of "completed" cannot be mistaken for "something was tested".
+// Approval and wait perform no technical action at all, by design.
+export var STEP_WHAT = {
+  approval: 'Human approval gate: pauses until a person approves. Performs no technical action.',
+  wait: 'Timed delay. Performs no technical action.',
+  send_email: 'Sends an email inject to the targets.',
+  send_sms: 'Sends an SMS inject to the targets.',
+  agent_task: 'Dispatches a task to the BAS agent on the endpoint.',
+  webhook: 'Calls an external HTTP endpoint.',
+  notify: 'Sends a notification.',
+  slack: 'Sends a Slack message.',
+};
+export function stepLabel(t) { return STEP_LABEL[t] || String(t || 'Step'); }
+export function stepWhat(t) { return STEP_WHAT[t] || ''; }
+export function stepTone(status) {
+  return status === 'completed' ? 'ok' : status === 'running' ? 'info' : status === 'waiting' ? 'warn' : status === 'failed' || status === 'aborted' ? 'bad' : 'muted';
+}
+
+// runSummary: where an execution is, from its steps. `current` is the step in progress, `waiting` the approval it is
+// stuck on, `failed` the step that stopped it.
+export function runSummary(execution, steps) {
+  steps = list(steps);
+  var total = steps.length || n(execution && execution.steps_total);
+  var done = steps.length ? steps.filter(function(s) { return s.status === 'completed'; }).length : n(execution && execution.steps_done);
+  var find = function(st) { return steps.filter(function(s) { return s.status === st; })[0] || null; };
+  return { done: done, total: total, pct: total ? Math.round(done / total * 100) : null, current: find('running'), waiting: find('waiting'), failed: find('failed') };
+}
+
+// scoreTone: higher is better, so 75+ is good and under 50 is poor.
+export function scoreTone(v) { var k = Number(v); return !isFinite(k) ? 'muted' : k >= 75 ? 'ok' : k >= 50 ? 'warn' : 'bad'; }
+
+// resultPairs: a step's result object as [label, text] pairs; nested values are shown as compact JSON.
+export function resultPairs(res) {
+  if (!res || typeof res !== 'object') return [];
+  return Object.keys(res).map(function(k) {
+    var v = res[k];
+    return [k.replace(/_/g, ' '), v !== null && typeof v === 'object' ? JSON.stringify(v) : String(v)];
+  });
+}
+
+// stateNote: the one-line "what is happening" callout at the top of the drawer; null when there is nothing to add.
+export function stateNote(execution, steps) {
+  var st = execution && execution.status, s = runSummary(execution, steps);
+  if (st === 'paused' && s.waiting) return { tone: 'warn', title: 'Waiting for approval', text: 'The exercise is paused at "' + (s.waiting.step_id || 'an approval step') + '". Nothing further runs until someone approves it.' };
+  if (st === 'paused') return { tone: 'warn', title: 'Paused', text: 'The exercise is paused and will not continue until it is resumed.' };
+  if (st === 'running') return { tone: 'info', title: 'Running', text: s.current ? 'Now on "' + (s.current.step_id || 'a step') + '" (' + stepLabel(s.current.step_type).toLowerCase() + '). This page refreshes by itself.' : 'The exercise is in progress. This page refreshes by itself.' };
+  if (st === 'created') return { tone: 'muted', title: 'Not started', text: 'This execution was created but has not been launched, so no step has run.' };
+  if (st === 'failed') return { tone: 'bad', title: 'Stopped by a failure', text: s.failed ? 'Step "' + (s.failed.step_id || 'a step') + '" failed, so the remaining steps did not run.' : 'A step failed, so the remaining steps did not run.' };
+  if (st === 'aborted') return { tone: 'bad', title: 'Aborted', text: 'An operator stopped this exercise. Steps that had not run were skipped, and nothing already done was undone.' };
+  return null;
+}
+
+export function planSteps(p) { return list(p && p.steps).length; }

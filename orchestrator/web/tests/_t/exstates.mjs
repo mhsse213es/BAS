@@ -1,0 +1,24 @@
+import { boot } from './exlib.mjs';
+let b = await boot({ empty: true }); await b.go('exercises');
+await b.page.screenshot({ path: b.T + 'ex-empty.png', fullPage: true, clip: { x: 240, y: 60, width: 1200, height: 900 } });
+console.log('empty errors', JSON.stringify(b.errs)); await b.close();
+b = await boot(); b.state.fail['/api/exercises/executions'] = 'database unavailable'; b.state.fail['/api/exercises/plans'] = 'plans service down';
+await b.go('exercises');
+await b.page.screenshot({ path: b.T + 'ex-fail.png', fullPage: true, clip: { x: 240, y: 60, width: 1200, height: 1100 } });
+console.log('fail errors', JSON.stringify(b.errs)); await b.close();
+b = await boot(); await b.go('exercises');
+const p = b.page;
+// table controls on executions
+await p.locator('#ext-execs-q').fill('phishing'); await p.waitForTimeout(300);
+console.log('filter phishing ->', await p.locator('#ext-execs-count').innerText());
+await p.locator('#ext-execs-q').fill('zzz'); await p.waitForTimeout(300);
+console.log('filter zzz ->', await p.locator('#ex-execs-box .dt-empty').innerText().then((t) => t.replace(/\s+/g, ' ')));
+await p.locator('#ex-execs-box button:has-text("Clear filter")').click(); await p.waitForTimeout(300);
+await p.locator('#ex-execs-box th:has-text("Progress")').click(); await p.waitForTimeout(300);
+console.log('sorted by progress first:', await p.locator('#ex-execs-box tbody tr').first().innerText().then((t) => t.replace(/\s+/g, ' ').slice(0, 60)));
+await p.locator('#ex-execs-box .dt-pager button:has-text("Next")').click(); await p.waitForTimeout(300);
+console.log('page 2 rows:', await p.locator('#ex-execs-box tbody tr').count(), await p.locator('#ext-execs-range').innerText());
+await p.locator('#ex-execs-box tbody .dt-cb').first().check(); await p.waitForTimeout(200);
+await p.locator('#ex-execs-box button:has-text("Export selected")').click(); await p.waitForTimeout(400);
+console.log('toast:', await b.toast());
+console.log('errors', JSON.stringify(b.errs)); await b.close();

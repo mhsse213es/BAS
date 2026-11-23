@@ -219,7 +219,7 @@ test('detection-verification: vfLoadQueue keeps payloads inside data-args', asyn
 
 test('openaev: loadExercisesTab keeps payloads inside data-args', async () => {
   for (const p of PAYLOADS) {
-    globalThis.fetch = async () => ({ status: 200, json: async () => ([{ id: p, name: p, steps: [] }]) });
+    globalThis.fetch = async () => ({ status: 200, json: async () => ([{ id: p, name: p, steps: [{ id: 's1' }] }]) });
     loadExercisesTab();
     await tick(); await tick();
     const div = document.getElementById('ex-plans-body');

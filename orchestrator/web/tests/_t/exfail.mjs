@@ -1,0 +1,15 @@
+import { boot } from './exlib.mjs';
+let b = await boot(); b.state.fail['/api/exercises/executions'] = 'database unavailable'; b.state.fail['/api/exercises/plans'] = 'plans service down';
+await b.go('exercises');
+await b.page.screenshot({ path: b.T + 'ex-fail.png', fullPage: true, clip: { x: 240, y: 700, width: 1200, height: 600 } });
+console.log('load-fail errors', JSON.stringify(b.errs)); await b.close();
+b = await boot(); await b.go('exercises');
+b.state.fail['/launch'] = 'agent group has no online agents';
+await b.page.locator('.ex-plan', { hasText: 'Phishing Response' }).locator('button:has-text("Launch")').click(); await b.page.waitForTimeout(600);
+await b.page.locator('#confirm-diff-submit-btn').click(); await b.page.waitForTimeout(1200);
+console.log('launch refused -> toast:', await b.toast());
+delete b.state.fail['/launch']; b.state.fail['/approve'] = 'step already approved';
+await b.page.locator('#ex-execs-box tbody tr', { hasText: 'Drill #7' }).click(); await b.page.waitForTimeout(800);
+await b.page.locator('#exercise-detail-overlay button:has-text("Approve")').click(); await b.page.waitForTimeout(900);
+console.log('approve refused -> toast:', await b.toast());
+console.log('errors', JSON.stringify(b.errs)); await b.close();
