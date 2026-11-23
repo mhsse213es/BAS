@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/audspect/bas/internal/compliance"
@@ -109,6 +110,7 @@ func (e *Engine) WriteAuditPack(ctx context.Context, agentID string, mapper *com
 			report.Agent.Hostname, report.Agent.IPAddress,
 			report.Agent.OSVersion, report.Agent.EnvLabel,
 			time.Now().UTC().Format("02 Jan 2006, 15:04 UTC"),
+			frameworkListing(mapper),
 		)
 	})
 
@@ -261,6 +263,16 @@ func (e *Engine) WriteAuditPack(ctx context.Context, agentID string, mapper *com
 	return nil
 }
 
+// frameworkListing names each framework file the pack writes, from the loaded mapper, so the README cannot drift
+// from the compliance/ folder.
+func frameworkListing(mapper *compliance.Mapper) string {
+	var b strings.Builder
+	for _, fw := range mapper.Frameworks() {
+		fmt.Fprintf(&b, "  %-22s%s\n", fw.ID+".csv", fw.Name)
+	}
+	return b.String()
+}
+
 func sanitize(s string) string {
 	var b []byte
 	for _, c := range []byte(s) {
@@ -311,12 +323,6 @@ Verifying integrity
   Every file must report "OK". See SIGNATURE.txt to authenticate the manifest.
 
 Frameworks in compliance/
-  NIST_CSF_2.csv        NIST Cybersecurity Framework 2.0
-  ISO_27001_2022.csv    ISO/IEC 27001:2022
-  RBI_CSF.csv           RBI Cyber Security Framework
-  SEBI_CSCRF.csv        SEBI CSCRF
-  IRDAI_CSF.csv         IRDAI Cyber Security Guidelines
-  CERT_IN.csv           CERT-In Directions 2022
-
+%s
 Classification: CONFIDENTIAL — For authorized use only.
 `
