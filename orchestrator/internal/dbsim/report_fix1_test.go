@@ -83,7 +83,7 @@ func TestRedactAdversarialInputIsFast(t *testing.T) {
 	for _, in := range inputs {
 		redact(in)
 	}
-	if d := time.Since(start); d > time.Second {
+	if d := time.Since(start); d > redactBudget {
 		t.Fatalf("redaction took %v", d)
 	}
 }
