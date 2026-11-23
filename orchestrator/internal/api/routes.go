@@ -960,6 +960,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 
 		// Audit log — append-only record of all operator actions
 		r.With(auth.RequirePermission(auth.CanViewAuditLogs)).Get("/api/audit-logs", h.GetAuditLogs)
+		r.With(auth.RequirePermission(auth.CanViewAuditLogs)).Get("/api/audit-logs/retention", h.GetAuditRetention)
 
 		// Ticketing — ITSM connector management (admin only)
 		r.With(auth.RequirePermission(auth.CanListTicketingConfigs)).Get("/api/ticketing/configs", h.ListTicketingConfigs)

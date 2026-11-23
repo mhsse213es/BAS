@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/audspect/bas/internal/auditretention"
 	"github.com/audspect/bas/internal/auth"
 )
 
@@ -150,4 +151,15 @@ func (h *Handler) GetAuditLogs(w http.ResponseWriter, r *http.Request) {
 		entries = append(entries, e)
 	}
 	respond(w, map[string]any{"entries": entries, "limit": limit, "offset": offset})
+}
+
+// GetAuditRetention answers GET /api/audit-logs/retention: how far back the audit log reaches against the
+// retention minimum. It reads only; the audit log is append-only.
+func (h *Handler) GetAuditRetention(w http.ResponseWriter, r *http.Request) {
+	var oldest *time.Time
+	if err := h.db.QueryRow(r.Context(), `SELECT min(ts) FROM audit_logs`).Scan(&oldest); err != nil {
+		jsonError(w, "could not read audit log coverage", http.StatusInternalServerError)
+		return
+	}
+	respond(w, auditretention.Coverage(oldest, time.Now().UTC()))
 }
