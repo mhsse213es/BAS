@@ -110,10 +110,18 @@ type Config struct {
 	ThreatIntelRegions   []string `json:"threat_intel_regions,omitempty"`    // e.g. ["Asia","India"]
 
 	// TCF Phase 6: validation lab (empty agent ID disables it entirely)
-	ValidationLabAgentID     string `json:"validation_lab_agent_id,omitempty"`
+	ValidationLabAgentID string `json:"validation_lab_agent_id,omitempty"`
+	// Audit-log purge (off by default). Rows older than AuditPurgeMaxDays are archived, signed and verified, then
+	// deleted, under the separate bas_audit_purger role. AuditPurgePassword is a secret and is never serialized.
+	AuditPurgeEnabled      bool   `json:"audit_purge_enabled,omitempty"`
+	AuditPurgeMaxDays      int    `json:"audit_purge_max_days,omitempty"` // default 365; never below 180
+	AuditPurgePassword     string `json:"-"`
+	AuditArchiveDir        string `json:"audit_archive_dir,omitempty"`
+	AuditArchivePrivateKey string `json:"audit_archive_private_key,omitempty"`
+	AuditArchivePublicKey  string `json:"audit_archive_public_key,omitempty"`
 	// SprayLabAgentID is the one agent allowed the lab-only spray and guessing exemption (is_spray_lab).
 	// Empty clears the exemption everywhere.
-	SprayLabAgentID string `json:"spray_lab_agent_id,omitempty"`
+	SprayLabAgentID          string `json:"spray_lab_agent_id,omitempty"`
 	ValidationLabPollMinutes int    `json:"validation_lab_poll_minutes,omitempty"` // default 5
 	// ValidationLabTimeoutMinutes bounds how long the lab waits for a run to
 	// complete. 0 = default (10); clamped to a conservative hard max (30) in
@@ -403,6 +411,14 @@ func Load(path string) (*Config, error) {
 	if v, ok := os.LookupEnv("SPRAY_LAB_AGENT_ID"); ok {
 		cfg.SprayLabAgentID = v
 	}
+	cfg.AuditPurgeEnabled = os.Getenv("AUDIT_PURGE_ENABLED") == "true"
+	if v := os.Getenv("AUDIT_PURGE_MAX_DAYS"); v != "" {
+		fmt.Sscanf(v, "%d", &cfg.AuditPurgeMaxDays)
+	}
+	cfg.AuditPurgePassword = os.Getenv("AUDIT_PURGE_PASSWORD")
+	cfg.AuditArchiveDir = os.Getenv("AUDIT_ARCHIVE_DIR")
+	cfg.AuditArchivePrivateKey = os.Getenv("AUDIT_ARCHIVE_PRIVATE_KEY")
+	cfg.AuditArchivePublicKey = os.Getenv("AUDIT_ARCHIVE_PUBLIC_KEY")
 	if v := os.Getenv("VALIDATION_LAB_POLL_MINUTES"); v != "" {
 		fmt.Sscanf(v, "%d", &cfg.ValidationLabPollMinutes)
 	}

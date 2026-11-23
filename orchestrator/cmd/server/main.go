@@ -1232,6 +1232,7 @@ func main() {
 		log.Println("[validationlab] disabled (VALIDATION_LAB_AGENT_ID not set)")
 	}
 
+	startAuditPurge(context.Background(), cfg, adminPool, pool)
 	vexSweepScheduler.Start(func(ctx context.Context) {
 		if err := vexSweepDispatcher.Tick(ctx); err != nil {
 			log.Printf("[vexsweep] tick: %v", err)

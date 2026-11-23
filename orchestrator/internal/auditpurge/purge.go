@@ -6,6 +6,7 @@ package auditpurge
 import (
 	"context"
 	"crypto/rsa"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -147,4 +148,12 @@ func deleteBatch(ctx context.Context, pool *pgxpool.Pool, cutoff time.Time, rows
 		return 0, err
 	}
 	return int(tag.RowsAffected()), nil
+}
+
+func toJSON(v any) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
 }
