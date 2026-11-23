@@ -349,6 +349,20 @@ controls:
     category: IDS/IPS — CDE
     techniques: [T1046, T1021, T1072, T1095]
 
+  # Requirement wording below is paraphrased from PCI DSS v4.0.1 section 11.4.5-11.4.6 from memory: check it
+  # against the standard text before attestation.
+  - id: REQ-11.4.5
+    name: If segmentation isolates the CDE, penetration tests of the segmentation controls are performed every 12 months and after changes
+    domain: Security Testing
+    category: Segmentation Testing
+    techniques: [T1046, T1021, T1190]
+
+  - id: REQ-11.4.6
+    name: For service providers, penetration tests of the segmentation controls are performed every six months and after changes
+    domain: Security Testing
+    category: Segmentation Testing
+    techniques: [T1046, T1021, T1190]
+
   - id: REQ-11.4.7
     name: Multi-tenant service providers support their customers for external penetration testing
     domain: Security Testing
