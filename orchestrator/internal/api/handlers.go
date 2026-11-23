@@ -6521,6 +6521,7 @@ func (h *Handler) GetComplianceReport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	results = reporting.FilterResults(results, filter)
+	results = append(results, h.segmentationEvidenceFor(r.Context(), frameworkID)...)
 
 	// ── Generate report ───────────────────────────────────────────────────────
 	report, err := h.complianceMapper.GenerateReport(results, frameworkID, resolvedAgentID, resolvedRunID, scenarioName)
