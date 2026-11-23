@@ -206,9 +206,10 @@ export function loadThreatPriorityActors() {
 }
 
 // ── Table controls ──
-export function setThreatPriorityTier(id) { TIER = id; T.page = 0; paintTable(); }
-export function onThreatPrioritySearch(el) { T.q = String((el && el.value) || ''); T.page = 0; paintTable(); }
-export function clearTpTableQuery() { T.q = ''; T.page = 0; var q = document.getElementById('tp-search'); if (q) q.value = ''; paintTable(); }
+// A filter change drops the selection: rows you can no longer see must not stay selected (or be exported as "selected").
+export function setThreatPriorityTier(id) { TIER = id; T.page = 0; T.sel = {}; paintTable(); }
+export function onThreatPrioritySearch(el) { T.q = String((el && el.value) || ''); T.page = 0; T.sel = {}; paintTable(); }
+export function clearTpTableQuery() { T.q = ''; T.page = 0; T.sel = {}; var q = document.getElementById('tp-search'); if (q) q.value = ''; paintTable(); }
 export function setTpPer(el) { T.per = Number(el && el.value) || 8; T.page = 0; paintTable(); }
 export function tpPage(d) { T.page += Number(d) || 0; paintTable(); }
 export function tpSortBy(col) {

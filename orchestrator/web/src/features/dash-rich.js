@@ -332,17 +332,23 @@ function renderGaps() {
 }
 var STATUS_TONE = { completed: 'ok', running: 'info', failed: 'bad', partial: 'warn', queued: 'warn', requested: 'warn', cancelled: 'muted', paused: 'warn' };
 var cap = function(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); };
-function runTable(id, title, runs, action, emptyMsg) {
+function runTable(id, title, runs, action, emptyMsg, scored) {
   var head = tab('View all →', 'runs');
   if (!runs.length) { cell(id, emptyCard(title, 'play', D.runs ? (emptyMsg || 'No runs yet') : 'Loading…', '', { actions: head })); return; }
-  cell(id, card(title, '<div class="tbl-wrap"><table><thead><tr><th>Run</th><th>Target</th><th>Status</th></tr></thead><tbody>' + runs.slice(0, 5).map(function(r) {
+  cell(id, card(title, '<div class="tbl-wrap"><table><thead><tr><th>Run</th><th>Target</th>' + (scored ? '<th>Prevented</th>' : '<th>Status</th>') + '</tr></thead><tbody>' + runs.slice(0, 5).map(function(r) {
     var paused = r.status === 'running' && r.paused;
     return '<tr class="rk-click"' + on('click', action, r.id) + '><td><div>' + x(r.name || r.scenarioId) + '</div><div class="mono muted tiny">' + x(r.id) + '</div></td><td class="muted">' + x(r.hostname || r.agentId || '—') + '</td>' +
-      '<td>' + pill(paused ? 'Paused' : cap(r.status), paused ? 'warn' : STATUS_TONE[r.status] || 'muted') + '</td></tr>';
+      (scored ? '<td>' + pill(M.prevPctOf(r) + '%', M.prevPctOf(r) >= 75 ? 'ok' : M.prevPctOf(r) >= 50 ? 'warn' : 'bad') + '</td></tr>'
+        : '<td>' + pill(paused ? 'Paused' : cap(r.status), paused ? 'warn' : STATUS_TONE[r.status] || 'muted') + '</td></tr>');
   }).join('') + '</tbody></table></div>', { flush: true, actions: head }));
 }
 // 'Recent validation runs' is the scored subset (runs that produced a prevention score), not a copy of 'Recent runs'.
-function renderRuns() { var r = D.runs || []; runTable('dop-runs', 'Recent runs', r, 'openDashRun'); runTable('dop-valruns', 'Recent validation runs', M.scoredRuns(r), 'openDashRun', 'No scored validation runs yet'); }
+// Recent runs shows status; Recent validation runs shows only the scored runs, with each one's prevention result, so the two differ.
+function renderRuns() {
+  var r = D.runs || [], sc = M.scoredRuns(r);
+  runTable('dop-runs', 'Recent runs', r, 'openDashRun');
+  runTable('dop-valruns', 'Recent validation runs', sc, 'openDashRun', 'No scored validation runs yet', true);
+}
 function renderFails() {
   var t = M.topFailing(D.runs || [], 5), head = tab('View all →', 'attack-coverage');
   if (!t.length) { cell('dop-fails', emptyCard('Top failing techniques', 'check', D.runs ? 'No failures recorded' : 'Loading…', D.runs ? 'Every tested technique was prevented.' : '', { actions: head })); return; }
