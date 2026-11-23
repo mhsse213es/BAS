@@ -1,0 +1,129 @@
+{
+  "version": 1,
+  "waivers": [
+    {
+      "function": "fetchAuditPage",
+      "target": "tbody",
+      "op": "=",
+      "from_tier": 0,
+      "to_tier": 1,
+      "sink_ids": [
+        "fetchAuditPage:tbody:=:23096db0eea1",
+        "fetchAuditPage:tbody:=:2d052d1ed2cd"
+      ],
+      "reason": "Was fully static in the October baseline; it now puts server data into the markup. Read the sink and the helpers it calls: every server value goes through x() or a core/kit.js helper that escapes its arguments, ids go through encodeURIComponent, and counts are coerced with Number().",
+      "reviewed_by": "Claude Sonnet 5.5 (manual read of the sink and its helpers; awaiting human sign-off in the PR)",
+      "reviewed_on": "2026-11-23"
+    },
+    {
+      "function": "loadAgtOverview",
+      "target": "pane",
+      "op": "=",
+      "from_tier": 3,
+      "to_tier": 4,
+      "sink_ids": [
+        "loadAgtOverview:pane:=:aa054c5d26b6"
+      ],
+      "reason": "overviewHtml(a) in agent-drawer.js builds the panel from local helpers dl(), note() and actBtn(), which the classifier cannot trace. Read by hand: every agent field is passed through x(), on() or the pill tone lookup; a.binaryHash is only an argument to on(), which escapes it. The waiver covers the call expression, not the body of overviewHtml: an edit inside that function does not change the sink id.",
+      "reviewed_by": "Claude Sonnet 5.5 (manual read of the sink and its helpers; awaiting human sign-off in the PR)",
+      "reviewed_on": "2026-11-23"
+    },
+    {
+      "function": "loadVariantCoverage",
+      "target": "el",
+      "op": "=",
+      "from_tier": 0,
+      "to_tier": 1,
+      "sink_ids": [
+        "loadVariantCoverage:el:=:5ffdeacc1e03",
+        "loadVariantCoverage:el:=:b474fefe1681",
+        "loadVariantCoverage:el:=:e5e239560bc1",
+        "loadVariantCoverage:el:=:fc2c67863bff"
+      ],
+      "reason": "Was fully static in the October baseline; it now puts server data into the markup. Read the sink and the helpers it calls: every server value goes through x() or a core/kit.js helper that escapes its arguments, ids go through encodeURIComponent, and counts are coerced with Number().",
+      "reviewed_by": "Claude Sonnet 5.5 (manual read of the sink and its helpers; awaiting human sign-off in the PR)",
+      "reviewed_on": "2026-11-23"
+    },
+    {
+      "function": "renderIOCRegistryTable",
+      "target": "tbody",
+      "op": "=",
+      "from_tier": 0,
+      "to_tier": 1,
+      "sink_ids": [
+        "renderIOCRegistryTable:tbody:=:a4306a0e20bc"
+      ],
+      "reason": "Was fully static in the October baseline; it now puts server data into the markup. Read the sink and the helpers it calls: every server value goes through x() or a core/kit.js helper that escapes its arguments, ids go through encodeURIComponent, and counts are coerced with Number().",
+      "reviewed_by": "Claude Sonnet 5.5 (manual read of the sink and its helpers; awaiting human sign-off in the PR)",
+      "reviewed_on": "2026-11-23"
+    },
+    {
+      "function": "renderLegacyMigrationPanel",
+      "target": "el",
+      "op": "=",
+      "from_tier": 3,
+      "to_tier": 4,
+      "sink_ids": [
+        "renderLegacyMigrationPanel:el:=:ea635579f3fa"
+      ],
+      "reason": "migrationPanelHtml() in agents-insights.js is a builder the classifier rates unescaped_text. Read by hand: hostname, agentId, time, count and label all go through x(); the tone comes from the model. The waiver covers the call expression, not the body of migrationPanelHtml.",
+      "reviewed_by": "Claude Sonnet 5.5 (manual read of the sink and its helpers; awaiting human sign-off in the PR)",
+      "reviewed_on": "2026-11-23"
+    },
+    {
+      "function": "renderList",
+      "target": "el",
+      "op": "=",
+      "from_tier": 0,
+      "to_tier": 1,
+      "sink_ids": [
+        "renderList:el:=:1e555838f538"
+      ],
+      "reason": "Was fully static in the October baseline; it now puts server data into the markup. Read the sink and the helpers it calls: every server value goes through x() or a core/kit.js helper that escapes its arguments, ids go through encodeURIComponent, and counts are coerced with Number().",
+      "reviewed_by": "Claude Sonnet 5.5 (manual read of the sink and its helpers; awaiting human sign-off in the PR)",
+      "reviewed_on": "2026-11-23"
+    },
+    {
+      "function": "renderRemList",
+      "target": "el",
+      "op": "=",
+      "from_tier": 0,
+      "to_tier": 1,
+      "sink_ids": [
+        "renderRemList:el:=:9f73877bd780",
+        "renderRemList:el:=:ddca0eed8a3a"
+      ],
+      "reason": "Was fully static in the October baseline; it now puts server data into the markup. Read the sink and the helpers it calls: every server value goes through x() or a core/kit.js helper that escapes its arguments, ids go through encodeURIComponent, and counts are coerced with Number().",
+      "reviewed_by": "Claude Sonnet 5.5 (manual read of the sink and its helpers; awaiting human sign-off in the PR)",
+      "reviewed_on": "2026-11-23"
+    },
+    {
+      "function": "vfLoadEvidence",
+      "target": "host",
+      "op": "=",
+      "from_tier": 0,
+      "to_tier": 1,
+      "sink_ids": [
+        "vfLoadEvidence:host:=:2a1d0a164a3a"
+      ],
+      "reason": "Was fully static in the October baseline; it now puts server data into the markup. Read the sink and the helpers it calls: every server value goes through x() or a core/kit.js helper that escapes its arguments, ids go through encodeURIComponent, and counts are coerced with Number().",
+      "reviewed_by": "Claude Sonnet 5.5 (manual read of the sink and its helpers; awaiting human sign-off in the PR)",
+      "reviewed_on": "2026-11-23"
+    },
+    {
+      "function": "vfLoadQueue",
+      "target": "box",
+      "op": "=",
+      "from_tier": 0,
+      "to_tier": 1,
+      "sink_ids": [
+        "vfLoadQueue:box:=:1602624981a2",
+        "vfLoadQueue:box:=:3a3603678503",
+        "vfLoadQueue:box:=:c31a69074737"
+      ],
+      "reason": "Was fully static in the October baseline; it now puts server data into the markup. Read the sink and the helpers it calls: every server value goes through x() or a core/kit.js helper that escapes its arguments, ids go through encodeURIComponent, and counts are coerced with Number().",
+      "reviewed_by": "Claude Sonnet 5.5 (manual read of the sink and its helpers; awaiting human sign-off in the PR)",
+      "reviewed_on": "2026-11-23"
+    }
+  ]
+}

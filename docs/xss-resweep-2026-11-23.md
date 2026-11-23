@@ -68,3 +68,26 @@ cannot clear them:
 These ten cannot be accepted by regenerating and committing the artifacts: the guard has no way to record a reviewed
 exception, so the next PR would fail against `main`'s baseline. That needs a small reviewed-waiver file, which is the part of
 option 2 that remains a separate decision. The regenerated `security/g1/` artifacts were deliberately not committed.
+
+## Update: reviewed-waiver file
+
+`security/g1/G1_REVIEWED_REGRESSIONS.json` records a regression a reviewer has read and accepted. `g1-check-no-regression.py`
+reads it (override with `--waivers`; a missing file means none) and prints every waived regression so a PR reviewer still sees it.
+
+A regression is waived only when a waiver names the **same slot and the same tier change** and **every current sink in that slot
+at the new tier is one of the waiver's `sink_ids`**. Sink ids are content hashes of the sink's own source, so editing a waived
+sink, or adding another sink at that tier, makes the guard fail again. A malformed file is an error, never ignored. Each entry
+needs a reason, a reviewer, a `YYYY-MM-DD` date, and `to_tier` above `from_tier`. A waiver that excused nothing in a run is
+reported as stale (not failed) so it gets removed.
+
+Limits, stated plainly:
+- **Builder sinks.** For `el.innerHTML = overviewHtml(a)` the id covers the call, not the builder's body, so an edit inside
+  `overviewHtml` or `migrationPanelHtml` does not re-flag. The two waivers for those say so.
+- **The reviewer is not a person.** The 9 entries were written from a manual read by Claude Sonnet 5.5. The guard enforces that a
+  reason, a reviewer name and a date exist; it cannot check that a human agreed. Merging the PR is that sign-off.
+- **Not new coverage.** This clears the ten flagged slots. Two other sinks at the highest tier changed their source since the
+  baseline and are listed by the guard as "REVIEW, not failed" (`renderScheduledAssessmentsList`, `renderTemplateGrid`); they
+  were not read as part of this work.
+
+The regenerated `security/g1/` artifacts are committed with it, so CI's "artifacts are stale" step passes. With the waivers,
+the guard passes locally against the committed baseline (`G1 regression guard: PASS`), and all 88 G1 Python tests pass.
