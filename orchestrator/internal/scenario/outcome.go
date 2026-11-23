@@ -216,6 +216,10 @@ func classifySkipReason(detail string) string {
 		return models.SkipReasonTelemetryOnly
 	case strings.Contains(lower, "not assessed"):
 		return models.SkipReasonNotAssessed
+	case strings.Contains(lower, "not configured"):
+		return models.SkipReasonNotConfigured
+	case strings.Contains(lower, "unverified"):
+		return models.SkipReasonUnverified
 	}
 	return ""
 }

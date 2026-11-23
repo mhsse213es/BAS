@@ -297,6 +297,13 @@ const SkipReasonPlatformUnavailable = "platform-unavailable"
 // (for example an administrator allowlist). It is not a platform failure and not a pass.
 const SkipReasonNotAssessed = "not-assessed"
 
+// SkipReasonNotConfigured marks a check whose telemetry integration is absent on this deployment.
+// It is not a failure of the control and not a pass.
+const SkipReasonNotConfigured = "not-configured"
+
+// SkipReasonUnverified marks a check whose integration exists but produced no usable correlated evidence.
+const SkipReasonUnverified = "unverified"
+
 // SkipReasonPrerequisiteMissing marks a SimulationResult synthesized
 // server-side because a curated technique's required environmental fact
 // (e.g. domain_joined) did not match the target agent's known value. Do not
