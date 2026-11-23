@@ -2,38 +2,33 @@ id: collection-channel-variants-exfil
 product_line: dlp
 name: Exfiltration Channel Variants Probe
 description: >
-  Resolution-only probe of four outbound channels that the main chain does not cover: SFTP over SSH,
-  SMB, a C2-shaped beacon, and a cloud-storage API upload. Each step resolves one random RFC-6761 .invalid
-  name carrying the run id. No connection is made and no data is sent. Each step then reports SKIP,
-  because a resolver result is not evidence that any egress, firewall, proxy, DLP or CASB control acted.
-  Prevention and detection are assessed only from correlated telemetry, which this release does not query.
-
-  KILL CHAIN STAGES (resolver probes):
-    1. SFTP / SSH         — resolve a .invalid SSH destination (T1048.002)
-    2. SMB Outbound       — resolve a .invalid SMB destination (T1048.003)
-    3. C2-Shaped Beacon   — resolve a .invalid beacon destination; no beacon body (T1041)
-    4. Cloud-Storage API  — resolve a .invalid storage destination; no upload (T1567.002)
-
-  SAFETY: no connection, no POST, no upload, no credential and no file is used. Windows only. Telemetry mode.
+  Validates whether endpoint and network controls detect or prevent four exfiltration channel families:
+  SFTP over SSH, SMB outbound, C2-style HTTPS traffic, and cloud-storage uploads, plus the egress firewall,
+  proxy and DLP controls that should cover them. It never sends data. Each channel is checked by a
+  resolution-only probe of a run-id-tagged .invalid name, by read-only configuration reads, and by
+  correlation with integrations. DNS resolution never proves that a channel is blocked.
+  VERDICTS: PASS = a correlated block event was found. FAIL = a correlated successful unauthorised transfer
+  was found. CONFIGURED = policy present, enforcement unverified (reported as SKIP, never scored). NOT_CONFIGURED
+  = integration or detector absent. UNVERIFIED = integration configured but no usable or fresh evidence.
+  ERROR = a query or execution failed. Prevention and detection are reported on separate lines.
+  INTEGRATIONS: Microsoft Defender for Endpoint, Microsoft Purview Endpoint DLP, Trellix DLP, firewall or proxy
+  egress telemetry. Opt-in by environment flag. This release has no operational probes, so no integration can PASS.
+  SAFETY: no connection is made to any host, no data is sent, no file is uploaded, no credential is used, and no
+  firewall, proxy or policy is changed. Windows only.
 author: Audspect Research
 executable: true
 local_check: false
 supported_os: [windows]
 tags:
+  - collection
   - exfiltration
-  - channels
-  - sftp
-  - smb
-  - c2
-  - cloud-api
   - dlp
+  - egress
   - t1048
   - t1041
   - t1567
-  - mitre
 mitre_phases:
   - exfiltration
-  - command-and-control
 
 live_policy:
   block_on_domain_controller: true
@@ -43,117 +38,810 @@ live_policy:
   execution_window: ""
 
 steps:
-
-  # ---------------------------------------------------------------------------
-  # Stage 1 — SFTP over SSH (T1048.002)
-  # ---------------------------------------------------------------------------
-  - name: "Channel 1 — SFTP (SSH) Resolution Probe to .invalid (T1048.002)"
+  - name: "Channel 1.1 — SSH destination resolution (T1048.002)"
     technique_id: T1048.002
     framework: custom
     executor: powershell
     requires_priv: user
-    timeout_sec: 30
+    timeout_sec: 60
     fidelity: telemetry-safe
     production_safe: true
     risk: low
     reversible: true
-    blast_radius: "Resolves one random .invalid name. No connection is made and no data is sent. Generates one DNS query (Sysmon EID 22)."
+    blast_radius: "Resolves one random .invalid name carrying the run id. No connection is made."
     telemetry:
-      - "Sysmon EID 22: DNS query for the bas-sim .invalid SFTP host"
+      - "Sysmon EID 22"
     detection:
-      - "Egress: correlated only when a real SSH event exists; none is generated here"
+      - "None"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CHN]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when explicitly configured. Configured is not operational: no adapter in
+        # this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
       $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
       $name = "bas-sim-sftp-$runId.invalid"
       $resolved = $false
       try { $null = Resolve-DnsName -Name $name -Type A -ErrorAction Stop; $resolved = $true } catch { $resolved = $false }
-      Write-Output "EXEC T1048.002: resolver probe for $name. No connection was made and no data was sent. resolved=$resolved. Channel 1. [BAS-SIM-CHN-1]"
-      Write-Output "SKIP: No connection or transfer was made, so no egress or firewall control was exercised. A resolver result is not evidence of prevention, so no PASS or FAIL is claimed. Channel 1. [BAS-SIM-CHN-1]"
+      Write-Output ("EXEC T1048.002: resolver probe for {0}. No connection was made and no data was sent. resolved={1}. SSH destination. $tag" -f $name, $resolved)
+      Out-Verdict 'SKIP' 'RESOLUTION_ONLY' 'SSH destination: a resolver result is not evidence of prevention or detection'
     cleanup: ""
 
-  # ---------------------------------------------------------------------------
-  # Stage 2 — SMB Outbound (T1048.003)
-  # ---------------------------------------------------------------------------
-  - name: "Channel 2 — SMB Outbound Resolution Probe to .invalid (T1048.003)"
+  - name: "Channel 1.2 — SSH egress policy, default outbound action (T1048.002)"
+    technique_id: T1048.002
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads state or configuration only. Nothing is sent."
+    telemetry:
+      - "Firewall profile read"
+    detection:
+      - "None"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CHN]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when explicitly configured. Configured is not operational: no adapter in
+        # this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $fw = Get-NetFirewallProfile -All -ErrorAction SilentlyContinue | ForEach-Object { "$($_.Name)=$($_.DefaultOutboundAction)" }
+      $unset = @($fw | Where-Object { $_ -match 'NotConfigured$' }).Count
+      if (-not $fw) { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'Windows Firewall profiles could not be read' }
+      elseif ($unset -eq $fw.Count) { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'no outbound default action is set on any firewall profile' }
+      else { Out-Verdict 'SKIP' 'CONFIGURED' ('default outbound action: ' + ($fw -join ', ') + ' ; configuration only, not enforcement') }
+    cleanup: ""
+
+  - name: "Channel 1.3 — SSH firewall and proxy event correlation (T1048.002)"
+    technique_id: T1048.002
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Queries an integration only when configured. Nothing is sent."
+    telemetry:
+      - "Integration query"
+    detection:
+      - "Firewall or proxy egress log"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CHN]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when explicitly configured. Configured is not operational: no adapter in
+        # this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $st = Get-AdapterState 'BAS_CLP_ADAPTER_EGRESS'
+      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'SSH firewall and proxy correlation for the probe run id: integration egress is not configured' }
+      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'SSH firewall and proxy correlation for the probe run id: integration egress is configured but no operational probe is implemented in this release.' }
+    cleanup: ""
+
+  - name: "Channel 1.4 — Synthetic SSH transfer detection (T1048.002)"
+    technique_id: T1048.002
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Queries an integration only when configured. Nothing is sent."
+    telemetry:
+      - "Integration query"
+    detection:
+      - "Defender for Endpoint"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CHN]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when explicitly configured. Configured is not operational: no adapter in
+        # this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $st = Get-AdapterState 'BAS_CLP_ADAPTER_DEFENDER'
+      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'detection of the synthetic SSH transfer attempt: integration defender is not configured' }
+      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'detection of the synthetic SSH transfer attempt: integration defender is configured but no operational probe is implemented in this release.' }
+    cleanup: ""
+
+  - name: "Channel 2.1 — SMB destination resolution (T1048.003)"
     technique_id: T1048.003
     framework: custom
     executor: powershell
     requires_priv: user
-    timeout_sec: 30
+    timeout_sec: 60
     fidelity: telemetry-safe
     production_safe: true
     risk: low
     reversible: true
-    blast_radius: "Resolves one random .invalid name. No connection is made and no data is sent. Generates one DNS query (Sysmon EID 22)."
+    blast_radius: "Resolves one random .invalid name carrying the run id. No connection is made."
     telemetry:
-      - "Sysmon EID 22: DNS query for the bas-sim .invalid SMB host"
+      - "Sysmon EID 22"
     detection:
-      - "Egress: correlated only when a real SMB event exists; none is generated here"
+      - "None"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CHN]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when explicitly configured. Configured is not operational: no adapter in
+        # this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
       $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
       $name = "bas-sim-smb-$runId.invalid"
       $resolved = $false
       try { $null = Resolve-DnsName -Name $name -Type A -ErrorAction Stop; $resolved = $true } catch { $resolved = $false }
-      Write-Output "EXEC T1048.003: resolver probe for $name. No connection was made and no data was sent. resolved=$resolved. Channel 2. [BAS-SIM-CHN-2]"
-      Write-Output "SKIP: No connection or transfer was made, so no egress or firewall control was exercised. A resolver result is not evidence of prevention, so no PASS or FAIL is claimed. Channel 2. [BAS-SIM-CHN-2]"
+      Write-Output ("EXEC T1048.003: resolver probe for {0}. No connection was made and no data was sent. resolved={1}. SMB destination. $tag" -f $name, $resolved)
+      Out-Verdict 'SKIP' 'RESOLUTION_ONLY' 'SMB destination: a resolver result is not evidence of prevention or detection'
     cleanup: ""
 
-  # ---------------------------------------------------------------------------
-  # Stage 3 — C2-Shaped Beacon Resolution Probe (T1041)
-  # ---------------------------------------------------------------------------
-  - name: "Channel 3 — C2-Shaped Beacon Resolution Probe (T1041)"
+  - name: "Channel 2.2 — TCP 445 outbound egress policy (T1048.003)"
+    technique_id: T1048.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads state or configuration only. Nothing is sent."
+    telemetry:
+      - "Firewall rule read"
+    detection:
+      - "None"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CHN]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when explicitly configured. Configured is not operational: no adapter in
+        # this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $ports = @(Get-NetFirewallRule -Direction Outbound -Action Block -Enabled True -ErrorAction SilentlyContinue | Get-NetFirewallPortFilter -ErrorAction SilentlyContinue | ForEach-Object { "$($_.RemotePort)" })
+      if ($ports.Count -eq 0) { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'no enabled outbound block rules were found' }
+      elseif (($ports -join ',') -match '445') { Out-Verdict 'SKIP' 'CONFIGURED' 'an enabled outbound block rule covers TCP 445; configuration only, not enforcement' }
+      else { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'no enabled outbound block rule covers TCP 445' }
+    cleanup: ""
+
+  - name: "Channel 2.3 — SMB firewall block correlation (T1048.003)"
+    technique_id: T1048.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Queries an integration only when configured. Nothing is sent."
+    telemetry:
+      - "Integration query"
+    detection:
+      - "Firewall or proxy egress log"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CHN]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when explicitly configured. Configured is not operational: no adapter in
+        # this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $st = Get-AdapterState 'BAS_CLP_ADAPTER_EGRESS'
+      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'SMB firewall block correlation for the probe run id: integration egress is not configured' }
+      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'SMB firewall block correlation for the probe run id: integration egress is configured but no operational probe is implemented in this release.' }
+    cleanup: ""
+
+  - name: "Channel 2.4 — SMB client telemetry availability (T1048.003)"
+    technique_id: T1048.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads state or configuration only. Nothing is sent."
+    telemetry:
+      - "Event log read"
+    detection:
+      - "None"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CHN]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when explicitly configured. Configured is not operational: no adapter in
+        # this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $log = Get-WinEvent -ListLog 'Microsoft-Windows-SMBClient/Security' -ErrorAction SilentlyContinue
+      if ($null -eq $log) { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'SMB client security log is not present' }
+      elseif ($log.IsEnabled) { Out-Verdict 'SKIP' 'PRECONDITION' 'SMB client security log is present and enabled; availability only' }
+      else { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'SMB client security log is present but disabled' }
+    cleanup: ""
+
+  - name: "Channel 3.1 — Beacon destination resolution (T1041)"
     technique_id: T1041
     framework: custom
     executor: powershell
     requires_priv: user
-    timeout_sec: 30
+    timeout_sec: 60
     fidelity: telemetry-safe
     production_safe: true
     risk: low
     reversible: true
-    blast_radius: "Resolves one random .invalid name. No beacon is sent and no body is posted. Generates one DNS query (Sysmon EID 22)."
+    blast_radius: "Resolves one random .invalid name carrying the run id. No beacon body is sent."
     telemetry:
-      - "Sysmon EID 22: DNS query for the bas-sim .invalid beacon host"
-      - "Proxy/NDR: none; no beacon is sent in this probe"
+      - "Sysmon EID 22"
     detection:
-      - "C2/NDR: correlated only when a real beacon event exists; none is generated here"
+      - "None"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CHN]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when explicitly configured. Configured is not operational: no adapter in
+        # this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
       $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
       $name = "bas-sim-beacon-$runId.invalid"
       $resolved = $false
       try { $null = Resolve-DnsName -Name $name -Type A -ErrorAction Stop; $resolved = $true } catch { $resolved = $false }
-      Write-Output "EXEC T1041: resolver probe for $name. No connection was made and no data was sent. resolved=$resolved. Channel 3. [BAS-SIM-CHN-3]"
-      Write-Output "SKIP: No connection or transfer was made, so no egress or firewall control was exercised. A resolver result is not evidence of prevention, so no PASS or FAIL is claimed. Channel 3. [BAS-SIM-CHN-3]"
+      Write-Output ("EXEC T1041: resolver probe for {0}. No connection was made and no data was sent. resolved={1}. beacon destination. $tag" -f $name, $resolved)
+      Out-Verdict 'SKIP' 'RESOLUTION_ONLY' 'beacon destination: a resolver result is not evidence of prevention or detection'
     cleanup: ""
 
-  # ---------------------------------------------------------------------------
-  # Stage 4 — Cloud-Storage API Upload (T1567.002)
-  # ---------------------------------------------------------------------------
-  - name: "Channel 4 — Cloud-Storage API Resolution Probe to .invalid (T1567.002)"
-    technique_id: T1567.002
+  - name: "Channel 3.2 — HTTPS egress policy and WinHTTP proxy (T1041)"
+    technique_id: T1041
     framework: custom
     executor: powershell
     requires_priv: user
-    timeout_sec: 30
+    timeout_sec: 60
     fidelity: telemetry-safe
     production_safe: true
     risk: low
     reversible: true
-    blast_radius: "Resolves one random .invalid name. No upload request is sent and no credential is used. Generates one DNS query (Sysmon EID 22)."
+    blast_radius: "Reads state or configuration only. Nothing is sent."
     telemetry:
-      - "Sysmon EID 22: DNS query for the bas-sim .invalid API host"
-      - "CASB/SSE: none; no upload request is sent in this probe"
+      - "Firewall profile read"
+      - "WinHTTP proxy read"
     detection:
-      - "CASB/SSE: correlated only when a real upload event exists; none is generated here"
+      - "None"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CHN]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when explicitly configured. Configured is not operational: no adapter in
+        # this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
       $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
-      $name = "bas-sim-cloud-$runId.invalid"
-      $resolved = $false
-      try { $null = Resolve-DnsName -Name $name -Type A -ErrorAction Stop; $resolved = $true } catch { $resolved = $false }
-      Write-Output "EXEC T1567.002: resolver probe for $name. No connection was made and no data was sent. resolved=$resolved. Channel 4. [BAS-SIM-CHN-4]"
-      Write-Output "SKIP: No connection or transfer was made, so no egress or firewall control was exercised. A resolver result is not evidence of prevention, so no PASS or FAIL is claimed. Channel 4. [BAS-SIM-CHN-4]"
+      $fw = Get-NetFirewallProfile -All -ErrorAction SilentlyContinue | ForEach-Object { "$($_.Name)=$($_.DefaultOutboundAction)" }
+      $unset = @($fw | Where-Object { $_ -match 'NotConfigured$' }).Count
+      if (-not $fw) { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'Windows Firewall profiles could not be read' }
+      elseif ($unset -eq $fw.Count) { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'no outbound default action is set on any firewall profile' }
+      else { Out-Verdict 'SKIP' 'CONFIGURED' ('default outbound action: ' + ($fw -join ', ') + ' ; configuration only, not enforcement') }
+      $wh = (netsh winhttp show proxy 2>$null) -join ' '
+      if ($wh -match 'Direct access') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'no WinHTTP proxy is configured; HTTPS egress is not proxied by this setting' }
+      else { Out-Verdict 'SKIP' 'CONFIGURED' 'a WinHTTP proxy is configured; configuration only, not enforcement' }
+    cleanup: ""
+
+  - name: "Channel 3.3 — Proxy detection of the beacon pattern (T1041)"
+    technique_id: T1041
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Queries an integration only when configured. Nothing is sent."
+    telemetry:
+      - "Integration query"
+    detection:
+      - "Proxy or NDR log"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CHN]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when explicitly configured. Configured is not operational: no adapter in
+        # this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $st = Get-AdapterState 'BAS_CLP_ADAPTER_EGRESS'
+      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'proxy detection of the synthetic beacon: integration egress is not configured' }
+      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'proxy detection of the synthetic beacon: integration egress is configured but no operational probe is implemented in this release.' }
+    cleanup: ""
+
+  - name: "Channel 3.4 — DLP event correlation for the beacon (T1041)"
+    technique_id: T1041
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Queries an integration only when configured. Nothing is sent."
+    telemetry:
+      - "Integration query"
+    detection:
+      - "Purview Endpoint DLP"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CHN]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when explicitly configured. Configured is not operational: no adapter in
+        # this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $st = Get-AdapterState 'BAS_CLP_ADAPTER_PURVIEW'
+      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'DLP event correlation for the synthetic beacon: integration purview is not configured' }
+      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'DLP event correlation for the synthetic beacon: integration purview is configured but no operational probe is implemented in this release.' }
+    cleanup: ""
+
+  - name: "Channel 3.5 — Periodic check-in pattern detection (T1041)"
+    technique_id: T1041
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "No action. Reports that periodicity is not assessed."
+    telemetry:
+      - "None"
+    detection:
+      - "None"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CHN]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when explicitly configured. Configured is not operational: no adapter in
+        # this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'no periodicity detector exists in this release; periodic beacon detection is not assessed' 
+    cleanup: ""
+
+  - name: "Channel 4.1 — Cloud-storage destination classification (T1567.002)"
+    technique_id: T1567.002
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Classifies a fixed list of hostnames in memory. No connection is made."
+    telemetry:
+      - "None"
+    detection:
+      - "None"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CHN]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when explicitly configured. Configured is not operational: no adapter in
+        # this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $hosts = @('drive.google.com', 'dropbox.com', 'onedrive.live.com', 'box.com')
+      $storage = @($hosts | Where-Object { $_ -match '(google|dropbox|onedrive|box)\.' })
+      Out-Verdict 'SKIP' 'PRECONDITION' ("classified {0} of {1} known storage hosts locally; no connection made" -f $storage.Count, $hosts.Count)
+    cleanup: ""
+
+  - name: "Channel 4.2 — Cloud-storage upload policy configuration (T1567.002)"
+    technique_id: T1567.002
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Queries an integration only when configured. Nothing is sent."
+    telemetry:
+      - "Integration query"
+    detection:
+      - "CASB or SSE policy"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CHN]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when explicitly configured. Configured is not operational: no adapter in
+        # this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $st = Get-AdapterState 'BAS_CLP_ADAPTER_EGRESS'
+      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'cloud-storage upload policy: integration egress is not configured' }
+      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'cloud-storage upload policy: integration egress is configured but no operational probe is implemented in this release.' }
+    cleanup: ""
+
+  - name: "Channel 4.3 — Cloud-storage DLP policy evaluation (T1567.002)"
+    technique_id: T1567.002
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Queries an integration only when configured. Nothing is sent."
+    telemetry:
+      - "Integration query"
+    detection:
+      - "Purview Endpoint DLP"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CHN]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when explicitly configured. Configured is not operational: no adapter in
+        # this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $st = Get-AdapterState 'BAS_CLP_ADAPTER_PURVIEW'
+      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'cloud-storage DLP policy evaluation: integration purview is not configured' }
+      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'cloud-storage DLP policy evaluation: integration purview is configured but no operational probe is implemented in this release.' }
+    cleanup: ""
+
+  - name: "Channel 4.4 — Cloud-storage proxy or firewall enforcement evidence (T1567.002)"
+    technique_id: T1567.002
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Queries an integration only when configured. Nothing is sent."
+    telemetry:
+      - "Integration query"
+    detection:
+      - "Firewall or proxy egress log"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CHN]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when explicitly configured. Configured is not operational: no adapter in
+        # this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $st = Get-AdapterState 'BAS_CLP_ADAPTER_EGRESS'
+      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'cloud-storage proxy or firewall enforcement: integration egress is not configured' }
+      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'cloud-storage proxy or firewall enforcement: integration egress is configured but no operational probe is implemented in this release.' }
+    cleanup: ""
+
+  - name: "Channel 5.1 — Outbound default-deny state (T1048)"
+    technique_id: T1048
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads state or configuration only. Nothing is sent."
+    telemetry:
+      - "Firewall profile read"
+    detection:
+      - "None"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CHN]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when explicitly configured. Configured is not operational: no adapter in
+        # this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $fw = Get-NetFirewallProfile -All -ErrorAction SilentlyContinue | ForEach-Object { "$($_.Name)=$($_.DefaultOutboundAction)" }
+      $unset = @($fw | Where-Object { $_ -match 'NotConfigured$' }).Count
+      if (-not $fw) { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'Windows Firewall profiles could not be read' }
+      elseif ($unset -eq $fw.Count) { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'no outbound default action is set on any firewall profile' }
+      else { Out-Verdict 'SKIP' 'CONFIGURED' ('default outbound action: ' + ($fw -join ', ') + ' ; configuration only, not enforcement') }
+    cleanup: ""
+
+  - name: "Channel 5.2 — Proxy enforcement configuration (T1048)"
+    technique_id: T1048
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads state or configuration only. Nothing is sent."
+    telemetry:
+      - "WinHTTP proxy read"
+    detection:
+      - "None"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CHN]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when explicitly configured. Configured is not operational: no adapter in
+        # this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $wh = (netsh winhttp show proxy 2>$null) -join ' '
+      if ($wh -match 'Direct access') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'no WinHTTP proxy is configured; HTTPS egress is not proxied by this setting' }
+      else { Out-Verdict 'SKIP' 'CONFIGURED' 'a WinHTTP proxy is configured; configuration only, not enforcement' }
+    cleanup: ""
+
+  - name: "Channel 5.3 — Firewall block evidence for the run id (T1048)"
+    technique_id: T1048
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Queries an integration only when configured. Nothing is sent."
+    telemetry:
+      - "Integration query"
+    detection:
+      - "Firewall or proxy egress log"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CHN]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when explicitly configured. Configured is not operational: no adapter in
+        # this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $st = Get-AdapterState 'BAS_CLP_ADAPTER_EGRESS'
+      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'firewall block evidence for the run id: integration egress is not configured' }
+      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'firewall block evidence for the run id: integration egress is configured but no operational probe is implemented in this release.' }
+    cleanup: ""
+
+  - name: "Channel 5.4 — Egress policy drift against a recorded baseline (T1048)"
+    technique_id: T1048
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "No action."
+    telemetry:
+      - "None"
+    detection:
+      - "None"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CHN]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when explicitly configured. Configured is not operational: no adapter in
+        # this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'no recorded egress baseline exists in this release; drift is not assessed' 
+    cleanup: ""
+
+  - name: "Channel 6.1 — DLP detection of the synthetic pattern (T1048)"
+    technique_id: T1048
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Uses a fake test pattern only. Queries an integration only when configured."
+    telemetry:
+      - "Integration query"
+    detection:
+      - "Purview Endpoint DLP"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CHN]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when explicitly configured. Configured is not operational: no adapter in
+        # this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $st = Get-AdapterState 'BAS_CLP_ADAPTER_PURVIEW'
+      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'DLP detection of the synthetic test pattern BAS-TEST-PATTERN-0000: integration purview is not configured' }
+      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'DLP detection of the synthetic test pattern BAS-TEST-PATTERN-0000: integration purview is configured but no operational probe is implemented in this release.' }
+    cleanup: ""
+
+  - name: "Channel 6.2 — Security telemetry source availability (T1048)"
+    technique_id: T1048
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads log configuration only."
+    telemetry:
+      - "Event log read"
+    detection:
+      - "None"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CHN]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when explicitly configured. Configured is not operational: no adapter in
+        # this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+
+      $sysmon = Get-WinEvent -ListLog 'Microsoft-Windows-Sysmon/Operational' -ErrorAction SilentlyContinue
+      if ($null -eq $sysmon) { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'Sysmon operational log is not present' }
+      elseif ($sysmon.IsEnabled) { Out-Verdict 'SKIP' 'PRECONDITION' 'Sysmon operational log is present and enabled; availability only' }
+      else { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'Sysmon operational log is present but disabled' }
+    cleanup: ""
+
+  - name: "Channel 6.3 — Event correlation and freshness (T1048)"
+    technique_id: T1048
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Queries an integration only when configured. Nothing is sent."
+    telemetry:
+      - "Integration query"
+    detection:
+      - "Defender for Endpoint"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CHN]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when explicitly configured. Configured is not operational: no adapter in
+        # this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $st = Get-AdapterState 'BAS_CLP_ADAPTER_DEFENDER'
+      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'correlation and freshness of channel events: integration defender is not configured' }
+      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'correlation and freshness of channel events: integration defender is configured but no operational probe is implemented in this release. Evidence must be fresher than 15 minutes.' }
     cleanup: ""

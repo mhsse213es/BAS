@@ -4286,7 +4286,7 @@
   {
     "scenario": "collection-channel-variants-exfil.yaml",
     "index": 1,
-    "technique_id": "T1048.003",
+    "technique_id": "T1048.002",
     "action_key": "",
     "framework": "custom",
     "class": "non_destructive",
@@ -4295,6 +4295,60 @@
   {
     "scenario": "collection-channel-variants-exfil.yaml",
     "index": 2,
+    "technique_id": "T1048.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-channel-variants-exfil.yaml",
+    "index": 3,
+    "technique_id": "T1048.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-channel-variants-exfil.yaml",
+    "index": 4,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-channel-variants-exfil.yaml",
+    "index": 5,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-channel-variants-exfil.yaml",
+    "index": 6,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-channel-variants-exfil.yaml",
+    "index": 7,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-channel-variants-exfil.yaml",
+    "index": 8,
     "technique_id": "T1041",
     "action_key": "",
     "framework": "custom",
@@ -4303,8 +4357,134 @@
   },
   {
     "scenario": "collection-channel-variants-exfil.yaml",
-    "index": 3,
+    "index": 9,
+    "technique_id": "T1041",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "collection-channel-variants-exfil.yaml",
+    "index": 10,
+    "technique_id": "T1041",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "collection-channel-variants-exfil.yaml",
+    "index": 11,
+    "technique_id": "T1041",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "collection-channel-variants-exfil.yaml",
+    "index": 12,
+    "technique_id": "T1041",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "collection-channel-variants-exfil.yaml",
+    "index": 13,
     "technique_id": "T1567.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-channel-variants-exfil.yaml",
+    "index": 14,
+    "technique_id": "T1567.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-channel-variants-exfil.yaml",
+    "index": 15,
+    "technique_id": "T1567.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-channel-variants-exfil.yaml",
+    "index": 16,
+    "technique_id": "T1567.002",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-channel-variants-exfil.yaml",
+    "index": 17,
+    "technique_id": "T1048",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-channel-variants-exfil.yaml",
+    "index": 18,
+    "technique_id": "T1048",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-channel-variants-exfil.yaml",
+    "index": 19,
+    "technique_id": "T1048",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-channel-variants-exfil.yaml",
+    "index": 20,
+    "technique_id": "T1048",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-channel-variants-exfil.yaml",
+    "index": 21,
+    "technique_id": "T1048",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-channel-variants-exfil.yaml",
+    "index": 22,
+    "technique_id": "T1048",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-channel-variants-exfil.yaml",
+    "index": 23,
+    "technique_id": "T1048",
     "action_key": "",
     "framework": "custom",
     "class": "non_destructive",
