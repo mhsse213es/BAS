@@ -147,6 +147,6 @@ steps:
       if ($reached) {
         Write-Output "FAIL: Clipboard-shaped text reached an unknown host. DLP is not inspecting outbound text from this process."
       } else {
-        Write-Output "FAIL: The endpoint attempted to send clipboard-shaped text to an unknown host with no DLP block. Unreachable only because the domain is .invalid."
+        Write-Output "SKIP: The transfer did not complete, so no DLP or egress control was exercised. A failed .invalid lookup is not evidence of prevention, so no PASS is claimed. Clipboard upload Stage 3. [BAS-SIM-CLP-S3]"
       }
     cleanup: ""
