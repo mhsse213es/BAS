@@ -113,3 +113,59 @@ export function drawerFacts(row, fmt) {
   if (row.suppressed) out.push(['Suppressed', row.suppressionReason || 'yes']);
   return out;
 }
+
+// ── Registry page helpers ───────────────────────────────────────────────────────────────────────────────────────
+
+export var PAGE_SIZE = 25;
+
+// agoText: "45m ago", "3h ago", "9d ago". Days from two days on, so a month-old indicator does not read "720h ago".
+export function agoText(iso, now) {
+  var t = new Date(iso).getTime();
+  if (!iso || !isFinite(t)) return '—';
+  var s = Math.max(0, ((now == null ? Date.now() : now) - t) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  if (s < 48 * 3600) return Math.floor(s / 3600) + 'h ago';
+  return Math.floor(s / 86400) + 'd ago';
+}
+
+// filtersActive: true when any server-side filter narrows the list (the "Show suppressed" box is a display choice).
+export function filtersActive(f) {
+  f = f || {};
+  return !!(f.type || f.source || f.origin || f.status || String(f.search || '').trim());
+}
+
+// guessType: the likely indicator type for a pasted value, or '' when it is not obvious.
+export function guessType(value) {
+  var v = String(value == null ? '' : value).trim();
+  if (!v) return '';
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(v) || (/^[0-9a-f:]+$/i.test(v) && (v.match(/:/g) || []).length >= 2)) return 'ip';
+  if (/^https?:\/\//i.test(v)) return 'url';
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return 'email';
+  if (/^([a-f0-9]{32}|[a-f0-9]{40}|[a-f0-9]{64})$/i.test(v)) return 'file_hash';
+  if (/^(HKLM|HKCU|HKCR|HKU|HKEY_)/i.test(v)) return 'registry_key';
+  if (/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(v)) return 'domain';
+  return '';
+}
+
+export function isDuplicate(rows, type, value) {
+  var v = String(value || '').trim();
+  return (rows || []).filter(function(r) { return r.type === type && r.value === v; })[0] || null;
+}
+
+// parseImportLines: "type,value" lines -> {entries} or {error}. A type the registry does not know is refused here,
+// before anything is sent (the server writes the good lines and then errors on the bad one).
+export function parseImportLines(raw) {
+  var lines = String(raw || '').split('\n').map(function(l) { return l.trim(); }).filter(Boolean);
+  if (!lines.length) return { error: 'Enter at least one type,value line.' };
+  var entries = [];
+  for (var i = 0; i < lines.length; i++) {
+    var k = lines[i].indexOf(',');
+    var type = k < 0 ? '' : lines[i].slice(0, k).trim().toLowerCase().replace(/[\s-]+/g, '_');
+    var value = k < 0 ? '' : lines[i].slice(k + 1).trim();
+    if (!type || !value) return { error: 'Line ' + (i + 1) + ' is not "type,value": ' + lines[i] };
+    if (!TYPE_LABEL[type]) return { error: 'Line ' + (i + 1) + ': unknown type "' + type + '". Valid types: ' + TYPE_IDS.join(', ') + '.' };
+    entries.push({ type: type, value: value });
+  }
+  return { entries: entries };
+}

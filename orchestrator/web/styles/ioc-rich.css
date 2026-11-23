@@ -36,3 +36,26 @@
 .ioc-rel { margin-top: 12px; }
 .ioc-rel h4 { margin: 0 0 6px; font-size: 12px; text-transform: none; letter-spacing: 0; color: var(--muted-hi); font-weight: 500; }
 .ioc-rel-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* One filter bar above the table; the charts sit above it. */
+.ioc-row2 { flex-wrap: wrap; gap: 8px; }
+.ioc-row2 .ioc-sup { margin-left: 4px; }
+.ioc-count { margin-left: auto; font-size: 12.5px; white-space: nowrap; }
+@media (max-width: 1000px) { .rk-grid.ioc-side { grid-template-columns: minmax(0, 1fr); } }
+.rk-grid.ioc-side { grid-template-columns: minmax(0, 1fr) 300px; }
+@media (max-width: 1000px) { .rk-grid.ioc-side { grid-template-columns: minmax(0, 1fr); } }
+.ioc-chip .ioc-chip-n { opacity: .65; margin-left: 3px; font-variant-numeric: tabular-nums; }
+.ioc-chip.dim { opacity: .55; }
+/* The value cell's code pill is styled by an unlayered g1-s rule, so the clamp needs !important. */
+.ioc-val code { display: -webkit-box !important; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-all; white-space: normal !important; background: transparent !important; padding: 0 !important; border: 0 !important; font-size: 12.5px; }
+.ioc-val .ioc-clamp { display: inline; }
+.ioc-table-card tbody tr[tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ioc-more td { text-align: center; padding: 12px; }
+.ioc-retry { margin-top: 12px; }
+#ioc-analytics-tiles .rk-kpi-val { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: clamp(18px, 1.7vw, 26px); }
+.ioc-sup-val { margin: 0 0 12px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--elevated); }
+.ioc-sup-val code { word-break: break-all; font-size: 12.5px; }
+.ioc-sup-presets { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 4px; }
+.ioc-dr-val { display: flex; align-items: flex-start; gap: 10px; justify-content: space-between; margin-top: 12px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--elevated); }
+.ioc-dr-val code { word-break: break-all; font-size: 12.5px; min-width: 0; }
+.ioc-dr-val .btn { width: auto; flex: 0 0 auto; }
