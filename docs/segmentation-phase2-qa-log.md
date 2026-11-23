@@ -40,3 +40,7 @@ Plan: `docs/superpowers/plans/2026-11-11-segmentation-phase2-api-ui.md`. Scope a
 
 ## Full package run (2026-11-11)
 `go test ./internal/api/` on commit 68ae4ea6: `ok github.com/audspect/bas/internal/api 1391.254s`, exit 0.
+
+## Open items
+- **Phase 3 (customer-network probes): DEFERRED** per the user, 2026-11-11. Needs a customer environment, signed scope (zones, ports, hours), a firewall vendor choice and log transport, and a probe-runner location. Not started; no traffic has been sent to any customer network.
+- Staging deploy of the Phase 2 orchestrator and a browser check of the Segmentation page: left for the user's upgrade.
