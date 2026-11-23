@@ -6,7 +6,7 @@ func TestInterpretAttachesFraudControlFromMarker(t *testing.T) {
 	step := Step{Name: "Carbanak Stage 8b -- test", TechniqueID: "T1098"}
 	res := ExecResult{
 		ExitCode: 0,
-		Stdout: "BAS-FRAUD-CONTROL {\"step\":\"8b\",\"expected_control\":\"prevent\",\"ledger_called\":true,\"ledger_decision\":\"rejected\",\"rule_fired\":\"beneficiary_second_approver_missing\"}\n",
+		Stdout:   "BAS-FRAUD-CONTROL {\"step\":\"8b\",\"expected_control\":\"prevent\",\"ledger_called\":true,\"ledger_decision\":\"rejected\",\"rule_fired\":\"beneficiary_second_approver_missing\"}\n",
 	}
 	got := Interpret(step, res)
 	if got.FraudControl == nil {

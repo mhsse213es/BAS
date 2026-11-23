@@ -10,6 +10,7 @@ import (
 	"github.com/audspect/bas/internal/variant"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
 // seedLabAgent seeds an active agent labelled Lab. Variant dispatch tests exercise dispatch mechanics, which apply
 // to a lab endpoint; policy on other labels is covered by the cleanup gate tests.
 func seedLabAgent(t *testing.T, pool *pgxpool.Pool, agentID, osVersion string) {
@@ -17,7 +18,6 @@ func seedLabAgent(t *testing.T, pool *pgxpool.Pool, agentID, osVersion string) {
 	seedActiveAgent(t, pool, agentID, osVersion)
 	setAgentEnvLabel(t, pool, agentID, "Lab")
 }
-
 
 func tpl(cleanup, status string) variant.Template {
 	return variant.Template{TechniqueID: "T1", BaseID: "b", Command: "c", Cleanup: cleanup, CleanupStatus: status}

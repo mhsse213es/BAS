@@ -1547,12 +1547,12 @@ func buildObjectiveRisks(results []models.SimulationResult) []ObjectiveRisk {
 
 // ExecutiveSummary is the top-level risk picture derived from the latest run.
 type ExecutiveSummary struct {
-	RiskScore          int                      `json:"riskScore"`
-	Classification     string                   `json:"classification"`
+	RiskScore      int    `json:"riskScore"`
+	Classification string `json:"classification"`
 	// Assessed is false when no step executed; the scores are then not a measurement. VetoedTechniques counts the
 	// steps Audspect's own policy refused, so the report can say why nothing was tested.
-	Assessed         bool `json:"assessed"`
-	VetoedTechniques int  `json:"vetoedTechniques"`
+	Assessed           bool                     `json:"assessed"`
+	VetoedTechniques   int                      `json:"vetoedTechniques"`
 	PreventionScore    float64                  `json:"preventionScore"`
 	ExposureScore      float64                  `json:"exposureScore"`
 	CoverageScore      float64                  `json:"coverageScore"`     // defense rate — tactics fully blocked

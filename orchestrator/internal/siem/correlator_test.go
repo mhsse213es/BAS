@@ -199,7 +199,7 @@ func TestCorrelate_ATelemetryProbeIsCheckedAgainstAlertsLikeAnExecutedStep(t *te
 		return r
 	}
 	results := []models.SimulationResult{
-		probe("T1135", seen),                    // alert in its window: detected
+		probe("T1135", seen),                        // alert in its window: detected
 		probe("T1083", runStart.Add(6*time.Minute)), // no alert near it: undetected
 		resultAt("T1098", "Account Manipulation", models.ResultSkipped, time.Time{}, 0), // an ordinary skip is still not executed
 	}

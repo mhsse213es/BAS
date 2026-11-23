@@ -44,7 +44,7 @@ var (
 	// ErrNoRunRecorder refuses every start when no scenario_runs recorder is
 	// installed: a run the agent reports on must have a row to attach to.
 	ErrNoRunRecorder = errors.New("dbsim: no run recorder installed; the run row cannot be written")
-	ErrNotActive            = errors.New("dbsim: job is not active")
+	ErrNotActive     = errors.New("dbsim: job is not active")
 )
 
 // JobStore persists jobs. Every mutation writes its audit row in the SAME
@@ -110,7 +110,7 @@ type StartRequest struct {
 // host events or detections against it (the handlers look the run up by id).
 type RunRow struct {
 	ID, ScenarioID, AgentID, Name, InitiatedBy string
-	StartedAt                                   time.Time
+	StartedAt                                  time.Time
 }
 
 // RunRecorder writes the scenario_runs row (satisfied by db.DBSimRunRecorder).
@@ -122,7 +122,7 @@ type RunRecorder interface {
 type Service struct {
 	// Runs records the scenario_runs row for each started run. Nil refuses every
 	// start (fail closed).
-	Runs RunRecorder
+	Runs       RunRecorder
 	Targets    TargetReader
 	Scenarios  ScenarioSource
 	Jobs       JobStore
@@ -163,7 +163,7 @@ type Service struct {
 	// ok=false (or nil) means no policy is configured: the grants dimension stays
 	// unverifiable and never passes.
 	GrantPolicy func(job dbsim.RunJob, rec dbsim.TargetRecord) (dbsim.Policy, bool)
-	AgentIP   func(ctx context.Context, agentID string) string
+	AgentIP     func(ctx context.Context, agentID string) string
 	// ConnectorTimeout bounds the connector factory call and each SIEM query
 	// (default DefaultConnectorTimeout); IngestTimeout bounds the whole grading
 	// phase of one Ingest (default DefaultIngestTimeout).

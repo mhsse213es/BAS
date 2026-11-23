@@ -1243,7 +1243,7 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 		"cloud_secret_value_read": {Class: ClassPotentiallyDestructive, BlastRadius: "Requests one synthetic test secret value into memory; only its length is recorded and the value is discarded."},
 	},
 	"T1098": {
-		"dbprobe_bounded_synthetic": dbprobeClass(ClassPotentiallyDestructive, "dbprobe_bounded_synthetic", "bounded_synthetic database probe (fixture-tagged synthetic objects, lab only) -- T1098"),
+		"dbprobe_bounded_synthetic":        dbprobeClass(ClassPotentiallyDestructive, "dbprobe_bounded_synthetic", "bounded_synthetic database probe (fixture-tagged synthetic objects, lab only) -- T1098"),
 		"cscrf_id_priv_group_change":       catalogClass(ClassDestructive, "cscrf_id_priv_group_change", "Creates a synthetic account, adds it to and removes it from Administrators, and deletes it in undo; a failed undo leaves an account"),
 		"policy_simulation_read":           {Class: ClassNonDestructive, BlastRadius: "IAM policy simulation only; no change is made."},
 		"cloud_role_assume":                {Class: ClassPotentiallyDestructive, BlastRadius: "Asks the cloud to issue temporary credentials for one operator-named test role; returned credentials are discarded."},

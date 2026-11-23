@@ -57,9 +57,9 @@ func TestEvaluate(t *testing.T) {
 			wantRule: "beneficiary_second_approver_missing",
 		},
 		{
-			name:     "beneficiary change with second approver approved",
-			action:   Action{Kind: "beneficiary", Actor: "op1", SecondApproverPresent: true, SameHostAsSession: true, At: inside},
-			want:     Approved,
+			name:   "beneficiary change with second approver approved",
+			action: Action{Kind: "beneficiary", Actor: "op1", SecondApproverPresent: true, SameHostAsSession: true, At: inside},
+			want:   Approved,
 		},
 		{
 			name:     "amount over limit flagged",
@@ -92,9 +92,9 @@ func TestEvaluate(t *testing.T) {
 			wantRule: "session_anomaly",
 		},
 		{
-			name:     "ordinary in-window transfer approved",
-			action:   Action{Kind: "transfer", Actor: "op1", Amount: 10, Limit: 100, SameHostAsSession: true, At: inside},
-			want:     Approved,
+			name:   "ordinary in-window transfer approved",
+			action: Action{Kind: "transfer", Actor: "op1", Amount: 10, Limit: 100, SameHostAsSession: true, At: inside},
+			want:   Approved,
 		},
 	}
 
