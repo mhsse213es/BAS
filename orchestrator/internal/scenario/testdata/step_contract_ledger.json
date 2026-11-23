@@ -8228,20 +8228,452 @@
   {
     "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
     "index": 0,
-    "technique_id": "T1562",
+    "technique_id": "T1203",
     "action_key": "",
     "framework": "custom",
-    "class": "non_destructive",
-    "status": "not_required_non_destructive"
+    "class": "destructive",
+    "status": "self_cleaning_declared"
   },
   {
     "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
     "index": 1,
-    "technique_id": "T1562",
+    "technique_id": "T1203",
     "action_key": "",
     "framework": "custom",
-    "class": "non_destructive",
-    "status": "not_required_non_destructive"
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 2,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 3,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 4,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 5,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 6,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 7,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 8,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 9,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 10,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 11,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 12,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 13,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 14,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 15,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 16,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 17,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 18,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 19,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 20,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 21,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 22,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 23,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 24,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 25,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 26,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 27,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 28,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 29,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 30,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 31,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 32,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 33,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 34,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 35,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 36,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 37,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 38,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 39,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 40,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 41,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 42,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 43,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 44,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 45,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 46,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 47,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 48,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
+  },
+  {
+    "scenario": "endpoint-mastery/em-08-exploit-mitigation.yaml",
+    "index": 49,
+    "technique_id": "T1203",
+    "action_key": "",
+    "framework": "custom",
+    "class": "destructive",
+    "status": "self_cleaning_declared"
   },
   {
     "scenario": "endpoint-mastery/em-09-browser-attack.yaml",
