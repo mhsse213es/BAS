@@ -810,32 +810,82 @@ def assert_input_covers_source():
 
     The classifier reads the assembled view (g1-assemble-classifier-view.py). A plain build's
     index.html has no inlined code, so it reports zero sinks and a silent pass. Every
-    `.innerHTML` token under web/src must therefore appear in the input.
+    `.innerHTML` and `.insertAdjacentHTML` token under web/src must therefore appear in the input.
     """
     src_dir = REPO_ROOT / "orchestrator" / "web" / "src"
-    src_count = sum(p.read_text(encoding="utf-8").count(".innerHTML") for p in src_dir.rglob("*.js"))
-    seen = text.count(".innerHTML")
-    if seen < src_count:
-        raise SystemExit(
-            f"G1 input {SRC} has {seen} '.innerHTML' tokens but web/src has {src_count}. "
-            "Run scripts/g1-assemble-classifier-view.py first; refusing to report a pass."
-        )
-    return src_count
+    for token in (".innerHTML", ".insertAdjacentHTML"):
+        src_count = sum(p.read_text(encoding="utf-8").count(token) for p in src_dir.rglob("*.js"))
+        seen = text.count(token)
+        if seen < src_count:
+            raise SystemExit(
+                f"G1 input {SRC} has {seen} '{token}' tokens but web/src has {src_count}. "
+                "Run scripts/g1-assemble-classifier-view.py first; refusing to report a pass."
+            )
 
 
-def main():
-    assert_input_covers_source()
-    records = []
+INSERT_OP = "insertAdjacentHTML"
+INSERT_RE = re.compile(r"\.insertAdjacentHTML\s*\(")
+
+def call_arg_spans(src, open_idx):
+    """Top-level argument spans [(start, end), ...] of the call whose '(' is at src[open_idx], or None when they
+    cannot be read with certainty (fail closed): a template literal, a comment, or no matching ')'. Strings are
+    skipped whole and (), [] and {} nest, so a comma inside either is not an argument separator."""
+    i, depth, start, spans, quote = open_idx + 1, 1, open_idx + 1, [], None
+    while i < len(src):
+        c = src[i]
+        if quote:
+            if c == "\\":
+                i += 2
+                continue
+            if c == quote:
+                quote = None
+        elif c in "'\"":
+            quote = c
+        elif c == "`":
+            return None
+        elif c == "/" and src[i + 1:i + 2] in ("/", "*"):
+            return None
+        elif c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+            if depth == 0:
+                if src[start:i].strip():
+                    spans.append((start, i))
+                return spans
+        elif c == "," and depth == 1:
+            spans.append((start, i))
+            start = i + 1
+        i += 1
+    return None
+
+def iter_sinks():
+    """Every place the view parses a string as HTML, in source order, as
+    (pos, op, lhs, rhs, readable): `X.innerHTML = / +=` (op '=' / '+=') and `X.insertAdjacentHTML(position, html)`
+    (op INSERT_OP; its HTML is the second argument). `pos` is the dot before the property or method name.
+    readable is False when the call's arguments could not be parsed; the caller must then claim nothing."""
+    found = []
     for m in SINK_RE.finditer(text):
-        op = m.group(1)
-        lhs_start = find_lhs_start(text, m.start())
-        lhs = text[lhs_start:m.start()].strip()
+        lhs = text[find_lhs_start(text, m.start()):m.start()].strip()
         rhs_start = skip_ws(text, m.end())
-        rhs_end = find_rhs_end(text, rhs_start)
-        rhs = text[rhs_start:rhs_end].strip()
-        lineno = line_of(m.start())
+        rhs = text[rhs_start:find_rhs_end(text, rhs_start)].strip()
+        found.append((m.start(), m.group(1), lhs, rhs, True))
+    for m in INSERT_RE.finditer(text):
+        lhs = text[find_lhs_start(text, m.start()):m.start()].strip()
+        spans = call_arg_spans(text, m.end() - 1)
+        if spans is not None and len(spans) == 2:
+            found.append((m.start(), INSERT_OP, lhs, text[spans[1][0]:spans[1][1]].strip(), True))
+        else:
+            raw_start = skip_ws(text, m.end())
+            found.append((m.start(), INSERT_OP, lhs, text[raw_start:find_rhs_end(text, raw_start)].strip(), False))
+    return sorted(found, key=lambda s: s[0])
+
+def find_sinks():
+    records = []
+    for pos, op, lhs, rhs, readable in iter_sinks():
+        lineno = line_of(pos)
         func = enclosing_function(lineno)
-        category = classify_expr(rhs)
+        category = classify_expr(rhs) if readable else "unclear"
         tags = tag_data_sources(rhs)
         records.append({
             "line": lineno,
@@ -848,7 +898,12 @@ def main():
             "data_source_tags": tags,
         })
 
-    records.sort(key=lambda r: r["line"])
+    records.sort(key=lambda r: r["line"])  # stable: two sinks on one line stay in source order
+    return records
+
+def main():
+    assert_input_covers_source()
+    records = find_sinks()
 
     with OUT_CSV.open("w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=["line", "function", "target", "op", "category", "data_source_tags", "rhs_len", "rhs"])

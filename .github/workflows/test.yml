@@ -149,7 +149,7 @@ jobs:
       - name: Assemble the G1 classifier view from web/src (the input the G1 scripts read)
         run: cd ../../scripts && python3 g1-assemble-classifier-view.py
       - name: G1 classifier, kit-helper and waiver tests (need the web build)
-        run: cd ../../scripts && python3 -m unittest test_g1_merge_classification test_g1_check_no_regression test_g1_assemble_classifier_view test_g1_kit_helpers test_g1_waivers -v
+        run: cd ../../scripts && python3 -m unittest test_g1_merge_classification test_g1_check_no_regression test_g1_assemble_classifier_view test_g1_kit_helpers test_g1_waivers test_g1_insert_adjacent -v
       - name: Smoke harness (bundled build)
         env:
           SMOKE_ROOT: dist
