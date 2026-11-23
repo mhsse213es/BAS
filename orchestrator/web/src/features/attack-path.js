@@ -1388,7 +1388,7 @@ export function repositionOpenRowMenus(e) {
 export function showConnectionConfig() {
   setAgentsView('operational');
   var w = document.getElementById('conn-cfg-wrap');
-  if (!w) return;
+  if (!w || ROLE !== 'admin') return; // the server only answers admins
   setDisplay(w, '');
   if (typeof loadConnectionConfig === 'function') loadConnectionConfig();
   w.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1399,11 +1399,13 @@ export function showConnectionConfig() {
 export function showAgentDownload() {
   setAgentsView('operational');
   var w = document.getElementById('conn-cfg-wrap');
-  if (!w) return;
-  setDisplay(w, '');
-  if (typeof loadConnectionConfig === 'function') loadConnectionConfig();
+  if (w && ROLE === 'admin') { // the connection settings are admin-only; everyone else goes straight to the downloads
+    setDisplay(w, '');
+    if (typeof loadConnectionConfig === 'function') loadConnectionConfig();
+  }
   var d = document.getElementById('agent-deploy-section');
-  (d || w).scrollIntoView({ behavior: 'smooth', block: 'start' });
+  var target = d || w;
+  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // buildAgentInstallCommands returns the copy-paste install one-liners for each
@@ -1505,6 +1507,7 @@ export function formatFingerprint(hex) {
 
 export function loadConnectionConfig() {
   apicall('/api/config/connection').then(function(data) {
+    if (!data || typeof data !== 'object' || data.error) throw new Error((data && data.error) || 'unexpected answer');
     var wrap = document.getElementById('conn-cfg-wrap');
     if (!wrap) return;
     setDisplay(wrap, '');
@@ -1522,7 +1525,10 @@ export function loadConnectionConfig() {
       setDisplay(fpRow, fpText ? '' : 'none');
     }
     // keep masked until user clicks Show
-  }).catch(function(e) { showToast('Failed to load connection config: ' + (e.message || 'error'), 'err'); });
+  }).catch(function(e) {
+    var sec = document.getElementById('cfg-agent-secret'); if (sec) { sec.dataset.value = ''; if (sec.classList.contains('secret-hidden')) sec.textContent = 'Could not load'; }
+    showToast('Failed to load connection config: ' + (e.message || 'error'), 'err');
+  });
 }
 
 export function toggleSecret(btn) {

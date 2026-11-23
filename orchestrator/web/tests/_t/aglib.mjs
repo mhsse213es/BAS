@@ -20,7 +20,7 @@ export async function boot(opts = {}) {
   let agents = opts.empty ? [] : richAgents();
   if (opts.many) { const base = richAgents(); agents = Array.from({ length: opts.many }, (_, i) => ({ ...base[i % base.length], id: 'm-' + i, agentId: 'm-' + i, hostname: 'HOST-' + String(i).padStart(3, '0'), groupId: 1 + (i % 4) })); }
   agents.push({ ...richAgents()[0], id: 'a-ret', agentId: 'a-ret', hostname: 'OLD-BOX', state: 'retired', status: 'offline' });
-  const state = { fail: {}, status: {}, calls: [], dialogs: [], answers: [], groups: [{ id: 1, name: 'Finance', parentId: null, totalAgentCount: 3, children: [{ id: 5, name: 'Branch', parentId: 1, totalAgentCount: 1, children: [] }] }, { id: 2, name: 'Domain controllers', parentId: null, totalAgentCount: 3, children: [] }, { id: 3, name: 'Servers', parentId: null, totalAgentCount: 3, children: [] }, { id: 4, name: 'Lab', parentId: null, totalAgentCount: 3, children: [] }], agents };
+  const state = { fail: opts.fail || {}, status: opts.status || {}, calls: [], dialogs: [], answers: [], groups: [{ id: 1, name: 'Finance', parentId: null, totalAgentCount: 3, children: [{ id: 5, name: 'Branch', parentId: 1, totalAgentCount: 1, children: [] }] }, { id: 2, name: 'Domain controllers', parentId: null, totalAgentCount: 3, children: [] }, { id: 3, name: 'Servers', parentId: null, totalAgentCount: 3, children: [] }, { id: 4, name: 'Lab', parentId: null, totalAgentCount: 3, children: [] }], agents };
   const errs = []; page.on('pageerror', (e) => errs.push(e.message.slice(0, 160)));
   page.on('dialog', async (d) => { state.dialogs.push(d.type() + ': ' + d.message().slice(0, 90)); const a = state.answers.shift(); if (d.type() === 'prompt') await d.accept(a == null ? '' : String(a)); else if (a === false) await d.dismiss(); else await d.accept(); });
   await page.addInitScript((r) => { localStorage.setItem('bas_role', r); localStorage.setItem('audspect_theme', 'dark'); }, opts.role || 'admin');
@@ -28,7 +28,12 @@ export async function boot(opts = {}) {
   await page.route('**/*', async (r) => {
     const req = r.request(), u = new URL(req.url()), path = u.pathname, m = req.method();
     if (u.hostname !== '127.0.0.1') return r.fulfill({ status: 204, body: '' });
-    if (!path.startsWith('/api/agent') && !path.startsWith('/api/fleet') && !path.startsWith('/api/ticketing')) { if (path === '/ready' || path.startsWith('/api/')) return json(r, fx(m, u)); return r.continue(); }
+    { const fk0 = Object.keys(state.fail).find((k) => !k.includes(':') && path.includes(k)); if (fk0 && path.startsWith('/api/')) { state.calls.push(m + ' ' + path + ' -> FAIL'); return json(r, { error: state.fail[fk0] }, state.status[fk0] || 500); } }
+    if (path.startsWith('/api/agents/') && path.includes('/logs/')) return json(r, [1, 2, 3].map((i) => ({ createdAt: new Date(Date.now() - i * 60000).toISOString(), level: ['info', 'warn', 'error'][i % 3], category: 'runtime', message: 'event ' + i + ' on ' + path.split('/')[3] })));
+    if (path.startsWith('/api/agents/') && path.includes('/telemetry')) return json(r, Array.from({ length: 12 }, (_, i) => ({ createdAt: new Date(Date.now() - i * 60000).toISOString(), metric: u.searchParams.get('metric') || 'heartbeat_latency_ms', value: 40 + (i * 7) % 30, unit: 'ms' })));
+    if (path.startsWith('/api/agents/') && path.endsWith('/risk')) return json(r, { measurable: true, healthScore: 71, criticalityRisk: 4, trend: { direction: 'Declining', newFindings: ['a', 'b'], resolvedFindings: ['c'] }, actionPlan: [{ categoryName: 'Credential Protection', deficit: 12, finding: { title: 'LSASS not protected', remediation: 'Enable RunAsPPL' } }], attackPathChain: [], categories: [] });
+    if (path === '/api/attackpath/jobs') return json(r, [{ id: 'j1', status: 'completed', createdAt: new Date().toISOString(), targetCount: 3, metrics: { nodeCount: 41, edgeCount: 77 } }, { id: 'j2', status: 'failed', createdAt: new Date().toISOString(), error: 'agent offline' }]);
+    if (!path.startsWith('/api/agent') && !path.startsWith('/api/fleet') && !path.startsWith('/api/ticketing') && !path.startsWith('/api/enrollment-tokens') && !path.startsWith('/api/config/connection')) { if (path === '/ready' || path.startsWith('/api/')) return json(r, fx(m, u)); return r.continue(); }
     const fk = Object.keys(state.fail).find((k) => (k.includes(':') ? k === m + ':' + path.replace(/\/[^/]+$/, '/*') || k === m + ':' + path : path.includes(k)));
     if (fk) { state.calls.push(m + ' ' + path + ' -> FAIL'); return json(r, { error: state.fail[fk] }, state.status[fk] || 500); }
     let body = {}; try { body = JSON.parse(req.postData() || '{}'); } catch {}
@@ -48,7 +53,9 @@ export async function boot(opts = {}) {
     if (path.startsWith('/api/agent-groups/') && m === 'DELETE') { state.groups = state.groups.filter((x) => String(x.id) !== path.split('/').pop()); return r.fulfill({ status: 204 }); }
     const act = path.match(/^\/api\/agents\/([^/]+)\/(stop|uninstall|revoke|reinstate|allow-reinstall|remove|group|state)$/);
     if (act && m !== 'GET') { const a = state.agents.find((x) => x.agentId === act[1]); if (a && act[2] === 'remove') a.state = 'retired'; if (a && act[2] === 'revoke') a.state = 'revoked'; if (a && act[2] === 'reinstate') a.state = 'active'; if (a && act[2] === 'state') a.state = body.state || a.state; return json(r, {}); }
-    if (path === '/api/fleet/min-agent-version') return json(r, { version: '', source: '', default: '1.9.2' });
+    if (path === '/api/config/connection') return json(r, { agentSecret: 'S3cr3t-Value-123', deploymentSigningFingerprint: 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90' });
+    if (path === '/api/enrollment-tokens/bulk') return json(r, { tokens: (body.hostnames || []).filter((h, i, a) => a.indexOf(h) === i).map((h, i) => ({ hostname: h, agentId: 'id-' + h, token: 'tok-' + i + '-abcdef', expiresAt: '2026-12-01T00:00:00Z' })), duplicates: (body.hostnames || []).filter((h, i, a) => a.indexOf(h) !== i) });
+    if (path === '/api/fleet/min-agent-version') return json(r, m === 'PUT' ? { version: body.version, source: 'setting', default: '1.9.2' } : { version: '', source: '', default: '1.9.2' });
     if (path === '/api/fleet/tray-icon') return json(r, { hidden: false });
     if (path === '/api/agent-binaries/revocations') return json(r, { items: [] });
     if (path.match(/\/api\/agents\/[^/]+\/(state|risk|telemetry)/) || path.startsWith('/api/agents/')) return json(r, fx(m, u));

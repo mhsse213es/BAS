@@ -1,0 +1,14 @@
+import { boot } from './aglib.mjs';
+const b = await boot(); const { page, T, state } = b; await b.go();
+const sq = (s) => s.replace(/\s+/g, ' ');
+const view = async (v) => { await page.locator('[data-agents-view="' + v + '"]').click(); await page.waitForTimeout(1200); };
+await view('operational');
+console.log('OPERATIONAL text ->', sq(await page.locator('#agents-view-operational').innerText()).slice(0, 700));
+await page.screenshot({ path: T + 'ag2-oper.png', fullPage: true });
+await view('risk');
+console.log('RISK text ->', sq(await page.locator('#agents-view-risk').innerText()).slice(0, 500));
+await page.screenshot({ path: T + 'ag2-risk.png', fullPage: true });
+await view('systemtree');
+console.log('hero buttons ->', JSON.stringify(await page.locator('#hero-agents button, #hero-agents a').allInnerTexts()));
+console.log('errors', JSON.stringify(b.errs), '| native', JSON.stringify(state.dialogs));
+await b.close();

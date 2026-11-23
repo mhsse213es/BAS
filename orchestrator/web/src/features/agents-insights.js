@@ -88,7 +88,8 @@ export function agentInsightsHtml(agents, totals) {
 
 // agentOperationalHtml renders the Operational view's tiles and its two cards.
 export function agentOperationalHtml(agents, totals) {
-  var list = agents || [];
+  // Retired agents are not in the "Total agents" tile, so they are not in the OS split or the simulation ranking either.
+  var list = (agents || []).filter(function(a) { return !(a && a.state === 'retired'); });
   var tiles = M.opTiles(totals).map(tileHtml);
   var os = M.osDonut(list);
   var palette = [CHART_COLORS.accent, CHART_COLORS.ok, CHART_COLORS.violet, CHART_COLORS.warn, CHART_COLORS.teal, CHART_COLORS.pink, CHART_COLORS.muted];
@@ -149,7 +150,7 @@ export function migrationPanelHtml(status, fmtTime) {
   var v = M.migrationView(status);
   var st = status || {};
   var blocking = (st.blockingAgents || []).map(function(a) {
-    return '<div class="legacy-blocking-row"><span>' + x(a.hostname || a.agentId) + '</span><span class="legacy-blocking-time">' + x(fmtTime(a.lastSeen)) + '</span></div>';
+    return '<div class="legacy-blocking-row"><span>' + x(a.hostname || a.agentId) + '</span><span class="legacy-blocking-time">last seen ' + x(fmtTime(a.lastSeen)) + '</span></div>';
   }).join('');
   var unattributed = st.unattributedRequests
     ? '<div class="legacy-unattributed-warning">&#9888; Unattributed legacy activity: ' + x(st.unattributedRequests.count) + ' request(s) — retirement blocked</div>' : '';

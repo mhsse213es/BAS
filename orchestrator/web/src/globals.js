@@ -15,6 +15,7 @@ import { clearEnrollmentTokens, copyEnrollmentToken, downloadEnrollmentTokensCsv
 import { closeAllowReinstallModal, closeReinstateAgentModal, closeRemoveAgentModal, closeRevokeAgentModal, closeStopAgentModal, closeUninstallAgentModal, submitAllowReinstall, submitReinstateAgent, submitRemoveAgent, submitRevokeAgent, submitStopAgent, submitUninstallAgent, triggerTicketingSync } from './features/agent-actions.js';
 import { closeAgentDetail, closeAgentDetailOnBackdrop, exportCompliance, filterControls, loadAgtLogs, loadAgtLogsTelemetryMetric, loadComplianceReport, openComplianceDoc, setAgentState, showAgentTab, toggleEvidence, updateLinuxDownloadCmd } from './features/agent-drawer.js';
 import { agentGroupMenuPick } from './features/attack-path.js';
+import { agtRetryTab } from './features/agent-drawer.js';
 import { askEnter } from './features/compliance.js';
 import { _apCancelJob, apAssetsClose, apCollectClose, apCollectViewResults, apCountTargets, apDiscoverSubnet, apScheduleClose, approveForLocalUse, approveLocalAckChanged, closeAPAbout, closeApproveLocalModal, closeExposureDetail, closeExposureDetailOnBackdrop, closeGroupPicker, copyRecommendedScenario, copyText, createAgentGroupPrompt, dispatchAPCollect, loadAgents, loadAttackPath, loadCoverageMatrix, loadExecDashboard, setExecRange, loadExposureAssets, loadMoreAgents, loadRecommendations, loadScenarios, manageUsersLink, onAgentSearchInput, openAPAbout, openAPAssets, openAPCollect, openAPSchedule, openAgentGroupMenuStop, openExposureDetail, openScenarioCategory, rowMenuAuditPack, rowMenuBoardScorecard, rowMenuDetail, rowMenuMoveGroup, rowMenuNavigator, rowMenuAllowReinstall, rowMenuReinstateAgent, rowMenuRemoveAgent, rowMenuReportCsv, rowMenuReportHtml, rowMenuReportJson, rowMenuReportPdf, rowMenuRevokeAgent, rowMenuRunSimulation, rowMenuSafeScan, rowMenuStopAgent, rowMenuTrayIcon, toggleFleetTrayIcon, toggleMinAgentVersion, revokeAgentBinary, unrevokeAgentBinary, rowMenuUninstallAgent, saveAPAsset, saveAPSchedule, scenarioCategoryKeydown, scenarioSearchClear, selectAgentGroup, selectDashPref, selectTheme, setAgentFilter, setCoverageFilter, setExposureFilter, setThreatPriorityTier, onExposureSearch, showAgentDownload, showSettingsSection, showThreatPriorityDetail, showThreatPriorityList, submitApproveLocal, submitGroupPicker, toggleRowMenuById, toggleSecret, refreshScenarioView, setScenarioView, setScenarioSort, setScenarioCatOff, clearScenarioFilters, openScenarioDrawer, closeScenarioDrawer, closeScenarioDrawerOnBackdrop, scenarioDrawerTab, scenarioCardKeydown, runScenarioCard, runScenarioFromDrawer, openScenarioRun } from './features/attack-path.js';
 import { auditPage, backupNow, exportAuditLogs, loadAuditLogs, loadBackups, loadLicenseInfo, prepareRestore } from './features/audit-logs.js';
@@ -501,6 +502,7 @@ export const ACTIONS = {
   openAgentDetailRiskTab,
   openAgentGroupMenuStop,
   agentGroupMenuPick,
+  agtRetryTab,
   askEnter,
   openBuilder,
   openBuilderARTPicker,

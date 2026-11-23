@@ -1553,5 +1553,14 @@ tr.ai-sel { background: var(--accent-dim); }
 .ask-input { width: 100%; }
 .ask-hint { margin-top: 8px; }
 .ask-err { margin-top: 8px; color: var(--danger-text, var(--danger)); }
-/* Agent action dialogs are launched from the agent drawer: they must sit above it (and below the confirm dialog, z 110). */
-#stop-agent-overlay, #uninstall-agent-overlay, #revoke-agent-overlay, #allow-reinstall-agent-overlay, #reinstate-agent-overlay, #remove-agent-overlay, #group-picker-overlay { z-index: 105 !important; }
+/* Dialogs (.overlay) are opened from inside drawers (Stop/Revoke/Move/Run/Download...): they always sit above a drawer
+   (z 100) and below the confirm dialog (110). Before this, they opened hidden behind the drawer that launched them. */
+.overlay { z-index: 105; }
+
+/* inline code inside the install notes stays inline (the block rule is only for the command lines) */
+.agent-dl-usage div code, .agent-dl-usage span code, .agent-dl-usage p code, .agent-dl-usage li code, .agent-dl-usage b code, .agent-dl-usage strong code { display: inline; margin-top: 0; }
+#agent-deploy-section, #conn-cfg-wrap { scroll-margin-top: 76px; }
+
+.agt-tab-fail { padding: 28px 18px; text-align: center; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+/* Results are opened from inside the agent drawer (Scenarios tab); they must sit above it, below the confirm dialog. */
+#results-overlay { z-index: 105; }

@@ -1,0 +1,13 @@
+import { boot } from './aglib.mjs';
+const b = await boot({ viewport: { width: 1280, height: 900 } }); const { page, T } = b;
+await page.evaluate(() => { localStorage.setItem('audspect_theme', 'light'); document.documentElement.setAttribute('data-theme', 'light'); });
+await b.go(); await page.waitForTimeout(500);
+await page.locator('.at-node', { hasText: 'Lab' }).locator('.at-menu').click(); await page.waitForTimeout(200);
+await page.screenshot({ path: T + 'agl-menu.png' });
+await page.locator('#ag-menu button', { hasText: 'Rename' }).click(); await page.waitForTimeout(300); await page.screenshot({ path: T + 'agl-ask.png' });
+await page.locator('#confirm-diff-overlay .btn', { hasText: 'Cancel' }).first().click().catch(() => {});
+await page.evaluate(() => document.getElementById('confirm-diff-overlay').classList.remove('open'));
+await page.locator('#agents-body tr').first().click(); await page.waitForTimeout(900); await page.locator('#agt-tab-overview button', { hasText: 'Stop Agent' }).click(); await page.fill('#stop-agent-reason', 'test'); await page.locator('#stop-agent-submit-btn').click(); await page.waitForTimeout(400); await page.screenshot({ path: T + 'agl-sure.png' });
+await b.close();
+const p = await boot({ viewport: { width: 420, height: 900 } }); await p.go(); await p.page.screenshot({ path: p.T + 'agp-0.png' }); await p.page.locator('#agents-body tr').first().click(); await p.page.waitForTimeout(900); await p.page.screenshot({ path: p.T + 'agp-drawer.png' });
+console.log('phone h-scroll', await p.page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)); await p.close();

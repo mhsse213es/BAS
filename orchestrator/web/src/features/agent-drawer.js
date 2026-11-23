@@ -51,7 +51,16 @@ export function closeAgentDetail() {
   _agtDetailId = null;
 }
 export function closeAgentDetailOnBackdrop(el, event) { if (event.target === el) closeAgentDetail(); }
+// A failed tab says so (and why) and offers Try again; it never reads as an empty list.
+function tabFail(e) {
+  var tab = _agtTabNow;
+  return '<div class="empty u-danger agt-tab-fail" role="alert"><b>Could not load this tab</b><div>' + x((e && e.message) || 'request failed') + '</div>' +
+    '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'agtRetryTab', tab) + '>Try again</button></div>';
+}
+var _agtTabNow = 'overview';
+export function agtRetryTab(tab) { showAgentTab(tab); }
 export function showAgentTab(tab) {
+  _agtTabNow = tab;
   ['overview','scenarios','logs','health','attackpath','risk'].forEach(function(t) {
     setDisplay(document.getElementById('agt-tab-' + t), t === tab ? '' : 'none');
   });
@@ -162,14 +171,15 @@ function overviewHtml(a) {
 function loadAgtOverview(agentId) {
   var pane = document.getElementById('agt-tab-overview');
   pane.innerHTML = '<div class="empty">Loading…</div>';
-  apicall('/api/agents').then(function(data) {
-    var a = (data || []).find(function(ag) { return ag.agentId === agentId; });
+  apicallOk('/api/agents').then(function(data) {
+    if (!Array.isArray(data)) throw new Error('unexpected answer from the server');
+    var a = data.find(function(ag) { return ag.agentId === agentId; });
     if (!a) { pane.innerHTML = '<div class="empty u-danger">Agent not found</div>'; return; }
     document.getElementById('agt-detail-title').textContent = a.hostname || agentId;
     var sub = document.getElementById('agt-detail-sub');
     if (sub) sub.textContent = M.drawerSub(a);
     pane.innerHTML = overviewHtml(a);
-  }).catch(function(e) { pane.innerHTML = '<div class="empty u-danger">' + x(e.message) + '</div>'; });
+  }).catch(function(e) { pane.innerHTML = tabFail(e); });
 }
 
 export function setAgentState(agentId, newState) {
@@ -195,7 +205,8 @@ export function setAgentState(agentId, newState) {
 function loadAgtScenarios(agentId) {
   var pane = document.getElementById('agt-tab-scenarios');
   pane.innerHTML = '<div style="color:var(--muted);padding:1rem">Loading…</div>';
-  apicall('/api/scenarios/runs?agentId=' + encodeURIComponent(agentId)).then(function(runs) {
+  apicallOk('/api/scenarios/runs?agentId=' + encodeURIComponent(agentId)).then(function(runs) {
+    if (runs && !Array.isArray(runs)) throw new Error('unexpected answer from the server');
     if (!runs || !runs.length) {
       pane.innerHTML = '<div style="padding:1rem;color:var(--muted)">No scenario runs found for this agent.</div>';
       return;
@@ -224,7 +235,7 @@ function loadAgtScenarios(agentId) {
       '<th style="padding:0.4rem 0.5rem;text-align:left">Status</th>' +
       '<th style="padding:0.4rem 0;text-align:left"></th>' +
       '</tr></thead><tbody>' + rows + '</tbody></table></div>';
-  }).catch(function(e) { pane.innerHTML = '<div style="padding:1rem;color:var(--danger)">' + x(e.message) + '</div>'; });
+  }).catch(function(e) { pane.innerHTML = tabFail(e); });
 }
 
 // _AGT_TELEMETRY_METRICS groups every metric name the agent actually emits
@@ -278,7 +289,8 @@ export function loadAgtLogs(agentId, tier) {
       : '') +
     '</div>';
 
-  apicall(url + (url.indexOf('?')>=0 ? '&' : '?') + 'limit=100').then(function(rows) {
+  apicallOk(url + (url.indexOf('?')>=0 ? '&' : '?') + 'limit=100').then(function(rows) {
+    if (rows && !Array.isArray(rows)) throw new Error('unexpected answer from the server');
     var tbody = '';
     if (!rows || !rows.length) {
       tbody = '<tr><td colspan="4" style="padding:0.8rem;color:var(--muted);text-align:center">No ' + tier + ' logs yet</td></tr>';
@@ -316,7 +328,7 @@ export function loadAgtLogs(agentId, tier) {
       '<table style="width:100%;border-collapse:collapse;font-size:0.79rem">' +
       '<tbody>' + tbody + '</tbody></table></div>';
   }).catch(function(e) {
-    pane.innerHTML = tierBtns + '<div style="padding:1rem;color:var(--danger)">' + x(e.message) + '</div>';
+    pane.innerHTML = tierBtns + tabFail(e);
   });
 }
 
@@ -394,20 +406,21 @@ var _AGT_HEALTH_CHARTS = [
 function loadAgtHealth(agentId) {
   var pane = document.getElementById('agt-tab-health');
   pane.innerHTML = '<div style="color:var(--muted);padding:1rem">Loading…</div>';
-
+  var failed = [];
   Promise.all(_AGT_HEALTH_CHARTS.map(function(c) {
     // Each metric fetched independently, with its own fallback: one metric
     // having no data yet (e.g. a freshly-enrolled agent with no scenario
     // runs) must not blank the whole grid.
-    return apicall('/api/agents/' + encodeURIComponent(agentId) + '/telemetry?metric=' + encodeURIComponent(c.metric) + '&limit=100')
-      .catch(function() { return []; });
+    return apicallOk('/api/agents/' + encodeURIComponent(agentId) + '/telemetry?metric=' + encodeURIComponent(c.metric) + '&limit=100')
+      .catch(function(e) { failed.push(e); return []; });
   })).then(function(results) {
+    if (failed.length === _AGT_HEALTH_CHARTS.length) throw failed[0];
     var cards = _AGT_HEALTH_CHARTS.map(function(c, i) {
       return metricSparklineCard({ title: c.title, unit: c.unit, data: results[i], decimals: c.decimals, thresholds: c.thresholds, footnote: c.footnote });
     }).join('');
     pane.innerHTML = '<div style="padding:1rem 1.25rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:0.85rem">' + cards + '</div>';
   }).catch(function(e) {
-    pane.innerHTML = '<div style="padding:1rem;color:var(--danger)">' + x(e.message) + '</div>';
+    pane.innerHTML = tabFail(e);
   });
 }
 
@@ -415,9 +428,9 @@ function loadAgtHealth(agentId) {
 function loadAgtRisk(agentId) {
   var panel = document.getElementById('agt-tab-risk');
   if (panel) panel.innerHTML = '<div class="empty" style="padding:2rem">Loading…</div>';
-  apicall('/api/agents/' + encodeURIComponent(agentId) + '/risk').then(function(d) {
+  apicallOk('/api/agents/' + encodeURIComponent(agentId) + '/risk').then(function(d) {
     renderAgtRisk(d);
-  }).catch(function(e) { if (panel) panel.innerHTML = '<div class="empty">' + x(e.message) + '</div>'; });
+  }).catch(function(e) { if (panel) panel.innerHTML = tabFail(e); });
 }
 // A category's note says what its score does or does not rest on (for example compliance frameworks left out for too
 // little testing). A category that is not scored still lists its findings: a failed control is real at any coverage.
@@ -504,7 +517,8 @@ function renderAgtRisk(health) {
 export function loadAgtAttackPath(agentId) {
   var pane = document.getElementById('agt-tab-attackpath');
   pane.innerHTML = '<div style="color:var(--muted);padding:1rem">Loading…</div>';
-  apicall('/api/attackpath/jobs?agentId=' + encodeURIComponent(agentId) + '&limit=10').then(function(jobs) {
+  apicallOk('/api/attackpath/jobs?agentId=' + encodeURIComponent(agentId) + '&limit=10').then(function(jobs) {
+    if (jobs && !Array.isArray(jobs)) throw new Error('unexpected answer from the server');
     if (!jobs || !jobs.length) {
       pane.innerHTML = '<div style="padding:1rem;color:var(--muted)">No attack-path jobs found for this agent.</div>';
       return;
@@ -547,7 +561,7 @@ export function loadAgtAttackPath(agentId) {
       '</tr></thead>' +
       '<tbody>' + rows + '</tbody></table></div>';
   }).catch(function(e) {
-    pane.innerHTML = '<div style="padding:1rem;color:var(--danger)">' + x(e.message) + '</div>';
+    pane.innerHTML = tabFail(e);
   });
 }
 
