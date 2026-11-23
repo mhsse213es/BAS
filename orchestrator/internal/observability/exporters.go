@@ -68,6 +68,12 @@ func newOTLPHTTPExporter(kind, endpoint string) (trace.SpanExporter, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A bare base (http://tempo:4318) gets the OTLP traces path; an explicit path is kept as given.
+	// Without this the spans would be posted to "/", which no OTLP receiver accepts.
+	if u, perr := url.Parse(ep); perr == nil && (u.Path == "" || u.Path == "/") {
+		u.Path = "/v1/traces"
+		ep = u.String()
+	}
 	exporter, err := otlptracehttp.New(context.Background(), otlptracehttp.WithEndpointURL(ep))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create %s exporter: %w", kind, err)

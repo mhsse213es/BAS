@@ -210,6 +210,9 @@ AUDSPECT_EMAILGW_DEFENDER_CLIENT_SECRET=""
 AUDSPECT_EMAILGW_INJECTION_HELO_DOMAIN=""
 AUDSPECT_EMAILGW_INJECTION_TARGET_MX=""
 AUDSPECT_EMAILGW_INJECTION_RELAY_HOST=""
+BAS_OTLP_ENDPOINT=""
+BAS_ALERT_WEBHOOK=""
+BAS_REMOTE_WRITE_URL=""
 TLS_CERT=""
 TLS_KEY=""
 DB_PASSWORD=""
@@ -394,6 +397,9 @@ load_config() {
       AUDSPECT_EMAILGW_INJECTION_HELO_DOMAIN)  AUDSPECT_EMAILGW_INJECTION_HELO_DOMAIN="$val"  ;;
       AUDSPECT_EMAILGW_INJECTION_TARGET_MX)    AUDSPECT_EMAILGW_INJECTION_TARGET_MX="$val"    ;;
       AUDSPECT_EMAILGW_INJECTION_RELAY_HOST)   AUDSPECT_EMAILGW_INJECTION_RELAY_HOST="$val"   ;;
+      BAS_OTLP_ENDPOINT)    BAS_OTLP_ENDPOINT="$val"    ;;
+      BAS_ALERT_WEBHOOK)    BAS_ALERT_WEBHOOK="$val"    ;;
+      BAS_REMOTE_WRITE_URL) BAS_REMOTE_WRITE_URL="$val" ;;
       TLS_CERT)             TLS_CERT="$val"             ;;
       TLS_KEY)              TLS_KEY="$val"              ;;
       DB_PASSWORD)          DB_PASSWORD="$val"          ;;
@@ -474,6 +480,19 @@ load_config() {
   validate_emailgw_config
   validate_k8s_scenario_config
   validate_k8s_discovery_config
+  # Trace export (optional, empty = off). The orchestrator skips a malformed
+  # endpoint with a log line, so refuse it here instead of shipping no traces.
+  if [[ -n "$BAS_OTLP_ENDPOINT" ]] && ! [[ "$BAS_OTLP_ENDPOINT" =~ ^https?://[^[:space:]]+$ ]]; then
+    err "setup.conf: BAS_OTLP_ENDPOINT must be an http(s) URL (got: ${BAS_OTLP_ENDPOINT})."; exit 1
+  fi
+  # Alert webhook (optional, empty = history only). Same rule as the trace endpoint.
+  if [[ -n "$BAS_ALERT_WEBHOOK" ]] && ! [[ "$BAS_ALERT_WEBHOOK" =~ ^https?://[^[:space:]]+$ ]]; then
+    err "setup.conf: BAS_ALERT_WEBHOOK must be an http(s) URL (got: ${BAS_ALERT_WEBHOOK})."; exit 1
+  fi
+  # Prometheus remote-write receiver (optional, empty = no push). Same URL rule.
+  if [[ -n "$BAS_REMOTE_WRITE_URL" ]] && ! [[ "$BAS_REMOTE_WRITE_URL" =~ ^https?://[^[:space:]]+$ ]]; then
+    err "setup.conf: BAS_REMOTE_WRITE_URL must be an http(s) URL (got: ${BAS_REMOTE_WRITE_URL})."; exit 1
+  fi
   [[ -z "$LOG_RETENTION_DAYS" ]] && LOG_RETENTION_DAYS="90"
   [[ -z "$BACKUP_RETENTION_DAILY"   ]] && BACKUP_RETENTION_DAILY="7"
   [[ -z "$BACKUP_RETENTION_WEEKLY"  ]] && BACKUP_RETENTION_WEEKLY="4"
@@ -1948,6 +1967,9 @@ KUBE_SCENARIO_CLUSTER=${KUBE_SCENARIO_CLUSTER:-kind-bas-lab}
 KUBE_SCENARIO_NAMESPACE=${KUBE_SCENARIO_NAMESPACE:-bas-sandbox}
 KUBE_DISCOVERY_API=${KUBE_DISCOVERY_API:-}
 KUBE_DISCOVERY_CLUSTER=${KUBE_DISCOVERY_CLUSTER:-kind-bas-lab}
+BAS_OTLP_ENDPOINT=${BAS_OTLP_ENDPOINT}
+BAS_ALERT_WEBHOOK=${BAS_ALERT_WEBHOOK}
+BAS_REMOTE_WRITE_URL=${BAS_REMOTE_WRITE_URL}
 TLS_CERT=${TLS_CERT:-}
 TLS_KEY=${TLS_KEY:-}
 TLS_CERT_CONTAINER_PATH=${tls_cert_container_path}

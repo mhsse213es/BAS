@@ -814,3 +814,13 @@ func (s *Store) AgentDomainJoined(ctx context.Context, agentID string) (*bool, e
 	}
 	return domainJoined, nil
 }
+
+// CountActiveSteps returns how many step executions, across all executions,
+// are running or waiting. The active-steps gauge is sampled from this.
+func (s *Store) CountActiveSteps(ctx context.Context) (int, error) {
+	var n int
+	err := s.db.QueryRow(ctx,
+		`SELECT COUNT(*) FROM exercise_step_executions WHERE status IN ('running','waiting')`,
+	).Scan(&n)
+	return n, err
+}

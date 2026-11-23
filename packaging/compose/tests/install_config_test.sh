@@ -223,6 +223,50 @@ for bad in 'ALEEF_SECRET_X="has\\"quote"' "ALEEF_SECRET_X=has'quote" 'ALEEF_SECR
 done
 
 grep -q 'ALEEF_SECRETS_FILE: /etc/bas/aleef-secrets.env' "${here}/../docker-compose.yml" && grep -q 'aleef-secrets.env:/etc/bas/aleef-secrets.env:ro' "${here}/../docker-compose.yml" && pass "compose mounts the aleef secrets file read-only" || fail "compose aleef mount missing"
+out="$(run_case '')"
+grep -q '^BAS_OTLP_ENDPOINT=$' <<<"$out" && pass "OTLP endpoint unset -> empty (tracing off)" || fail "OTLP unset: $out"
+
+out="$(run_case 'BAS_OTLP_ENDPOINT=http://tempo.internal:4318   # traces')"
+grep -q '^BAS_OTLP_ENDPOINT=http://tempo.internal:4318$' <<<"$out" && pass "OTLP endpoint from setup.conf reaches .env" || fail "OTLP set: $out"
+
+for bad in 'ftp://tempo:4318' 'tempo:4318' 'http://tempo 4318'; do
+  out="$(run_case "BAS_OTLP_ENDPOINT=${bad}")"
+  if grep -q 'ERR: .*BAS_OTLP_ENDPOINT' <<<"$out" && ! grep -q '^rc=0$' <<<"$out"; then
+    pass "BAS_OTLP_ENDPOINT=${bad} refused"
+  else
+    fail "BAS_OTLP_ENDPOINT=${bad} not refused: $out"
+  fi
+done
+
+out="$(run_case 'BAS_ALERT_WEBHOOK=https://hooks.example.internal/bas')"
+grep -q '^BAS_ALERT_WEBHOOK=https://hooks.example.internal/bas$' <<<"$out" && pass "alert webhook from setup.conf reaches .env" || fail "alert webhook: $out"
+
+out="$(run_case '')"
+grep -q '^BAS_ALERT_WEBHOOK=$' <<<"$out" && pass "alert webhook unset -> empty (history only)" || fail "alert webhook unset: $out"
+
+for bad in 'ftp://hooks.example.internal' 'hooks.example.internal/bas'; do
+  out="$(run_case "BAS_ALERT_WEBHOOK=${bad}")"
+  if grep -q 'ERR: .*BAS_ALERT_WEBHOOK' <<<"$out" && ! grep -q '^rc=0$' <<<"$out"; then
+    pass "BAS_ALERT_WEBHOOK=${bad} refused"
+  else
+    fail "BAS_ALERT_WEBHOOK=${bad} not refused: $out"
+  fi
+done
+
+out="$(run_case 'BAS_REMOTE_WRITE_URL=https://mimir.internal/api/v1/push')"
+grep -q '^BAS_REMOTE_WRITE_URL=https://mimir.internal/api/v1/push$' <<<"$out" && pass "remote-write URL from setup.conf reaches .env" || fail "remote-write set: $out"
+
+out="$(run_case '')"
+grep -q '^BAS_REMOTE_WRITE_URL=$' <<<"$out" && pass "remote-write unset -> empty (no push)" || fail "remote-write unset: $out"
+
+for bad in 'ftp://mimir.internal/push' 'mimir.internal:9009'; do
+  out="$(run_case "BAS_REMOTE_WRITE_URL=${bad}")"
+  if grep -q 'ERR: .*BAS_REMOTE_WRITE_URL' <<<"$out" && ! grep -q '^rc=0$' <<<"$out"; then
+    pass "BAS_REMOTE_WRITE_URL=${bad} refused"
+  else
+    fail "BAS_REMOTE_WRITE_URL=${bad} not refused: $out"
+  fi
+done
 
 echo
 [[ $fails -eq 0 ]] && echo "ALL PASS" || { echo "${fails} FAILED"; exit 1; }
