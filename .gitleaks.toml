@@ -44,4 +44,44 @@ paths = [
   # on goldenPrivateKeyPEM in golden_vector_test.go. Never used as a real
   # key anywhere.
   '''orchestrator/internal/cmdsigning/golden_vector_test\.go$''',
+  # lab runbook: synthetic operator identities (op1..op3) in example JSON
+  '''docs/carbanak-bfsi-lab-runbook\.md$''',
+  # unit-test constant token for a mock LLM endpoint
+  '''orchestrator/internal/aisink/chatcompletion_test\.go$''',
+  # unit-test constant token for a mock connector
+  '''orchestrator/internal/aisink/connectoringestion_test\.go$''',
+  # unit-test placeholder API key in a request fixture
+  '''orchestrator/internal/api/detection_handlers_test\.go$''',
+  # unit-test encryption key constant (credTestKey) for the secrets store
+  '''orchestrator/internal/api/secrets_test\.go$''',
+  # unit-test placeholder JWT-shaped token_ref in a fixture
+  '''orchestrator/internal/api/aleef_handlers_test\.go$''',
+  # catalog example of a weak-credential check, not a credential
+  '''orchestrator/internal/apibas/catalog/API-BAS-AUTHN-011\.yaml$''',
+  # fixture webhook_secret placeholder for the API BAS test target
+  '''orchestrator/internal/apibas/fixture/fixture\.go$''',
+  # test operator identities (op1..op3) for the ledger server
+  '''orchestrator/internal/carbanakledger/server_test\.go$''',
+  # scrubber test vectors: fake password/api-key/PEM header that must be redacted
+  '''orchestrator/internal/models/secret_scrub_test\.go$''',
+  # redactor test vectors: Stripe-shaped strings that must be redacted
+  '''orchestrator/internal/models/redact_test\.go$''',
+  # scrubber test vectors for backfilled secrets
+  '''orchestrator/internal/secretbackfill/scrub_test\.go$''',
+  # fake PEM header inside a string, used to assert a non-certificate is rejected
+  '''installer/embedconfig_test\.go$''',
+  # install-config test input with placeholder credentials
+  '''packaging/compose/tests/install_config_test\.sh$''',
+  # scenario: lab operator identity literal (op1) in a simulated ledger call
+  '''scenarios/carbanak-bfsi-amount-manipulation\.yaml$''',
+  # scenario: lab operator identity literal (op1) in a simulated ledger call
+  '''scenarios/carbanak-bfsi-beneficiary-creation\.yaml$''',
+  # scenario: lab operator identity literal (op1) in a simulated ledger call
+  '''scenarios/carbanak-bfsi-limit-modification\.yaml$''',
+  # scenario: lab operator identity literal (op1) in a simulated ledger call
+  '''scenarios/carbanak-bfsi-off-hours-transfer\.yaml$''',
+  # scenario: lab operator identity literal (op1) in a simulated ledger call
+  '''scenarios/carbanak-bfsi-session-misuse\.yaml$''',
+  # scenario: lab operator identity literal (op1) in a simulated ledger call
+  '''scenarios/carbanak-bfsi-unauthorized-approval\.yaml$''',
 ]

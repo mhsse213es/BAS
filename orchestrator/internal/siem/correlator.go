@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/audspect/bas/internal/models"
@@ -42,6 +43,10 @@ func Correlate(
 ) (*CorrelationReport, error) {
 	if agentIP == "" {
 		return nil, fmt.Errorf("siem correlate: agent IP is empty — cannot query SIEM without a source IP")
+	}
+	// The IP is interpolated into the SIEM query, so it must be an address.
+	if net.ParseIP(agentIP) == nil {
+		return nil, fmt.Errorf("siem correlate: agent IP %q is not a valid IP address", agentIP)
 	}
 
 	qStart := runStart.Add(-preWindow)

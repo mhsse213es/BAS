@@ -805,7 +805,26 @@ DATA_SOURCE_PATTERNS = [
 def tag_data_sources(rhs):
     return ",".join(name for name, pat in DATA_SOURCE_PATTERNS if re.search(pat, rhs))
 
+def assert_input_covers_source():
+    """Refuse to classify an input that is missing web/src code.
+
+    The classifier reads the assembled view (g1-assemble-classifier-view.py). A plain build's
+    index.html has no inlined code, so it reports zero sinks and a silent pass. Every
+    `.innerHTML` token under web/src must therefore appear in the input.
+    """
+    src_dir = REPO_ROOT / "orchestrator" / "web" / "src"
+    src_count = sum(p.read_text(encoding="utf-8").count(".innerHTML") for p in src_dir.rglob("*.js"))
+    seen = text.count(".innerHTML")
+    if seen < src_count:
+        raise SystemExit(
+            f"G1 input {SRC} has {seen} '.innerHTML' tokens but web/src has {src_count}. "
+            "Run scripts/g1-assemble-classifier-view.py first; refusing to report a pass."
+        )
+    return src_count
+
+
 def main():
+    assert_input_covers_source()
     records = []
     for m in SINK_RE.finditer(text):
         op = m.group(1)

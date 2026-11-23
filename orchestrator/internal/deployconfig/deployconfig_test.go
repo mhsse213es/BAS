@@ -13,20 +13,24 @@ import (
 	"encoding/pem"
 	"math/big"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
 
-// The golden fixture is byte-identical in agent/deployconfig/testdata. The
-// orchestrator must regenerate it exactly (RSA PKCS#1 v1.5 is deterministic) and
-// the agent must verify it, so neither side can drift from the wire format
-// without a test failing. The private key in testdata is a throwaway used only
-// by this test; it signs nothing real.
+// The golden fixture is byte-identical in agent/deployconfig/testdata. The orchestrator
+// verifies it against the committed public certificate (testdata/test-signing-cert.pem) and
+// checks that the config encoding matches what Build produces. No private key is committed:
+// tests that need to sign generate a key in memory for that run only.
 //
 // Regenerate both copies with:  DEPLOYCONFIG_UPDATE_GOLDEN=1 go test ./internal/deployconfig
-// then copy testdata/golden.json to agent/deployconfig/testdata/golden.json.
+// then copy testdata/golden.json to agent/deployconfig/testdata/golden.json. Regeneration
+// replaces the committed certificate too.
+
+const (
+	goldenPath = "testdata/golden.json"
+	certPath   = "testdata/test-signing-cert.pem"
+)
 
 type goldenFile struct {
 	Envelope    string `json:"envelope"`
@@ -48,31 +52,19 @@ type testSigner struct {
 func (s testSigner) PrivateKey() *rsa.PrivateKey { return s.key }
 func (s testSigner) CertPEM() []byte             { return s.cert }
 
-func loadOrCreateTestSigner(t *testing.T, update bool) testSigner {
+// ephemeralSigner returns an in-memory signing key and a matching self-signed certificate.
+// The key is never written to disk.
+func ephemeralSigner(t *testing.T) testSigner {
 	t.Helper()
-	keyPath := filepath.Join("testdata", "test-signing-key.pem")
-	certPath := filepath.Join("testdata", "test-signing-cert.pem")
-	if kb, err := os.ReadFile(keyPath); err == nil && !update {
-		cb, err := os.ReadFile(certPath)
-		if err != nil {
-			t.Fatal(err)
-		}
-		blk, _ := pem.Decode(kb)
-		key, err := x509.ParsePKCS1PrivateKey(blk.Bytes)
-		if err != nil {
-			t.Fatal(err)
-		}
-		// A Windows checkout may convert the certificate's line endings; the envelope
-		// must embed the same bytes regardless.
-		return testSigner{key: key, cert: bytes.ReplaceAll(cb, []byte{13, 10}, []byte{10})}
-	}
-	if !update {
-		t.Skip("golden fixtures missing; run with DEPLOYCONFIG_UPDATE_GOLDEN=1 to create them")
-	}
 	key, err := rsa.GenerateKey(rand.Reader, 3072)
 	if err != nil {
 		t.Fatal(err)
 	}
+	return testSigner{key: key, cert: selfSignedCertPEM(t, key)}
+}
+
+func selfSignedCertPEM(t *testing.T, key *rsa.PrivateKey) []byte {
+	t.Helper()
 	tmpl := &x509.Certificate{
 		SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "TEST ONLY deployment config signer"},
 		NotBefore: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), NotAfter: time.Date(2046, 1, 1, 0, 0, 0, 0, time.UTC),
@@ -82,22 +74,98 @@ func loadOrCreateTestSigner(t *testing.T, update bool) testSigner {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll("testdata", 0o755); err != nil {
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+}
+
+// committedCert returns the public certificate that signed the golden fixture.
+func committedCert(t *testing.T) []byte {
+	t.Helper()
+	cb, err := os.ReadFile(certPath)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(keyPath, pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)}), 0o600); err != nil {
+	return bytes.ReplaceAll(cb, []byte{13, 10}, []byte{10})
+}
+
+// verifyEnvelopeSignature checks the envelope's domain-separated signature against the public key in certPEM.
+func verifyEnvelopeSignature(t *testing.T, env []byte, certPEM []byte) {
+	t.Helper()
+	cert, err := parseCert(certPEM)
+	if err != nil {
 		t.Fatal(err)
 	}
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
-	if err := os.WriteFile(certPath, certPEM, 0o644); err != nil {
+	pub, ok := cert.PublicKey.(*rsa.PublicKey)
+	if !ok {
+		t.Fatal("certificate key is not RSA")
+	}
+	var e struct {
+		Config    string `json:"config"`
+		Signature string `json:"signature"`
+	}
+	if err := json.Unmarshal(env, &e); err != nil {
 		t.Fatal(err)
 	}
-	return testSigner{key: key, cert: certPEM}
+	cfg, err := base64.StdEncoding.DecodeString(e.Config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sig, err := base64.StdEncoding.DecodeString(e.Signature)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(append([]byte(SigningDomain), cfg...))
+	if err := rsa.VerifyPKCS1v15(pub, crypto.SHA256, digest[:], sig); err != nil {
+		t.Fatalf("golden signature does not verify with the committed certificate: %v", err)
+	}
+}
+
+func envelopeConfig(t *testing.T, env []byte) string {
+	t.Helper()
+	var e struct {
+		Config string `json:"config"`
+	}
+	if err := json.Unmarshal(env, &e); err != nil {
+		t.Fatal(err)
+	}
+	return e.Config
 }
 
 func TestBuildMatchesGolden(t *testing.T) {
-	update := os.Getenv("DEPLOYCONFIG_UPDATE_GOLDEN") == "1"
-	s := loadOrCreateTestSigner(t, update)
+	if os.Getenv("DEPLOYCONFIG_UPDATE_GOLDEN") == "1" {
+		regenerateGolden(t)
+		return
+	}
+	raw, err := os.ReadFile(goldenPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want goldenFile
+	if err := json.Unmarshal(raw, &want); err != nil {
+		t.Fatal(err)
+	}
+	cert := committedCert(t)
+	fp, err := Fingerprint(cert)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fp != want.Fingerprint {
+		t.Fatalf("fingerprint drifted from the golden fixture: got %s want %s", fp, want.Fingerprint)
+	}
+	// The config encoding does not depend on the key, so a fresh key must produce the same config bytes.
+	probe, err := Build(ephemeralSigner(t), goldenConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if envelopeConfig(t, probe) != envelopeConfig(t, []byte(want.Envelope)) {
+		t.Fatal("config encoding drifted from the golden fixture")
+	}
+	verifyEnvelopeSignature(t, []byte(want.Envelope), cert)
+}
+
+// regenerateGolden writes a new golden fixture and its certificate. The private key stays in memory only.
+func regenerateGolden(t *testing.T) {
+	t.Helper()
+	s := ephemeralSigner(t)
 	env, err := Build(s, goldenConfig)
 	if err != nil {
 		t.Fatal(err)
@@ -106,31 +174,21 @@ func TestBuildMatchesGolden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := goldenFile{Envelope: string(env), Fingerprint: fp, Now: "2026-10-25T12:00:00Z"}
-	path := filepath.Join("testdata", "golden.json")
-	if update {
-		b, _ := json.MarshalIndent(got, "", "  ")
-		if err := os.WriteFile(path, append(b, '\n'), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		t.Log("golden fixtures regenerated")
-		return
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
+	if err := os.MkdirAll("testdata", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	var want goldenFile
-	if err := json.Unmarshal(raw, &want); err != nil {
+	if err := os.WriteFile(certPath, s.CertPEM(), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got.Envelope != want.Envelope || got.Fingerprint != want.Fingerprint {
-		t.Fatalf("envelope or fingerprint drifted from the golden fixture:\n got  %s\n want %s", got.Envelope, want.Envelope)
+	b, _ := json.MarshalIndent(goldenFile{Envelope: string(env), Fingerprint: fp, Now: "2026-10-25T12:00:00Z"}, "", "  ")
+	if err := os.WriteFile(goldenPath, append(b, '\n'), 0o644); err != nil {
+		t.Fatal(err)
 	}
+	t.Log("golden fixtures regenerated; copy testdata/golden.json to agent/deployconfig/testdata/")
 }
 
 func TestBuildSignsWithDomainSeparation(t *testing.T) {
-	s := loadOrCreateTestSigner(t, false)
+	s := ephemeralSigner(t)
 	env, err := Build(s, goldenConfig)
 	if err != nil {
 		t.Fatal(err)
@@ -156,8 +214,7 @@ func TestBuildSignsWithDomainSeparation(t *testing.T) {
 }
 
 func TestFingerprintFormat(t *testing.T) {
-	s := loadOrCreateTestSigner(t, false)
-	fp, err := Fingerprint(s.CertPEM())
+	fp, err := Fingerprint(committedCert(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +227,7 @@ func TestFingerprintFormat(t *testing.T) {
 }
 
 func TestBuildRefusesToSignInvalidConfig(t *testing.T) {
-	s := loadOrCreateTestSigner(t, false)
+	s := ephemeralSigner(t)
 	cases := map[string]func(c *Config){
 		"http scheme":    func(c *Config) { c.ServerURL = "http://bas.example.com" },
 		"empty url":      func(c *Config) { c.ServerURL = "" },
@@ -197,7 +254,7 @@ func TestBuildRejectsWeakKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	good := loadOrCreateTestSigner(t, false)
+	good := ephemeralSigner(t)
 	if _, err := Build(testSigner{key: key, cert: good.cert}, goldenConfig); err == nil {
 		t.Fatal("a signer whose key is weaker than 3072 bits must be refused")
 	}

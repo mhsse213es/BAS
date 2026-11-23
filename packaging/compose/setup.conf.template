@@ -91,6 +91,17 @@ AUDSPECT_EMAILGW_DEFENDER_CLIENT_SECRET=
 AUDSPECT_EMAILGW_INJECTION_HELO_DOMAIN=
 AUDSPECT_EMAILGW_INJECTION_TARGET_MX=
 AUDSPECT_EMAILGW_INJECTION_RELAY_HOST=
+# Optional trace export to a Tempo or Jaeger OTLP/HTTP receiver. Leave blank to
+# keep tracing off. Must be an http(s) URL, e.g. http://tempo.internal:4318.
+BAS_OTLP_ENDPOINT=
+
+# Optional webhook for alert state changes (FIRING / RESOLVED), sent as JSON.
+# Blank keeps alerts in the server history only. Must be an http(s) URL.
+BAS_ALERT_WEBHOOK=
+
+# Optional Prometheus remote-write receiver (Prometheus, Mimir, VictoriaMetrics).
+# Blank = no push; /metrics stays available for scraping either way.
+BAS_REMOTE_WRITE_URL=
 
 # DNS_SINK_BIND_IP is the host IP the DLP DNS-tunneling sink (UDP/53) binds
 # to. Auto-detected (first non-loopback IP via `hostname -I`) if left blank.
