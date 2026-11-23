@@ -1683,6 +1683,13 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Which CA signed the certificate this heartbeat arrived on (only when it came over mTLS and carries one).
+	if kid := peerIssuerKeyID(r); kid != "" {
+		_, _ = h.db.Exec(r.Context(),
+			`UPDATE agents SET cert_issuer_key_id = $2 WHERE agent_id = $1`,
+			hb.AgentID, kid)
+	}
+
 	if hb.Transport != "" {
 		_, _ = h.db.Exec(r.Context(),
 			`UPDATE agents SET transport = $2 WHERE agent_id = $1`,

@@ -1,6 +1,8 @@
 package api
 
 import (
+	"crypto/x509"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -149,5 +151,72 @@ func (h *Handler) CARotationStatus(w http.ResponseWriter, r *http.Request) {
 		resp["agentsPending"] = pending
 		resp["readyToPromote"] = total > 0 && have == total
 	}
+	if state == pki.RotationPromoted {
+		newID, err := caKeyID(filepath.Join(h.pkiDir, "ca-cert.pem"))
+		if err != nil {
+			jsonError(w, "read the new CA: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		rows, err := h.db.Query(r.Context(), `
+			SELECT agent_id, COALESCE(cert_issuer_key_id,'') = $1
+			  FROM agents
+			 WHERE COALESCE(state,'active') NOT IN ('revoked','uninstalling','uninstalled')
+			 ORDER BY agent_id`, newID)
+		if err != nil {
+			jsonError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+		pending := []string{}
+		total, on := 0, 0
+		for rows.Next() {
+			var id string
+			var onNew bool
+			if rows.Scan(&id, &onNew) != nil {
+				continue
+			}
+			total++
+			if onNew {
+				on++
+			} else {
+				pending = append(pending, id)
+			}
+		}
+		resp["newCAKeyId"] = newID
+		resp["agentsTotal"] = total
+		resp["agentsOnNewCA"] = on
+		resp["agentsPendingRenewal"] = pending
+		// An agent whose issuer is unknown counts as pending: retiring early locks out any agent still on an old cert.
+		resp["readyToRetire"] = total > 0 && on == total
+	}
 	respond(w, resp)
+}
+
+// peerIssuerKeyID returns the hex authority key id of the client certificate on the request, or "" when the
+// request is not mTLS or the certificate names no issuer key. Unknown is never guessed.
+func peerIssuerKeyID(r *http.Request) string {
+	if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 {
+		return ""
+	}
+	return hex.EncodeToString(r.TLS.PeerCertificates[0].AuthorityKeyId)
+}
+
+// caKeyID returns the hex subject key id of the CA certificate in a PEM file.
+func caKeyID(path string) (string, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	blk, _ := pem.Decode(b)
+	if blk == nil {
+		return "", errors.New("no PEM block in " + filepath.Base(path))
+	}
+	c, err := x509.ParseCertificate(blk.Bytes)
+	if err != nil {
+		return "", err
+	}
+	if len(c.SubjectKeyId) == 0 {
+		return "", errors.New("the CA certificate has no subject key id")
+	}
+	return hex.EncodeToString(c.SubjectKeyId), nil
 }
