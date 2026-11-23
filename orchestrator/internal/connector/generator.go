@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -56,6 +57,9 @@ const (
 
 // Generator converts ThreatActor profiles into BAS scenario YAML files.
 type Generator struct {
+	// onNewDraft, when set, runs after a generated version is newly created (REQ-055: wakes the validation lab).
+	onNewDraft atomic.Pointer[func()]
+
 	intelDir string // e.g. "scenarios/intel"
 	// sectors/regions are the deployment's own configured values
 	// (config.Config.ThreatIntelSectors/ThreatIntelRegions) — when a
@@ -120,6 +124,12 @@ func DBComponentVersions(pool *pgxpool.Pool) func(context.Context) (scenario.Com
 
 // WithRegistrar makes the generator register every candidate as a
 // LOCAL/UNTRUSTED/DRAFT version in the Content Registry.
+// SetNewDraftHook registers fn to run after the generator creates a new draft version. It is safe to call while a
+// sync may be running; a rewrite of an existing generation does not fire it.
+func (g *Generator) SetNewDraftHook(fn func()) {
+	g.onNewDraft.Store(&fn)
+}
+
 func (g *Generator) WithRegistrar(r Registrar) *Generator {
 	g.registrar = r
 	return g
@@ -278,6 +288,11 @@ func (g *Generator) Write(actors []ThreatActor) (GenerateResult, error) {
 				res.Failed++
 				g.recordAttempt(cycleID, &threatID, &id, "failed", reasonCode, strptr(err.Error()), &key, startedAt)
 				continue
+			}
+			if created {
+				if h := g.onNewDraft.Load(); h != nil && *h != nil {
+					(*h)()
+				}
 			}
 		}
 		fileChanged := false
