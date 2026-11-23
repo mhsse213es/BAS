@@ -6,7 +6,7 @@ import { apiInvSelect, apiInvImport, apiInvLoadFile, apiInvFilter, apiInvVersion
 import { loadThreatPriorityActors, onThreatPrioritySearch, clearTpTableQuery, setTpPer, tpPage, tpSortBy, toggleTpCols, tpColToggle, tpSelectRow, tpSelectAll, clearTpSelection, tpRowKeydown, exportTpCsv, exportTpSelected, closeThreatPriorityDetail, closeThreatPriorityDetailOnBackdrop, tpGo } from './features/tp-view.js';
 import { toggleExpCols, setExpPer, expPage, expSortBy, expColToggle, expSelectRow, expSelectAll, clearExpSelection, expRowKeydown, exportExpCsv, exportExpSelected, clearExpTableQuery, expGo } from './features/exp-view.js';
 import { setRecLimit } from './features/attack-path.js';
-import { setCoverageActor, covSearch, covSetResult, covClearFilters, tcvTableQuery, clearTcvTableQuery, setTcvPer, tcvPage, tcvSortBy, toggleTcvCols, tcvColToggle, tcvSelectRow, tcvSelectAll, clearTcvSelection, exportTcvCsv, exportTcvSelected } from './features/tcv-view.js';
+import { setCoverageActor, covSearch, covSetResult, covClearFilters, tcvTableQuery, clearTcvTableQuery, setTcvPer, tcvPage, tcvSortBy, toggleTcvCols, tcvColToggle, tcvSelectRow, tcvSelectAll, clearTcvSelection, exportTcvCsv, exportTcvSelected, openTcvTechnique, tcvSeeResults, tcvRowKeydown, loadCoverageActors } from './features/tcv-view.js';
 import { recTableQuery, clearRecTableQuery, setRecPer, recPage, recDetails, recSortBy, toggleRecCols, recColToggle, recSelectRow, recSelectAll, clearRecSelection, exportRecCsv, exportRecSelected } from './features/recommendations.js';
 import { setTblQuery, setTblClear, setTblPer, setTblPage, setTblSort, setTblCols, setTblColToggle, setTblSelectRow, setTblSelectAll, setTblClearSel, setTblExport, setTblExportSel } from './features/set-view.js';
 import { exTblQuery, exTblClear, exTblPer, exTblPage, exTblSort, exTblCols, exTblColToggle, exTblSelectRow, exTblSelectAll, exTblClearSel, exTblExport, exTblExportSel, exRowKeydown } from './features/ex-view.js';
@@ -283,6 +283,10 @@ export const ACTIONS = {
   setTcvPer,
   tcvPage,
   tcvSortBy,
+  openTcvTechnique,
+  tcvSeeResults,
+  tcvRowKeydown,
+  loadCoverageActors,
   toggleTcvCols,
   tcvColToggle,
   tcvSelectRow,

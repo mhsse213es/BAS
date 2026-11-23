@@ -572,6 +572,7 @@ export function revalidateRemediation(techniqueId) {
   //           (2) scenario with a custom step whose techniqueId matches.
   // The wizard must not open behind the detail drawer the click came from.
   var _ro = document.getElementById('results-overlay'); if (_ro) _ro.classList.remove('open');
+  var _rc = document.getElementById('cov-drawer-overlay'); if (_rc) _rc.classList.remove('open');
   var tid = (techniqueId || '').toUpperCase();
   var match = null;
   var matchFw = 'art';
