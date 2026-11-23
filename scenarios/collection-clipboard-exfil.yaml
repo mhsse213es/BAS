@@ -2,24 +2,20 @@ id: collection-clipboard-exfil
 product_line: dlp
 name: Clipboard Collection Probe
 description: >
-  Telemetry-safe emulation of an adversary collecting clipboard contents and
-  sending them out. Clipboards often hold credentials and copied records, so this
-  scenario never reads what the user has copied. It runs only when the clipboard
-  is empty. In that case it puts a synthetic [BAS-SIM] marker on the clipboard,
-  reads back only that marker, and clears the clipboard, so the user is left with
-  the empty clipboard they started with. If the user has content on the clipboard,
-  the scenario skips without reading it.
-
-  KILL CHAIN STAGES:
-    1. Clipboard Presence Check — test whether the clipboard holds text, without reading it (T1115)
-    2. Synthetic Clipboard Capture — with the clipboard empty, write a synthetic marker, read it back, clear (T1115)
-    3. Clipboard Upload Attempt — POST the captured synthetic marker to an RFC-6761 .invalid host (T1048.003)
-
-  SAFETY: The scenario reads the user's clipboard only to test whether it is empty,
-  and reads its own marker otherwise. It never reads user content. It clears the
-  clipboard only after its own marker was written into an empty clipboard, which
-  restores the starting state. Clipboard history (Win+V) may still record the
-  marker; the scenario does not disable it. Windows only.
+  Validation of clipboard data protection, access monitoring and exfiltration prevention. It never collects
+  user clipboard data. Clipboard collection is a sensitive technique, so every test is read-only apart from one
+  synthetic marker that exists only when the clipboard was empty at the start.
+  SECTIONS: clipboard collection and access; monitoring and protection; synthetic capture; history and
+  synchronization; Remote Desktop redirection; DLP enforcement; exfiltration prevention.
+  VERDICTS: PASS = effective enforcement verified. FAIL = enforcement contradicted. SKIP = not assessable, with a
+  state (CONFIGURED, NOT_CONFIGURED, UNVERIFIED, CANNOT_VERIFY, PRECONDITION, USER_CONTENT_PRESENT and others).
+  A registry value alone is CONFIGURED and never scores. Missing or unverified integrations are NOT_CONFIGURED
+  or UNVERIFIED, never PASS. A DNS result is never proof of prevention.
+  INTEGRATIONS (opt-in by environment flag, modular adapters): Defender for Endpoint, Purview Endpoint DLP,
+  Trellix DLP, firewall or proxy egress telemetry. This release has no operational probes, so a configured
+  integration reports UNVERIFIED.
+  SAFETY: no clipboard content is read, stored or sent. No connection is made to any host. No browser,
+  session or policy is changed. Windows only.
 author: Audspect Research
 executable: true
 local_check: false
@@ -27,7 +23,6 @@ supported_os: [windows]
 tags:
   - collection
   - clipboard
-  - credentials
   - exfiltration
   - dlp
   - t1115
@@ -45,99 +40,1184 @@ live_policy:
   execution_window: ""
 
 steps:
-
-  # ---------------------------------------------------------------------------
-  # Stage 1 — Clipboard Presence Check (T1115)
-  # ---------------------------------------------------------------------------
-  - name: "Clipboard 1 — Clipboard Presence Check, No Content Read (T1115)"
+  - name: "Clipboard 1.1 — Clipboard API available (T1115)"
     technique_id: T1115
     framework: custom
     executor: powershell
     requires_priv: user
-    timeout_sec: 20
-    fidelity: telemetry-safe
-    production_safe: false
-    risk: medium
-    reversible: true
-    blast_radius: "Tests whether the clipboard currently holds text, using ContainsText. This does not read the content. Nothing is written in this stage."
-    telemetry:
-      - "PowerShell EID 4104: System.Windows.Forms.Clipboard call"
-    detection:
-      - "EDR: clipboard access from a non-interactive script — collection IOC"
-    command: |
-      $ErrorActionPreference = 'SilentlyContinue'
-      Add-Type -AssemblyName System.Windows.Forms
-      $hasText = [System.Windows.Forms.Clipboard]::ContainsText()
-      if ($hasText) {
-        Write-Output "SKIP: The clipboard holds user content. It was not read and nothing was written. Clipboard Stage 1. [BAS-SIM-CLP-S1]"
-      } else {
-        Write-Output "EXEC T1115: the clipboard is empty, so Stage 2 can run safely. Clipboard Stage 1. [BAS-SIM-CLP-S1]"
-      }
-    cleanup: ""
-
-  # ---------------------------------------------------------------------------
-  # Stage 2 — Synthetic Clipboard Capture (T1115)
-  # ---------------------------------------------------------------------------
-  - name: "Clipboard 2 — Synthetic Capture With Empty Clipboard (T1115)"
-    technique_id: T1115
-    framework: custom
-    executor: powershell
-    requires_priv: user
-    timeout_sec: 20
-    fidelity: telemetry-safe
-    production_safe: false
-    risk: medium
-    reversible: true
-    blast_radius: "Only when Stage 1 found the clipboard empty: writes a synthetic [BAS-SIM] marker, reads it back, and clears the clipboard. The clipboard is returned to empty. If the clipboard has content, the step skips without reading or changing it."
-    telemetry:
-      - "PowerShell EID 4104: Set-Clipboard and Get-Clipboard calls"
-      - "Clipboard history: the synthetic marker may be recorded if history is enabled"
-    detection:
-      - "EDR: clipboard written and read back by a script — clipboard collection IOC"
-    command: |
-      $ErrorActionPreference = 'SilentlyContinue'
-      Add-Type -AssemblyName System.Windows.Forms
-      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
-      if ([System.Windows.Forms.Clipboard]::ContainsText()) {
-        Write-Output "SKIP: The clipboard holds user content, so no synthetic capture was done. [BAS-SIM-CLP-S2]"
-        exit 0
-      }
-      $marker = "[BAS-SIM] synthetic clipboard marker run=$runId"
-      [System.Windows.Forms.Clipboard]::SetText($marker)
-      $back = [System.Windows.Forms.Clipboard]::GetText()
-      [System.Windows.Forms.Clipboard]::Clear()
-      $captured = $back -eq $marker
-      $empty = -not [System.Windows.Forms.Clipboard]::ContainsText()
-      Write-Output "EXEC T1115: wrote a synthetic marker to the empty clipboard, read it back (captured=$captured), and cleared it (empty=$empty). Clipboard Stage 2. [BAS-SIM-CLP-S2]"
-      if ($captured) {
-        Write-Output "FAIL: A script wrote to and read back the clipboard with no alert. Programmatic clipboard capture is a credential-collection signal."
-      }
-    cleanup: ""
-
-  # ---------------------------------------------------------------------------
-  # Stage 3 — Clipboard Upload Attempt (T1048.003)
-  # ---------------------------------------------------------------------------
-  - name: "Clipboard 3 — Synthetic Capture Upload Attempt to .invalid (T1048.003)"
-    technique_id: T1048.003
-    framework: custom
-    executor: powershell
-    requires_priv: user
-    timeout_sec: 30
+    timeout_sec: 60
     fidelity: telemetry-safe
     production_safe: true
     risk: low
     reversible: true
-    blast_radius: "Resolves one random RFC-6761 .invalid name. No clipboard data, marker text or payload is sent to any host. Generates one DNS query (Sysmon EID 22)."
+    section: "Clipboard collection and access"
+    blast_radius: "Loads the Windows Forms clipboard type. No clipboard content is read or written."
     telemetry:
-      - "Sysmon EID 22: DNS query for the bas-sim .invalid host"
+      - "PowerShell EID 4104"
     detection:
-      - "DLP/egress: no transmission is made; this stage is a resolver check only"
+      - "Informational only"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      Add-Type -AssemblyName System.Windows.Forms
+
+      try { [void][System.Windows.Forms.Clipboard]; Out-Verdict 'SKIP' 'CONFIGURED' 'clipboard API loads; precondition only, no protection claimed' }
+      catch { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'clipboard API did not load' }
+    cleanup: ""
+
+  - name: "Clipboard 1.2 — Clipboard precondition: content present (no read) (T1115)"
+    technique_id: T1115
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "Clipboard collection and access"
+    blast_radius: "Uses ContainsText only. Content is never read."
+    telemetry:
+      - "PowerShell EID 4104"
+    detection:
+      - "Informational only"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      Add-Type -AssemblyName System.Windows.Forms
+
+      if ([System.Windows.Forms.Clipboard]::ContainsText()) { Out-Verdict 'SKIP' 'PRECONDITION' 'clipboard holds text; state recorded without reading it' }
+      else { Out-Verdict 'SKIP' 'PRECONDITION' 'clipboard holds no text' }
+    cleanup: ""
+
+  - name: "Clipboard 1.3 — Clipboard history policy value (T1115)"
+    technique_id: T1115
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "Clipboard collection and access"
+    blast_radius: "Reads one registry value."
+    telemetry:
+      - "Registry read"
+    detection:
+      - "None"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $v = Get-PolicyValue 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' 'AllowClipboardHistory'
+      if ($null -eq $v) { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'history: policy value AllowClipboardHistory not set' }
+      else { Out-Verdict 'SKIP' 'CONFIGURED' ('history: policy value AllowClipboardHistory={0}; not enforcement' -f $v) }
+    cleanup: ""
+
+  - name: "Clipboard 1.4 — Cross-device clipboard policy value (T1115)"
+    technique_id: T1115
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "Clipboard collection and access"
+    blast_radius: "Reads one registry value."
+    telemetry:
+      - "Registry read"
+    detection:
+      - "None"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $v = Get-PolicyValue 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' 'AllowCrossDeviceClipboard'
+      if ($null -eq $v) { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'cross-device: policy value AllowCrossDeviceClipboard not set' }
+      else { Out-Verdict 'SKIP' 'CONFIGURED' ('cross-device: policy value AllowCrossDeviceClipboard={0}; not enforcement' -f $v) }
+    cleanup: ""
+
+  - name: "Clipboard 1.5 — Script clipboard access restriction (T1115)"
+    technique_id: T1115
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "Clipboard collection and access"
+    blast_radius: "No action. Reports that no supported control was found."
+    telemetry:
+      - "None"
+    detection:
+      - "None"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'no supported Windows policy restricts script clipboard access in this release' 
+    cleanup: ""
+
+  - name: "Clipboard 1.6 — Non-interactive clipboard access monitored (T1115)"
+    technique_id: T1115
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "Clipboard collection and access"
+    blast_radius: "Queries an integration only when configured."
+    telemetry:
+      - "Integration query, when configured"
+    detection:
+      - "Defender for Endpoint"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $st = Get-AdapterState 'BAS_CLP_ADAPTER_DEFENDER'
+      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'non-interactive clipboard access monitoring: integration defender is not configured' }
+      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'non-interactive clipboard access monitoring: integration defender is configured but no operational probe is implemented in this release' }
+    cleanup: ""
+
+  - name: "Clipboard 2.1 — Defender for Endpoint integration (T1115)"
+    technique_id: T1115
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "Clipboard monitoring and protection"
+    blast_radius: "Reads integration status only when configured."
+    telemetry:
+      - "Integration query"
+    detection:
+      - "Defender for Endpoint"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $st = Get-AdapterState 'BAS_CLP_ADAPTER_DEFENDER'
+      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'Microsoft Defender for Endpoint telemetry: integration defender is not configured' }
+      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'Microsoft Defender for Endpoint telemetry: integration defender is configured but no operational probe is implemented in this release' }
+    cleanup: ""
+
+  - name: "Clipboard 2.2 — Microsoft Purview Endpoint DLP integration (T1115)"
+    technique_id: T1115
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "Clipboard monitoring and protection"
+    blast_radius: "Reads integration status only when configured."
+    telemetry:
+      - "Integration query"
+    detection:
+      - "Purview Endpoint DLP"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $st = Get-AdapterState 'BAS_CLP_ADAPTER_PURVIEW'
+      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'Microsoft Purview Endpoint DLP telemetry: integration purview is not configured' }
+      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'Microsoft Purview Endpoint DLP telemetry: integration purview is configured but no operational probe is implemented in this release' }
+    cleanup: ""
+
+  - name: "Clipboard 2.3 — Trellix DLP integration (T1115)"
+    technique_id: T1115
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "Clipboard monitoring and protection"
+    blast_radius: "Reads integration status only when configured."
+    telemetry:
+      - "Integration query"
+    detection:
+      - "Trellix DLP"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $st = Get-AdapterState 'BAS_CLP_ADAPTER_TRELLIX'
+      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'Trellix DLP telemetry: integration trellix is not configured' }
+      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'Trellix DLP telemetry: integration trellix is configured but no operational probe is implemented in this release' }
+    cleanup: ""
+
+  - name: "Clipboard 2.4 — Egress telemetry integration (T1048)"
+    technique_id: T1048
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "Clipboard monitoring and protection"
+    blast_radius: "Reads integration status only when configured."
+    telemetry:
+      - "Integration query"
+    detection:
+      - "Firewall or proxy egress log"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $st = Get-AdapterState 'BAS_CLP_ADAPTER_EGRESS'
+      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'firewall or proxy egress telemetry: integration egress is not configured' }
+      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'firewall or proxy egress telemetry: integration egress is configured but no operational probe is implemented in this release' }
+    cleanup: ""
+
+  - name: "Clipboard 2.5 — Synthetic clipboard write detected by monitoring (T1115)"
+    technique_id: T1115
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "Clipboard monitoring and protection"
+    blast_radius: "No clipboard action in this check; it queries monitoring evidence only."
+    telemetry:
+      - "Integration query"
+    detection:
+      - "Defender for Endpoint"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $st = Get-AdapterState 'BAS_CLP_ADAPTER_DEFENDER'
+      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'monitoring evidence for a synthetic clipboard write: integration defender is not configured' }
+      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'monitoring evidence for a synthetic clipboard write: integration defender is configured but no operational probe is implemented in this release' }
+    cleanup: ""
+
+  - name: "Clipboard 3.1 — Synthetic capture round trip with compare-before-clear (T1115)"
+    technique_id: T1115
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "Synthetic clipboard capture"
+    blast_radius: "Writes one synthetic marker only when the clipboard is empty. Clears only if no later clipboard change occurred (sequence number check). No user content is read."
+    telemetry:
+      - "PowerShell EID 4104: Set-Clipboard style calls"
+    detection:
+      - "Monitoring evidence is queried in section 2"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      Add-Type -AssemblyName System.Windows.Forms
       $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+
+      Add-Type -TypeDefinition @"
+      using System.Runtime.InteropServices;
+      public static class BasClipSeq { [DllImport("user32.dll")] public static extern uint GetClipboardSequenceNumber(); }
+      "@
+      if ([System.Windows.Forms.Clipboard]::ContainsText()) {
+        Out-Verdict 'SKIP' 'USER_CONTENT_PRESENT' 'clipboard holds content; nothing was read, written or cleared'
+        return
+      }
+      $marker = "[BAS-SIM-CLP] synthetic run=$runId"
+      [System.Windows.Forms.Clipboard]::SetText($marker)
+      $seqAfterSet = [BasClipSeq]::GetClipboardSequenceNumber()
+      $roundTrip = ([System.Windows.Forms.Clipboard]::GetText() -eq $marker)
+      $seqNow = [BasClipSeq]::GetClipboardSequenceNumber()
+      if ($seqNow -ne $seqAfterSet) {
+        Out-Verdict 'SKIP' 'CHANGED_SINCE_START' 'clipboard changed during the test; not cleared, the user change is kept'
+        return
+      }
+      [System.Windows.Forms.Clipboard]::Clear()
+      $cleanedEmpty = -not [System.Windows.Forms.Clipboard]::ContainsText()
+      if (-not $cleanedEmpty) { Out-Verdict 'ERROR' 'CLEANUP_FAILED' 'clipboard still holds text after clear'; return }
+      if ($roundTrip) { Out-Verdict 'SKIP' 'UNVERIFIED' 'synthetic write and read-back completed and the clipboard was cleared; detection was not verified' }
+      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'synthetic read-back did not match; capture not confirmed' }
+    cleanup: ""
+
+  - name: "Clipboard 3.2 — Capture attempt detection (T1115)"
+    technique_id: T1115
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "Synthetic clipboard capture"
+    blast_radius: "Queries monitoring evidence only."
+    telemetry:
+      - "Integration query"
+    detection:
+      - "Defender for Endpoint"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $st = Get-AdapterState 'BAS_CLP_ADAPTER_DEFENDER'
+      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'detection of the synthetic capture attempt: integration defender is not configured' }
+      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'detection of the synthetic capture attempt: integration defender is configured but no operational probe is implemented in this release' }
+    cleanup: ""
+
+  - name: "Clipboard 3.3 — Cleanup verification (T1115)"
+    technique_id: T1115
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "Synthetic clipboard capture"
+    blast_radius: "Reports whether text remains. Changes nothing."
+    telemetry:
+      - "None"
+    detection:
+      - "None"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      Add-Type -AssemblyName System.Windows.Forms
+
+      if ([System.Windows.Forms.Clipboard]::ContainsText()) { Out-Verdict 'SKIP' 'PRECONDITION' 'clipboard holds text; cleanup status not asserted here' }
+      else { Out-Verdict 'SKIP' 'PRECONDITION' 'clipboard is empty; no text remains from the test' }
+    cleanup: ""
+
+  - name: "Clipboard 3.4 — User clipboard protected from overwrite (T1115)"
+    technique_id: T1115
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "Synthetic clipboard capture"
+    blast_radius: "Reads whether text is present. Writes nothing."
+    telemetry:
+      - "None"
+    detection:
+      - "None"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      Add-Type -AssemblyName System.Windows.Forms
+
+      if ([System.Windows.Forms.Clipboard]::ContainsText()) { Out-Verdict 'SKIP' 'USER_CONTENT_PRESENT' 'user content present; the probe never overwrites it' }
+      else { Out-Verdict 'SKIP' 'PRECONDITION' 'clipboard empty; overwrite protection is exercised only by section 3.1' }
+    cleanup: ""
+
+  - name: "Clipboard 3.5 — Clipboard content never stored by the probe (T1115)"
+    technique_id: T1115
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "Synthetic clipboard capture"
+    blast_radius: "No action."
+    telemetry:
+      - "None"
+    detection:
+      - "None"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      Out-Verdict 'SKIP' 'NOT_APPLICABLE' 'the probe writes no clipboard content to disk or to any output other than its own marker' 
+    cleanup: ""
+
+  - name: "Clipboard 4.1 — Clipboard history policy enforced (T1115)"
+    technique_id: T1115
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "Clipboard history and synchronization"
+    blast_radius: "Reads two registry values. No history content is read."
+    telemetry:
+      - "Registry read"
+    detection:
+      - "None"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+
+      $pol = Get-PolicyValue 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' 'AllowClipboardHistory'
+      $eff = Get-PolicyValue 'HKCU:\Software\Microsoft\Clipboard' 'EnableClipboardHistory'
+      if ($null -eq $pol) { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'history policy not set; no enforcement claim' ; return }
+      if ([int]$pol -ne 0) { Out-Verdict 'SKIP' 'CONFIGURED' 'history policy allows history; no restriction to verify' ; return }
+      if ($null -eq $eff) { Out-Verdict 'SKIP' 'CANNOT_VERIFY' 'policy disables history but the effective user setting is not readable' ; return }
+      if ([int]$eff -eq 0) { Out-Verdict 'PASS' 'ENFORCED' 'policy disables history and the effective setting is off' }
+      else { Out-Verdict 'FAIL' 'CONTRADICTED' 'policy disables history but the effective setting is on' }
+    cleanup: ""
+
+  - name: "Clipboard 4.2 — Cloud clipboard sync policy enforced (T1115)"
+    technique_id: T1115
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "Clipboard history and synchronization"
+    blast_radius: "Reads two registry values."
+    telemetry:
+      - "Registry read"
+    detection:
+      - "None"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+
+      $pol = Get-PolicyValue 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' 'AllowCrossDeviceClipboard'
+      $eff = Get-PolicyValue 'HKCU:\Software\Microsoft\Clipboard' 'CloudClipboardAutomaticUpload'
+      if ($null -eq $pol) { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'cross-device policy not set; no enforcement claim' ; return }
+      if ([int]$pol -ne 0) { Out-Verdict 'SKIP' 'CONFIGURED' 'cross-device sync allowed by policy; no restriction to verify' ; return }
+      if ($null -eq $eff) { Out-Verdict 'SKIP' 'CANNOT_VERIFY' 'sync is disabled by policy but the effective setting is not readable' ; return }
+      if ([int]$eff -eq 0) { Out-Verdict 'PASS' 'ENFORCED' 'sync disabled by policy and the effective setting is off' }
+      else { Out-Verdict 'FAIL' 'CONTRADICTED' 'sync disabled by policy but the effective setting is on' }
+    cleanup: ""
+
+  - name: "Clipboard 4.3 — Cross-device clipboard policy value (T1115)"
+    technique_id: T1115
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "Clipboard history and synchronization"
+    blast_radius: "Reads one registry value."
+    telemetry:
+      - "Registry read"
+    detection:
+      - "None"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $v = Get-PolicyValue 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' 'AllowCrossDeviceClipboard'
+      if ($null -eq $v) { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'cross-device restriction: policy value AllowCrossDeviceClipboard not set' }
+      else { Out-Verdict 'SKIP' 'CONFIGURED' ('cross-device restriction: policy value AllowCrossDeviceClipboard={0}; not enforcement' -f $v) }
+    cleanup: ""
+
+  - name: "Clipboard 4.4 — History content not readable by this probe (T1115)"
+    technique_id: T1115
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "Clipboard history and synchronization"
+    blast_radius: "No action."
+    telemetry:
+      - "None"
+    detection:
+      - "None"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      Out-Verdict 'SKIP' 'CANNOT_VERIFY' 'clipboard history content is not readable without UI interaction; history is not inspected' 
+    cleanup: ""
+
+  - name: "Clipboard 5.1 — RDP clipboard redirection policy value (T1021.001)"
+    technique_id: T1021.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "Remote Desktop clipboard redirection"
+    blast_radius: "Reads one registry value."
+    telemetry:
+      - "Registry read"
+    detection:
+      - "None"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $v = Get-PolicyValue 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' 'fDisableClip'
+      if ($null -eq $v) { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'RDP redirection: policy value fDisableClip not set' }
+      else { Out-Verdict 'SKIP' 'CONFIGURED' ('RDP redirection: policy value fDisableClip={0}; not enforcement' -f $v) }
+    cleanup: ""
+
+  - name: "Clipboard 5.2 — RDP clipboard redirection enforced (T1021.001)"
+    technique_id: T1021.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "Remote Desktop clipboard redirection"
+    blast_radius: "No session is opened."
+    telemetry:
+      - "None"
+    detection:
+      - "None"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      Out-Verdict 'SKIP' 'CANNOT_VERIFY' 'effective redirection needs a remote session; this probe opens none' 
+    cleanup: ""
+
+  - name: "Clipboard 5.3 — Remote Desktop service state (T1021.001)"
+    technique_id: T1021.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "Remote Desktop clipboard redirection"
+    blast_radius: "Reads service status. Changes nothing."
+    telemetry:
+      - "None"
+    detection:
+      - "None"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+
+      $svc = Get-Service -Name TermService -ErrorAction SilentlyContinue
+      if ($null -eq $svc) { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'Remote Desktop service not present' }
+      else { Out-Verdict 'SKIP' 'PRECONDITION' ("Remote Desktop service status={0}; state only" -f $svc.Status) }
+    cleanup: ""
+
+  - name: "Clipboard 5.4 — Remote session clipboard policy enforcement (T1021.001)"
+    technique_id: T1021.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "Remote Desktop clipboard redirection"
+    blast_radius: "Queries integration only when configured."
+    telemetry:
+      - "Integration query"
+    detection:
+      - "Defender for Endpoint"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $st = Get-AdapterState 'BAS_CLP_ADAPTER_DEFENDER'
+      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'remote session clipboard enforcement telemetry: integration defender is not configured' }
+      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'remote session clipboard enforcement telemetry: integration defender is configured but no operational probe is implemented in this release' }
+    cleanup: ""
+
+  - name: "Clipboard 6.1 — Synthetic sensitive-pattern detection (T1115)"
+    technique_id: T1115
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "DLP enforcement"
+    blast_radius: "Uses a fake test pattern only. Queries integration only when configured."
+    telemetry:
+      - "Integration query"
+    detection:
+      - "Purview Endpoint DLP"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $st = Get-AdapterState 'BAS_CLP_ADAPTER_PURVIEW'
+      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'DLP detection of the synthetic test pattern BAS-TEST-PATTERN-0000: integration purview is not configured' }
+      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'DLP detection of the synthetic test pattern BAS-TEST-PATTERN-0000: integration purview is configured but no operational probe is implemented in this release' }
+    cleanup: ""
+
+  - name: "Clipboard 6.2 — Clipboard DLP block versus audit mode (T1115)"
+    technique_id: T1115
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "DLP enforcement"
+    blast_radius: "Queries integration only when configured."
+    telemetry:
+      - "Integration query"
+    detection:
+      - "Trellix DLP"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $st = Get-AdapterState 'BAS_CLP_ADAPTER_TRELLIX'
+      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'DLP block or audit mode: integration trellix is not configured' }
+      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'DLP block or audit mode: integration trellix is configured but no operational probe is implemented in this release' }
+    cleanup: ""
+
+  - name: "Clipboard 6.3 — Policy-triggered action evidence (T1115)"
+    technique_id: T1115
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "DLP enforcement"
+    blast_radius: "Queries integration only when configured."
+    telemetry:
+      - "Integration query"
+    detection:
+      - "Purview Endpoint DLP"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $st = Get-AdapterState 'BAS_CLP_ADAPTER_PURVIEW'
+      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'policy-triggered action evidence: integration purview is not configured' }
+      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'policy-triggered action evidence: integration purview is configured but no operational probe is implemented in this release' }
+    cleanup: ""
+
+  - name: "Clipboard 6.4 — DLP source present (T1115)"
+    technique_id: T1115
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "DLP enforcement"
+    blast_radius: "Queries integration only when configured."
+    telemetry:
+      - "Integration query"
+    detection:
+      - "Trellix DLP"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $st = Get-AdapterState 'BAS_CLP_ADAPTER_TRELLIX'
+      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'DLP source presence: integration trellix is not configured' }
+      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'DLP source presence: integration trellix is configured but no operational probe is implemented in this release' }
+    cleanup: ""
+
+  - name: "Clipboard 7.1 — Controlled .invalid resolution (T1048.003)"
+    technique_id: T1048.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "Exfiltration prevention"
+    blast_radius: "Resolves one random .invalid name. No connection is made and no data is sent."
+    telemetry:
+      - "Sysmon EID 22"
+    detection:
+      - "None"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+
       $name = "bas-sim-clip-$runId.invalid"
       $resolved = $false
       try { $null = Resolve-DnsName -Name $name -Type A -ErrorAction Stop; $resolved = $true } catch { $resolved = $false }
-      Write-Output "EXEC T1048.003: resolver probe for $name. No data was sent. resolved=$resolved (expected: false). Clipboard upload Stage 3. [BAS-SIM-CLP-S3]"
-      Write-Output "SKIP: No transmission was made, so no DLP or egress control was exercised. A resolver result is not evidence of prevention, so no PASS is claimed. Clipboard upload Stage 3. [BAS-SIM-CLP-S3]"
+      Out-Verdict 'SKIP' 'RESOLUTION_ONLY' ("resolver probe for $name, resolved=$resolved; no data sent, not evidence of prevention")
+    cleanup: ""
+
+  - name: "Clipboard 7.2 — Egress control event for the probe (T1048.003)"
+    technique_id: T1048.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "Exfiltration prevention"
+    blast_radius: "Queries egress telemetry only when configured."
+    telemetry:
+      - "Integration query"
+    detection:
+      - "Firewall or proxy egress log"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $st = Get-AdapterState 'BAS_CLP_ADAPTER_EGRESS'
+      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'egress control event for the resolver probe: integration egress is not configured' }
+      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'egress control event for the resolver probe: integration egress is configured but no operational probe is implemented in this release' }
+    cleanup: ""
+
+  - name: "Clipboard 7.3 — Network control evidence (T1048.003)"
+    technique_id: T1048.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "Exfiltration prevention"
+    blast_radius: "Queries integration only when configured."
+    telemetry:
+      - "Integration query"
+    detection:
+      - "Defender for Endpoint"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      $st = Get-AdapterState 'BAS_CLP_ADAPTER_DEFENDER'
+      if ($st -eq 'NOT_CONFIGURED') { Out-Verdict 'SKIP' 'NOT_CONFIGURED' 'network control evidence: integration defender is not configured' }
+      else { Out-Verdict 'SKIP' 'UNVERIFIED' 'network control evidence: integration defender is configured but no operational probe is implemented in this release' }
+    cleanup: ""
+
+  - name: "Clipboard 7.4 — Failed versus blocked classification (T1048.003)"
+    technique_id: T1048.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    section: "Exfiltration prevention"
+    blast_radius: "No action."
+    telemetry:
+      - "None"
+    detection:
+      - "None"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tag = '[BAS-SIM-CLP]'
+      function Out-Verdict([string]$v, [string]$state, [string]$detail) {
+        Write-Output ("{0}: state={1} {2} {3}" -f $v, $state, $detail, $tag)
+      }
+      function Get-PolicyValue([string]$path, [string]$name) {
+        try { return (Get-ItemProperty -LiteralPath $path -Name $name -ErrorAction Stop).$name } catch { return $null }
+      }
+      function Get-AdapterState([string]$flag) {
+        # An integration counts only when it is explicitly configured. Configured is not operational:
+        # no adapter in this release returns PASS, so a configured adapter reports UNVERIFIED.
+        if ([Environment]::GetEnvironmentVariable($flag) -ne '1') { return 'NOT_CONFIGURED' }
+        return 'UNVERIFIED'
+      }
+      Out-Verdict 'SKIP' 'CANNOT_VERIFY' 'no transfer was attempted, so failed and blocked cannot be classified; DNS failure is not a block' 
     cleanup: ""

@@ -4331,6 +4331,267 @@
   {
     "scenario": "collection-clipboard-exfil.yaml",
     "index": 2,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 3,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 4,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 5,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 6,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 7,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 8,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 9,
+    "technique_id": "T1048",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 10,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 11,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 12,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 13,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 14,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 15,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 16,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 17,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 18,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 19,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 20,
+    "technique_id": "T1021.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 21,
+    "technique_id": "T1021.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 22,
+    "technique_id": "T1021.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 23,
+    "technique_id": "T1021.001",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 24,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 25,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 26,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 27,
+    "technique_id": "T1115",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 28,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 29,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 30,
+    "technique_id": "T1048.003",
+    "action_key": "",
+    "framework": "custom",
+    "class": "non_destructive",
+    "status": "not_required_non_destructive"
+  },
+  {
+    "scenario": "collection-clipboard-exfil.yaml",
+    "index": 31,
     "technique_id": "T1048.003",
     "action_key": "",
     "framework": "custom",

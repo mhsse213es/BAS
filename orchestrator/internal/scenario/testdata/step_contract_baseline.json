@@ -886,8 +886,8 @@
   },
   "endpoint-mastery/em-09-browser-attack.yaml": {
     "cleanup": 0,
-    "detection": 2,
-    "telemetry": 1
+    "detection": 0,
+    "telemetry": 0
   },
   "endpoint-mastery/em-10-endpoint-exfiltration.yaml": {
     "cleanup": 0,
