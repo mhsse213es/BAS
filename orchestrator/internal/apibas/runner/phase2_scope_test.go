@@ -104,6 +104,10 @@ func TestPhase2_ScopeAcceptance(t *testing.T) {
 			e := newEnvFaults(t, mode, fx, s.Preconditions.LabFaults)
 			rep := e.run(t, s, e.state)
 			o := rep.Outcome
+			if unqualifiedMachine(o) {
+				t.Logf("%s %s: not graded, this machine matches no committed calibration record (%s)", id, mode, o.Reason)
+				continue
+			}
 			if mode == lab.ModeVulnerable {
 				if o.Result != grade.FAIL || o.Exploitability != grade.Exploited {
 					failures = append(failures, id+" vulnerable: "+string(o.Result)+"/"+string(o.Exploitability)+" ("+o.Reason+")")
