@@ -135,6 +135,8 @@ func ClaimDueAPIBASSchedulesReportingPauses(ctx context.Context, pool *pgxpool.P
 	if err := rows.Err(); err != nil {
 		return nil, nil, err
 	}
+	// Filter in place: a paused schedule is dropped from the result without shortening the slice being ranged over.
+	kept := out[:0]
 	for i := range out {
 		s := &out[i]
 		s.DueAt = s.NextRunAt
@@ -149,8 +151,6 @@ func ClaimDueAPIBASSchedulesReportingPauses(ctx context.Context, pool *pgxpool.P
 				}
 				s.LastResult, s.Enabled = reason, false
 				paused = append(paused, *s)
-				out = append(out[:i], out[i+1:]...)
-				i--
 				continue
 			}
 			next = n
@@ -159,8 +159,9 @@ func ClaimDueAPIBASSchedulesReportingPauses(ctx context.Context, pool *pgxpool.P
 		if _, err := tx.Exec(ctx, `UPDATE apibas_schedules SET next_run_at = $2, last_run_at = $3 WHERE target_id = $1`, s.TargetID, next, now); err != nil {
 			return nil, nil, fmt.Errorf("advance apibas schedule: %w", err)
 		}
+		kept = append(kept, *s)
 	}
-	return out, paused, tx.Commit(ctx)
+	return kept, paused, tx.Commit(ctx)
 }
 
 // RecordAPIBASScheduleResult stores what a scheduled run did. A failure to queue the job counts toward pausing the schedule, which
