@@ -175,9 +175,9 @@ export function copyRecommendedScenario() {
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(function() {
       showToast('Copied ' + REC_SCENARIO.artTechniques.length + ' technique IDs — paste into the scenario builder.');
-    }).catch(function() { showToast(text); });
+    }).catch(function() { showToast('Could not copy automatically — select and copy: ' + text, 'warn'); });
   } else {
-    showToast(text);
+    showToast('Clipboard is not available here — select and copy: ' + text, 'warn');
   }
 }
 

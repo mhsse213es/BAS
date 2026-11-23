@@ -15,7 +15,9 @@ import { revalidateRemediation } from './findings.js';
 
 var _rows = [];
 var _limit = M.DEFAULT_LIMIT;
-var T = { q: '', col: -1, dir: 1, page: 0, per: 8, sel: {}, hidden: {} };
+var T = { q: '', col: -1, dir: 1, page: 0, per: 10, sel: {}, hidden: {} };
+// Score, Threat and Environment read best biggest-first, so the first click on them sorts descending.
+var DESC_FIRST = { 2: true, 4: true, 5: true };
 
 export function recLimit() { return _limit; }
 
@@ -65,7 +67,7 @@ function skeletonHtml() {
       '<label class="dt-search">' + ico('<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>') + '<input type="search" id="rec-dt-q" placeholder="Filter rows…" aria-label="Filter rows"' + on('input', 'recTableQuery') + '></label>' +
       '<span class="dt-count muted" id="rec-dt-count"></span><span class="grow"></span>' +
       '<div class="dt-colwrap"><button type="button" class="btn btn-outline btn-sm"' + on('click', 'toggleRecCols') + '>' + ico('<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>') + 'Columns</button><div class="dt-cols" id="rec-cols" hidden></div></div>' +
-      '<select id="rec-dt-per" class="dt-per" aria-label="Rows per page"' + on('change', 'setRecPer') + '><option value="5">5 / page</option><option value="8" selected>8 / page</option><option value="15">15 / page</option><option value="9999">All rows</option></select>' +
+      '<select id="rec-dt-per" class="dt-per" aria-label="Rows per page"' + on('change', 'setRecPer') + '><option value="10">10 / page</option><option value="25">25 / page</option><option value="50">50 / page</option><option value="9999">All rows</option></select>' +
       '<button type="button" class="btn btn-outline btn-sm"' + on('click', 'exportRecCsv') + '>' + ico('<path d="M12 4v11M7 11l5 5 5-5M5 20h14"/>') + 'Export CSV</button></div>' +
     '<div class="dt-bulk" id="rec-bulk" hidden><b id="rec-bulk-n">0</b><span>selected</span><span class="grow"></span><button type="button" class="btn btn-outline btn-sm"' + on('click', 'exportRecSelected') + '>Export selected</button><button type="button" class="btn btn-ghost btn-sm"' + on('click', 'clearRecSelection') + '>Clear selection</button></div>' +
     '<div class="tbl-wrap dt-scroll" id="rec-table-wrap"><table><thead id="rec-thead"></thead><tbody id="rec-table-body"></tbody></table></div>' +
@@ -106,10 +108,13 @@ function actionsCellHtml(i, t) {
   var reval = canRun
     ? '<button type="button" class="btn btn-primary btn-sm"' + on('click', 'revalidateRemediation', t.techniqueId) + '>&#8635; Re-validate</button>'
     : '';
-  return '<td class="rec-acts">' + ((details + reval) || '<span class="muted">—</span>') + '</td>';
+  return '<td class="rec-acts"' + on('click', 'stopEvent') + '>' + ((details + reval) || '<span class="muted">—</span>') + '</td>';
 }
 
 // recDetails opens the technique's coverage detail for a row of the table.
+export function recRowKeydown(i, el, event) {
+  if (event && (event.key === 'Enter' || event.key === ' ') && event.target === el) { event.preventDefault(); recDetails(i); }
+}
 export function recDetails(i) {
   var t = _rows[i];
   if (!t || !t.techniqueId) return;
@@ -135,7 +140,7 @@ function paintTable() {
   if (all) { all.checked = list.length > 0 && onList === list.length; all.indeterminate = onList > 0 && onList < list.length; }
   tbody.innerHTML = rows.map(function(t) {
     var i = idx(t);
-    return '<tr><td class="dt-selcol"><input type="checkbox" class="dt-cb" aria-label="Select technique"' + (T.sel[i] ? ' checked' : '') + on('change', 'recSelectRow', i) + '></td>' +
+    return '<tr class="dt-click" tabindex="0"' + on('click', 'recDetails', i) + on('keydown', 'recRowKeydown', i) + '><td class="dt-selcol"' + on('click', 'stopEvent') + '><input type="checkbox" class="dt-cb" aria-label="Select technique"' + (T.sel[i] ? ' checked' : '') + on('change', 'recSelectRow', i) + '></td>' +
       cols.map(function(c) { return cellHtml(c, t); }).join('') + actionsCellHtml(i, t) + '</tr>';
   }).join('');
   var menu = document.getElementById('rec-cols');
@@ -192,11 +197,11 @@ export function showRecommendations(data) {
 // ── Table controls ──
 export function recTableQuery(el) { T.q = String((el && el.value) || ''); T.page = 0; paintTable(); }
 export function clearRecTableQuery() { T.q = ''; T.page = 0; var q = document.getElementById('rec-dt-q'); if (q) q.value = ''; paintTable(); }
-export function setRecPer(el) { T.per = Number(el && el.value) || 8; T.page = 0; paintTable(); }
+export function setRecPer(el) { T.per = Number(el && el.value) || 10; T.page = 0; paintTable(); }
 export function recPage(d) { T.page += Number(d) || 0; paintTable(); }
 export function recSortBy(col) {
   col = Number(col);
-  if (T.col === col) T.dir = -T.dir; else { T.col = col; T.dir = 1; }
+  if (T.col === col) T.dir = -T.dir; else { T.col = col; T.dir = DESC_FIRST[col] ? -1 : 1; }
   T.page = 0;
   paintTable();
 }

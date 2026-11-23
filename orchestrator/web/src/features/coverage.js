@@ -1,5 +1,5 @@
 import { state } from '../core/state.js';
-import { apicall } from '../core/api.js';
+import { apicall, apicallOk } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { failureOf, failureHtml } from '../core/load-state.js';
@@ -383,7 +383,7 @@ export function openTechnique(id) {
   var vi = M.verdictInfo(st);
   var an = ((state._covAnalytics || []).filter(function(t) { return t.techniqueId === id; })[0]) || null;
   var lib = _utlData.filter(function(t) { return t.techniqueId === id; })[0] || null;
-  apicall('/api/attack/technique/' + encodeURIComponent(id)).then(function(e) {
+  apicallOk('/api/attack/technique/' + encodeURIComponent(id)).then(function(e) {
     e = e || {};
     var set = function(eid, t) { var el = document.getElementById(eid); if (el) el.textContent = t; };
     set('cov-drawer-title', e.name || 'Technique');
@@ -412,7 +412,7 @@ export function openTechnique(id) {
     }
     var o = document.getElementById('cov-drawer-overlay');
     if (o) o.classList.add('open');
-  }).catch(function(err) { showToast(err.message, 'err'); });
+  }).catch(function(err) { showToast('Could not load technique ' + id + ': ' + (err && err.message ? err.message : 'request failed'), 'err'); });
 }
 export function closeCovDrawer() {
   var o = document.getElementById('cov-drawer-overlay');
