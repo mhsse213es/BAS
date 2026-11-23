@@ -6,7 +6,8 @@ export function ago(iso) {
   var s = Math.floor((Date.now() - new Date(iso)) / 1000);
   if (s < 60)   return s + 's ago';
   if (s < 3600) return Math.floor(s/60) + 'm ago';
-  return Math.floor(s/3600) + 'h ago';
+  if (s < 48 * 3600) return Math.floor(s/3600) + 'h ago';
+  return Math.floor(s/86400) + 'd ago';
 }
 export function daysAgo(iso) {
   if (!iso) return 0;

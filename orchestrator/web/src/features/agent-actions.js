@@ -1,4 +1,6 @@
-import { apicall } from '../core/api.js';
+import { apicallOk } from '../core/api.js';
+import { x } from '../core/escape.js';
+import { openConfirmDiffModal } from './compliance.js';
 import { showToast } from '../core/util.js';
 import { loadAgents } from './attack-path.js';
 import { _openAgentActionModal } from './integrations.js';
@@ -20,11 +22,10 @@ export function submitStopAgent() {
   if (!_stopAgentTargetId) return;
   var reason = document.getElementById('stop-agent-reason').value.trim();
   if (!reason) { showToast('Reason is required', 'err'); return; }
-  if (!confirm('Stop agent permanently?\n\nReason: ' + reason + '\n\nThis cannot be undone remotely. Proceed?')) return;
-
+  askSure('Stop agent permanently?', 'This cannot be undone remotely.', reason, 'Stop agent', function() {
   var btn = document.getElementById('stop-agent-submit-btn');
   btn.disabled = true;
-  apicall('/api/agents/' + encodeURIComponent(_stopAgentTargetId) + '/stop', {
+  apicallOk('/api/agents/' + encodeURIComponent(_stopAgentTargetId) + '/stop', {
     method: 'POST',
     body: JSON.stringify({ reason: reason })
   }).then(function() {
@@ -32,7 +33,8 @@ export function submitStopAgent() {
     showToast('Stop dispatched', 'ok');
     closeStopAgentModal();
     loadAgents();
-  }).catch(function(e) { btn.disabled = false; showToast(e.message, 'err'); });
+  }).catch(function(e) { btn.disabled = false; showToast('Stop failed: ' + e.message, 'err'); });
+  });
 }
 
 // ── Uninstall Agent ──────────────────────────────────────────────────────
@@ -54,20 +56,19 @@ export function submitUninstallAgent() {
   if (!_uninstallAgentTargetId) return;
   var reason = document.getElementById('uninstall-agent-reason').value.trim();
   if (!reason) { showToast('Reason is required', 'err'); return; }
-  if (!confirm('Uninstall this agent from the endpoint?\n\nReason: ' + reason + '\n\nThe agent must be online to confirm. Proceed?')) return;
-
+  askSure('Uninstall this agent from the endpoint?', 'The agent must be online to confirm.', reason, 'Uninstall', function() {
   var btn = document.getElementById('uninstall-agent-submit-btn');
   btn.disabled = true;
-  apicall('/api/agents/' + encodeURIComponent(_uninstallAgentTargetId) + '/uninstall', {
+  apicallOk('/api/agents/' + encodeURIComponent(_uninstallAgentTargetId) + '/uninstall', {
     method: 'POST',
     body: JSON.stringify({ reason: reason })
   }).then(function(res) {
     btn.disabled = false;
-    if (res && res.error) { showToast(res.error, 'err'); return; }
     showToast('Uninstall dispatched', 'ok');
     closeUninstallAgentModal();
     loadAgents();
-  }).catch(function(e) { btn.disabled = false; showToast(e.message, 'err'); });
+  }).catch(function(e) { btn.disabled = false; showToast('Uninstall failed: ' + e.message, 'err'); });
+  });
 }
 
 // ── Revoke / Reinstate Agent ───────────────────────────────────────────────
@@ -79,19 +80,19 @@ function agentStateAction(idPrefix, verb, getTarget, successMsg, confirmText, cl
     if (!target) return;
     var reason = document.getElementById(idPrefix + '-reason').value.trim();
     if (!reason) { showToast('Reason is required', 'err'); return; }
-    if (!confirm(confirmText + '\n\nReason: ' + reason + '\n\nProceed?')) return;
+    askSure(confirmText, '', reason, 'Confirm', function() {
     var btn = document.getElementById(idPrefix + '-submit-btn');
     btn.disabled = true;
-    apicall('/api/agents/' + encodeURIComponent(target) + '/' + verb, {
+    apicallOk('/api/agents/' + encodeURIComponent(target) + '/' + verb, {
       method: 'POST',
       body: JSON.stringify({ reason: reason })
     }).then(function(res) {
       btn.disabled = false;
-      if (res && res.error) { showToast(res.error, 'err'); return; }
       showToast(successMsg, 'ok');
       closeFn();
       loadAgents();
-    }).catch(function(e) { btn.disabled = false; showToast(e.message, 'err'); });
+    }).catch(function(e) { btn.disabled = false; showToast('Failed: ' + e.message, 'err'); });
+    });
   };
 }
 
@@ -150,11 +151,10 @@ export function submitRemoveAgent() {
   if (!_removeAgentTargetId) return;
   var reason = document.getElementById('remove-agent-reason').value.trim();
   if (!reason) { showToast('Reason is required', 'err'); return; }
-  if (!confirm('Remove this agent from the dashboard?\n\nReason: ' + reason + '\n\nThe agent software on the endpoint keeps running -- this only removes the record here. Proceed?')) return;
-
+  askSure('Remove this agent from the dashboard?', 'The agent software on the endpoint keeps running. This only removes the record here.', reason, 'Remove', function() {
   var btn = document.getElementById('remove-agent-submit-btn');
   btn.disabled = true;
-  apicall('/api/agents/' + encodeURIComponent(_removeAgentTargetId) + '/remove', {
+  apicallOk('/api/agents/' + encodeURIComponent(_removeAgentTargetId) + '/remove', {
     method: 'POST',
     body: JSON.stringify({ reason: reason })
   }).then(function() {
@@ -162,11 +162,18 @@ export function submitRemoveAgent() {
     showToast('Agent removed', 'ok');
     closeRemoveAgentModal();
     loadAgents();
-  }).catch(function(e) { btn.disabled = false; showToast(e.message, 'err'); });
+  }).catch(function(e) { btn.disabled = false; showToast('Remove failed: ' + e.message, 'err'); });
+  });
 }
 
 export function triggerTicketingSync() {
-  apicall('/api/ticketing/sync', { method: 'POST' })
+  apicallOk('/api/ticketing/sync', { method: 'POST' })
     .then(function() { showToast('Sync started', 'ok'); })
-    .catch(function(e) { showToast(e.message, 'err'); });
+    .catch(function(e) { showToast('Sync failed: ' + e.message, 'err'); });
+}
+// askSure: the in-page confirmation every destructive agent action goes through (it replaces window.confirm).
+function askSure(title, warning, reason, label, go) {
+  openConfirmDiffModal(title,
+    (warning ? '<p class="ag-sure-warn">' + x(warning) + '</p>' : '') + '<div class="ag-sure-reason"><span class="muted">Reason</span><b>' + x(reason) + '</b></div>',
+    go, { sub: 'Review before you continue.', confirmLabel: label, danger: true });
 }

@@ -1,6 +1,7 @@
 import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { on } from '../core/actions.js';
 import { showToast } from '../core/util.js';
 import { initComplianceTab, loadComplianceReport } from './agent-drawer.js';
 import { showTab } from './shell.js';
@@ -190,6 +191,24 @@ export function openConfirmDiffModal(title, diffHtml, onConfirm, opts) {
   if (btn) { btn.textContent = opts.confirmLabel || 'Save'; btn.classList.toggle('is-danger', !!opts.danger); }
   CONFIRM_DIFF_PENDING = onConfirm;
   document.getElementById('confirm-diff-overlay').classList.add('open');
+}
+
+// askText: an in-page replacement for window.prompt. cb(value) runs only for a non-empty answer; an empty one
+// reopens the dialog with a message instead of silently doing nothing.
+export function askText(title, label, initial, confirmLabel, cb, opts) {
+  opts = opts || {};
+  var body = '<label class="ask-lab" for="ask-input">' + x(label) + '</label>' +
+    '<input type="text" id="ask-input" class="ask-input" autocomplete="off" maxlength="120" value="' + x(initial || '') + '"' + on('keydown', 'askEnter') + '>' +
+    (opts.hint ? '<div class="tiny muted ask-hint">' + x(opts.hint) + '</div>' : '') + '<div class="ask-err tiny" id="ask-err" hidden></div>';
+  openConfirmDiffModal(title, body, function() {
+    var v = String((document.getElementById('ask-input') || {}).value || '').trim();
+    if (!v && !opts.allowEmpty) { askText(title, label, initial, confirmLabel, cb, opts); var e = document.getElementById('ask-err'); if (e) { e.textContent = 'Enter a value to continue.'; e.hidden = false; } return; }
+    cb(v);
+  }, { sub: opts.sub || ' ', confirmLabel: confirmLabel || 'Save' });
+  setTimeout(function() { var i = document.getElementById('ask-input'); if (i) { i.focus(); i.select(); } }, 30);
+}
+export function askEnter(el, event) {
+  if (event && event.key === 'Enter') { event.preventDefault(); runConfirmDiffModal(); }
 }
 
 export function closeConfirmDiffModal() {

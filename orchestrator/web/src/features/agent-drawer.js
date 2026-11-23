@@ -1,5 +1,6 @@
 import { state } from '../core/state.js';
-import { apicall } from '../core/api.js';
+import { apicall, apicallOk } from '../core/api.js';
+import { openConfirmDiffModal } from './compliance.js';
 import { x } from '../core/escape.js';
 import { debCommand } from './deb-command.js';
 import { on } from '../core/actions.js';
@@ -137,10 +138,11 @@ function overviewHtml(a) {
       ])
     : '';
 
-  var acts = [actBtn('Run simulation', 'play', 'rowMenuRunSimulation', [id])];
+  // Running a simulation needs analyst or admin; changing an agent's state is admin-only on the server (agents:set-state).
+  var acts = (admin || ROLE === 'analyst') ? [actBtn('Run simulation', 'play', 'rowMenuRunSimulation', [id])] : [];
   if (admin) acts.push(actBtn('Move to Group', 'layers', 'rowMenuMoveGroup', [id]));
   var stateBtn = { active: ['Restore to Active', 'shield'], quarantined: ['Quarantine', 'alert'], restricted: ['Restrict', 'lock'], retired: ['Retire', 'x'] };
-  M.stateTargets(life, a.forceRemoved).forEach(function(s) { acts.push(actBtn(stateBtn[s][0], stateBtn[s][1], 'setAgentState', [id, s])); });
+  if (admin) M.stateTargets(life, a.forceRemoved).forEach(function(s) { acts.push(actBtn(stateBtn[s][0], stateBtn[s][1], 'setAgentState', [id, s])); });
   if (admin && !offline && !a.forceRemoved) acts.push(actBtn('Stop Agent', 'pause', 'rowMenuStopAgent', [id, host]));
   if (admin && !a.forceRemoved && life !== 'retired' && life !== 'uninstalled') {
     acts.push(life === 'revoked'
@@ -153,8 +155,8 @@ function overviewHtml(a) {
     acts.push(actBtn('Force Remove Agent', 'alert', 'rowMenuRemoveAgent', [id, host], 'agt-danger'));
   }
   return '<div class="agt-ov">' + notes + dl(rows) + pol +
-    '<h4 class="agt-h4">Actions</h4><div class="agt-actions">' + acts.join('') + '</div>' +
-    '<div class="agt-hint">Quarantine / Restrict / Retire all block scenario dispatch. Only <b>Restore to Active</b> re-enables the agent.</div></div>';
+    (acts.length ? '<h4 class="agt-h4">Actions</h4><div class="agt-actions">' + acts.join('') + '</div>' : '') +
+    (admin ? '<div class="agt-hint">Quarantine / Restrict / Retire all block scenario dispatch. Only <b>Restore to Active</b> re-enables the agent.</div>' : '') + '</div>';
 }
 
 function loadAgtOverview(agentId) {
@@ -178,14 +180,15 @@ export function setAgentState(agentId, newState) {
     retired:     'Retire decommissions this agent and blocks all scenario dispatch. Are you sure?',
     active:      'Restore this agent to active and re-enable scenario dispatch?'
   };
-  if (!confirm(warn[newState] || 'Set agent state to ' + newState + '?')) return;
-  apicall('/api/agents/' + encodeURIComponent(agentId) + '/state', {
-    method: 'PUT', body: JSON.stringify({ state: newState })
-  }).then(function() {
-    showToast('Agent state set to ' + newState, newState === 'active' ? 'ok' : 'warn');
-    loadAgents();
-    loadAgtOverview(agentId);
-  }).catch(function(e) { showToast(e.message, 'err'); });
+  openConfirmDiffModal(labels[newState] || 'Change agent state', '<p class="ag-sure-warn">' + x(warn[newState] || 'Set agent state to ' + newState + '?') + '</p>', function() {
+    apicallOk('/api/agents/' + encodeURIComponent(agentId) + '/state', {
+      method: 'PUT', body: JSON.stringify({ state: newState })
+    }).then(function() {
+      showToast('Agent state set to ' + newState, newState === 'active' ? 'ok' : 'warn');
+      loadAgents();
+      loadAgtOverview(agentId);
+    }).catch(function(e) { showToast('Could not change the state: ' + e.message, 'err'); });
+  }, { sub: 'Review before you continue.', confirmLabel: labels[newState] || 'Confirm', danger: newState !== 'active' });
 }
 
 // ── Scenarios tab ─────────────────────────────────────────────────────────────

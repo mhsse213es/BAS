@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { setupDom, load } from './dom.mjs';
 
 setupDom();
-const fns = await load([
+const fns = await load(['runConfirmDiffModal', 
   'openRevokeAgentModal', 'submitRevokeAgent', 'openReinstateAgentModal', 'submitReinstateAgent', 'agentRevokeMenuItems',
 ]);
 
@@ -53,6 +53,7 @@ test('revoking posts the reason to the revoke endpoint and closes the dialog', a
   fns.openRevokeAgentModal('abc123deadbeef01', 'host-1');
   document.getElementById('revoke-agent-reason').value = 'laptop stolen';
   fns.submitRevokeAgent();
+  fns.runConfirmDiffModal();
   await flush();
   const revoke = calls.find((c) => c.path === '/api/agents/abc123deadbeef01/revoke');
   assert.ok(revoke, 'no call to the revoke endpoint');
@@ -66,6 +67,7 @@ test('a server error keeps the revoke dialog open', async () => {
   fns.openRevokeAgentModal('abc123deadbeef01', 'host-1');
   document.getElementById('revoke-agent-reason').value = 'x';
   fns.submitRevokeAgent();
+  fns.runConfirmDiffModal();
   await flush();
   assert.ok(document.getElementById('revoke-agent-overlay').classList.contains('open'));
 });
@@ -75,6 +77,7 @@ test('reinstating posts the reason to the reinstate endpoint', async () => {
   fns.openReinstateAgentModal('abc123deadbeef01', 'host-1');
   document.getElementById('reinstate-agent-reason').value = 're-imaged';
   fns.submitReinstateAgent();
+  fns.runConfirmDiffModal();
   await flush();
   const c = calls.find((x) => x.path === '/api/agents/abc123deadbeef01/reinstate');
   assert.ok(c, 'no call to the reinstate endpoint');

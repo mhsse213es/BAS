@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { setupDom, load } from './dom.mjs';
 
 setupDom();
-const fns = await load(['openAllowReinstallModal', 'submitAllowReinstall', 'agentRevokeMenuItems']);
+const fns = await load(['runConfirmDiffModal', 'openAllowReinstallModal', 'submitAllowReinstall', 'agentRevokeMenuItems']);
 
 function stubNetwork({ response = { ok: true }, confirmAnswer = true } = {}) {
   const calls = [];
@@ -40,6 +40,7 @@ test('approving a reinstall posts the reason to the allow-reinstall endpoint and
   fns.openAllowReinstallModal('abc123deadbeef01', 'host-1');
   document.getElementById('allow-reinstall-agent-reason').value = 'disk reimaged';
   fns.submitAllowReinstall();
+  fns.runConfirmDiffModal();
   await flush();
   const c = calls.find((x) => x.path === '/api/agents/abc123deadbeef01/allow-reinstall');
   assert.ok(c, 'no call to the allow-reinstall endpoint');

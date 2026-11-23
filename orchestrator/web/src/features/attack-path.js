@@ -9,7 +9,7 @@ import { _templates, _adversaries, renderTemplateGrid, syncAdversaryVisibility }
 import { _agtDetailId, downloadAuditPack, downloadBoardScorecard, downloadFullReportCSV, downloadFullReportJSON, downloadFullReportPDF, downloadNavigatorLayer, loadAgtAttackPath, openAgentDetail, openFullReport, safeScan } from './agent-drawer.js';
 import { openAllowReinstallModal, openReinstateAgentModal, openRemoveAgentModal, openRevokeAgentModal, openStopAgentModal, openUninstallAgentModal } from './agent-actions.js';
 import { loadAuditLogs, loadBackups, loadLicenseInfo } from './audit-logs.js';
-import { loadCalderaStatus, openConfirmDiffModal } from './compliance.js';
+import { loadCalderaStatus, openConfirmDiffModal, askText } from './compliance.js';
 import { syncDisplayPrefControls } from './display-prefs.js';
 import { loadUsers } from './evidence.js';
 import { loadOpenAEVConfig, renderAttackPath } from './openaev.js';
@@ -755,12 +755,15 @@ function agentDotColor(b) { return b === 'online' ? 'var(--success)' : b === 'de
 
 export var agentGroupTree = [];
 var activeAgentGroupId = null; // null = "All" (no filter), otherwise a group id
+var _groupsFailed = false;
 
 export function loadAgentGroupTree() {
+  _groupsFailed = false;
   apicall('/api/agent-groups').then(function(tree) {
-    agentGroupTree = Array.isArray(tree) ? tree : [];
+    if (!Array.isArray(tree)) throw new Error((tree && tree.error) || 'unexpected answer');
+    agentGroupTree = tree;
     renderAgentGroupTree();
-  }).catch(function() { agentGroupTree = []; renderAgentGroupTree(); });
+  }).catch(function() { agentGroupTree = []; _groupsFailed = true; renderAgentGroupTree(); });
 }
 
 function renderAgentGroupTree() {
@@ -770,7 +773,8 @@ function renderAgentGroupTree() {
   var allRow = '<div class="at-node' + (activeAgentGroupId === null ? ' active' : '') + '"' + on('click', 'selectAgentGroup', null) + '>' +
     '<span class="at-caret"></span><span class="at-ico">' + kitIcon('layers') + '</span><span class="at-name">All agents</span>' +
     (fleet ? '<span class="at-count">' + fleet + '</span>' : '') + '</div>';
-  root.innerHTML = allRow + agentGroupTree.map(renderAgentGroupNode).join('');
+  var ng = document.querySelector('.agt-newgroup'); if (ng) ng.hidden = ROLE !== 'admin';
+  root.innerHTML = allRow + (_groupsFailed ? '<div class="tiny muted at-err">Could not load the groups. <button type="button" class="btn btn-ghost btn-sm"' + on('click', 'loadAgentGroupTree') + '>Retry</button></div>' : agentGroupTree.map(renderAgentGroupNode).join(''));
 }
 
 function renderAgentGroupNode(node) {
@@ -782,7 +786,7 @@ function renderAgentGroupNode(node) {
     '<span class="at-ico">' + kitIcon('server') + '</span>' +
     '<span class="at-name">' + x(node.name) + '</span>' +
     '<span class="at-count">' + node.totalAgentCount + '</span>' +
-    '<span class="at-menu"' + on('click', 'openAgentGroupMenuStop', node.id) + '>&#8942;</span>' +
+    (ROLE === 'admin' ? '<button type="button" class="at-menu" aria-label="Group actions" aria-haspopup="menu"' + on('click', 'openAgentGroupMenuStop', node.id) + '>&#8942;</button>' : '') +
     '</div>';
   if (hasChildren) {
     html += '<div class="at-children">' + node.children.map(renderAgentGroupNode).join('') + '</div>';
@@ -796,10 +800,28 @@ export function selectAgentGroup(groupId) {
   loadAgents();
 }
 
-export function openAgentGroupMenuStop(id, el, event) { event.stopPropagation(); openAgentGroupMenu(event, id); }
+export function openAgentGroupMenuStop(id, el, event) { event.stopPropagation(); openAgentGroupMenu(el, id); }
 
-export function openAgentGroupMenu(ev, groupId) {
-  var action = prompt('Type: rename / new / move / delete');
+function closeAgentGroupMenu() { var m = document.getElementById('ag-menu'); if (m) m.remove(); }
+document.addEventListener('click', closeAgentGroupMenu);
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeAgentGroupMenu(); });
+
+// A small popover with the four things you can do to a group (it replaced a prompt() that asked you to type the verb).
+export function openAgentGroupMenu(el, groupId) {
+  closeAgentGroupMenu();
+  var r = el.getBoundingClientRect();
+  var m = document.createElement('div');
+  m.id = 'ag-menu'; m.className = 'ag-menu'; m.setAttribute('role', 'menu');
+  m.style.top = Math.min(r.bottom + 4, window.innerHeight - 170) + 'px';
+  m.style.left = Math.min(r.left, window.innerWidth - 190) + 'px';
+  m.innerHTML = [['rename', 'Rename'], ['new', 'New subgroup'], ['move', 'Move to…'], ['delete', 'Delete']].map(function(i) {
+    return '<button type="button" role="menuitem" class="ag-menu-i' + (i[0] === 'delete' ? ' is-danger' : '') + '"' + on('click', 'agentGroupMenuPick', i[0], groupId) + '>' + i[1] + '</button>';
+  }).join('');
+  document.body.appendChild(m);
+  var f = m.querySelector('button'); if (f) f.focus();
+}
+export function agentGroupMenuPick(action, groupId) {
+  closeAgentGroupMenu();
   if (action === 'rename') renameAgentGroupPrompt(groupId);
   else if (action === 'new') createAgentGroupPrompt(groupId);
   else if (action === 'move') moveAgentGroupPrompt(groupId);
@@ -807,19 +829,27 @@ export function openAgentGroupMenu(ev, groupId) {
 }
 
 export function createAgentGroupPrompt(parentId) {
-  var name = prompt('New group name:');
-  if (!name) return;
-  apicall('/api/agent-groups', { method: 'POST', body: JSON.stringify({ name: name, parentId: parentId }) })
-    .then(function(res) { if (res && res.error) { showToast(res.error, 'err'); return; } loadAgentGroupTree(); })
-    .catch(function(e) { showToast(e.message, 'err'); });
+  askText(parentId == null ? 'New group' : 'New subgroup', 'Group name', '', 'Create', function(name) {
+    apicallOk('/api/agent-groups', { method: 'POST', body: JSON.stringify({ name: name, parentId: parentId }) })
+      .then(function() { showToast('Group "' + name + '" created', 'ok'); loadAgentGroupTree(); })
+      .catch(function(e) { showToast('Could not create the group: ' + e.message, 'err'); });
+  });
 }
 
 function renameAgentGroupPrompt(groupId) {
-  var name = prompt('New name:');
-  if (!name) return;
-  apicall('/api/agent-groups/' + groupId, { method: 'PATCH', body: JSON.stringify({ name: name }) })
-    .then(function(res) { if (res && res.error) { showToast(res.error, 'err'); return; } loadAgentGroupTree(); })
-    .catch(function(e) { showToast(e.message, 'err'); });
+  var cur = agtGroupName(agentGroupTree, groupId);
+  askText('Rename group', 'Group name', cur, 'Rename', function(name) {
+    apicallOk('/api/agent-groups/' + groupId, { method: 'PATCH', body: JSON.stringify({ name: name }) })
+      .then(function() { showToast('Group renamed', 'ok'); loadAgentGroupTree(); loadAgents(); })
+      .catch(function(e) { showToast('Could not rename the group: ' + e.message, 'err'); });
+  });
+}
+function agtGroupName(nodes, id) {
+  for (var i = 0; i < (nodes || []).length; i++) {
+    if (nodes[i].id === id) return nodes[i].name;
+    var r = agtGroupName(nodes[i].children, id); if (r) return r;
+  }
+  return '';
 }
 
 // gpFlattenGroups walks the nested group tree depth-first into a flat list
@@ -922,12 +952,18 @@ function moveAgentGroupPrompt(groupId) {
 }
 
 function deleteAgentGroupConfirm(groupId) {
-  if (!confirm('Delete this group?')) return;
-  fetch('/api/agent-groups/' + groupId, { method: 'DELETE', credentials: 'same-origin' })
-    .then(function(r) {
-      if (r.status === 204) { showToast('Group deleted', 'ok'); loadAgentGroupTree(); return; }
-      r.json().then(function(j) { showToast(j.error || 'Delete failed', 'err'); });
-    }).catch(function(e) { showToast(e.message, 'err'); });
+  var nm = agtGroupName(agentGroupTree, groupId);
+  openConfirmDiffModal('Delete group', '<p class="ag-sure-warn">Delete the group "' + x(nm) + '"? Its agents are not removed.</p>', function() {
+    fetch('/api/agent-groups/' + groupId, { method: 'DELETE', credentials: 'same-origin' })
+      .then(function(r) {
+        if (r.status === 204 || r.ok) {
+          showToast('Group deleted', 'ok');
+          if (activeAgentGroupId === groupId) activeAgentGroupId = null;
+          loadAgentGroupTree(); loadAgents(); return;
+        }
+        return r.json().then(function(j) { showToast('Could not delete the group: ' + ((j && j.error) || 'HTTP ' + r.status), 'err'); }, function() { showToast('Could not delete the group (HTTP ' + r.status + ')', 'err'); });
+      }).catch(function(e) { showToast('Could not delete the group: ' + e.message, 'err'); });
+  }, { sub: 'This cannot be undone.', confirmLabel: 'Delete group', danger: true });
 }
 
 export function moveAgentToGroupPrompt(agentId) {
@@ -1106,15 +1142,14 @@ function putTrayIcon(url, hidden, okMsg) {
 }
 export function toggleFleetTrayIcon() {
   var hide = !state.fleetTrayHidden;
-  if (!confirm(fleetTrayConfirm(hide))) return;
-  putTrayIcon('/api/fleet/tray-icon', hide, hide ? 'Tray icon hidden on all Windows agents' : 'Tray icon shown on all Windows agents');
+  openConfirmDiffModal(hide ? 'Hide the tray icon' : 'Show the tray icon', '<p class="ag-sure-warn">' + x(fleetTrayConfirm(hide)) + '</p>', function() {
+    putTrayIcon('/api/fleet/tray-icon', hide, hide ? 'Tray icon hidden on all Windows agents' : 'Tray icon shown on all Windows agents');
+  }, { sub: 'Applies to every Windows agent that has no setting of its own.', confirmLabel: hide ? 'Hide' : 'Show' });
 }
 // Sets the fleet minimum agent version. Empty clears it. The server validates the format.
 export function toggleMinAgentVersion() {
   var cur = state.minAgentVersion || '', def = state.minAgentVersionDefault || '';
-  var v = prompt('Minimum agent version, for example 1.9.7. Agents below it are flagged for upgrade; they keep running. Leave empty for no minimum' +
-    (def ? ', or type "default" to go back to the previous release (' + def + ').' : '.'), cur);
-  if (v === null) return;
+  askText('Minimum agent version', 'Version, for example 1.9.7', cur, 'Save', function(v) {
   v = v.trim();
   var reset = v.toLowerCase() === 'default';
   if (reset && !def) { showToast('This release does not name a previous release, so there is no default', 'warn'); return; }
@@ -1124,27 +1159,30 @@ export function toggleMinAgentVersion() {
     showToast(state.minAgentVersion ? 'Minimum agent version set to ' + state.minAgentVersion : 'Minimum agent version cleared', 'ok');
     return loadAgents();
   }).catch(function(e) { showToast(e.message, 'err'); });
+  }, { allowEmpty: true, hint: 'Agents below it are flagged for upgrade; they keep running. Leave empty for no minimum' + (def ? ', or type "default" for the previous release (' + def + ').' : '.') });
 }
 // Revokes an agent binary hash (admin). Every agent running that exact binary is quarantined at once. An admin can
 // reverse a console revocation (unrevokeAgentBinary); one written into the signed release needs a new release.
 export function revokeAgentBinary(sha256) {
-  if (!confirm('Revoke this agent binary? Every agent running this exact binary will be quarantined and stop receiving scenarios until it runs a current signed release.')) return;
+  openConfirmDiffModal('Revoke this agent binary', '<p class="ag-sure-warn">Every agent running this exact binary will be quarantined and stop receiving scenarios until it runs a current signed release.</p>', function() {
   apicall('/api/agent-binaries/revocations', { method: 'POST', body: JSON.stringify({ sha256: sha256, reason: 'Revoked from the agent drawer' }) }).then(function(r) {
     if (r && r.error) throw new Error(r.error);
     showToast('Binary revoked; ' + ((r && r.agentsQuarantined) || 0) + ' agent(s) quarantined', 'ok');
     loadBinaryRevocations();
     return loadAgents();
   }).catch(function(e) { showToast(e.message, 'err'); });
+  }, { sub: 'Review before you continue.', confirmLabel: 'Revoke binary', danger: true });
 }
 // Reverses a console revocation (admin). It lifts the revocation only: agents stay quarantined until each is restored.
 export function unrevokeAgentBinary(sha256) {
-  if (!confirm('Un-revoke this agent binary? The binary is trusted again if it is a current or previous signed release. Agents that were quarantined because of the revocation stay quarantined until you restore each one.')) return;
+  openConfirmDiffModal('Un-revoke this agent binary', '<p class="ag-sure-warn">The binary is trusted again if it is a current or previous signed release. Agents quarantined because of the revocation stay quarantined until you restore each one.</p>', function() {
   apicall('/api/agent-binaries/revocations/' + encodeURIComponent(sha256), { method: 'DELETE' }).then(function(r) {
     if (r && r.error) throw new Error(r.error);
     showToast('Revocation lifted; ' + ((r && r.agentsStillQuarantined) || 0) + ' agent(s) still quarantined until restored', 'ok');
     loadBinaryRevocations();
     return loadAgents();
   }).catch(function(e) { showToast(e.message, 'err'); });
+  }, { sub: 'Review before you continue.', confirmLabel: 'Un-revoke' });
 }
 export function rowMenuTrayIcon(id, hidden) {
   closeAllRowMenus();
@@ -1195,8 +1233,8 @@ function agentRowMenu(a, idx) {
         '<button class="btn btn-ghost btn-sm row-menu-btn"' + on('click', 'toggleRowMenuById', menuId) + ' title="Actions" aria-label="Actions" aria-haspopup="true">' + kitIcon('more') + '</button>' +
         '<div class="row-menu-panel" id="' + menuId + '">' +
           '<button class="row-menu-item"' + on('click', 'rowMenuDetail', a.agentId) + '>&#128269; Detail</button>' +
-          '<button class="row-menu-item"' + on('click', 'rowMenuRunSimulation', a.agentId) + '>&#9654; Run simulation</button>' +
-          '<button class="row-menu-item"' + on('click', 'rowMenuSafeScan', a.agentId) + '>&#128737; Safe Scan</button>' +
+          (ROLE === 'admin' || ROLE === 'analyst' ? '<button class="row-menu-item"' + on('click', 'rowMenuRunSimulation', a.agentId) + '>&#9654; Run simulation</button>' +
+          '<button class="row-menu-item"' + on('click', 'rowMenuSafeScan', a.agentId) + '>&#128737; Safe Scan</button>' : '') +
           '<button class="row-menu-item"' + on('click', 'rowMenuReportHtml', a.agentId) + '>&#128196; Report (HTML)</button>' +
           '<button class="row-menu-item"' + on('click', 'rowMenuReportPdf', a.agentId) + '>&#8595; Report (PDF)</button>' +
           '<button class="row-menu-item"' + on('click', 'rowMenuReportCsv', a.agentId) + '>&#8595; Report (CSV)</button>' +
