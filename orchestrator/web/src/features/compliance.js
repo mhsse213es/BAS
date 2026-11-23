@@ -208,7 +208,7 @@ export function askText(title, label, initial, confirmLabel, cb, opts) {
   setTimeout(function() { var i = document.getElementById('ask-input'); if (i) { i.focus(); i.select(); } }, 30);
 }
 export function askEnter(el, event) {
-  if (event && event.key === 'Enter') { event.preventDefault(); runConfirmDiffModal(); }
+  if (event && event.key === 'Enter' && !event.isComposing) { event.preventDefault(); runConfirmDiffModal(); }
 }
 
 export function closeConfirmDiffModal() {

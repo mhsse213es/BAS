@@ -805,6 +805,10 @@ export function openAgentGroupMenuStop(id, el, event) { event.stopPropagation();
 function closeAgentGroupMenu() { var m = document.getElementById('ag-menu'); if (m) m.remove(); }
 document.addEventListener('click', closeAgentGroupMenu);
 document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeAgentGroupMenu(); });
+var _agMenuAt = 0;
+// A scroll caused by opening the menu itself (focus / scroll-into-view) must not close it.
+window.addEventListener('scroll', function() { if (Date.now() - _agMenuAt > 400) closeAgentGroupMenu(); }, true);
+window.addEventListener('resize', closeAgentGroupMenu);
 
 // A small popover with the four things you can do to a group (it replaced a prompt() that asked you to type the verb).
 export function openAgentGroupMenu(el, groupId) {
@@ -818,7 +822,8 @@ export function openAgentGroupMenu(el, groupId) {
     return '<button type="button" role="menuitem" class="ag-menu-i' + (i[0] === 'delete' ? ' is-danger' : '') + '"' + on('click', 'agentGroupMenuPick', i[0], groupId) + '>' + i[1] + '</button>';
   }).join('');
   document.body.appendChild(m);
-  var f = m.querySelector('button'); if (f) f.focus();
+  _agMenuAt = Date.now();
+  var f = m.querySelector('button'); if (f) f.focus({ preventScroll: true });
 }
 export function agentGroupMenuPick(action, groupId) {
   closeAgentGroupMenu();
@@ -1514,6 +1519,7 @@ export function loadConnectionConfig() {
     document.getElementById('cfg-server-url').textContent = window.location.origin;
     var secretEl = document.getElementById('cfg-agent-secret');
     secretEl.dataset.value = data.agentSecret || '';
+    delete secretEl.dataset.failed;
     // The deployment signing fingerprint is the trust anchor for the Windows MSI bundle: operators
     // compare it with the one the installer shows. It comes from this authenticated call only.
     var fpRow = document.getElementById('cfg-fingerprint-row');
@@ -1526,7 +1532,7 @@ export function loadConnectionConfig() {
     }
     // keep masked until user clicks Show
   }).catch(function(e) {
-    var sec = document.getElementById('cfg-agent-secret'); if (sec) { sec.dataset.value = ''; if (sec.classList.contains('secret-hidden')) sec.textContent = 'Could not load'; }
+    var sec = document.getElementById('cfg-agent-secret'); if (sec) { sec.dataset.value = ''; sec.dataset.failed = '1'; if (sec.classList.contains('secret-hidden')) sec.textContent = 'Could not load'; }
     showToast('Failed to load connection config: ' + (e.message || 'error'), 'err');
   });
 }
@@ -1535,7 +1541,7 @@ export function toggleSecret(btn) {
   var el = document.getElementById('cfg-agent-secret');
   var hidden = el.classList.contains('secret-hidden');
   if (hidden) {
-    el.textContent = el.dataset.value || '(not configured)';
+    el.textContent = el.dataset.value || (el.dataset.failed ? 'Could not load' : '(not configured)');
     el.classList.remove('secret-hidden');
     btn.textContent = 'Hide';
   } else {
