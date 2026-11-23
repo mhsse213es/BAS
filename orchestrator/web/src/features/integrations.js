@@ -50,11 +50,11 @@ function dlgOpen(id, focusId) {
 }
 function dlgClose(id) { var e = document.getElementById(id); if (e) e.classList.remove('open'); }
 // A save takes a moment: lock the button so a double click cannot create the connector twice.
-function setSaving(btnId, on) {
+function setSaving(btnId, busy) {
   var b = document.getElementById(btnId);
   if (!b) return;
-  b.disabled = !!on;
-  b.textContent = on ? 'Saving…' : 'Save';
+  b.disabled = !!busy;
+  b.textContent = busy ? 'Saving…' : 'Save';
 }
 function showTest(el, tone, text) {
   el.className = 'int-test ' + tone;

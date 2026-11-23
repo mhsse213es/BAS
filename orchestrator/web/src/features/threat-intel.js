@@ -252,11 +252,11 @@ function taxiiResult(tone, text) {
   el.className = 'int-test' + (tone ? ' ' + tone : '') + (text ? '' : ' is-empty');
   el.textContent = text;
 }
-function taxiiSaving(on) {
+function taxiiSaving(busy) {
   var b = document.getElementById('taxii-conn-save-btn');
   if (!b) return;
-  b.disabled = !!on;
-  b.textContent = on ? 'Saving…' : (TAXII_EDITING_ID ? 'Save Changes' : 'Save');
+  b.disabled = !!busy;
+  b.textContent = busy ? 'Saving…' : (TAXII_EDITING_ID ? 'Save Changes' : 'Save');
 }
 
 export function testTAXIIConnectorForm() {
