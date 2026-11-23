@@ -124,6 +124,59 @@
       "reason": "Was fully static in the October baseline; it now puts server data into the markup. Read the sink and the helpers it calls: every server value goes through x() or a core/kit.js helper that escapes its arguments, ids go through encodeURIComponent, and counts are coerced with Number().",
       "reviewed_by": "Claude Sonnet 5.5 (manual read of the sink and its helpers; awaiting human sign-off in the PR)",
       "reviewed_on": "2026-11-23"
+    },
+    {
+      "function": "loadExposureAssets",
+      "target": "if (sum) sum",
+      "op": "=",
+      "from_tier": 2,
+      "to_tier": 4,
+      "sink_ids": [
+        "loadExposureAssets:if (sum) sum:=:7e97cf7191f8"
+      ],
+      "reason": "Reviewed by reading the sinks and helpers: the summary and main panes take chartsHtml() and card()/empty() output. Chart labels pass through hbars() (x() on labels and values) and charts.js (esc() on labels and tooltips); card titles and notes are constants or escaped. No server string reaches markup unescaped.",
+      "reviewed_by": "Claude Haiku 5.5 (manual read of the sink and its helpers; awaiting human sign-off in the PR)",
+      "reviewed_on": "2026-11-23"
+    },
+    {
+      "function": "loadThreatPriorityActors",
+      "target": "if (charts) charts",
+      "op": "=",
+      "from_tier": 2,
+      "to_tier": 4,
+      "sink_ids": [
+        "loadThreatPriorityActors:if (charts) charts:=:7e97cf7191f8"
+      ],
+      "reason": "Reviewed by reading the sinks and helpers: tilesHtml() escapes label, value and caption with x(); chartsHtml() passes actor names through hbars() (x()) and counts through Number()/String(); chartSlot labels are escaped in charts.js (esc()). No server string reaches markup unescaped.",
+      "reviewed_by": "Claude Haiku 5.5 (manual read of the sink and its helpers; awaiting human sign-off in the PR)",
+      "reviewed_on": "2026-11-23"
+    },
+    {
+      "function": "openExposureDetail",
+      "target": "body",
+      "op": "=",
+      "from_tier": 1,
+      "to_tier": 3,
+      "sink_ids": [
+        "openExposureDetail:body:=:4dc3d8b62238",
+        "openExposureDetail:body:=:893416bdd99c"
+      ],
+      "reason": "Reviewed by reading the whole function: every server value in the detail drawer (CVE, CVSS, EPSS, technique, edge from/to/reason, finding name, state) goes through x(); chips and sevChip use fixed tones; kv() escapes labels and values; scores come from expScoreTiles, which escapes its output. No server string reaches markup unescaped.",
+      "reviewed_by": "Claude Haiku 5.5 (manual read of the sink and its helpers; awaiting human sign-off in the PR)",
+      "reviewed_on": "2026-11-23"
+    },
+    {
+      "function": "renderRunsSummary",
+      "target": "if (ch) ch",
+      "op": "=",
+      "from_tier": 2,
+      "to_tier": 4,
+      "sink_ids": [
+        "renderRunsSummary:if (ch) ch:=:3aabe203202a"
+      ],
+      "reason": "Reviewed by reading the sinks and helpers: chartsHtml(runs) builds its legend from constants, feeds numeric series and labels into chartSlot (labels escaped in charts.js via esc()), and wraps the run count with String(). Card titles are constants. No server string reaches markup unescaped.",
+      "reviewed_by": "Claude Haiku 5.5 (manual read of the sink and its helpers; awaiting human sign-off in the PR)",
+      "reviewed_on": "2026-11-23"
     }
   ]
 }
