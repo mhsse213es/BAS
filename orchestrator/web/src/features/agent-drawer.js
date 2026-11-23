@@ -784,7 +784,7 @@ function renderControlsTable(controls, filter) {
   var statusLabel = {resisted:'✓ Resisted', failed:'✗ Failed', partial:'◑ Partial', inconclusive:'? Inconclusive', untested:'○ Untested', manual:'✎ Manual'};
   var rows = (controls || []).filter(function(c) { return !filter || c.status === filter; });
   document.getElementById('cmp-controls-body').innerHTML = rows.map(function(c, i) {
-    var badge = '<span class="cmp-badge ' + c.status + '">' + (statusLabel[c.status] || c.status) + '</span>';
+    var badge = '<span class="cmp-badge ' + x(c.status) + '">' + x(statusLabel[c.status] || c.status) + '</span>';
     if (c.status === 'manual') {
       return '<tr><td>' + badge + '</td>' +
         '<td><span class="cmp-ctrl-id">' + x(c.id) + '</span></td>' +

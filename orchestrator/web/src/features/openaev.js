@@ -399,8 +399,8 @@ function loadAPHistory() {
       return '<tr>' +
         '<td style="font-family:var(--font-mono);font-size:0.76rem">' + ts + '</td>' +
         '<td>' + x(r.hostname || r.agentId) + '</td>' +
-        '<td style="text-align:right">' + (r.nodeCount || 0) + '</td>' +
-        '<td style="text-align:right">' + (r.edgeCount || 0) + '</td>' +
+        '<td style="text-align:right">' + x(String(r.nodeCount || 0)) + '</td>' +
+        '<td style="text-align:right">' + x(String(r.edgeCount || 0)) + '</td>' +
         '<td style="text-align:right">' + _fmtDuration(r.durationMs) + '</td>' +
         '<td class="u-center">' + (r.sharpHound ? '&#10003;' : '&#8212;') + '</td>' +
         '<td>' + statusBadge + '</td>' +

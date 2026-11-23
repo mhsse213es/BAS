@@ -117,7 +117,7 @@ function render() {
   var openIds = box.querySelector('details.gap-t') ? openTechniqueIds(box) : S.keepOpen;
   S.keepOpen = [];
   var tiles = G.summaryTiles(d.summary).map(function(t) {
-    return '<div class="gap-tile tone-' + x(t.tone) + '"><div class="gap-n">' + t.count + '</div><div class="gap-l">' + x(t.status) + '</div></div>';
+    return '<div class="gap-tile tone-' + x(t.tone) + '"><div class="gap-n">' + x(String(t.count)) + '</div><div class="gap-l">' + x(t.status) + '</div></div>';
   }).join('');
   var gaps = (d.techniques || []).filter(function(t) { return t.status === 'Detection gap'; });
   var rest = (d.techniques || []).filter(function(t) { return t.status !== 'Detection gap'; });

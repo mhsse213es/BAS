@@ -718,7 +718,7 @@ function pollEMSweepProgress() {
 function renderEMSweepProgress(sw, runs) {
   document.getElementById('em-sweep-progress-title').textContent = 'EM Full Sweep — ' + x(sw.agentId);
   document.getElementById('em-sweep-progress-summary').innerHTML =
-    '<strong>' + sw.completedLayers + '/' + sw.totalLayers + '</strong> layers complete &middot; status: ' + x(sweepStatusLabel(sw.status)) +
+    '<strong>' + x(String(sw.completedLayers)) + '/' + x(String(sw.totalLayers)) + '</strong> layers complete &middot; status: ' + x(sweepStatusLabel(sw.status)) +
     (sw.error ? '<div style="color:var(--danger);margin-top:0.3rem">' + x(sw.error) + '</div>' : '');
   // Combined report only once the sweep has stopped advancing -- a partial
   // union of whatever layers happened to finish so far is a lot less useful
@@ -757,7 +757,7 @@ function renderEMSweepProgress(sw, runs) {
         // reuses that real data instead of leaving a completed-but-halted
         // layer with no way to see what it found.
         var pr = r.progress;
-        var toBadge = pr.stepsFailed + ' fail / ' + pr.stepsPassed + ' pass' + (pr.stepsTimeout ? ' / ' + pr.stepsTimeout + ' timeout' : '');
+        var toBadge = x(String(pr.stepsFailed)) + ' fail / ' + x(String(pr.stepsPassed)) + ' pass' + (pr.stepsTimeout ? ' / ' + x(String(pr.stepsTimeout)) + ' timeout' : '');
         actionHtml = '<button class="btn btn-outline btn-sm"' + on('click', 'openRunPanelAction', r.id, r.name, pr.stepsTotal || 0, r.mode || '', r.maxPrivilege || '') + '>' + toBadge + '</button>';
       } else {
         actionHtml = '<span class="tiny muted">' + x(badge) + '</span>';

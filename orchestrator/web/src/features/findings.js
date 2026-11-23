@@ -437,7 +437,7 @@ function endpointCard(e) {
   var name = e.hostname || e.agentId;
   var sev = e.severity || {};
   var sevLine = ['critical', 'high', 'medium', 'low'].map(function(k) {
-    return '<span>' + k.charAt(0).toUpperCase() + k.slice(1) + ' ' + (sev[k] || 0) + '</span>';
+    return '<span>' + k.charAt(0).toUpperCase() + k.slice(1) + ' ' + x(String(sev[k] || 0)) + '</span>';
   }).join('');
   var head =
     '<button type="button" class="rem-ep-head"' + on('click', 'toggleRemEndpoint', key) + ' aria-expanded="' + open + '">' +
@@ -528,7 +528,7 @@ function renderRemList() {
       '<b class="rem-name">' + x(v.name) + '</b>' +
       '<div class="rem-closes">Closes <b>' + x(v.closes) + '</b> \u00b7 ' + x(v.agents) + '</div>' +
       (v.controls ? '<div class="rem-ctrl">' + x(v.controls) + '</div>' : '') +
-      '<div class="rem-miss"><span class="rem-missed">Missed ' + v.missed + '</span><span class="muted">Detected only ' + v.detectedOnly + '</span></div>' +
+      '<div class="rem-miss"><span class="rem-missed">Missed ' + x(String(v.missed)) + '</span><span class="muted">Detected only ' + x(String(v.detectedOnly)) + '</span></div>' +
       '<div class="rem-fix-acts">' +
         '<button class="btn btn-outline btn-sm"' + on('click', 'openRemediation', i) + '>View</button>' +
         (canTicket ? '<button class="btn btn-outline btn-sm"' + on('click', 'remSingleTicket', i) + (done ? ' disabled' : '') + '>' + (done ? '&#10003; Ticketed' : '&#128279; Ticket') + '</button>' : '') +

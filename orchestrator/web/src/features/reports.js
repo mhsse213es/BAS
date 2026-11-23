@@ -2928,15 +2928,15 @@ function renderDetectionValidationTab(rep, run) {
     '<div style="padding:1rem 0 0.5rem">' +
       '<div style="display:flex;gap:1.5rem;margin-bottom:0.75rem;flex-wrap:wrap">' +
         '<div class="u-center">' +
-          '<div style="font-size:1.7rem;font-weight:700;color:' + covColor + '">' + coverage + '%</div>' +
+          '<div style="font-size:1.7rem;font-weight:700;color:' + covColor + '">' + x(String(coverage)) + '%</div>' +
           '<div style="font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Detection Coverage</div>' +
         '</div>' +
         '<div class="u-center">' +
-          '<div style="font-size:1.7rem;font-weight:700;color:var(--danger)">' + missRate + '%</div>' +
+          '<div style="font-size:1.7rem;font-weight:700;color:var(--danger)">' + x(String(missRate)) + '%</div>' +
           '<div style="font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Detection Miss Rate</div>' +
         '</div>' +
         '<div class="u-center">' +
-          '<div style="font-size:1.7rem;font-weight:700">' + verifiedFindings + '</div>' +
+          '<div style="font-size:1.7rem;font-weight:700">' + x(String(verifiedFindings)) + '</div>' +
           '<div style="font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Verified Findings</div>' +
         '</div>' +
       '</div>' +

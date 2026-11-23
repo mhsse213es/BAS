@@ -115,7 +115,7 @@ export function __init_L16159() {
     if (!state.log.length) { el.innerHTML = '<div class="lv-l muted">Waiting for the first event…</div>'; return; }
     var nearEnd = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
     el.innerHTML = state.log.map(function (l) {
-      return '<div class="lv-l ' + l.tone + '">' + (l.time ? '<span class="lv-time">' + x(l.time) + '</span>' : '') + x(l.text) + '</div>';
+      return '<div class="lv-l ' + x(l.tone) + '">' + (l.time ? '<span class="lv-time">' + x(l.time) + '</span>' : '') + x(l.text) + '</div>';
     }).join('');
     if (nearEnd) el.scrollTop = el.scrollHeight;
   }

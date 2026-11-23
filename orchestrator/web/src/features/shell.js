@@ -606,9 +606,9 @@ export function renderAgentRiskSummary(rows) {
     return '<tr>' +
       '<td>' + x(a.hostname || a.agentId) + '</td>' +
       (a.measurable
-        ? '<td' + cssVars(['g1-v-7d75dfc9', _riskScoreColor(a.healthScore)]) + ' class="g1-s-c6fa01b3">' + a.healthScore + '</td>'
+        ? '<td' + cssVars(['g1-v-7d75dfc9', _riskScoreColor(a.healthScore)]) + ' class="g1-s-c6fa01b3">' + x(String(a.healthScore)) + '</td>'
         : '<td class="u-muted" title="Nothing collected for this endpoint yet — an absent score is not a safe score">— no data</td>') +
-      '<td>' + (a.criticalityRisk || 0) + '</td>' +
+      '<td>' + x(String(a.criticalityRisk || 0)) + '</td>' +
       '<td>' + _riskTrendBadge(a.trend) + '</td>' +
       '<td>' + x(a.topDeficitCategory || '—') + '</td>' +
       '<td>' + (a.openFindingsCount || 0) + '</td>' +

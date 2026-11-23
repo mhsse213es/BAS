@@ -91,7 +91,7 @@ export function renderRunIOCList() {
       '<div class="g1-s-70a1b066">' +
         '<div class="g1-display-grid g1-s-ee837f27">' +
           '<div><div class="kpi-label">Source</div><div>' + x(ind.source || '—') + '</div></div>' +
-          '<div><div class="kpi-label">Confidence</div><div>' + (ind.confidence || 0) + '%</div></div>' +
+          '<div><div class="kpi-label">Confidence</div><div>' + x(String(ind.confidence || 0)) + '%</div></div>' +
           '<div><div class="kpi-label">Extracted</div><div>' + (ind.extractedAt ? ago(ind.extractedAt) : '—') + '</div></div>' +
           '<div><div class="kpi-label">Seen in techniques</div><div>' + (techs || '<span class="muted">—</span>') + '</div></div>' +
         '</div>' +

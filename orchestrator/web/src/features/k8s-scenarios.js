@@ -68,9 +68,9 @@ function renderK8sClusters(runs) {
     if (c.problem) foot.push(c.problem + ' need attention');
     return '<button type="button" class="rk-card k8s-cl' + (F.cluster === c.id ? ' sel' : '') + '"' + on('click', 'k8sPickCluster', c.id) + '>' +
       '<span class="k8s-cl-top"><b class="mono">' + x(c.id) + '</b>' + pill(c.label, c.tone) + '</span>' +
-      '<span class="k8s-cl-sub muted">' + c.nsCount + (c.nsCount === 1 ? ' namespace' : ' namespaces') + '</span>' +
-      '<span class="k8s-cl-row"><span class="muted">Cleaned up</span><b>' + c.cleanPct + '%</b></span>' + bar(c.cleanPct, c.cleanPct >= 80 ? 'ok' : c.cleanPct >= 40 ? 'warn' : 'bad') +
-      '<span class="k8s-cl-foot muted"><span>' + c.runs + (c.runs === 1 ? ' run' : ' runs') + '</span>' + foot.map(function(f) { return '<span>' + x(f) + '</span>'; }).join('') + '</span>' +
+      '<span class="k8s-cl-sub muted">' + x(String(c.nsCount)) + (c.nsCount === 1 ? ' namespace' : ' namespaces') + '</span>' +
+      '<span class="k8s-cl-row"><span class="muted">Cleaned up</span><b>' + x(String(c.cleanPct)) + '%</b></span>' + bar(c.cleanPct, c.cleanPct >= 80 ? 'ok' : c.cleanPct >= 40 ? 'warn' : 'bad') +
+      '<span class="k8s-cl-foot muted"><span>' + x(String(c.runs)) + (c.runs === 1 ? ' run' : ' runs') + '</span>' + foot.map(function(f) { return '<span>' + x(f) + '</span>'; }).join('') + '</span>' +
       '</button>';
   })) : '';
   var sel = document.getElementById('k8s-cluster-sel');

@@ -274,11 +274,11 @@ function renderFactoryHealthFunnel(r) {
   if (!el) return;
   var st = M.funnelStages(r.pipeline.funnel);
   var boxes = st.map(function(s, i) {
-    return '<div class="fh-stage tone-' + s.tone + '"><div class="fh-stage-v">' + x(s.value) + '</div><div class="fh-stage-n">' + x(s.label) + '</div></div>' +
+    return '<div class="fh-stage tone-' + x(s.tone) + '"><div class="fh-stage-v">' + x(s.value) + '</div><div class="fh-stage-n">' + x(s.label) + '</div></div>' +
       (i < st.length - 1 ? '<span class="fh-arrow" aria-hidden="true">→</span>' : '');
   }).join('');
   var lines = M.qualityLines(r.pipeline.dataQuality).map(function(l) {
-    return '<span class="fh-q tone-' + l.tone + '">' + icon(l.tone === 'ok' ? 'ok' : 'alert') + x(l.text) + '</span>';
+    return '<span class="fh-q tone-' + x(l.tone) + '">' + icon(l.tone === 'ok' ? 'ok' : 'alert') + x(l.text) + '</span>';
   }).join('');
   el.innerHTML = card('Content pipeline', '<div class="fh-funnel">' + boxes + '</div><div class="fh-quality">' + lines + '</div>');
 }

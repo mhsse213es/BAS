@@ -311,13 +311,13 @@ function renderVexSweepList(sweeps) {
           '<span class="vex-sw-id">' + x(sw.agentId) + '</span>' +
           (disconnected ? '<span class="sbadge s-agent_disconnected">Agent Disconnected</span>' : '') + '</div>' +
         '<div class="vex-sw-actions">' +
-          (disconnected ? '' : '<span class="vex-sw-pct">' + pct + '%</span>') +
+          (disconnected ? '' : '<span class="vex-sw-pct">' + x(String(pct)) + '%</span>') +
           '<button class="btn btn-outline btn-sm vex-sw-stop"' + on('click', 'stopVexSweep', sw.id) + '>&#9632; Stop</button>' +
         '</div>' +
       '</div>' +
       '<div class="vex-sw-bar"><div class="vex-sw-fill" style="width:' + pct + '%"></div></div>' +
       '<div class="vex-sw-meta">' +
-        '<span class="vex-sw-chip">Atomic test ' + (sw.currentIndex + 1) + ' of ' + sw.totalTechniques + '</span>' +
+        '<span class="vex-sw-chip">Atomic test ' + x(String(sw.currentIndex + 1)) + ' of ' + x(String(sw.totalTechniques)) + '</span>' +
         '<span class="vex-sw-tech">' + x(sw.currentTechnique) + '</span>' +
       '</div>' +
       '<div class="vex-sw-variant" id="vex-sweep-variant-' + x(sw.id) + '">Loading current variant…</div>' +
