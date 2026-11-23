@@ -63,6 +63,73 @@ func (e *Executor) cancelInflight(execID string) []string {
 	return ids
 }
 
+// handleWaitForTicket validates the step and enters the waiting state; triggerWaitForTicket then polls the
+// ticket each tick. A configuration that can never succeed fails the step visibly rather than waiting forever.
+func (e *Executor) handleWaitForTicket(ctx context.Context, ex *Execution, ps *PlanStep, se *StepExecution) error {
+	fail := func(msg string) error { return e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed, msg) }
+	cfg := ps.Config.WaitForTicket
+	if cfg == nil {
+		return fail("missing wait_for_ticket config")
+	}
+	switch cfg.Until {
+	case "", "acknowledged", "resolved":
+	default:
+		return fail(`wait_for_ticket "until" must be "acknowledged" or "resolved"`)
+	}
+	plan, err := e.store.GetPlan(ctx, ex.PlanID)
+	if err != nil {
+		return err
+	}
+	isTicketStep := false
+	for _, s := range plan.Steps {
+		if s.ID == cfg.TicketStepID && s.Type == StepTypeTicket {
+			isTicketStep = true
+		}
+	}
+	if !isTicketStep {
+		return fail("ticket_step_id " + cfg.TicketStepID + " is not a ticket step in this plan")
+	}
+	if _, ok := e.tickets.(TicketStatusReader); !ok {
+		return fail("ticketing cannot report ticket status")
+	}
+	now := time.Now()
+	se.Status = StepWaiting
+	se.StartedAt = &now
+	_ = e.store.RecordEvent(context.Background(), ex.ID, ps.ID, "step_waiting", "system",
+		map[string]any{"waiting_for": "ticket_status", "ticket_step_id": cfg.TicketStepID})
+	return e.store.UpsertStepExecution(context.Background(), se)
+}
+
+// triggerWaitForTicket reports whether the watched ticket has reached the wanted status. It does not ask the
+// connector anything until the ticket step has actually created a ticket.
+func (e *Executor) triggerWaitForTicket(ctx context.Context, ex *Execution, ps *PlanStep, se *StepExecution) (bool, map[string]any, error) {
+	cfg := ps.Config.WaitForTicket
+	reader, ok := e.tickets.(TicketStatusReader)
+	if cfg == nil || !ok {
+		return false, nil, nil
+	}
+	ts, err := e.store.GetStepExecByStepID(ctx, ex.ID, cfg.TicketStepID)
+	if err != nil || ts == nil || ts.Status != StepCompleted {
+		return false, nil, err
+	}
+	ticketID, _ := ts.Result["ticket_id"].(string)
+	connectorID, _ := ts.Result["connector_id"].(string)
+	if ticketID == "" {
+		return false, nil, nil
+	}
+	status, err := reader.TicketStatus(ctx, connectorID, ticketID)
+	if err != nil {
+		return false, nil, err
+	}
+	reached := status == "resolved" || (cfg.Until != "resolved" && status == "in_progress")
+	if !reached {
+		return false, nil, nil
+	}
+	payload := map[string]any{"ticket_id": ticketID, "connector_id": connectorID, "ticket_status": status, "acknowledged": true}
+	_, _ = e.evidence.Append(ctx, ex.ID, se.ID, "soc_acknowledged", "soc", "ticket_status", payload)
+	return true, payload, nil
+}
+
 // Cleanup states recorded in a ticket step's result, so a later pass never closes the same ticket twice.
 const (
 	cleanupDone    = "done"

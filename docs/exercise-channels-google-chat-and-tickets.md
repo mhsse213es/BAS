@@ -40,5 +40,43 @@ does not support it.
   finding. The connector's own assignment group (ServiceNow) and project (Jira) still apply.
 - The created ticket id and URL are stored in the step result and the evidence chain.
 
+### Cleanup: drill tickets are closed when the exercise ends
+
+When an exercise completes or is aborted, each drill ticket it opened is **closed by default**, so a drill does not
+leave open tickets in a real queue. The close note says it was a drill (it never uses the finding path's "technique is
+now prevented" text). Set `"keep_open": true` on the ticket step to leave it open, for example if the SOC wants drills kept
+as a record.
+
+- It runs once per ticket and is recorded in the evidence chain as `cleanup_done`, `cleanup_skipped` (keep_open) or
+  `cleanup_failed`. A failed close never blocks the abort; the ticket stays eligible for a later pass, and you can see
+  the failure in the evidence.
+- Cleanup runs after the score is computed, so it never changes the score.
+- Only tickets can be cleaned up. Chat webhooks and SMS are one-way: they cannot be read back or unsent, so a message
+  already sent stays sent.
+
+### `wait_for_ticket`
+
+Waits until a ticket opened by an earlier ticket step is picked up, and records that as the SOC's acknowledgement.
+
+```json
+{ "id": "wait-ack", "type": "wait_for_ticket", "timeout_secs": 3600,
+  "config": { "wait_for_ticket": { "ticket_step_id": "open-ticket", "until": "acknowledged" } } }
+```
+
+- `until` is `acknowledged` (default: the ticket is in progress or resolved) or `resolved`.
+- When it fires it records `soc_acknowledged` evidence, which sets `Technical.SOCAcknowledged` and
+  `time_to_acknowledge_s` (injected ticket to acknowledgement) in the exercise score.
+- Set `timeout_secs`. If nobody acknowledges in time the step completes as timed out and the score records **no**
+  acknowledgement; that is a real result, not an error. Without a timeout it waits as long as the exercise runs.
+- A step that can never succeed (no such ticket step, `until` not recognised, ticketing that cannot report status) fails
+  visibly instead of waiting forever.
+- The ticket step is recorded as `ticket_injected` evidence, not `ticket_created`: the score reads `ticket_created` as
+  the defenders raising a ticket, and a ticket the exercise opens itself is not that.
+
+### Aborting
+
+Aborting cancels a Google Chat or ticket send that is still in flight (the request is cancelled and the step is marked
+cancelled). Slack, Teams, SMS and email sends already running are not yet cancellable.
+
 Not verified: these have been tested against fake ServiceNow and Jira servers only, never a live instance. A real
 instance may need a different record type or required field than the defaults.

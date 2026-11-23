@@ -119,6 +119,7 @@ type TicketNotifier interface {
 // with "not configured" instead of pretending to send.
 func (e *Executor) RegisterChannelBuiltins(gchat *GoogleChatInjector, tickets TicketNotifier) {
 	e.tickets = tickets
+	e.registry.Register(StepTypeWaitForTicket, StepHandlerFunc(e.handleWaitForTicket))
 	e.registry.Register(StepTypeGoogleChat, StepHandlerFunc(e.handleGoogleChat(gchat)))
 	e.registry.Register(StepTypeTicket, StepHandlerFunc(e.handleTicket(tickets)))
 }
@@ -128,6 +129,7 @@ func (e *Executor) RegisterBuiltinTriggers() {
 	e.triggers.Register(StepTypeWaitForAgent, e.triggerWaitForAgent)
 	e.triggers.Register(StepTypeWaitForDetection, e.triggerWaitForDetection)
 	e.triggers.Register(StepTypeWaitForWebhook, e.triggerWaitForWebhook)
+	e.triggers.Register(StepTypeWaitForTicket, e.triggerWaitForTicket)
 	e.triggers.Register(StepTypeAgentTask, e.triggerWaitForBASDetection)
 }
 
@@ -226,7 +228,7 @@ func (e *Executor) advance(ctx context.Context, ex *Execution) error {
 		if ps.TimeoutSecs > 0 && se.StartedAt != nil &&
 			now.After(se.StartedAt.Add(time.Duration(ps.TimeoutSecs)*time.Second)) {
 			switch ps.Type {
-			case StepTypeWaitForAgent, StepTypeWaitForDetection, StepTypeWaitForWebhook:
+			case StepTypeWaitForAgent, StepTypeWaitForDetection, StepTypeWaitForWebhook, StepTypeWaitForTicket:
 				_ = e.store.SetStepResult(ctx, ex.ID, ps.ID, mergeMaps(se.Result, map[string]any{"timed_out": true}))
 				_ = e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepCompleted, "timeout")
 				_ = e.store.RecordEvent(ctx, ex.ID, ps.ID, "timeout", "system", nil)
@@ -1164,8 +1166,13 @@ func (e *Executor) computeScore(ctx context.Context, ex *Execution) *ExerciseSco
 		EDRBlocked:    counts["edr_blocked"] > 0,
 		SIEMAlerted:   counts["siem_alerted"] > 0,
 		TicketCreated: counts["ticket_created"] > 0,
+		// Set only by a wait_for_ticket step that saw the ticket picked up; a timeout leaves it false.
+		SOCAcknowledged: counts["soc_acknowledged"] > 0,
 		MTTDSeconds:   mttd,
 		MTTRSeconds:   mttr,
+	}
+	if t.SOCAcknowledged {
+		t.TimeToAcknowledgeSeconds, _ = e.store.SumDurationByType(ctx, ex.ID, "ticket_injected", "soc_acknowledged")
 	}
 	detBonus := 0.0
 	if t.EDRDetected {
